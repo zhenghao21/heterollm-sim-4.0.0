@@ -153,11 +153,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--threads", type=int, default=16)
     parser.add_argument("--gpu-layers", type=int, default=-1)
     parser.add_argument("--parallel", type=int, default=1)
+    parser.add_argument("--ctx-checkpoints", type=int,
+                        help="explicit llama-server per-slot context checkpoint count; omit to preserve runtime default")
     parser.add_argument("--repetitions", type=int, default=5)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--flash-attn", choices=("off", "on"), required=True)
+    parser.add_argument("--cuda-graphs", choices=("auto", "on", "off"), default="auto",
+                        help="CUDA Graph policy for the llama-server child: auto inherits the environment, on removes GGML_CUDA_DISABLE_GRAPHS, off sets it to 1")
     parser.add_argument("--disable-cuda-graphs", action="store_true",
-                        help="set GGML_CUDA_DISABLE_GRAPHS=1 only in the llama-server child environment")
+                        help="deprecated alias for --cuda-graphs off")
     parser.add_argument("--startup-timeout", type=float, default=180.0)
     parser.add_argument("--request-timeout", type=float, default=900.0)
     return parser.parse_args()
@@ -175,6 +179,8 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--gpu-layers must be -1 or greater")
     if args.parallel != 1:
         raise ValueError("this collector currently supports --parallel 1 only")
+    if args.ctx_checkpoints is not None and args.ctx_checkpoints < 0:
+        raise ValueError("--ctx-checkpoints must be zero or positive")
     if args.prompt_tokens + args.output_tokens > args.context:
         raise ValueError("prompt plus output tokens exceed --context")
     if not args.server.is_file():
@@ -299,6 +305,12 @@ def _require_effective_context(props: Any, stderr_lines: list[str], requested: i
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if args.disable_cuda_graphs and args.cuda_graphs == "on":
+        raise ValueError("--disable-cuda-graphs conflicts with --cuda-graphs on")
+    diagnostic_keys = ("HETEROLLM_CUDA_GRAPH_TRACE", "HETEROLLM_CUDA_GRAPH_DRY_RUN",
+                       "HETEROLLM_CUDA_GRAPH_CAPTURE_ONLY")
+    if any(key in os.environ for key in diagnostic_keys):
+        raise ValueError("native latency collection requires CUDA Graph diagnostics and dry-run modes to be unset")
     _validate_args(args)
     args.server = args.server.resolve()
     args.model = args.model.resolve()
@@ -313,17 +325,27 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "--gpu-layers", str(args.gpu_layers), "--flash-attn", args.flash_attn,
         "--cache-type-k", "f16", "--cache-type-v", "f16", "--kv-unified", "--no-cache-prompt", "--fit", "off", "--perf",
     ]
+    if args.ctx_checkpoints is not None:
+        command.extend(["--ctx-checkpoints", str(args.ctx_checkpoints)])
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     child_env = os.environ.copy()
-    if args.disable_cuda_graphs:
+    requested_graph_mode = "off" if args.disable_cuda_graphs else args.cuda_graphs
+    if requested_graph_mode == "on":
+        child_env.pop("GGML_CUDA_DISABLE_GRAPHS", None)
+    elif requested_graph_mode == "off":
         child_env["GGML_CUDA_DISABLE_GRAPHS"] = "1"
     # The locked source tests presence, not numeric truth. Record only this
     # relevant key, never the complete inherited environment or credentials.
-    effective_env = {"GGML_CUDA_DISABLE_GRAPHS": child_env.get("GGML_CUDA_DISABLE_GRAPHS")}
+    effective_env = {
+        "GGML_CUDA_DISABLE_GRAPHS": child_env.get("GGML_CUDA_DISABLE_GRAPHS"),
+        "GGML_CUDA_GRAPH_OPT": child_env.get("GGML_CUDA_GRAPH_OPT"),
+    }
     graph_configuration = {
+        "cuda_graphs_mode_requested": requested_graph_mode,
         "effective_env": effective_env,
         "cuda_graphs_disabled": "GGML_CUDA_DISABLE_GRAPHS" in child_env,
-        "cuda_graphs_disable_requested": args.disable_cuda_graphs,
+        "cuda_graphs_disable_requested": requested_graph_mode == "off",
+        "cuda_graphs_legacy_disable_flag_used": args.disable_cuda_graphs,
     }
     process = subprocess.Popen(
         command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
@@ -483,6 +505,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "cache_type_k": "f16",
                 "cache_type_v": "f16",
                 "parallel": args.parallel,
+                "ctx_checkpoints_requested": args.ctx_checkpoints,
                 "temperature": 0.0,
                 "seed": 0,
                 "ignore_eos": True,

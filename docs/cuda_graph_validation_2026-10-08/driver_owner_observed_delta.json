@@ -1,0 +1,1742 @@
+{
+  "schema": "graph-driver-owner-observed-difference/v1",
+  "delta_sign": "final minus before; negative means final is faster or lower",
+  "source": "recorded completed jobs only; no inferred or synthesized measurements",
+  "explanation": [
+    "32 us was the sum of 128 old 250 ns driver service demands, not a measured E2E delta.",
+    "Critical paths, resource overlap and persistent DRAM state determine the actual latency change; rerun values are required.",
+    "TTFT, TPOT and E2E use the explicit measured request. Report physical totals include startup and warmups.",
+    "Null or missing physical counters remain unavailable. Exact comparisons do not hide floating-point differences.",
+    "A reported difference does not prove that one code change is its sole cause; inspect input differences and known code changes."
+  ],
+  "compared_cases": 0,
+  "cases_with_input_differences": 6,
+  "pending_cases": 0,
+  "excluded_before_cases": 2,
+  "cases": [
+    {
+      "case": "qwen3_0_6b_f16_graph_off",
+      "before_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\before_runtime_owner_fix\\ui_qwen3_0_6b_f16_graph_off_result.json",
+      "final_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_off_result.json",
+      "status": "compared_with_input_differences",
+      "before_job_id": "da0242ea389a4bd9bda795a70c7be68f",
+      "final_job_id": "316707a701b74af7bc5c4c36e0f83f7d",
+      "before_finished_at": "2026-10-08T04:12:20.335989Z",
+      "final_finished_at": "2026-10-08T05:20:10.892633Z",
+      "comparison_request_id": "04_measured0",
+      "input_contract_matched": false,
+      "input_contract_errors": [
+        "submitted workload.metadata.cuda_graph_structural_program differs from prepared native contract"
+      ],
+      "measured_request_engine_metrics": {
+        "engine_ttft_ns": {
+          "before": 12246652.968046188,
+          "after": 12246652.968046188,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true,
+          "after_minus_before_us": 0.0
+        },
+        "engine_tpot_ns": {
+          "before": 3474342.6902927584,
+          "after": 3474092.690292762,
+          "status": "compared",
+          "after_minus_before": -249.9999999962747,
+          "exactly_equal": false,
+          "after_minus_before_us": -0.2499999999962747
+        },
+        "engine_e2e_ns": {
+          "before": 453488174.6352265,
+          "after": 453456424.63522696,
+          "status": "compared",
+          "after_minus_before": -31749.999999523163,
+          "exactly_equal": false,
+          "after_minus_before_us": -31.749999999523162
+        }
+      },
+      "physical_metric_scope": "all report requests including startup and warmups; not measured request alone",
+      "report_physical_metrics": {
+        "batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_live_batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "completed_requests": {
+          "before": 5,
+          "after": 5,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "rejected_requests": {
+          "before": 0,
+          "after": 0,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "task_count": {
+          "before": 870244,
+          "after": 870244,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "resource_accounted_bytes": {
+          "before": 1062902429744,
+          "after": 1062902429744,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "total_energy_pj": {
+          "before": 2786825128636.704,
+          "after": 2786825128636.704,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true
+        }
+      },
+      "report_dram_metrics": {
+        "task_count": {
+          "before": 242300,
+          "after": 242300,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_bytes": {
+          "before": 514918170948,
+          "after": 514918170948,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_read_bytes": {
+          "before": 504865467340,
+          "after": 504865467340,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_write_bytes": {
+          "before": 10052703608,
+          "after": 10052703608,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_bytes": {
+          "before": 515602203328,
+          "after": 515602203328,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_read_bytes": {
+          "before": 504867739840,
+          "after": 504867739840,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_write_bytes": {
+          "before": 10734463488,
+          "after": 10734463488,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "burst_count": {
+          "before": 8056284427,
+          "after": 8056284427,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_hits": {
+          "before": 7957075293,
+          "after": 7957075293,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_misses": {
+          "before": 384,
+          "after": 384,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_conflicts": {
+          "before": 99208750,
+          "after": 99208750,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "service_ns": {
+          "before": 629218519.4074924,
+          "after": 629218019.4074275,
+          "status": "compared",
+          "after_minus_before": -500.0000648498535,
+          "exactly_equal": false
+        },
+        "queue_wait_ns": {
+          "before": 8627200270.428104,
+          "after": 8627199270.428104,
+          "status": "compared",
+          "after_minus_before": -1000.0,
+          "exactly_equal": false
+        },
+        "read_write_switches": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "refresh_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "turnaround_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        }
+      },
+      "dram_metric_availability": {
+        "before": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        },
+        "after": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        }
+      },
+      "dram_resource_differences": {
+        "status": "compared",
+        "before_resource_count": 404,
+        "after_resource_count": 404,
+        "shared_resource_count": 404,
+        "removed_resource_ids": [],
+        "added_resource_ids": [],
+        "owner_changes": {},
+        "fields": {
+          "bytes_moved": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "service_ns": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "energy_pj": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          }
+        }
+      }
+    },
+    {
+      "case": "qwen3_0_6b_f16_graph_on",
+      "before_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\before_runtime_owner_fix\\ui_qwen3_0_6b_f16_graph_on_result.json",
+      "final_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_0_6b_f16_graph_on_result.json",
+      "status": "compared_with_input_differences",
+      "before_job_id": "1113e90edfda45a9842792125a1d589c",
+      "final_job_id": "1e3587fc817349ecbec16c7eff75399c",
+      "before_finished_at": "2026-10-08T04:01:25.837229Z",
+      "final_finished_at": "2026-10-08T05:19:06.102793Z",
+      "comparison_request_id": "04_measured0",
+      "input_contract_matched": false,
+      "input_contract_errors": [
+        "submitted workload.metadata.cuda_graph_structural_program differs from prepared native contract"
+      ],
+      "measured_request_engine_metrics": {
+        "engine_ttft_ns": {
+          "before": 12246652.968046188,
+          "after": 12246652.968046188,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true,
+          "after_minus_before_us": 0.0
+        },
+        "engine_tpot_ns": {
+          "before": 3476161.748468599,
+          "after": 3475911.7484686035,
+          "status": "compared",
+          "after_minus_before": -249.9999999953434,
+          "exactly_equal": false,
+          "after_minus_before_us": -0.2499999999953434
+        },
+        "engine_e2e_ns": {
+          "before": 453719195.02355826,
+          "after": 453687445.02355886,
+          "status": "compared",
+          "after_minus_before": -31749.999999403954,
+          "exactly_equal": false,
+          "after_minus_before_us": -31.749999999403954
+        }
+      },
+      "physical_metric_scope": "all report requests including startup and warmups; not measured request alone",
+      "report_physical_metrics": {
+        "batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_live_batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "completed_requests": {
+          "before": 5,
+          "after": 5,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "rejected_requests": {
+          "before": 0,
+          "after": 0,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "task_count": {
+          "before": 636359,
+          "after": 636359,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "resource_accounted_bytes": {
+          "before": 1062902429744,
+          "after": 1062902429744,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "total_energy_pj": {
+          "before": 2786825128636.704,
+          "after": 2786825128636.704,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true
+        }
+      },
+      "report_dram_metrics": {
+        "task_count": {
+          "before": 242300,
+          "after": 242300,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_bytes": {
+          "before": 514918170948,
+          "after": 514918170948,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_read_bytes": {
+          "before": 504865467340,
+          "after": 504865467340,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_write_bytes": {
+          "before": 10052703608,
+          "after": 10052703608,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_bytes": {
+          "before": 515602203328,
+          "after": 515602203328,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_read_bytes": {
+          "before": 504867739840,
+          "after": 504867739840,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_write_bytes": {
+          "before": 10734463488,
+          "after": 10734463488,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "burst_count": {
+          "before": 8056284427,
+          "after": 8056284427,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_hits": {
+          "before": 7957075293,
+          "after": 7957075293,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_misses": {
+          "before": 384,
+          "after": 384,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_conflicts": {
+          "before": 99208750,
+          "after": 99208750,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "service_ns": {
+          "before": 629829500.0280511,
+          "after": 629829000.0297543,
+          "status": "compared",
+          "after_minus_before": -499.9982968568802,
+          "exactly_equal": false
+        },
+        "queue_wait_ns": {
+          "before": 8628422231.707184,
+          "after": 8628421231.707184,
+          "status": "compared",
+          "after_minus_before": -1000.0,
+          "exactly_equal": false
+        },
+        "read_write_switches": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "refresh_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "turnaround_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        }
+      },
+      "dram_metric_availability": {
+        "before": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        },
+        "after": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        }
+      },
+      "dram_resource_differences": {
+        "status": "compared",
+        "before_resource_count": 404,
+        "after_resource_count": 404,
+        "shared_resource_count": 404,
+        "removed_resource_ids": [],
+        "added_resource_ids": [],
+        "owner_changes": {},
+        "fields": {
+          "bytes_moved": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "service_ns": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "energy_pj": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          }
+        }
+      }
+    },
+    {
+      "case": "qwen3_1_7b_q8_0_graph_off",
+      "before_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\before_runtime_owner_fix\\ui_qwen3_1_7b_q8_0_graph_off_result.json",
+      "final_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_off_result.json",
+      "status": "compared_with_input_differences",
+      "before_job_id": "118d3c87e0014546a315bbd70e5a90b8",
+      "final_job_id": "3d6afdcf18194d45830ca7a66659f17e",
+      "before_finished_at": "2026-10-08T04:09:02.244300Z",
+      "final_finished_at": "2026-10-08T05:16:46.459495Z",
+      "comparison_request_id": "04_measured0",
+      "input_contract_matched": false,
+      "input_contract_errors": [
+        "submitted workload.metadata.cuda_graph_structural_program differs from prepared native contract"
+      ],
+      "measured_request_engine_metrics": {
+        "engine_ttft_ns": {
+          "before": 16853169.247597694,
+          "after": 16853169.247597694,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true,
+          "after_minus_before_us": 0.0
+        },
+        "engine_tpot_ns": {
+          "before": 4278736.682378168,
+          "after": 4278486.682378168,
+          "status": "compared",
+          "after_minus_before": -250.0,
+          "exactly_equal": false,
+          "after_minus_before_us": -0.25
+        },
+        "engine_e2e_ns": {
+          "before": 560252727.909625,
+          "after": 560220977.909625,
+          "status": "compared",
+          "after_minus_before": -31750.0,
+          "exactly_equal": false,
+          "after_minus_before_us": -31.75
+        }
+      },
+      "physical_metric_scope": "all report requests including startup and warmups; not measured request alone",
+      "report_physical_metrics": {
+        "batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_live_batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "completed_requests": {
+          "before": 5,
+          "after": 5,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "rejected_requests": {
+          "before": 0,
+          "after": 0,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "task_count": {
+          "before": 815224,
+          "after": 815224,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "resource_accounted_bytes": {
+          "before": 1574294927920,
+          "after": 1574294927920,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "total_energy_pj": {
+          "before": 4701462373603.096,
+          "after": 4701462373603.096,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true
+        }
+      },
+      "report_dram_metrics": {
+        "task_count": {
+          "before": 231212,
+          "after": 231212,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_bytes": {
+          "before": 765866463684,
+          "after": 765866463684,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_read_bytes": {
+          "before": 752449846348,
+          "after": 752449846348,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_write_bytes": {
+          "before": 13416617336,
+          "after": 13416617336,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_bytes": {
+          "before": 766550496064,
+          "after": 766550496064,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_read_bytes": {
+          "before": 752452118848,
+          "after": 752452118848,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_write_bytes": {
+          "before": 14098377216,
+          "after": 14098377216,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "burst_count": {
+          "before": 11977351501,
+          "after": 11977351501,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_hits": {
+          "before": 11859200109,
+          "after": 11859200109,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_misses": {
+          "before": 384,
+          "after": 384,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_conflicts": {
+          "before": 118151008,
+          "after": 118151008,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "service_ns": {
+          "before": 882759139.0980825,
+          "after": 882758639.0994399,
+          "status": "compared",
+          "after_minus_before": -499.9986426830292,
+          "exactly_equal": false
+        },
+        "queue_wait_ns": {
+          "before": 7803656593.15581,
+          "after": 7803655593.15581,
+          "status": "compared",
+          "after_minus_before": -1000.0,
+          "exactly_equal": false
+        },
+        "read_write_switches": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "refresh_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "turnaround_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        }
+      },
+      "dram_metric_availability": {
+        "before": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        },
+        "after": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        }
+      },
+      "dram_resource_differences": {
+        "status": "compared",
+        "before_resource_count": 404,
+        "after_resource_count": 404,
+        "shared_resource_count": 404,
+        "removed_resource_ids": [],
+        "added_resource_ids": [],
+        "owner_changes": {},
+        "fields": {
+          "bytes_moved": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "service_ns": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "energy_pj": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          }
+        }
+      }
+    },
+    {
+      "case": "qwen3_1_7b_q8_0_graph_on",
+      "before_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\before_runtime_owner_fix\\ui_qwen3_1_7b_q8_0_graph_on_result.json",
+      "final_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_on_result.json",
+      "status": "compared_with_input_differences",
+      "before_job_id": "8a72c71327d44ac5939728b2e492d37e",
+      "final_job_id": "3b73faa98cc44b3cb94dda94c33e24ff",
+      "before_finished_at": "2026-10-08T03:58:52.580716Z",
+      "final_finished_at": "2026-10-08T05:15:26.980338Z",
+      "comparison_request_id": "04_measured0",
+      "input_contract_matched": false,
+      "input_contract_errors": [
+        "submitted workload.metadata.cuda_graph_structural_program differs from prepared native contract"
+      ],
+      "measured_request_engine_metrics": {
+        "engine_ttft_ns": {
+          "before": 16853169.247597694,
+          "after": 16853169.247597694,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true,
+          "after_minus_before_us": 0.0
+        },
+        "engine_tpot_ns": {
+          "before": 4279890.42320313,
+          "after": 4279640.42320313,
+          "status": "compared",
+          "after_minus_before": -250.0,
+          "exactly_equal": false,
+          "after_minus_before_us": -0.25
+        },
+        "engine_e2e_ns": {
+          "before": 560399252.9943953,
+          "after": 560367502.9943953,
+          "status": "compared",
+          "after_minus_before": -31750.0,
+          "exactly_equal": false,
+          "after_minus_before_us": -31.75
+        }
+      },
+      "physical_metric_scope": "all report requests including startup and warmups; not measured request alone",
+      "report_physical_metrics": {
+        "batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_live_batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "completed_requests": {
+          "before": 5,
+          "after": 5,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "rejected_requests": {
+          "before": 0,
+          "after": 0,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "task_count": {
+          "before": 592007,
+          "after": 592007,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "resource_accounted_bytes": {
+          "before": 1574294927920,
+          "after": 1574294927920,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "total_energy_pj": {
+          "before": 4701462373603.096,
+          "after": 4701462373603.096,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true
+        }
+      },
+      "report_dram_metrics": {
+        "task_count": {
+          "before": 231212,
+          "after": 231212,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_bytes": {
+          "before": 765866463684,
+          "after": 765866463684,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_read_bytes": {
+          "before": 752449846348,
+          "after": 752449846348,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_write_bytes": {
+          "before": 13416617336,
+          "after": 13416617336,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_bytes": {
+          "before": 766550496064,
+          "after": 766550496064,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_read_bytes": {
+          "before": 752452118848,
+          "after": 752452118848,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_write_bytes": {
+          "before": 14098377216,
+          "after": 14098377216,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "burst_count": {
+          "before": 11977351501,
+          "after": 11977351501,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_hits": {
+          "before": 11859200109,
+          "after": 11859200109,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_misses": {
+          "before": 384,
+          "after": 384,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_conflicts": {
+          "before": 118151008,
+          "after": 118151008,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "service_ns": {
+          "before": 883485106.6863271,
+          "after": 883484606.6875147,
+          "status": "compared",
+          "after_minus_before": -499.9988124370575,
+          "exactly_equal": false
+        },
+        "queue_wait_ns": {
+          "before": 7805108528.539092,
+          "after": 7805107528.539092,
+          "status": "compared",
+          "after_minus_before": -1000.0,
+          "exactly_equal": false
+        },
+        "read_write_switches": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "refresh_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "turnaround_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        }
+      },
+      "dram_metric_availability": {
+        "before": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        },
+        "after": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        }
+      },
+      "dram_resource_differences": {
+        "status": "compared",
+        "before_resource_count": 404,
+        "after_resource_count": 404,
+        "shared_resource_count": 404,
+        "removed_resource_ids": [],
+        "added_resource_ids": [],
+        "owner_changes": {},
+        "fields": {
+          "bytes_moved": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "service_ns": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "energy_pj": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          }
+        }
+      }
+    },
+    {
+      "case": "qwen3_4b_q4_k_m_graph_off",
+      "before_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\before_runtime_owner_fix\\ui_qwen3_4b_q4_k_m_graph_off_result.json",
+      "final_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_off_result.json",
+      "status": "excluded_before_not_completed",
+      "before_job_status": "cancelled"
+    },
+    {
+      "case": "qwen3_4b_q4_k_m_graph_on",
+      "before_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\before_runtime_owner_fix\\ui_qwen3_4b_q4_k_m_graph_on_result.json",
+      "final_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_4b_q4_k_m_graph_on_result.json",
+      "status": "compared_with_input_differences",
+      "before_job_id": "62be8c2f9e52440d933baf6282bbb429",
+      "final_job_id": "f0a5dab324ed43dbb13271aa69b3de03",
+      "before_finished_at": "2026-10-08T04:14:56.020733Z",
+      "final_finished_at": "2026-10-08T05:32:19.900160Z",
+      "comparison_request_id": "04_measured0",
+      "input_contract_matched": false,
+      "input_contract_errors": [
+        "submitted workload.metadata.cuda_graph_structural_program differs from prepared native contract"
+      ],
+      "measured_request_engine_metrics": {
+        "engine_ttft_ns": {
+          "before": 39649490.4950006,
+          "after": 39649490.4950006,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true,
+          "after_minus_before_us": 0.0
+        },
+        "engine_tpot_ns": {
+          "before": 5552171.909543499,
+          "after": 5551921.909543501,
+          "status": "compared",
+          "after_minus_before": -249.99999999813735,
+          "exactly_equal": false,
+          "after_minus_before_us": -0.24999999999813735
+        },
+        "engine_e2e_ns": {
+          "before": 744775323.007025,
+          "after": 744743573.0070252,
+          "status": "compared",
+          "after_minus_before": -31749.99999976158,
+          "exactly_equal": false,
+          "after_minus_before_us": -31.74999999976158
+        }
+      },
+      "physical_metric_scope": "all report requests including startup and warmups; not measured request alone",
+      "report_physical_metrics": {
+        "batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_live_batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "completed_requests": {
+          "before": 5,
+          "after": 5,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "rejected_requests": {
+          "before": 0,
+          "after": 0,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "task_count": {
+          "before": 798787,
+          "after": 798787,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "resource_accounted_bytes": {
+          "before": 2215471004460,
+          "after": 2215471004460,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "total_energy_pj": {
+          "before": 8283975683306.298,
+          "after": 8283975683306.298,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true
+        }
+      },
+      "report_dram_metrics": {
+        "task_count": {
+          "before": 309956,
+          "after": 309956,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_bytes": {
+          "before": 1061668814616,
+          "after": 1061668814616,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_read_bytes": {
+          "before": 1033619882624,
+          "after": 1033619882624,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_write_bytes": {
+          "before": 28048931992,
+          "after": 28048931992,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_bytes": {
+          "before": 1062548239424,
+          "after": 1062548239424,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_read_bytes": {
+          "before": 1033622771776,
+          "after": 1033622771776,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_write_bytes": {
+          "before": 28925467648,
+          "after": 28925467648,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "burst_count": {
+          "before": 16602316241,
+          "after": 16602316241,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_hits": {
+          "before": 16434218967,
+          "after": 16434218967,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_misses": {
+          "before": 384,
+          "after": 384,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_conflicts": {
+          "before": 168096890,
+          "after": 168096890,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "service_ns": {
+          "before": 1228390984.605082,
+          "after": 1228390484.6047447,
+          "status": "compared",
+          "after_minus_before": -500.00033736228943,
+          "exactly_equal": false
+        },
+        "queue_wait_ns": {
+          "before": 12211514128.025873,
+          "after": 12211513128.03042,
+          "status": "compared",
+          "after_minus_before": -999.9954528808594,
+          "exactly_equal": false
+        },
+        "read_write_switches": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "refresh_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "turnaround_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        }
+      },
+      "dram_metric_availability": {
+        "before": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        },
+        "after": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        }
+      },
+      "dram_resource_differences": {
+        "status": "compared",
+        "before_resource_count": 404,
+        "after_resource_count": 404,
+        "shared_resource_count": 404,
+        "removed_resource_ids": [],
+        "added_resource_ids": [],
+        "owner_changes": {},
+        "fields": {
+          "bytes_moved": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "service_ns": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "energy_pj": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          }
+        }
+      }
+    },
+    {
+      "case": "qwen3_8b_q4_k_m_graph_off",
+      "before_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\before_runtime_owner_fix\\ui_qwen3_8b_q4_k_m_graph_off_result.json",
+      "final_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_off_result.json",
+      "status": "excluded_before_not_completed",
+      "before_job_status": "cancelled"
+    },
+    {
+      "case": "qwen3_8b_q4_k_m_graph_on",
+      "before_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\before_runtime_owner_fix\\ui_qwen3_8b_q4_k_m_graph_on_result.json",
+      "final_result": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_on_result.json",
+      "status": "compared_with_input_differences",
+      "before_job_id": "1573add188454c0f93e79852346641a8",
+      "final_job_id": "53f6a8fbd97f48b19cb552ceffccd0c3",
+      "before_finished_at": "2026-10-08T04:15:23.721580Z",
+      "final_finished_at": "2026-10-08T05:33:06.051790Z",
+      "comparison_request_id": "04_measured0",
+      "input_contract_matched": false,
+      "input_contract_errors": [
+        "submitted workload.metadata.cuda_graph_structural_program differs from prepared native contract"
+      ],
+      "measured_request_engine_metrics": {
+        "engine_ttft_ns": {
+          "before": 64772081.53081322,
+          "after": 64772081.53081322,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true,
+          "after_minus_before_us": 0.0
+        },
+        "engine_tpot_ns": {
+          "before": 8399315.799567305,
+          "after": 8399065.799567305,
+          "status": "compared",
+          "after_minus_before": -250.0,
+          "exactly_equal": false,
+          "after_minus_before_us": -0.25
+        },
+        "engine_e2e_ns": {
+          "before": 1131485188.075861,
+          "after": 1131453438.075861,
+          "status": "compared",
+          "after_minus_before": -31750.0,
+          "exactly_equal": false,
+          "after_minus_before_us": -31.75
+        }
+      },
+      "physical_metric_scope": "all report requests including startup and warmups; not measured request alone",
+      "report_physical_metrics": {
+        "batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_live_batch_count": {
+          "before": 386,
+          "after": 386,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "completed_requests": {
+          "before": 5,
+          "after": 5,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "rejected_requests": {
+          "before": 0,
+          "after": 0,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "task_count": {
+          "before": 798787,
+          "after": 798787,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "resource_accounted_bytes": {
+          "before": 3930498141968,
+          "after": 3930498141968,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "total_energy_pj": {
+          "before": 15163519746177.5,
+          "after": 15163519746177.5,
+          "status": "compared",
+          "after_minus_before": 0.0,
+          "exactly_equal": true
+        }
+      },
+      "report_dram_metrics": {
+        "task_count": {
+          "before": 309956,
+          "after": 309956,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_bytes": {
+          "before": 1912382465520,
+          "after": 1912382465520,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_read_bytes": {
+          "before": 1880058612056,
+          "after": 1880058612056,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "logical_write_bytes": {
+          "before": 32323853464,
+          "after": 32323853464,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_bytes": {
+          "before": 1913261910976,
+          "after": 1913261910976,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_read_bytes": {
+          "before": 1880061521856,
+          "after": 1880061521856,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "physical_write_bytes": {
+          "before": 33200389120,
+          "after": 33200389120,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "burst_count": {
+          "before": 29894717359,
+          "after": 29894717359,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_hits": {
+          "before": 29624115365,
+          "after": 29624115365,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_misses": {
+          "before": 384,
+          "after": 384,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "row_conflicts": {
+          "before": 270601610,
+          "after": 270601610,
+          "status": "compared",
+          "after_minus_before": 0,
+          "exactly_equal": true
+        },
+        "service_ns": {
+          "before": 2162689839.990822,
+          "after": 2162689339.9919834,
+          "status": "compared",
+          "after_minus_before": -499.9988384246826,
+          "exactly_equal": false
+        },
+        "queue_wait_ns": {
+          "before": 12153432635.995914,
+          "after": 12153431635.995914,
+          "status": "compared",
+          "after_minus_before": -1000.0,
+          "exactly_equal": false
+        },
+        "read_write_switches": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "refresh_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        },
+        "turnaround_wait_ns": {
+          "before": null,
+          "after": null,
+          "status": "unavailable",
+          "after_minus_before": null,
+          "exactly_equal": null
+        }
+      },
+      "dram_metric_availability": {
+        "before": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        },
+        "after": {
+          "organization_profiles": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "read_write_switches": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "refresh_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          },
+          "turnaround_wait_ns": {
+            "physical_batch_count": 386,
+            "recorded_batch_count": 0,
+            "status": "not_recorded"
+          }
+        }
+      },
+      "dram_resource_differences": {
+        "status": "compared",
+        "before_resource_count": 404,
+        "after_resource_count": 404,
+        "shared_resource_count": 404,
+        "removed_resource_ids": [],
+        "added_resource_ids": [],
+        "owner_changes": {},
+        "fields": {
+          "bytes_moved": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "service_ns": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          },
+          "energy_pj": {
+            "changed_resource_count": 0,
+            "unavailable_resource_ids": [],
+            "max_absolute_delta": 0,
+            "changed_resources": {},
+            "all_existing_resources_exactly_equal": true
+          }
+        }
+      }
+    }
+  ]
+}

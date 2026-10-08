@@ -1,0 +1,198 @@
+{
+  "schema": "heterollm.native-graph-validation/v1",
+  "status": "completed",
+  "native_source_revision": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+  "controlled_variant": {
+    "context_checkpoints": 0,
+    "prompt_tokens": 512,
+    "output_tokens": 128,
+    "context": 768,
+    "flash_attn": "off",
+    "gpu_layers": -1,
+    "threads": 16,
+    "timing_warmups": 2,
+    "timing_repetitions": 5,
+    "structural_warmups": 2,
+    "structural_repetitions": 1
+  },
+  "primary_native_source_restored": true,
+  "primary_native_binaries_restored": true,
+  "native_timings_used_to_fit_simulator": false,
+  "models": [
+    {
+      "model_slug": "qwen3_0_6b_f16",
+      "timing_files": {
+        "on": "native_qwen3_0_6b_f16_graph_on.json",
+        "off": "native_qwen3_0_6b_f16_graph_off.json"
+      },
+      "diagnostic_files": {
+        "on": "native_graph_diagnostic_qwen3_0_6b_f16_on.json",
+        "off": "native_graph_diagnostic_qwen3_0_6b_f16_off.json"
+      },
+      "structural_files": {
+        "dry": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_0_6b_f16_dry.jsonl",
+        "live": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_0_6b_f16_live.jsonl",
+        "capture": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_0_6b_f16_capture.jsonl"
+      },
+      "dry_live_validation": "structure_validation_qwen3_0_6b_f16.json",
+      "dry_server_validation": "server_structure_validation_qwen3_0_6b_f16.json",
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      },
+      "off_events": {
+        "direct": 386
+      }
+    },
+    {
+      "model_slug": "qwen3_1_7b_q8_0",
+      "timing_files": {
+        "on": "native_qwen3_1_7b_q8_0_graph_on.json",
+        "off": "native_qwen3_1_7b_q8_0_graph_off.json"
+      },
+      "diagnostic_files": {
+        "on": "native_graph_diagnostic_qwen3_1_7b_q8_0_on.json",
+        "off": "native_graph_diagnostic_qwen3_1_7b_q8_0_off.json"
+      },
+      "structural_files": {
+        "dry": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_1_7b_q8_0_dry.jsonl",
+        "live": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_1_7b_q8_0_live.jsonl",
+        "capture": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_1_7b_q8_0_capture.jsonl"
+      },
+      "dry_live_validation": "structure_validation_qwen3_1_7b_q8_0.json",
+      "dry_server_validation": "server_structure_validation_qwen3_1_7b_q8_0.json",
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      },
+      "off_events": {
+        "direct": 386
+      }
+    },
+    {
+      "model_slug": "qwen3_4b_q4_k_m",
+      "timing_files": {
+        "on": "native_qwen3_4b_q4_k_m_graph_on.json",
+        "off": "native_qwen3_4b_q4_k_m_graph_off.json"
+      },
+      "diagnostic_files": {
+        "on": "native_graph_diagnostic_qwen3_4b_q4_k_m_on.json",
+        "off": "native_graph_diagnostic_qwen3_4b_q4_k_m_off.json"
+      },
+      "structural_files": {
+        "dry": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_4b_q4_k_m_dry.jsonl",
+        "live": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_4b_q4_k_m_live.jsonl",
+        "capture": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_4b_q4_k_m_capture.jsonl"
+      },
+      "dry_live_validation": "structure_validation_qwen3_4b_q4_k_m.json",
+      "dry_server_validation": "server_structure_validation_qwen3_4b_q4_k_m.json",
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      },
+      "off_events": {
+        "direct": 386
+      }
+    },
+    {
+      "model_slug": "qwen3_8_27b_mixed",
+      "timing_files": {
+        "on": "native_qwen3_8_27b_mixed_graph_on.json",
+        "off": "native_qwen3_8_27b_mixed_graph_off.json"
+      },
+      "diagnostic_files": {
+        "on": "native_graph_diagnostic_qwen3_8_27b_mixed_on.json",
+        "off": "native_graph_diagnostic_qwen3_8_27b_mixed_off.json"
+      },
+      "structural_files": {
+        "dry": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_8_27b_mixed_dry.jsonl",
+        "live": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_8_27b_mixed_live.jsonl",
+        "capture": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_8_27b_mixed_capture.jsonl"
+      },
+      "dry_live_validation": "structure_validation_qwen3_8_27b_mixed.json",
+      "dry_server_validation": "server_structure_validation_qwen3_8_27b_mixed.json",
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      },
+      "off_events": {
+        "direct": 386
+      }
+    },
+    {
+      "model_slug": "qwen3_8b_q4_k_m",
+      "timing_files": {
+        "on": "native_qwen3_8b_q4_k_m_graph_on.json",
+        "off": "native_qwen3_8b_q4_k_m_graph_off.json"
+      },
+      "diagnostic_files": {
+        "on": "native_graph_diagnostic_qwen3_8b_q4_k_m_on.json",
+        "off": "native_graph_diagnostic_qwen3_8b_q4_k_m_off.json"
+      },
+      "structural_files": {
+        "dry": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_8b_q4_k_m_dry.jsonl",
+        "live": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_8b_q4_k_m_live.jsonl",
+        "capture": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_8b_q4_k_m_capture.jsonl"
+      },
+      "dry_live_validation": "structure_validation_qwen3_8b_q4_k_m.json",
+      "dry_server_validation": "server_structure_validation_qwen3_8b_q4_k_m.json",
+      "on_events": {
+        "properties_changed": 7,
+        "direct": 7,
+        "properties_stable": 379,
+        "capture_begin": 4,
+        "capture_end": 4,
+        "instantiate": 1,
+        "update": 4,
+        "replay": 379,
+        "destroy_graph": 3,
+        "update_failed": 1,
+        "destroy_exec": 1,
+        "reinstantiate": 1
+      },
+      "off_events": {
+        "direct": 386
+      }
+    }
+  ]
+}

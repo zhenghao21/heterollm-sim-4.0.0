@@ -120,6 +120,24 @@ def test_source_cache_views_are_bounded_and_persistent_between_steps():
                     assert access["offset_bytes"] + access["size_bytes"] <= access["buffer_size_bytes"]
 
 
+def test_serial_native_cache_requests_have_distinct_owners_and_reject_merged_sequences():
+    scenario = case("qwen3_0_6b_f16")
+    initial = scenario.workload.requests[0]
+    requests = tuple(replace(initial, request_id=name) for name in ("startup", "warmup", "measured"))
+    scenario = replace(scenario, workload=replace(scenario.workload, requests=requests))
+    layer, plan, router = p._execution_layers(scenario)[0], p._parallel_plan(scenario), p._topology_router(scenario)
+    contracts = [p._source_f32_kv_contract(scenario, router, plan, plan.ranks[0], layer,
+        2, 2, 2, 2, owner_request_ids=(request.request_id,)) for request in requests]
+    assert [contract["request_id"] for contract in contracts] == [request.request_id for request in requests]
+    assert len({contract["k_cache_id"] for contract in contracts}) == 3
+    assert len({contract["v_cache_id"] for contract in contracts}) == 3
+    with pytest.raises(ValueError, match="single-GPU"):
+        p._source_f32_kv_contract(scenario, router, plan, plan.ranks[0], layer,
+            2, 2, 2, 2, owner_request_ids=("startup", "warmup"))
+    with pytest.raises(ValueError, match="single-GPU"):
+        p._source_f32_kv_contract(scenario, router, plan, plan.ranks[0], layer, 2, 2, 2, 2)
+
+
 @pytest.mark.parametrize("cache_generation", [0, 1])
 def test_source_cache_lifetime_in_indexed_kernel_graphs(cache_generation, monkeypatch):
     original_ranges = p._source_f32_kv_ranges

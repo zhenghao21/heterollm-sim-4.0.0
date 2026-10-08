@@ -1,0 +1,83 @@
+{
+  "llama_cpp_source_revision": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+  "native_timing_binary": "original uninstrumented Release build",
+  "workload": {
+    "prompt_tokens": 512,
+    "output_tokens": 128,
+    "context": 768,
+    "batch": 512,
+    "ubatch": 512,
+    "threads": 16,
+    "gpu_layers": -1,
+    "flash_attn": "off",
+    "warmups": 2,
+    "repetitions": 5
+  },
+  "graph_optimizer_env": null,
+  "samples": [
+    {
+      "file": "native_qwen3_0_6b_f16_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 540.742
+    },
+    {
+      "file": "native_qwen3_0_6b_f16_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 363.64599999999996
+    },
+    {
+      "file": "native_qwen3_1_7b_q8_0_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 717.551
+    },
+    {
+      "file": "native_qwen3_1_7b_q8_0_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 496.077
+    },
+    {
+      "file": "native_qwen3_4b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 998.05
+    },
+    {
+      "file": "native_qwen3_4b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 764.4060000000001
+    },
+    {
+      "file": "native_qwen3_8_27b_mixed_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 3465.79
+    },
+    {
+      "file": "native_qwen3_8_27b_mixed_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 2911.4680000000003
+    },
+    {
+      "file": "native_qwen3_8b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 1298.364
+    },
+    {
+      "file": "native_qwen3_8b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 1086.8529999999998
+    }
+  ],
+  "limitations": [
+    "Graph on policy removes the disable variable; actual replay must be verified separately by diagnostic traces.",
+    "8B and 27B runs were repeated under confirmed GPU exclusivity after potential microbenchmark overlap; only repeated results retained."
+  ]
+}

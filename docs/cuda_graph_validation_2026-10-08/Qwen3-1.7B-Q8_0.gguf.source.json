@@ -1,0 +1,7 @@
+{
+  "repository": "Qwen/Qwen3-1.7B-GGUF",
+  "revision": "90862c4b9d2787eaed51d12237eafdfe7c5f6077",
+  "filename": "Qwen3-1.7B-Q8_0.gguf",
+  "size_bytes": 1834426016,
+  "source_url": "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/90862c4b9d2787eaed51d12237eafdfe7c5f6077/Qwen3-1.7B-Q8_0.gguf"
+}

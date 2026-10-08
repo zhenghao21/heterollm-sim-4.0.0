@@ -58,6 +58,7 @@ from .event_kernel import (
 )
 from .execution_control import ExecutionControl
 from .llama_graph_runtime import LlamaGraphRuntime
+from .cuda_graph_serving import CudaGraphServingRuntime
 from .retained_kv_state import (
     RetainedKVState,
     BOUND as _RETAINED_KV_BOUND,
@@ -1288,6 +1289,13 @@ class _ExecutionStageMetadataCache:
             if trusted_handoff
             else _execution_stages_from_metadata(metadata)
         )
+        if parsed[0] and _has_live_physical_tasks(parsed[0]):
+            # Physical cohorts replay against live allocator/DRAM state and
+            # already bypass the immutable replay-layout cache. Their fresh
+            # source tuples cannot hit this identity memo, but retaining 512
+            # of them keeps every full task DAG alive in aggregate runs.
+            # Return the same parsed stages without changing their contents.
+            return parsed
         if len(self._values) >= self.max_entries:
             # Dict insertion order gives a small, deterministic FIFO bound.
             self._values.pop(next(iter(self._values)))
@@ -5284,6 +5292,7 @@ class _OnlineRuntime:
         self.batches: List[ServingBatch] = []
         self._runtime_origin_ns = runtime_origin_ns
         self._llama_graph_runtime = LlamaGraphRuntime(plan.scenario)
+        self._cuda_graph_runtime = CudaGraphServingRuntime(plan.scenario)
         self.now = max(
             runtime_origin_ns,
             min(
@@ -9552,6 +9561,7 @@ class _OnlineRuntime:
                 continue
             break
         self.execution_control.raise_if_cancelled()
+        self._cuda_graph_runtime.assert_complete()
         result = self._result()
         self.execution_control.report(
             "serving_complete",
@@ -14286,6 +14296,7 @@ class _OnlineRuntime:
             self._execute_cohort(cohort)
         except BaseException as error:
             self._llama_graph_runtime.failed(cohort.cohort_id, error)
+            self._cuda_graph_runtime.failed()
             # Lowering can reserve KV before a provider or graph validation
             # fails.  Restore the reservation boundary so a diagnostic failure
             # cannot leak capacity into a later replay.
@@ -14340,7 +14351,8 @@ class _OnlineRuntime:
 
     def _execute_cohort(self, cohort: BatchCohort) -> None:
         cohort = self._with_kv_scan_lower_bound(cohort)
-        cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
+        with self._cuda_graph_runtime.scope(cohort, self.now) as cuda_transition:
+            cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
         planning_energy_pj = cost.energy_pj
         planning_duration_ns = cost.duration_ns
         execution_plan = self._execution_plan_for(cohort, cost.metadata)
@@ -14967,6 +14979,7 @@ class _OnlineRuntime:
         self.events.append(ServingEvent(end_ns, "batch_end", cohort_id=cohort.cohort_id, details={"kind": cohort.kind}))
         self.now = end_ns
         self._llama_graph_runtime.commit(graph_transition)
+        self._cuda_graph_runtime.commit(cuda_transition)
 
     def _finish(self, state: _MutableRequest, timestamp_ns: float) -> None:
         if state.status == RequestStatus.FINISHED:
@@ -15427,6 +15440,7 @@ class _OnlineRuntime:
             runtime_kernel_metrics={
                 **dict(self._execution_resource_kernel.metrics),
                 "llama_cpu_graph_lifecycle": self._llama_graph_runtime.summary(),
+                "llama_cuda_graph_lifecycle": self._cuda_graph_runtime.summary(),
                 "paged_kv_pool": (
                     self.ledger.paged_pool.snapshot()
                     if self.ledger.paged_pool is not None

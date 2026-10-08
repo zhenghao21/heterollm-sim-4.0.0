@@ -7,7 +7,7 @@ const vm = require("node:vm");
 const root = path.resolve(__dirname, "..");
 const core = require(path.join(root, "src/heterollm_sim/webui/model-graph-core.js"));
 
-function loadApp() {
+function loadApp({ scheduleTimer = setTimeout, cancelTimer = clearTimeout } = {}) {
   const source = fs.readFileSync(path.join(root, "src/heterollm_sim/webui/app.js"), "utf8");
   const storedValues = new Map();
   const context = {
@@ -21,9 +21,9 @@ function loadApp() {
       setItem(key, value) { storedValues.set(key, String(value)); },
       removeItem(key) { storedValues.delete(key); },
     },
-    window: { addEventListener() {}, setTimeout, clearTimeout },
-    setTimeout,
-    clearTimeout,
+    window: { addEventListener() {}, setTimeout: scheduleTimer, clearTimeout: cancelTimer },
+    setTimeout: scheduleTimer,
+    clearTimeout: cancelTimer,
     URL,
     JSON,
     Math,
@@ -70,6 +70,27 @@ function loadApp() {
         restoreRenderInteractionState = () => {};
         renderAll = () => {};
         markMappingStale = () => {};
+      },
+      importScenarioFile,
+      runScenario,
+      setScenario,
+      setBusy,
+      syncRunButtons,
+      scheduleValidationNavigationRecheck,
+      stubImportRunRendering({ request, events }) {
+        apiRequest = request;
+        clearValidationFocus = () => {};
+        resetTracePlaybackState = () => {};
+        resetTopologyHistory = () => {};
+        renderAll = () => {};
+        renderSteps = () => {};
+        renderDiagnostics = () => {};
+        openDiagnostics = () => {};
+        Topology.normalizeTopologyView = () => ({ layout: { positions: {} }, viewport: {} });
+        toast = (...args) => events.push({ type: "toast", args });
+        showOperationError = (...args) => events.push({ type: "error", args });
+        renderRunJobDialog = () => {};
+        openRunJobDialog = () => events.push({ type: "dialog" });
       },
       resetPlacementForArchitecturePreset,
       resetArchitectureDependentProfiles,
@@ -171,6 +192,190 @@ function graphWithPorts(firstContract, secondContract) {
     ],
   };
 }
+
+function importScenario(name) {
+  return {
+    schema_version: "4.0.0",
+    name,
+    hardware: {
+      name: "import-test-hardware",
+      components: [
+        { component_id: "cpu0", kind: "cpu", cost_profile_id: "cpu-profile", metadata: {}, ports: [] },
+        { component_id: "gpu0", kind: "gpu", cost_profile_id: "gpu-profile", metadata: {}, ports: [] },
+      ],
+      links: [],
+      metadata: {},
+    },
+    model: { name: "import-test-model", graph: graphWithPorts({}, {}) },
+    placement: { metadata: {}, parallel: {} },
+    workload: workload(),
+    profiles: {
+      components: { cpu: { "cpu-profile": {} }, gpu: { "gpu-profile": {} } },
+      host_orchestration: {
+        cpu_component_id: "cpu0", gpu_component_id: "gpu0",
+        scheduler_resource_id: "host.scheduler", pack_resource_id: "host.pack",
+        dma_resource_id: "host.dma", submission_resource_id: "host.submit",
+      },
+      fusion: {},
+      runtime: { gpu_controllers: { gpu0: {} } },
+    },
+  };
+}
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((accept, fail) => { resolve = accept; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+function prepareImportRun(api, request) {
+  const events = [];
+  for (const id of [
+    "busyOverlay", "busyTitle", "busyDetail", "runButton", "rerunButton", "emptyRunButton",
+    "traceRunButton", "importButton", "importHardwareButton", "fileInput", "hardwareFileInput",
+  ]) api.dom[id] = { disabled: false, hidden: true, value: "selected.json" };
+  api.stubImportRunRendering({ request, events });
+  api.setScenario(importScenario("old-scenario"));
+  return events;
+}
+
+test("scenario import blocks runs through file reading and normalization, then one run uses the imported input", async () => {
+  const api = loadApp();
+  const fileRead = deferred();
+  const normalization = deferred();
+  const requests = [];
+  const events = prepareImportRun(api, (route, options) => {
+    requests.push({ route, name: JSON.parse(options.body).name });
+    if (route === "/normalize") return normalization.promise;
+    if (route === "/validate") return Promise.resolve({ valid: true, errors: [], warnings: [] });
+    if (route === "/run-estimate") return Promise.resolve({ risk_level: "low" });
+    throw new Error(`Unexpected route: ${route}`);
+  });
+  const importTask = api.importScenarioFile({ text: () => fileRead.promise });
+  for (const phase of ["reading", "normalizing"]) {
+    assert.equal(api.state.busy, true, phase);
+    assert.equal(api.dom.busyOverlay.hidden, false, phase);
+    api.syncRunButtons();
+    for (const id of ["runButton", "rerunButton", "emptyRunButton", "traceRunButton", "importButton", "importHardwareButton"]) {
+      assert.equal(api.dom[id].disabled, true, `${id} while ${phase}`);
+    }
+    await api.runScenario();
+    assert.equal(requests.some(({ route }) => route === "/validate"), false);
+    assert.equal(api.state.scenario.name, "old-scenario");
+    if (phase === "reading") {
+      fileRead.resolve(JSON.stringify(importScenario("new-scenario")));
+      await new Promise(setImmediate);
+    }
+  }
+  normalization.resolve({ scenario: importScenario("new-scenario") });
+  await importTask;
+  assert.equal(api.state.busy, false);
+  assert.equal(api.dom.busyOverlay.hidden, true);
+  assert.equal(api.dom.runButton.disabled, false);
+  assert.equal(api.dom.importButton.disabled, false);
+  assert.equal(api.state.scenario.name, "new-scenario");
+  await api.runScenario();
+  assert.deepEqual(requests, [
+    { route: "/normalize", name: "new-scenario" },
+    { route: "/validate", name: "new-scenario" },
+    { route: "/run-estimate", name: "new-scenario" },
+  ]);
+  assert.equal(events.filter(({ type }) => type === "dialog").length, 1);
+  assert.equal(events.filter(({ type }) => type === "error").length, 0);
+});
+
+test("overlapping and externally busy imports do not read files or release another operation's busy state", async () => {
+  const api = loadApp();
+  const normalization = deferred();
+  const requests = [];
+  prepareImportRun(api, (route) => { requests.push(route); return normalization.promise; });
+  let rejectedFileReads = 0;
+  const rejectedFile = { text() { rejectedFileReads += 1; return Promise.resolve("{}"); } };
+  api.setBusy(true);
+  await api.importScenarioFile(rejectedFile);
+  assert.equal(api.state.busy, true);
+  assert.equal(api.dom.busyOverlay.hidden, false);
+  assert.equal(rejectedFileReads, 0);
+  api.setBusy(false);
+  const importTask = api.importScenarioFile({ text: async () => JSON.stringify(importScenario("new-scenario")) });
+  await new Promise(setImmediate);
+  await api.importScenarioFile(rejectedFile);
+  assert.equal(api.state.busy, true);
+  assert.equal(api.dom.runButton.disabled, true);
+  assert.equal(rejectedFileReads, 0);
+  assert.deepEqual(requests, ["/normalize"]);
+  assert.equal(api.state.scenario.name, "old-scenario");
+  normalization.resolve(importScenario("new-scenario"));
+  await importTask;
+  assert.equal(api.state.busy, false);
+  assert.equal(api.state.scenario.name, "new-scenario");
+});
+
+test("failed file reads, JSON parsing and normalization release import busy state and allow retry", async () => {
+  for (const failure of ["read", "json", "normalize"]) {
+    const api = loadApp();
+    let failNormalize = failure === "normalize";
+    const events = prepareImportRun(api, async (_route, options) => {
+      if (failNormalize) throw new Error("normalization failed");
+      return JSON.parse(options.body);
+    });
+    const oldScenario = api.state.scenario;
+    await api.importScenarioFile({ text: async () => {
+      if (failure === "read") throw new Error("file read failed");
+      return failure === "json" ? "invalid JSON" : JSON.stringify(importScenario("new-scenario"));
+    } });
+    assert.equal(api.state.busy, false, failure);
+    assert.equal(api.dom.busyOverlay.hidden, true, failure);
+    assert.equal(api.dom.runButton.disabled, false, failure);
+    assert.equal(api.dom.fileInput.value, "", failure);
+    assert.equal(api.dom.hardwareFileInput.value, "", failure);
+    assert.equal(api.state.scenario, oldScenario, failure);
+    assert.equal(events.some(({ type, args }) => type === "toast" && args[2] === "error"), true, failure);
+    failNormalize = false;
+    await api.importScenarioFile({ text: async () => JSON.stringify(importScenario("retry-scenario")) });
+    assert.equal(api.state.scenario.name, "retry-scenario", failure);
+    assert.equal(api.state.busy, false, failure);
+  }
+});
+
+test("a queued validation recheck waits for a busy import and resumes after import failure", async () => {
+  const timers = new Map();
+  let nextTimer = 0;
+  const api = loadApp({
+    scheduleTimer(callback) { const id = ++nextTimer; timers.set(id, callback); return id; },
+    cancelTimer(id) { timers.delete(id); },
+  });
+  const fireNextTimer = () => {
+    assert.equal(timers.size, 1);
+    const [id, callback] = timers.entries().next().value;
+    timers.delete(id);
+    callback();
+  };
+  const normalization = deferred();
+  const requests = [];
+  prepareImportRun(api, (route) => {
+    requests.push(route);
+    return route === "/normalize" ? normalization.promise : Promise.resolve({ valid: true, errors: [] });
+  });
+  api.state.validationNavigation = { active: true, pendingGeneration: 0, recheckTimer: null };
+  api.scheduleValidationNavigationRecheck();
+  const importTask = api.importScenarioFile({ text: async () => JSON.stringify(importScenario("new-scenario")) });
+  await new Promise(setImmediate);
+  fireNextTimer();
+  assert.deepEqual(requests, ["/normalize"]);
+  assert.equal(api.state.busy, true);
+  assert.equal(api.state.validationNavigation.pendingGeneration, api.state.scenarioGeneration);
+  normalization.reject(new Error("normalization failed"));
+  await importTask;
+  assert.equal(api.state.busy, false);
+  assert.equal(api.state.scenario.name, "old-scenario");
+  fireNextTimer();
+  await new Promise(setImmediate);
+  assert.deepEqual(requests, ["/normalize", "/validate"]);
+  assert.equal(api.state.busy, false);
+  assert.equal(timers.size, 0);
+});
 
 test("model graph rejects conflicting port contracts when tensor contract is absent", () => {
   for (const [field, first, second] of [

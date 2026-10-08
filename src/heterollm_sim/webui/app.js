@@ -2611,7 +2611,7 @@ function setBusy(active, title = "正在运行分析模型", detail = "正在编
   dom.busyOverlay.hidden = !active;
   dom.busyTitle.textContent = title;
   dom.busyDetail.textContent = detail;
-  [dom.runButton, dom.rerunButton, dom.emptyRunButton, dom.compareButton, dom.validateButton, dom.loadReferenceButton, dom.canonicalExportButton, dom.canonicalExportDialogButton, dom.directScoreButton, dom.openDirectScoreButton, dom.kvAnalysisButton]
+  [dom.runButton, dom.rerunButton, dom.emptyRunButton, dom.traceRunButton, dom.compareButton, dom.validateButton, dom.loadReferenceButton, dom.importButton, dom.importHardwareButton, dom.canonicalExportButton, dom.canonicalExportDialogButton, dom.directScoreButton, dom.openDirectScoreButton, dom.kvAnalysisButton]
     .filter(Boolean)
     .forEach((button) => { button.disabled = active; });
   syncRunButtons();
@@ -4008,6 +4008,10 @@ function scheduleValidationNavigationRecheck() {
   if (state.validationNavigation.recheckTimer) clearTimeout(state.validationNavigation.recheckTimer);
   state.validationNavigation.recheckTimer = setTimeout(() => {
     state.validationNavigation.recheckTimer = null;
+    if (state.busy) {
+      state.validationNavigation.pendingGeneration = state.scenarioGeneration;
+      return;
+    }
     if (state.scenarioGeneration !== generation) {
       state.validationNavigation.pendingGeneration = state.scenarioGeneration;
     }
@@ -4226,7 +4230,7 @@ function syncRunButtons() {
   if (dom.runButton) dom.runButton.textContent = active ? uiText("查看仿真进度", "View simulation progress") : uiText("运行仿真", "Run simulation");
   if (dom.rerunButton) dom.rerunButton.textContent = active ? uiText("查看运行进度", "View run progress") : uiText("重新运行", "Run again");
   if (dom.emptyRunButton) dom.emptyRunButton.textContent = active ? uiText("查看运行进度", "View run progress") : uiText("运行当前场景", "Run current scenario");
-  for (const button of [dom.runButton, dom.rerunButton, dom.emptyRunButton]) {
+  for (const button of [dom.runButton, dom.rerunButton, dom.emptyRunButton, dom.traceRunButton]) {
     if (button) button.disabled = state.busy || modelGraphReadOnly;
   }
   if (dom.compareButton) dom.compareButton.disabled = state.busy || active || modelGraphReadOnly;
@@ -19826,6 +19830,17 @@ async function exportCanonicalIr() {
 
 async function importScenarioFile(file) {
   if (!file) return;
+  if (state.busy) {
+    dom.fileInput.value = "";
+    if (dom.hardwareFileInput) dom.hardwareFileInput.value = "";
+    toast(uiText("请等待当前操作完成", "Wait for the current operation"),
+      uiText("当前操作完成后，请重新选择要导入的文件。", "Choose the file again after the current operation finishes."), "info");
+    return;
+  }
+  // Own the busy interval before reading the file. Until normalization
+  // completes, state.scenario still refers to the previously loaded input.
+  setBusy(true, uiText("正在导入场景", "Importing scenario"),
+    uiText("正在读取文件并校验场景配置…", "Reading the file and normalizing scenario settings…"));
   try {
     const text = await file.text();
     const value = JSON.parse(text);
@@ -19933,6 +19948,12 @@ async function importScenarioFile(file) {
   } finally {
     dom.fileInput.value = "";
     if (dom.hardwareFileInput) dom.hardwareFileInput.value = "";
+    setBusy(false);
+    if (state.validationNavigation?.active
+        && state.validationNavigation.pendingGeneration === state.scenarioGeneration) {
+      state.validationNavigation.pendingGeneration = 0;
+      scheduleValidationNavigationRecheck();
+    }
   }
 }
 

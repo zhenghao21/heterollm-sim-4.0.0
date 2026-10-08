@@ -11,9 +11,10 @@ import math
 import copy
 import contextvars
 from bisect import bisect_left
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from enum import Enum
-from typing import Any, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Iterable, Optional, Sequence, Tuple
 
 from .contracts import EvidenceStatus, ResourceDemand, TaskCategory, TaskSpec
 from .ir import ComponentSpec, LinkSpec, OFFLOAD_STORAGE_COMPONENT_KINDS, default_memory_resource_id
@@ -785,21 +786,25 @@ def resolve_physical_task(
     execution_by_owner = {}
     operations_by_owner = {}
     for (_access, operation, _address, _byte_count, owner, access_config), item in zip(validated, results):
-        row = execution_by_owner.setdefault(owner, {
-            "kind": str(getattr(access_config.kind, "value", access_config.kind)),
-            "operation_count": 0,
-            "logical_bytes": 0,
-            "logical_read_bytes": 0,
-            "logical_write_bytes": 0,
-            "physical_bytes": 0,
-            "physical_read_bytes": 0,
-            "physical_write_bytes": 0,
-            "energy_pj": 0.0,
-            "resource_busy_ns": {},
-            "resource_owners": {},
-            "completion_ns": float(arrival_ns),
-        })
-        operations_by_owner.setdefault(owner, set()).add(operation.value)
+        row = execution_by_owner.get(owner)
+        if row is None:
+            row = {
+                "kind": str(getattr(access_config.kind, "value", access_config.kind)),
+                "operation_count": 0,
+                "logical_bytes": 0,
+                "logical_read_bytes": 0,
+                "logical_write_bytes": 0,
+                "physical_bytes": 0,
+                "physical_read_bytes": 0,
+                "physical_write_bytes": 0,
+                "energy_pj": 0.0,
+                "resource_busy_ns": {},
+                "resource_owners": {},
+                "completion_ns": float(arrival_ns),
+            }
+            execution_by_owner[owner] = row
+            operations_by_owner[owner] = set()
+        operations_by_owner[owner].add(operation.value)
         row["operation_count"] += 1
         row["logical_bytes"] += item.logical_bytes
         row["logical_read_bytes" if operation is Operation.READ else "logical_write_bytes"] += item.logical_bytes

@@ -1,0 +1,7 @@
+{
+  "repository": "Qwen/Qwen3-4B-GGUF",
+  "revision": "bc640142c66e1fdd12af0bd68f40445458f3869b",
+  "filename": "Qwen3-4B-Q4_K_M.gguf",
+  "size_bytes": 2497280256,
+  "source_url": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf"
+}

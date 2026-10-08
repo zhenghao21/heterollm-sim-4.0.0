@@ -1,0 +1,54 @@
+{
+  "model_slug": "qwen3_0_6b_f16",
+  "old_dry_path": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_0_6b_f16_dry.jsonl",
+  "new_dry_path": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\bound_qwen3_0_6b_f16\\dry.jsonl",
+  "old_capture_path": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_0_6b_f16_capture.jsonl",
+  "new_capture_path": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\bound_qwen3_0_6b_f16\\capture.jsonl",
+  "old_dry_calls": 386,
+  "new_dry_calls": 386,
+  "old_capture_calls": 386,
+  "new_capture_calls": 386,
+  "lifecycle_signature_mismatch_count": 0,
+  "typed_topology_descriptor_mismatch_count": 0,
+  "lifecycle_mismatches": [],
+  "typed_topology_mismatches": [],
+  "equivalent": true,
+  "target_llm_latency_used": false,
+  "comparison_boundary": "dry source lifecycle predicates and complete typed capture descriptors; address identity classes preserved, process-local literal pointer values excluded",
+  "producer": {
+    "source_revision": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+    "probe": "F:\\codex_project\\_runtime_sources\\llama.cpp\\build-native-5080-sm120-graph-diag\\bin\\cuda_graph_structure_probe.exe",
+    "model": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+    "base_scenario": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\scenario_qwen3_0_6b_f16_512_128.json",
+    "command": [
+      "F:\\codex_project\\_runtime_sources\\llama.cpp\\build-native-5080-sm120-graph-diag\\bin\\cuda_graph_structure_probe.exe",
+      "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+      "512",
+      "128",
+      "768",
+      "2",
+      "1"
+    ],
+    "ctx_checkpoints": 0,
+    "startup_token_ids": [
+      151643,
+      151645
+    ],
+    "cuda_visible_devices": "0",
+    "device": {
+      "index": "0",
+      "name": "NVIDIA GeForce RTX 5080",
+      "compute_capability": "12.0",
+      "driver": "617.14"
+    },
+    "target_llm_latency_used": false,
+    "live_trace_used": false,
+    "requires_native_runtime_and_gpu": true,
+    "structural_calls": 386,
+    "scope": "source_assisted_dry_and_capture_only_not_cpu_only_prediction"
+  },
+  "ready_scenarios": [
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\replay_inputs\\scenario_qwen3_0_6b_f16_graph_off.json",
+    "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\replay_inputs\\scenario_qwen3_0_6b_f16_graph_on.json"
+  ]
+}

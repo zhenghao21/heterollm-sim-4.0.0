@@ -1,0 +1,24 @@
+{
+  "qualified": true,
+  "dry_call_count": 386,
+  "live_call_count": 386,
+  "mismatches": [],
+  "scope": "source_lifecycle_predicates_only_not_cuda_node_topology_or_timing",
+  "native_decisions_used_as_prediction_inputs": false,
+  "actual_native_events": {
+    "properties_changed": 7,
+    "direct": 7,
+    "properties_stable": 379,
+    "capture_begin": 4,
+    "capture_end": 4,
+    "instantiate": 1,
+    "update": 4,
+    "replay": 379,
+    "destroy_graph": 3,
+    "update_failed": 1,
+    "destroy_exec": 1,
+    "reinstantiate": 1
+  },
+  "model_slug": "qwen3_0_6b_f16",
+  "context_checkpoints": 0
+}

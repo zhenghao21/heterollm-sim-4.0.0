@@ -1,0 +1,8 @@
+# Local history and exact duplicate scenarios stay on disk, outside delivery.
+/before_runtime_owner_fix/
+/cancelled_memory_pressure_27b/
+/replay_inputs/scenario_*.json
+
+# Full copied CUDA node records are reproducible intermediate data.
+/source_program_fragments/*_update_pairs.json
+!/source_program_fragments/all_update_pairs.json

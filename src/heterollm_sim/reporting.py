@@ -5650,6 +5650,14 @@ def _online_report_core(
     }
     if serving.prompt_cache_save_timing:
         summary["prompt_cache_save_timing"] = dict(serving.prompt_cache_save_timing)
+    cuda_lifecycle = serving.runtime_kernel_metrics.get("llama_cuda_graph_lifecycle")
+    if cuda_lifecycle is not None:
+        summary["llama_cuda_graph_lifecycle"] = to_primitive(cuda_lifecycle)
+        summary["llama_cuda_graph_lifecycle"]["runtime_measurement_modes"] = sorted({
+            profile.kernel_model.runtime_measurement_mode
+            for group in result.scenario.component_profiles.values() for profile in group.values()
+            if isinstance(profile, GPUProfile) and profile.kernel_model is not None
+            and profile.kernel_model.runtime_calibration is not None})
     return _OnlineReportCore(
         summary=summary,
         requests=request_rows,

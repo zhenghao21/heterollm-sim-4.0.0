@@ -1,0 +1,8 @@
+{
+  "repository": "ggml-org/Qwen3-0.6B-GGUF",
+  "revision": "b5f37287796e5be0ea3dab2e7430873fb3f73e49",
+  "filename": "Qwen3-0.6B-f16.gguf",
+  "size_bytes": 1509347424,
+  "lfs_sha256": "ab9004daf660cd6a6ba1c07556e74fcceb2b756063ccce3f9c69d3a637b361cc",
+  "source_url": "https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/blob/main/Qwen3-0.6B-f16.gguf"
+}

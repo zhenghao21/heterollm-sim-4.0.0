@@ -91,6 +91,63 @@ def test_cuda_graph_flag_is_child_only_and_actual_environment_is_recorded(monkey
     assert received["env"].get(key) == expected
     assert received["env"] is not benchmark.os.environ
     assert benchmark.os.environ.get(key) == inherited
-    assert result["configuration"]["effective_env"] == {key: expected}
+    assert result["configuration"]["effective_env"] == {
+        key: expected, "GGML_CUDA_GRAPH_OPT": benchmark.os.environ.get("GGML_CUDA_GRAPH_OPT"),
+    }
     assert result["configuration"]["cuda_graphs_disabled"] is (expected is not None)
     assert result["configuration"]["cuda_graphs_disable_requested"] is disable
+
+
+@pytest.mark.parametrize("mode,inherited,expected", [
+    ("auto", None, None), ("auto", "0", "0"),
+    ("on", None, None), ("on", "0", None),
+    ("off", None, "1"), ("off", "0", "1"),
+])
+def test_cuda_graph_mode_controls_only_child_environment(monkeypatch, tmp_path, mode, inherited, expected):
+    key = "GGML_CUDA_DISABLE_GRAPHS"
+    if inherited is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, inherited)
+    monkeypatch.setattr(benchmark.sys, "argv", ["native_benchmark.py", "--server", str(tmp_path / "server.exe"),
+        "--model", str(tmp_path / "model.gguf"), "--output", str(tmp_path / "result.json"),
+        "--flash-attn", "off", "--cuda-graphs", mode])
+    args = benchmark._parse_args()
+    monkeypatch.setattr(benchmark, "_validate_args", lambda args: None)
+    received = {}
+
+    class Process:
+        stderr = BytesIO()
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(benchmark.subprocess, "Popen", lambda command, **kwargs: (received.update(kwargs) or Process()))
+    monkeypatch.setattr(benchmark, "_wait_ready", lambda *args: (_ for _ in ()).throw(RuntimeError("stop after checking process arguments")))
+    result = benchmark.run(args)
+    assert received["env"].get(key) == expected
+    assert received["env"] is not benchmark.os.environ
+    assert benchmark.os.environ.get(key) == inherited
+    config = result["configuration"]
+    assert config["cuda_graphs_mode_requested"] == mode
+    assert config["effective_env"][key] == expected
+    assert config["cuda_graphs_disabled"] is (expected is not None)
+
+
+def test_cuda_graph_on_conflicts_with_legacy_disable_flag(monkeypatch, tmp_path):
+    monkeypatch.setattr(benchmark.sys, "argv", ["native_benchmark.py", "--server", str(tmp_path / "server.exe"),
+        "--model", str(tmp_path / "model.gguf"), "--output", str(tmp_path / "result.json"),
+        "--flash-attn", "off", "--cuda-graphs", "on", "--disable-cuda-graphs"])
+    args = benchmark._parse_args()
+    with pytest.raises(ValueError, match="conflicts"):
+        benchmark.run(args)
+
+
+@pytest.mark.parametrize("key", ["HETEROLLM_CUDA_GRAPH_TRACE", "HETEROLLM_CUDA_GRAPH_DRY_RUN",
+                               "HETEROLLM_CUDA_GRAPH_CAPTURE_ONLY"])
+def test_native_timing_rejects_structural_diagnostics(monkeypatch, tmp_path, key):
+    monkeypatch.setenv(key, "1")
+    monkeypatch.setattr(benchmark.sys, "argv", ["native_benchmark.py", "--server", str(tmp_path / "server.exe"),
+        "--model", str(tmp_path / "model.gguf"), "--output", str(tmp_path / "result.json"),
+        "--flash-attn", "off"])
+    with pytest.raises(ValueError, match="diagnostics and dry-run"):
+        benchmark.run(benchmark._parse_args())

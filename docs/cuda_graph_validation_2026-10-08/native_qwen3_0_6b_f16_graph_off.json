@@ -1,0 +1,6391 @@
+{
+  "schema": "heterollm.native-benchmark/v1",
+  "status": "completed",
+  "measurement_boundary": {
+    "engine_ttft": "server timings.prompt_ms from request timing start through first-token sampling",
+    "engine_tpot": "server timings.predicted_per_token_ms = predicted_ms / (predicted_n - 1)",
+    "engine_e2e": "server timings.prompt_ms + predicted_ms; excludes client HTTP/SSE transport",
+    "client": "perf_counter_ns immediately before HTTP POST /completion to first/last non-empty content event",
+    "stream_end": "stop=true final completion event is an empty notification and is excluded from visible-token timestamps"
+  },
+  "server_field_semantics": {
+    "timings.prompt_n": "prompt tokens processed by the engine; checked against the requested prompt length",
+    "timings.cache_n": "prompt tokens reused from prior context; checked as zero",
+    "tokens_cached": "server completion field populated from slot.prompt.n_tokens; retained as reported cached-token count and not used as this-request cache hits"
+  },
+  "identity": {
+    "model_path": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+    "server_path": "F:\\codex_project\\_runtime_sources\\llama.cpp\\build-native-5080-sm120\\bin\\llama-server.exe",
+    "server_build_info": "b1-d3146f2"
+  },
+  "actual_server_context": {
+    "requested_context": 768,
+    "props_n_ctx": 768,
+    "startup_n_ctx_slot": 768
+  },
+  "configuration": {
+    "cuda_graphs_mode_requested": "off",
+    "effective_env": {
+      "GGML_CUDA_DISABLE_GRAPHS": "1",
+      "GGML_CUDA_GRAPH_OPT": null
+    },
+    "cuda_graphs_disabled": true,
+    "cuda_graphs_disable_requested": true,
+    "cuda_graphs_legacy_disable_flag_used": false,
+    "model_path": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+    "server_command": [
+      "F:\\codex_project\\_runtime_sources\\llama.cpp\\build-native-5080-sm120\\bin\\llama-server.exe",
+      "--model",
+      "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "65367",
+      "--ctx-size",
+      "768",
+      "--batch-size",
+      "512",
+      "--ubatch-size",
+      "512",
+      "--threads",
+      "16",
+      "--threads-batch",
+      "16",
+      "--parallel",
+      "1",
+      "--gpu-layers",
+      "-1",
+      "--flash-attn",
+      "off",
+      "--cache-type-k",
+      "f16",
+      "--cache-type-v",
+      "f16",
+      "--kv-unified",
+      "--no-cache-prompt",
+      "--fit",
+      "off",
+      "--perf",
+      "--ctx-checkpoints",
+      "0"
+    ],
+    "prompt_tokens": 512,
+    "output_tokens": 128,
+    "context": 768,
+    "expected_effective_context": 768,
+    "batch": 512,
+    "ubatch": 512,
+    "threads": 16,
+    "threads_batch": 16,
+    "gpu_layers_requested": -1,
+    "flash_attn": "off",
+    "cache_type_k": "f16",
+    "cache_type_v": "f16",
+    "parallel": 1,
+    "ctx_checkpoints_requested": 0,
+    "temperature": 0.0,
+    "seed": 0,
+    "ignore_eos": true,
+    "cache_prompt": false,
+    "speculative_decoding": false,
+    "requested_repetitions": 5,
+    "requested_warmups": 2
+  },
+  "native_server_props": {
+    "default_generation_settings": {
+      "params": {
+        "seed": 4294967295,
+        "temperature": 0.800000011920929,
+        "dynatemp_range": 0.0,
+        "dynatemp_exponent": 1.0,
+        "top_k": 40,
+        "top_p": 0.949999988079071,
+        "min_p": 0.05000000074505806,
+        "top_n_sigma": -1.0,
+        "xtc_probability": 0.0,
+        "xtc_threshold": 0.10000000149011612,
+        "typical_p": 1.0,
+        "repeat_last_n": 64,
+        "repeat_penalty": 1.0,
+        "presence_penalty": 0.0,
+        "frequency_penalty": 0.0,
+        "dry_multiplier": 0.0,
+        "dry_base": 1.75,
+        "dry_allowed_length": 2,
+        "dry_penalty_last_n": 64,
+        "mirostat": 0,
+        "mirostat_tau": 5.0,
+        "mirostat_eta": 0.10000000149011612,
+        "adaptive_target": -1.0,
+        "adaptive_decay": 0.8999999761581421,
+        "max_tokens": -1,
+        "n_predict": -1,
+        "n_keep": 0,
+        "n_discard": 0,
+        "ignore_eos": false,
+        "stream": false,
+        "n_probs": 0,
+        "min_keep": 0,
+        "chat_format": "Content-only",
+        "reasoning_format": "none",
+        "reasoning_in_content": false,
+        "generation_prompt": "",
+        "samplers": [
+          "penalties",
+          "dry",
+          "top_n_sigma",
+          "top_k",
+          "typ_p",
+          "top_p",
+          "min_p",
+          "xtc",
+          "temperature"
+        ],
+        "speculative.types": "none",
+        "timings_per_token": false,
+        "post_sampling_probs": false,
+        "backend_sampling": false,
+        "lora": []
+      },
+      "n_ctx": 768
+    },
+    "total_slots": 1,
+    "model_alias": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+    "model_ftype": "F16",
+    "model_path": "F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf",
+    "modalities": {
+      "vision": false,
+      "video": false,
+      "audio": false
+    },
+    "media_marker": "<__media_7t8zA4CB0XyVHmIJtK1GS6DSdCU84Kja__>",
+    "endpoint_slots": true,
+    "endpoint_props": false,
+    "endpoint_metrics": false,
+    "ui": true,
+    "ui_settings": {},
+    "chat_template": "{%- if tools %}\n    {{- '<|im_start|>system\\n' }}\n    {%- if messages[0].role == 'system' %}\n        {{- messages[0].content + '\\n\\n' }}\n    {%- endif %}\n    {{- \"# Tools\\n\\nYou may call one or more functions to assist with the user query.\\n\\nYou are provided with function signatures within <tools></tools> XML tags:\\n<tools>\" }}\n    {%- for tool in tools %}\n        {{- \"\\n\" }}\n        {{- tool | tojson }}\n    {%- endfor %}\n    {{- \"\\n</tools>\\n\\nFor each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:\\n<tool_call>\\n{\\\"name\\\": <function-name>, \\\"arguments\\\": <args-json-object>}\\n</tool_call><|im_end|>\\n\" }}\n{%- else %}\n    {%- if messages[0].role == 'system' %}\n        {{- '<|im_start|>system\\n' + messages[0].content + '<|im_end|>\\n' }}\n    {%- endif %}\n{%- endif %}\n{%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}\n{%- for message in messages[::-1] %}\n    {%- set index = (messages|length - 1) - loop.index0 %}\n    {%- if ns.multi_step_tool and message.role == \"user\" and not(message.content.startswith('<tool_response>') and message.content.endswith('</tool_response>')) %}\n        {%- set ns.multi_step_tool = false %}\n        {%- set ns.last_query_index = index %}\n    {%- endif %}\n{%- endfor %}\n{%- for message in messages %}\n    {%- if (message.role == \"user\") or (message.role == \"system\" and not loop.first) %}\n        {{- '<|im_start|>' + message.role + '\\n' + message.content + '<|im_end|>' + '\\n' }}\n    {%- elif message.role == \"assistant\" %}\n        {%- set content = message.content %}\n        {%- set reasoning_content = '' %}\n        {%- if message.reasoning_content is defined and message.reasoning_content is not none %}\n            {%- set reasoning_content = message.reasoning_content %}\n        {%- else %}\n            {%- if '</think>' in message.content %}\n                {%- set content = message.content.split('</think>')[-1].lstrip('\\n') %}\n                {%- set reasoning_content = message.content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}\n            {%- endif %}\n        {%- endif %}\n        {%- if loop.index0 > ns.last_query_index %}\n            {%- if loop.last or (not loop.last and reasoning_content) %}\n                {{- '<|im_start|>' + message.role + '\\n<think>\\n' + reasoning_content.strip('\\n') + '\\n</think>\\n\\n' + content.lstrip('\\n') }}\n            {%- else %}\n                {{- '<|im_start|>' + message.role + '\\n' + content }}\n            {%- endif %}\n        {%- else %}\n            {{- '<|im_start|>' + message.role + '\\n' + content }}\n        {%- endif %}\n        {%- if message.tool_calls %}\n            {%- for tool_call in message.tool_calls %}\n                {%- if (loop.first and content) or (not loop.first) %}\n                    {{- '\\n' }}\n                {%- endif %}\n                {%- if tool_call.function %}\n                    {%- set tool_call = tool_call.function %}\n                {%- endif %}\n                {{- '<tool_call>\\n{\"name\": \"' }}\n                {{- tool_call.name }}\n                {{- '\", \"arguments\": ' }}\n                {%- if tool_call.arguments is string %}\n                    {{- tool_call.arguments }}\n                {%- else %}\n                    {{- tool_call.arguments | tojson }}\n                {%- endif %}\n                {{- '}\\n</tool_call>' }}\n            {%- endfor %}\n        {%- endif %}\n        {{- '<|im_end|>\\n' }}\n    {%- elif message.role == \"tool\" %}\n        {%- if loop.first or (messages[loop.index0 - 1].role != \"tool\") %}\n            {{- '<|im_start|>user' }}\n        {%- endif %}\n        {{- '\\n<tool_response>\\n' }}\n        {{- message.content }}\n        {{- '\\n</tool_response>' }}\n        {%- if loop.last or (messages[loop.index0 + 1].role != \"tool\") %}\n            {{- '<|im_end|>\\n' }}\n        {%- endif %}\n    {%- endif %}\n{%- endfor %}\n{%- if add_generation_prompt %}\n    {{- '<|im_start|>assistant\\n' }}\n    {%- if enable_thinking is defined and enable_thinking is false %}\n        {{- '<think>\\n\\n</think>\\n\\n' }}\n    {%- endif %}\n{%- endif %}",
+    "chat_template_caps": {
+      "supports_object_arguments": true,
+      "supports_parallel_tool_calls": true,
+      "supports_preserve_reasoning": false,
+      "supports_reasoning_effort": false,
+      "supports_string_content": true,
+      "supports_system_role": true,
+      "supports_tool_calls": true,
+      "supports_tools": true,
+      "supports_typed_content": false
+    },
+    "bos_token": "<|endoftext|>",
+    "eos_token": "<|im_end|>",
+    "build_info": "b1-d3146f2",
+    "is_sleeping": false,
+    "cors_proxy_enabled": false
+  },
+  "prompt": {
+    "token_count": 512,
+    "token_ids": [
+      1986,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374,
+      264,
+      8356,
+      2205,
+      44378,
+      28431,
+      9934,
+      13,
+      15003,
+      279,
+      21085,
+      448,
+      264,
+      2797,
+      323,
+      63594,
+      16148,
+      13,
+      576,
+      7428,
+      374,
+      311,
+      6629,
+      1614,
+      44378,
+      39270,
+      1212,
+      264,
+      13153,
+      480,
+      3950,
+      53596,
+      13,
+      1096,
+      374
+    ]
+  },
+  "warmups": [
+    {
+      "index": 1,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "tokens_predicted": 128,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639
+    },
+    {
+      "index": 2,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "tokens_predicted": 128,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639
+    }
+  ],
+  "samples": [
+    {
+      "request_id": "request-0000",
+      "repetition": 1,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 18742000.0,
+      "engine_tpot_ns": 3977685.039370079,
+      "engine_e2e_ns": 523908000.0,
+      "client_ttft_ns": 30186700,
+      "client_tpot_ns": 3976642.5196850393,
+      "client_e2e_ns": 535220300,
+      "client_request_start_to_first_visible_token_ns": 30186700,
+      "client_first_visible_token_elapsed_ns": 30186700,
+      "client_last_visible_token_elapsed_ns": 535220300,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 30186700
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 34227100
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 37925700
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 41719500
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 45905100
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 50612700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 54314400
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 58024400
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 62048300
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 65814400
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 69590500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 73483600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 77393500
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 81817400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 86135600
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 89802400
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 93773300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 97491700
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 101578200
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 105390700
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 109175400
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 114141500
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 118825400
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 122496700
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 126267500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 130043300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 133925300
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 137614600
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 141268600
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 145117700
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 148860100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 153102100
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 157281600
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 160892200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 164628500
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 168720100
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 172912000
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 177241200
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 181516200
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 185851500
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 189472900
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 193295700
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 197162200
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 200967400
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 204781200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 208451900
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 212588600
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 217090400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 221192300
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 224850800
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 228583500
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 232249900
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 236070300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 239862300
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 243668300
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 248508600
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 252514500
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 256342200
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 260055400
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 263926200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 267484500
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 271128200
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 274894900
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 278718800
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 284058100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 287722100
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 291439900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 294937700
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 298733100
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 302281700
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 306001200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 309693400
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 314437200
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 318705800
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 322446900
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 326195800
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 330014900
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 333782500
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 337428900
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 341106700
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 344869300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 350030400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 354277100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 358525000
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 362330300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 365994100
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 369653700
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 373401600
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 377386500
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 382616300
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 386875200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 391016500
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 395246900
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 399009600
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 402768200
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 406430600
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 410082700
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 414651800
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 418943700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 422734500
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 426513100
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 430302200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 434034700
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 437790300
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 441320600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 445108600
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 450342000
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 454252400
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 458483800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 462284400
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 465984500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 469708600
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 474181300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 478383800
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 483561500
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 488260100
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 492862200
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 497139600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 500830300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 504520100
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 508279000
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 512349700
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 516994400
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 520593900
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 524239200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 527998400
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 531669100
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 535220300
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 18.742,
+        "prompt_per_token_ms": 0.03660546875,
+        "prompt_per_second": 27318.32248425995,
+        "predicted_n": 128,
+        "predicted_ms": 505.166,
+        "predicted_per_token_ms": 3.977685039370079,
+        "predicted_per_second": 251.40250927417918
+      },
+      "server_prompt_ms": 18.742,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 505.166,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 3.977685039370079,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    },
+    {
+      "request_id": "request-0000",
+      "repetition": 2,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 18811000.0,
+      "engine_tpot_ns": 3970070.8661417323,
+      "engine_e2e_ns": 523010000.0,
+      "client_ttft_ns": 43542100,
+      "client_tpot_ns": 3969491.3385826773,
+      "client_e2e_ns": 547667500,
+      "client_request_start_to_first_visible_token_ns": 43542100,
+      "client_first_visible_token_elapsed_ns": 43542100,
+      "client_last_visible_token_elapsed_ns": 547667500,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 43542100
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 49080200
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 53537300
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 58160900
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 61799800
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 65649200
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 69359100
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 73115700
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 77880100
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 82073000
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 85956200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 89639600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 93769900
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 97508400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 101191100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 104902900
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 108742700
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 113854400
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 118437000
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 122247000
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 126200700
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 130203600
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 133841000
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 137613600
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 141303300
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 145471200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 150000300
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 153658800
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 157527300
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 161318000
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 164936800
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 168781000
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 172425300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 176265300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 181546300
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 185248500
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 188945200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 192783900
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 196401000
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 200061300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 203771800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 207624000
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 212365600
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 216059500
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 219656000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 223536400
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 227250300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 231468900
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 235317100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 239851700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 244769600
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 249190700
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 253020700
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 256759800
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 260571800
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 264358700
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 268189000
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 271859300
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 275592700
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 280598700
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 284314000
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 288005700
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 291821100
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 295449800
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 299200000
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 302939600
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 306504900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 310300600
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 314453700
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 318510800
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 323181400
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 327336700
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 331028600
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 335138700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 339311300
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 343122100
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 347475500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 351958500
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 355768800
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 359458500
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 363061200
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 366821400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 370592100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 374341200
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 379138300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 383695600
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 387425000
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 391201600
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 395035100
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 398639400
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 402322100
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 406170500
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 411080500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 415304000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 419098600
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 422983500
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 427010200
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 430978600
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 434606600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 438405700
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 442321900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 447175200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 451034200
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 454776900
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 458432800
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 462059800
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 465612900
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 469204700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 472860900
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 476595800
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 480802700
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 485246700
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 489063500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 492938400
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 496724000
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 500520600
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 504184000
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 507958100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 512759300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 516706600
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 521027900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 524775400
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 528471800
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 532005300
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 535663900
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 539392300
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 543348000
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 547667500
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 18.811,
+        "prompt_per_token_ms": 0.036740234375,
+        "prompt_per_second": 27218.117059167507,
+        "predicted_n": 128,
+        "predicted_ms": 504.199,
+        "predicted_per_token_ms": 3.9700708661417323,
+        "predicted_per_second": 251.88467252017557
+      },
+      "server_prompt_ms": 18.811,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 504.199,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 3.9700708661417323,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    },
+    {
+      "request_id": "request-0000",
+      "repetition": 3,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 18052000.0,
+      "engine_tpot_ns": 3945094.4881889764,
+      "engine_e2e_ns": 519078999.99999994,
+      "client_ttft_ns": 28801200,
+      "client_tpot_ns": 3944176.377952756,
+      "client_e2e_ns": 529711600,
+      "client_request_start_to_first_visible_token_ns": 28801200,
+      "client_first_visible_token_elapsed_ns": 28801200,
+      "client_last_visible_token_elapsed_ns": 529711600,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 28801200
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 33840000
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 37574900
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 41349400
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 45115100
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 49079700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 52907400
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 56806600
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 60919500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 64570000
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 68934400
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 73159300
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 77068500
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 80657200
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 84226300
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 87862300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 91460800
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 96121600
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 100413900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 104143000
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 107851700
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 111821900
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 115472200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 119173300
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 122959300
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 126808500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 131698300
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 135516200
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 139243900
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 143377100
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 147084100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 150803500
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 154347700
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 157914100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 161837800
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 166634300
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 170366500
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 174078000
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 177916300
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 182517000
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 186167700
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 189910400
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 193650500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 197799400
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 202663900
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 206336000
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 210283500
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 213954900
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 217760300
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 221542500
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 225289300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 230108700
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 234359900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 238098200
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 241820600
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 245885900
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 249707600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 253349700
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 257100500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 260784500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 265349500
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 268983800
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 273007200
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 276742100
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 280396300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 283993900
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 287516500
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 291158600
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 295016500
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 299788100
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 303461200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 306956300
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 310681200
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 314488600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 318175300
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 321836600
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 325505700
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 329460300
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 334670500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 338457500
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 342012800
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 345908100
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 349774600
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 353456100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 357265900
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 360886400
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 365560900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 369916900
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 373513200
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 377116200
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 380950900
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 385697200
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 389907600
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 393719000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 398045000
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 402435500
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 406222700
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 409997500
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 414069900
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 418906900
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 422678600
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 426342900
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 430663500
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 435436000
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 439130600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 442897000
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 447014400
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 451879200
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 455381300
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 459065900
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 462855100
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 466787600
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 471760000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 475340800
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 479480200
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 483097800
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 486671900
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 490390700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 494114200
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 499323500
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 502919700
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 506432100
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 510050600
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 514081000
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 518588400
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 522120600
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 525758500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 529711600
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 18.052,
+        "prompt_per_token_ms": 0.0352578125,
+        "prompt_per_second": 28362.50830932861,
+        "predicted_n": 128,
+        "predicted_ms": 501.027,
+        "predicted_per_token_ms": 3.9450944881889765,
+        "predicted_per_second": 253.47935340809977
+      },
+      "server_prompt_ms": 18.052,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 501.027,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 3.9450944881889765,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    },
+    {
+      "request_id": "request-0000",
+      "repetition": 4,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 19395000.0,
+      "engine_tpot_ns": 4011440.9448818895,
+      "engine_e2e_ns": 528847999.99999994,
+      "client_ttft_ns": 31840000,
+      "client_tpot_ns": 4010946.4566929135,
+      "client_e2e_ns": 541230200,
+      "client_request_start_to_first_visible_token_ns": 31840000,
+      "client_first_visible_token_elapsed_ns": 31840000,
+      "client_last_visible_token_elapsed_ns": 541230200,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 31840000
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 36082800
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 40118700
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 43724800
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 47582800
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 52976300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 56650200
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 60393800
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 64416500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 69917700
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 73883100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 77670100
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 81821300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 85890900
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 89926200
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 93566500
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 97245700
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 101529800
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 105485200
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 109121800
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 112769500
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 116564400
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 120167300
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 123699200
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 127302100
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 131116900
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 135427500
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 139471300
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 143129400
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 146857100
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 150898600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 155327500
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 158978300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 162548700
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 166459600
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 171358500
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 174970100
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 178660600
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 182607700
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 187524700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 191302400
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 194862200
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 198603700
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 203746200
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 207431300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 211050300
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 214900300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 219819400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 223556700
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 227132700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 230736800
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 234860500
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 238920300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 242601400
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 246283900
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 250338800
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 255401600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 259110800
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 262708300
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 266660100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 271588300
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 275179300
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 278871700
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 282539500
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 286119600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 289764100
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 293380800
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 296992000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 302159600
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 305740000
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 309475600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 313086000
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 317070700
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 322086000
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 325701800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 329313400
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 333310700
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 338146200
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 341762500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 345282600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 349584400
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 354321400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 357993600
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 361695500
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 365468200
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 370569300
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 374393100
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 377930700
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 381660700
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 386784200
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 390536000
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 394337700
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 398692800
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 403521400
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 407453800
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 411235500
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 415382100
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 420801400
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 425346100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 429579900
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 433637300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 438414300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 442050200
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 445861500
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 449666200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 453209500
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 456771500
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 460310100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 464228300
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 469184500
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 472736100
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 476307500
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 479984500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 483854300
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 488731900
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 492386100
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 496054700
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 500036300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 504975400
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 508539300
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 512233600
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 516270300
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 521347000
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 525269300
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 528857600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 532769500
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 537620100
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 541230200
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 19.395,
+        "prompt_per_token_ms": 0.037880859375,
+        "prompt_per_second": 26398.556328950763,
+        "predicted_n": 128,
+        "predicted_ms": 509.453,
+        "predicted_per_token_ms": 4.0114409448818895,
+        "predicted_per_second": 249.28698034951213
+      },
+      "server_prompt_ms": 19.395,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 509.453,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 4.0114409448818895,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    },
+    {
+      "request_id": "request-0000",
+      "repetition": 5,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 18851000.0,
+      "engine_tpot_ns": 3867283.464566929,
+      "engine_e2e_ns": 509996000.0,
+      "client_ttft_ns": 19821100,
+      "client_tpot_ns": 3865659.05511811,
+      "client_e2e_ns": 510759800,
+      "client_request_start_to_first_visible_token_ns": 19821100,
+      "client_first_visible_token_elapsed_ns": 19821100,
+      "client_last_visible_token_elapsed_ns": 510759800,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 19821100
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 23980300
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 29337400
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 32977000
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 36596500
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 40409900
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 45324800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 48950100
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 52459600
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 56380200
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 60550600
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 64573600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 68187700
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 71834900
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 75512900
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 79192800
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 82743700
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 86269600
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 90889000
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 94582700
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 98687700
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 102228400
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 105836700
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 109722400
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 113998900
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 117610400
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 121183800
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 125227300
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 130210100
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 133870900
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 137366100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 141317100
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 146113300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 149789300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 153333300
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 157329200
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 162419600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 166053300
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 169653700
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 173639900
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 178498800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 182119500
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 185865100
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 189746800
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 193823200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 197884400
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 201498600
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 205143400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 209001300
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 212950200
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 216892200
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 220890300
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 225647800
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 229888400
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 233603100
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 237201800
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 240804800
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 244459800
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 248040600
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 251690100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 255251200
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 260010800
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 263770700
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 267464300
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 271140100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 274721400
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 278320500
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 281836100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 285423600
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 289166300
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 293769100
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 298009400
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 301618000
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 305321300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 309168000
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 314751000
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 318382400
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 322076100
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 326118300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 331059600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 334612200
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 338361700
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 341884400
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 345471700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 348981900
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 352487400
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 356348800
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 360557100
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 364565800
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 368407000
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 372022700
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 375780200
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 379412500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 382925300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 386525900
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 390255200
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 394623400
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 398539200
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 402419700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 406029300
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 409812800
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 413259100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 416865900
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 420516400
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 425073900
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 429380300
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 432937500
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 436524700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 440146800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 443722800
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 447333400
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 450811600
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 454413100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 458976900
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 462875300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 466438800
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 469992100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 473637300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 477252800
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 480729100
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 484302400
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 487850500
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 492413800
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 496008500
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 499920300
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 503459300
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 507083200
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 510759800
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 18.851,
+        "prompt_per_token_ms": 0.036818359375,
+        "prompt_per_second": 27160.36284547239,
+        "predicted_n": 128,
+        "predicted_ms": 491.145,
+        "predicted_per_token_ms": 3.867283464566929,
+        "predicted_per_second": 258.57944191633834
+      },
+      "server_prompt_ms": 18.851,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 491.145,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 3.867283464566929,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    }
+  ],
+  "summary": {
+    "engine": {
+      "ttft": {
+        "mean": 18770200.0,
+        "median": 18811000.0,
+        "interval_min": 18052000.0,
+        "interval_max": 19395000.0
+      },
+      "tpot": {
+        "mean": 3954314.9606299214,
+        "median": 3970070.8661417323,
+        "interval_min": 3867283.464566929,
+        "interval_max": 4011440.9448818895
+      },
+      "e2e": {
+        "mean": 520968200.0,
+        "median": 523010000.0,
+        "interval_min": 509996000.0,
+        "interval_max": 528847999.99999994
+      }
+    },
+    "client": {
+      "ttft": {
+        "mean": 30838220.0,
+        "median": 30186700.0,
+        "interval_min": 19821100.0,
+        "interval_max": 43542100.0
+      },
+      "tpot": {
+        "mean": 3953383.1496062996,
+        "median": 3969491.3385826773,
+        "interval_min": 3865659.05511811,
+        "interval_max": 4010946.4566929135
+      },
+      "e2e": {
+        "mean": 532917880.0,
+        "median": 535220300.0,
+        "interval_min": 510759800.0,
+        "interval_max": 547667500.0
+      }
+    },
+    "server_phases_ms": {
+      "server_prompt_ms": {
+        "mean": 18.7702,
+        "median": 18.811,
+        "interval_min": 18.052,
+        "interval_max": 19.395
+      },
+      "server_predicted_ms": {
+        "mean": 502.198,
+        "median": 504.199,
+        "interval_min": 491.145,
+        "interval_max": 509.453
+      }
+    }
+  },
+  "requests": {
+    "request-0000": {
+      "prompt_tokens": 512,
+      "visible_output_tokens": 128,
+      "ttft_ns": 18811000.0,
+      "tpot_ns": 3970070.8661417323,
+      "e2e_ns": 523010000.0
+    }
+  },
+  "client_requests": {
+    "request-0000": {
+      "prompt_tokens": 512,
+      "visible_output_tokens": 128,
+      "ttft_ns": 30186700.0,
+      "tpot_ns": 3969491.3385826773,
+      "e2e_ns": 535220300.0
+    }
+  },
+  "repetitions": [
+    {
+      "request_id": "request-0000",
+      "repetition": 1,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 18742000.0,
+      "engine_tpot_ns": 3977685.039370079,
+      "engine_e2e_ns": 523908000.0,
+      "client_ttft_ns": 30186700,
+      "client_tpot_ns": 3976642.5196850393,
+      "client_e2e_ns": 535220300,
+      "client_request_start_to_first_visible_token_ns": 30186700,
+      "client_first_visible_token_elapsed_ns": 30186700,
+      "client_last_visible_token_elapsed_ns": 535220300,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 30186700
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 34227100
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 37925700
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 41719500
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 45905100
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 50612700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 54314400
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 58024400
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 62048300
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 65814400
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 69590500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 73483600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 77393500
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 81817400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 86135600
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 89802400
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 93773300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 97491700
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 101578200
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 105390700
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 109175400
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 114141500
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 118825400
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 122496700
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 126267500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 130043300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 133925300
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 137614600
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 141268600
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 145117700
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 148860100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 153102100
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 157281600
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 160892200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 164628500
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 168720100
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 172912000
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 177241200
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 181516200
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 185851500
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 189472900
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 193295700
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 197162200
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 200967400
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 204781200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 208451900
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 212588600
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 217090400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 221192300
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 224850800
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 228583500
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 232249900
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 236070300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 239862300
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 243668300
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 248508600
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 252514500
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 256342200
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 260055400
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 263926200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 267484500
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 271128200
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 274894900
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 278718800
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 284058100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 287722100
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 291439900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 294937700
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 298733100
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 302281700
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 306001200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 309693400
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 314437200
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 318705800
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 322446900
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 326195800
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 330014900
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 333782500
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 337428900
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 341106700
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 344869300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 350030400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 354277100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 358525000
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 362330300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 365994100
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 369653700
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 373401600
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 377386500
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 382616300
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 386875200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 391016500
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 395246900
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 399009600
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 402768200
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 406430600
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 410082700
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 414651800
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 418943700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 422734500
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 426513100
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 430302200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 434034700
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 437790300
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 441320600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 445108600
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 450342000
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 454252400
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 458483800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 462284400
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 465984500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 469708600
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 474181300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 478383800
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 483561500
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 488260100
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 492862200
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 497139600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 500830300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 504520100
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 508279000
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 512349700
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 516994400
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 520593900
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 524239200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 527998400
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 531669100
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 535220300
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 18.742,
+        "prompt_per_token_ms": 0.03660546875,
+        "prompt_per_second": 27318.32248425995,
+        "predicted_n": 128,
+        "predicted_ms": 505.166,
+        "predicted_per_token_ms": 3.977685039370079,
+        "predicted_per_second": 251.40250927417918
+      },
+      "server_prompt_ms": 18.742,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 505.166,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 3.977685039370079,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    },
+    {
+      "request_id": "request-0000",
+      "repetition": 2,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 18811000.0,
+      "engine_tpot_ns": 3970070.8661417323,
+      "engine_e2e_ns": 523010000.0,
+      "client_ttft_ns": 43542100,
+      "client_tpot_ns": 3969491.3385826773,
+      "client_e2e_ns": 547667500,
+      "client_request_start_to_first_visible_token_ns": 43542100,
+      "client_first_visible_token_elapsed_ns": 43542100,
+      "client_last_visible_token_elapsed_ns": 547667500,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 43542100
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 49080200
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 53537300
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 58160900
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 61799800
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 65649200
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 69359100
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 73115700
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 77880100
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 82073000
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 85956200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 89639600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 93769900
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 97508400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 101191100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 104902900
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 108742700
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 113854400
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 118437000
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 122247000
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 126200700
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 130203600
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 133841000
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 137613600
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 141303300
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 145471200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 150000300
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 153658800
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 157527300
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 161318000
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 164936800
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 168781000
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 172425300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 176265300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 181546300
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 185248500
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 188945200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 192783900
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 196401000
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 200061300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 203771800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 207624000
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 212365600
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 216059500
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 219656000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 223536400
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 227250300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 231468900
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 235317100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 239851700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 244769600
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 249190700
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 253020700
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 256759800
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 260571800
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 264358700
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 268189000
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 271859300
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 275592700
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 280598700
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 284314000
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 288005700
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 291821100
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 295449800
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 299200000
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 302939600
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 306504900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 310300600
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 314453700
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 318510800
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 323181400
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 327336700
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 331028600
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 335138700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 339311300
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 343122100
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 347475500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 351958500
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 355768800
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 359458500
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 363061200
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 366821400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 370592100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 374341200
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 379138300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 383695600
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 387425000
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 391201600
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 395035100
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 398639400
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 402322100
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 406170500
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 411080500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 415304000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 419098600
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 422983500
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 427010200
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 430978600
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 434606600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 438405700
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 442321900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 447175200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 451034200
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 454776900
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 458432800
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 462059800
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 465612900
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 469204700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 472860900
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 476595800
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 480802700
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 485246700
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 489063500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 492938400
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 496724000
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 500520600
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 504184000
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 507958100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 512759300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 516706600
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 521027900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 524775400
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 528471800
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 532005300
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 535663900
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 539392300
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 543348000
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 547667500
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 18.811,
+        "prompt_per_token_ms": 0.036740234375,
+        "prompt_per_second": 27218.117059167507,
+        "predicted_n": 128,
+        "predicted_ms": 504.199,
+        "predicted_per_token_ms": 3.9700708661417323,
+        "predicted_per_second": 251.88467252017557
+      },
+      "server_prompt_ms": 18.811,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 504.199,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 3.9700708661417323,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    },
+    {
+      "request_id": "request-0000",
+      "repetition": 3,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 18052000.0,
+      "engine_tpot_ns": 3945094.4881889764,
+      "engine_e2e_ns": 519078999.99999994,
+      "client_ttft_ns": 28801200,
+      "client_tpot_ns": 3944176.377952756,
+      "client_e2e_ns": 529711600,
+      "client_request_start_to_first_visible_token_ns": 28801200,
+      "client_first_visible_token_elapsed_ns": 28801200,
+      "client_last_visible_token_elapsed_ns": 529711600,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 28801200
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 33840000
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 37574900
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 41349400
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 45115100
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 49079700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 52907400
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 56806600
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 60919500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 64570000
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 68934400
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 73159300
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 77068500
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 80657200
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 84226300
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 87862300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 91460800
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 96121600
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 100413900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 104143000
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 107851700
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 111821900
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 115472200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 119173300
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 122959300
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 126808500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 131698300
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 135516200
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 139243900
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 143377100
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 147084100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 150803500
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 154347700
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 157914100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 161837800
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 166634300
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 170366500
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 174078000
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 177916300
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 182517000
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 186167700
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 189910400
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 193650500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 197799400
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 202663900
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 206336000
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 210283500
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 213954900
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 217760300
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 221542500
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 225289300
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 230108700
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 234359900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 238098200
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 241820600
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 245885900
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 249707600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 253349700
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 257100500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 260784500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 265349500
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 268983800
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 273007200
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 276742100
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 280396300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 283993900
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 287516500
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 291158600
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 295016500
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 299788100
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 303461200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 306956300
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 310681200
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 314488600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 318175300
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 321836600
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 325505700
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 329460300
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 334670500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 338457500
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 342012800
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 345908100
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 349774600
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 353456100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 357265900
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 360886400
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 365560900
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 369916900
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 373513200
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 377116200
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 380950900
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 385697200
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 389907600
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 393719000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 398045000
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 402435500
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 406222700
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 409997500
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 414069900
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 418906900
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 422678600
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 426342900
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 430663500
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 435436000
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 439130600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 442897000
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 447014400
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 451879200
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 455381300
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 459065900
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 462855100
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 466787600
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 471760000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 475340800
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 479480200
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 483097800
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 486671900
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 490390700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 494114200
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 499323500
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 502919700
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 506432100
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 510050600
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 514081000
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 518588400
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 522120600
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 525758500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 529711600
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 18.052,
+        "prompt_per_token_ms": 0.0352578125,
+        "prompt_per_second": 28362.50830932861,
+        "predicted_n": 128,
+        "predicted_ms": 501.027,
+        "predicted_per_token_ms": 3.9450944881889765,
+        "predicted_per_second": 253.47935340809977
+      },
+      "server_prompt_ms": 18.052,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 501.027,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 3.9450944881889765,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    },
+    {
+      "request_id": "request-0000",
+      "repetition": 4,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 19395000.0,
+      "engine_tpot_ns": 4011440.9448818895,
+      "engine_e2e_ns": 528847999.99999994,
+      "client_ttft_ns": 31840000,
+      "client_tpot_ns": 4010946.4566929135,
+      "client_e2e_ns": 541230200,
+      "client_request_start_to_first_visible_token_ns": 31840000,
+      "client_first_visible_token_elapsed_ns": 31840000,
+      "client_last_visible_token_elapsed_ns": 541230200,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 31840000
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 36082800
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 40118700
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 43724800
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 47582800
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 52976300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 56650200
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 60393800
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 64416500
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 69917700
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 73883100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 77670100
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 81821300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 85890900
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 89926200
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 93566500
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 97245700
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 101529800
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 105485200
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 109121800
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 112769500
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 116564400
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 120167300
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 123699200
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 127302100
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 131116900
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 135427500
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 139471300
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 143129400
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 146857100
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 150898600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 155327500
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 158978300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 162548700
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 166459600
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 171358500
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 174970100
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 178660600
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 182607700
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 187524700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 191302400
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 194862200
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 198603700
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 203746200
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 207431300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 211050300
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 214900300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 219819400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 223556700
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 227132700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 230736800
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 234860500
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 238920300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 242601400
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 246283900
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 250338800
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 255401600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 259110800
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 262708300
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 266660100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 271588300
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 275179300
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 278871700
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 282539500
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 286119600
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 289764100
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 293380800
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 296992000
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 302159600
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 305740000
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 309475600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 313086000
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 317070700
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 322086000
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 325701800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 329313400
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 333310700
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 338146200
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 341762500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 345282600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 349584400
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 354321400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 357993600
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 361695500
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 365468200
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 370569300
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 374393100
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 377930700
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 381660700
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 386784200
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 390536000
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 394337700
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 398692800
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 403521400
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 407453800
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 411235500
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 415382100
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 420801400
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 425346100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 429579900
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 433637300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 438414300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 442050200
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 445861500
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 449666200
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 453209500
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 456771500
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 460310100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 464228300
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 469184500
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 472736100
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 476307500
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 479984500
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 483854300
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 488731900
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 492386100
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 496054700
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 500036300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 504975400
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 508539300
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 512233600
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 516270300
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 521347000
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 525269300
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 528857600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 532769500
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 537620100
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 541230200
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 19.395,
+        "prompt_per_token_ms": 0.037880859375,
+        "prompt_per_second": 26398.556328950763,
+        "predicted_n": 128,
+        "predicted_ms": 509.453,
+        "predicted_per_token_ms": 4.0114409448818895,
+        "predicted_per_second": 249.28698034951213
+      },
+      "server_prompt_ms": 19.395,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 509.453,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 4.0114409448818895,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    },
+    {
+      "request_id": "request-0000",
+      "repetition": 5,
+      "prompt_tokens_requested": 512,
+      "prompt_n": 512,
+      "prompt_tokens_processed": 512,
+      "cache_n": 0,
+      "server_reported_cached_token_count": 639,
+      "visible_output_tokens": 128,
+      "engine_ttft_ns": 18851000.0,
+      "engine_tpot_ns": 3867283.464566929,
+      "engine_e2e_ns": 509996000.0,
+      "client_ttft_ns": 19821100,
+      "client_tpot_ns": 3865659.05511811,
+      "client_e2e_ns": 510759800,
+      "client_request_start_to_first_visible_token_ns": 19821100,
+      "client_first_visible_token_elapsed_ns": 19821100,
+      "client_last_visible_token_elapsed_ns": 510759800,
+      "client_visible_content_events": [
+        {
+          "content": " a",
+          "elapsed_ns": 19821100
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 23980300
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 29337400
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 32977000
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 36596500
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 40409900
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 45324800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 48950100
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 52459600
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 56380200
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 60550600
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 64573600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 68187700
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 71834900
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 75512900
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 79192800
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 82743700
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 86269600
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 90889000
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 94582700
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 98687700
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 102228400
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 105836700
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 109722400
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 113998900
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 117610400
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 121183800
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 125227300
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 130210100
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 133870900
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 137366100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 141317100
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 146113300
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 149789300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 153333300
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 157329200
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 162419600
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 166053300
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 169653700
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 173639900
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 178498800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 182119500
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 185865100
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 189746800
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 193823200
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 197884400
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 201498600
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 205143400
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 209001300
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 212950200
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 216892200
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 220890300
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 225647800
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 229888400
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 233603100
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 237201800
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 240804800
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 244459800
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 248040600
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 251690100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 255251200
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 260010800
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 263770700
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 267464300
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 271140100
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 274721400
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 278320500
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 281836100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 285423600
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 289166300
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 293769100
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 298009400
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 301618000
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 305321300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 309168000
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 314751000
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 318382400
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 322076100
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 326118300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 331059600
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 334612200
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 338361700
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 341884400
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 345471700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 348981900
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 352487400
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 356348800
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 360557100
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 364565800
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 368407000
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 372022700
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 375780200
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 379412500
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 382925300
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 386525900
+        },
+        {
+          "content": " repeat",
+          "elapsed_ns": 390255200
+        },
+        {
+          "content": "able",
+          "elapsed_ns": 394623400
+        },
+        {
+          "content": " token",
+          "elapsed_ns": 398539200
+        },
+        {
+          "content": " workload",
+          "elapsed_ns": 402419700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 406029300
+        },
+        {
+          "content": " This",
+          "elapsed_ns": 409812800
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 413259100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 416865900
+        },
+        {
+          "content": " fixed",
+          "elapsed_ns": 420516400
+        },
+        {
+          "content": " local",
+          "elapsed_ns": 425073900
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 429380300
+        },
+        {
+          "content": " benchmark",
+          "elapsed_ns": 432937500
+        },
+        {
+          "content": " prompt",
+          "elapsed_ns": 436524700
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 440146800
+        },
+        {
+          "content": " Continue",
+          "elapsed_ns": 443722800
+        },
+        {
+          "content": " the",
+          "elapsed_ns": 447333400
+        },
+        {
+          "content": " passage",
+          "elapsed_ns": 450811600
+        },
+        {
+          "content": " with",
+          "elapsed_ns": 454413100
+        },
+        {
+          "content": " a",
+          "elapsed_ns": 458976900
+        },
+        {
+          "content": " clear",
+          "elapsed_ns": 462875300
+        },
+        {
+          "content": " and",
+          "elapsed_ns": 466438800
+        },
+        {
+          "content": " concise",
+          "elapsed_ns": 469992100
+        },
+        {
+          "content": " explanation",
+          "elapsed_ns": 473637300
+        },
+        {
+          "content": ".",
+          "elapsed_ns": 477252800
+        },
+        {
+          "content": " The",
+          "elapsed_ns": 480729100
+        },
+        {
+          "content": " purpose",
+          "elapsed_ns": 484302400
+        },
+        {
+          "content": " is",
+          "elapsed_ns": 487850500
+        },
+        {
+          "content": " to",
+          "elapsed_ns": 492413800
+        },
+        {
+          "content": " measure",
+          "elapsed_ns": 496008500
+        },
+        {
+          "content": " model",
+          "elapsed_ns": 499920300
+        },
+        {
+          "content": " inference",
+          "elapsed_ns": 503459300
+        },
+        {
+          "content": " latency",
+          "elapsed_ns": 507083200
+        },
+        {
+          "content": " under",
+          "elapsed_ns": 510759800
+        }
+      ],
+      "server_timings": {
+        "cache_n": 0,
+        "prompt_n": 512,
+        "prompt_ms": 18.851,
+        "prompt_per_token_ms": 0.036818359375,
+        "prompt_per_second": 27160.36284547239,
+        "predicted_n": 128,
+        "predicted_ms": 491.145,
+        "predicted_per_token_ms": 3.867283464566929,
+        "predicted_per_second": 258.57944191633834
+      },
+      "server_prompt_ms": 18.851,
+      "server_prompt_n": 512,
+      "server_cache_n": 0,
+      "server_predicted_ms": 491.145,
+      "server_predicted_n": 128,
+      "server_predicted_per_token_ms": 3.867283464566929,
+      "stop_type": "limit",
+      "stop": true,
+      "status": "completed"
+    }
+  ],
+  "server_stderr": [
+    "0.00.039.750 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)",
+    "0.00.039.868 W srv  llama_server: -----------------",
+    "0.00.039.870 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set",
+    "0.00.039.870 W srv  llama_server: this can be a security risk (cross-origin attacks)",
+    "0.00.039.870 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655",
+    "0.00.039.871 W srv  llama_server: -----------------",
+    "0.00.052.355 I srv    load_model: loading model 'F:\\codex_project\\37_LLMsim\\models\\Qwen3-0.6B-f16.gguf'",
+    "0.00.310.002 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden",
+    "0.00.744.237 I cmn          init: llama threadpool init, n_threads = 16",
+    "0.00.793.222 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 768, kv_unified = 'true'",
+    "0.00.800.074 I srv  llama_server: model loaded",
+    "0.00.800.079 I srv  llama_server: listening on http://127.0.0.1:65367",
+    "0.00.958.840 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1",
+    "0.00.958.875 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0",
+    "0.01.598.403 I slot print_timing: id  0 | task 0 | prompt eval time =     142.11 ms /   512 tokens (    0.28 ms per token,  3602.84 tokens per second)",
+    "0.01.598.408 I slot print_timing: id  0 | task 0 |        eval time =     497.39 ms /   128 tokens (    3.92 ms per token,   255.33 tokens per second)",
+    "0.01.598.409 I slot print_timing: id  0 | task 0 |       total time =     639.50 ms /   640 tokens",
+    "0.01.598.409 I slot print_timing: id  0 | task 0 |    graphs reused =        127",
+    "0.01.598.451 I slot      release: id  0 | task 0 | stop processing: n_tokens = 639, truncated = 0",
+    "0.01.599.472 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 1.000 (> 0.100 thold), f_keep = 0.801",
+    "0.01.599.558 I slot launch_slot_: id  0 | task 129 | processing task, is_child = 0",
+    "0.02.109.124 I slot print_timing: id  0 | task 129 | prompt eval time =      17.46 ms /   512 tokens (    0.03 ms per token, 29325.85 tokens per second)",
+    "0.02.109.130 I slot print_timing: id  0 | task 129 |        eval time =     492.09 ms /   128 tokens (    3.87 ms per token,   258.08 tokens per second)",
+    "0.02.109.131 I slot print_timing: id  0 | task 129 |       total time =     509.55 ms /   640 tokens",
+    "0.02.109.131 I slot print_timing: id  0 | task 129 |    graphs reused =        253",
+    "0.02.109.152 I slot      release: id  0 | task 129 | stop processing: n_tokens = 639, truncated = 0",
+    "0.02.120.711 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 1.000 (> 0.100 thold), f_keep = 0.801",
+    "0.02.120.807 I slot launch_slot_: id  0 | task 258 | processing task, is_child = 0",
+    "0.02.644.731 I slot print_timing: id  0 | task 258 | prompt eval time =      18.74 ms /   512 tokens (    0.04 ms per token, 27318.32 tokens per second)",
+    "0.02.644.736 I slot print_timing: id  0 | task 258 |        eval time =     505.17 ms /   128 tokens (    3.98 ms per token,   251.40 tokens per second)",
+    "0.02.644.737 I slot print_timing: id  0 | task 258 |       total time =     523.91 ms /   640 tokens",
+    "0.02.644.737 I slot print_timing: id  0 | task 258 |    graphs reused =        379",
+    "0.02.644.752 I slot      release: id  0 | task 258 | stop processing: n_tokens = 639, truncated = 0",
+    "0.02.669.632 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 1.000 (> 0.100 thold), f_keep = 0.801",
+    "0.02.669.716 I slot launch_slot_: id  0 | task 387 | processing task, is_child = 0",
+    "0.03.192.748 I slot print_timing: id  0 | task 387 | prompt eval time =      18.81 ms /   512 tokens (    0.04 ms per token, 27218.12 tokens per second)",
+    "0.03.192.754 I slot print_timing: id  0 | task 387 |        eval time =     504.20 ms /   128 tokens (    3.97 ms per token,   251.88 tokens per second)",
+    "0.03.192.755 I slot print_timing: id  0 | task 387 |       total time =     523.01 ms /   640 tokens",
+    "0.03.192.756 I slot print_timing: id  0 | task 387 |    graphs reused =        505",
+    "0.03.192.775 I slot      release: id  0 | task 387 | stop processing: n_tokens = 639, truncated = 0",
+    "0.03.203.757 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 1.000 (> 0.100 thold), f_keep = 0.801",
+    "0.03.203.833 I slot launch_slot_: id  0 | task 516 | processing task, is_child = 0",
+    "0.03.722.929 I slot print_timing: id  0 | task 516 | prompt eval time =      18.05 ms /   512 tokens (    0.04 ms per token, 28362.51 tokens per second)",
+    "0.03.722.934 I slot print_timing: id  0 | task 516 |        eval time =     501.03 ms /   128 tokens (    3.95 ms per token,   253.48 tokens per second)",
+    "0.03.722.935 I slot print_timing: id  0 | task 516 |       total time =     519.08 ms /   640 tokens",
+    "0.03.722.936 I slot print_timing: id  0 | task 516 |    graphs reused =        631",
+    "0.03.722.956 I slot      release: id  0 | task 516 | stop processing: n_tokens = 639, truncated = 0",
+    "0.03.735.556 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 1.000 (> 0.100 thold), f_keep = 0.801",
+    "0.03.735.667 I slot launch_slot_: id  0 | task 645 | processing task, is_child = 0",
+    "0.04.264.531 I slot print_timing: id  0 | task 645 | prompt eval time =      19.39 ms /   512 tokens (    0.04 ms per token, 26398.56 tokens per second)",
+    "0.04.264.537 I slot print_timing: id  0 | task 645 |        eval time =     509.45 ms /   128 tokens (    4.01 ms per token,   249.29 tokens per second)",
+    "0.04.264.538 I slot print_timing: id  0 | task 645 |       total time =     528.85 ms /   640 tokens",
+    "0.04.264.539 I slot print_timing: id  0 | task 645 |    graphs reused =        757",
+    "0.04.264.558 I slot      release: id  0 | task 645 | stop processing: n_tokens = 639, truncated = 0",
+    "0.04.265.629 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, f_sim_best = 1.000 (> 0.100 thold), f_keep = 0.801",
+    "0.04.265.712 I slot launch_slot_: id  0 | task 774 | processing task, is_child = 0",
+    "0.04.775.721 I slot print_timing: id  0 | task 774 | prompt eval time =      18.85 ms /   512 tokens (    0.04 ms per token, 27160.36 tokens per second)",
+    "0.04.775.726 I slot print_timing: id  0 | task 774 |        eval time =     491.14 ms /   128 tokens (    3.87 ms per token,   258.58 tokens per second)",
+    "0.04.775.726 I slot print_timing: id  0 | task 774 |       total time =     510.00 ms /   640 tokens",
+    "0.04.775.727 I slot print_timing: id  0 | task 774 |    graphs reused =        883",
+    "0.04.775.740 I slot      release: id  0 | task 774 | stop processing: n_tokens = 639, truncated = 0"
+  ]
+}

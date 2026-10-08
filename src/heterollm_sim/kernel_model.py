@@ -12,6 +12,7 @@ import re
 from typing import Mapping
 
 from .contracts import ResourceDemand, TaskCategory
+from .runtime_residual import RuntimeResidualCalibration, RuntimeStructureMeasurements
 
 
 def _number(value, name, *, zero=False):
@@ -242,6 +243,13 @@ class KernelModelProfile:
     # kernel.  Graph replay is still charged once per explicit replay.
     runtime_submission_ns: float | None = None
     runtime_submission_evidence: str | None = None
+    runtime_calibration: RuntimeResidualCalibration | RuntimeStructureMeasurements | None = None
+    runtime_host_resource_id: str | None = None
+    runtime_measurement_mode: str = 'qualified'
+    # A source-rule kernel profile and an independently measured CUDA API
+    # profile use different namespaces. Bind both identities explicitly;
+    # never rename the evidence to make unrelated strings compare equal.
+    runtime_calibration_binding: Mapping[str, str] | None = None
     calibration_provenance: str = 'caller_declared'
     graph_enabled: bool = False
     stateful_l2: bool = False
@@ -278,6 +286,32 @@ class KernelModelProfile:
             raise ValueError('calibration_runtime_sha256 must be lowercase SHA-256')
         if type(self.graph_enabled) is not bool or type(self.stateful_l2) is not bool:
             raise ValueError('graph_enabled and stateful_l2 must be boolean')
+        if self.runtime_measurement_mode not in ('qualified', 'experimental_exact_structure'):
+            raise ValueError('unknown runtime measurement mode')
+        if self.runtime_calibration is not None:
+            expected_type = (RuntimeStructureMeasurements if self.runtime_measurement_mode == 'experimental_exact_structure'
+                             else RuntimeResidualCalibration)
+            if not isinstance(self.runtime_calibration, expected_type):
+                raise ValueError('runtime_calibration must be an independent runtime cost profile')
+            binding = self.runtime_calibration_binding
+            identities = ('hardware_id', 'runtime_id', 'architecture')
+            if binding is not None:
+                expected = {**{'kernel_' + key: getattr(self, key) for key in identities},
+                            **{'measured_' + key: getattr(self.runtime_calibration, key) for key in identities}}
+                if not isinstance(binding, Mapping) or dict(binding) != expected:
+                    raise ValueError('runtime calibration binding does not match both profile identities')
+            else:
+                for key in identities:
+                    if getattr(self.runtime_calibration, key) != getattr(self, key):
+                        raise ValueError(f'runtime calibration {key} differs from the kernel profile')
+            if not isinstance(self.runtime_host_resource_id, str) or not self.runtime_host_resource_id.strip():
+                raise ValueError('runtime calibration requires an explicit CPU submission resource')
+            if self.runtime_submission_ns is not None or self.graph_launch_ns is not None:
+                raise ValueError('structured runtime costs cannot also charge scalar submission costs')
+        elif self.runtime_host_resource_id is not None or self.runtime_calibration_binding is not None:
+            raise ValueError('runtime submission resource/binding requires runtime_calibration')
+        elif self.runtime_measurement_mode != 'qualified':
+            raise ValueError('experimental runtime mode requires independent structural measurements')
         if not isinstance(self.kernels, tuple) or any(not isinstance(k, KernelCapability) for k in self.kernels):
             raise ValueError('kernels must contain KernelCapability')
 
@@ -363,6 +397,14 @@ def kernel_model_from_dict(raw: Mapping):
                 values[key] = tuple(values[key])
         return values
     values = construct(KernelModelProfile, raw, ('unverified_parameters',))
+    if values.get('runtime_calibration') is not None:
+        from .runtime_residual import runtime_calibration_from_dict, runtime_structure_measurements_from_dict, STRUCTURE_SCHEMA
+        if not isinstance(values['runtime_calibration'], Mapping):
+            raise ValueError('runtime calibration must be a structured measurement record')
+        restore = (runtime_structure_measurements_from_dict
+                   if values['runtime_calibration'].get('protocol') == STRUCTURE_SCHEMA
+                   else runtime_calibration_from_dict)
+        values['runtime_calibration'] = restore(values['runtime_calibration'])
     if 'kernels' in values and not isinstance(values['kernels'], (list, tuple)):
         raise ValueError('kernels must be an array')
     kernels = []
@@ -791,7 +833,8 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
                           'ordinary_device_launch_ns': (gpu.kernel_launch_ns if profile.launch_ns is None else profile.launch_ns),
                           'runtime_submission_ns': runtime_submission,
                           'ordinary_kernel_submission_ns': launch,
-                          'graph_replay_bound': bool(profile.graph_enabled and profile.graph_launch_ns is not None),
+                          # A selected profile is not a runtime capture binding.
+                          'graph_replay_bound': False,
                           'runtime_submission_evidence': profile.runtime_submission_evidence,
                       })
     audit = {'schema': 'kernel-aware-cost/v1', 'kernel_family': kernel.kernel_family,
@@ -958,6 +1001,9 @@ def apply_captured_graph_launch(tasks, profile):
     the runtime adapter. Group IDs must identify a single replay, not a cached
     executable reused over multiple tokens. No graph is inferred from shapes.
     """
+    if profile.runtime_calibration is not None:
+        from .cuda_graph_costs import apply_cuda_graph_runtime_costs
+        return apply_cuda_graph_runtime_costs(tasks, profile)
     if not profile.graph_enabled:
         return tuple(tasks)
     groups = {}

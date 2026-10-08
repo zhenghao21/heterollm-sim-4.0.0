@@ -1,0 +1,85 @@
+{
+  "llama_cpp_source_revision": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+  "native_timing_binary": "original uninstrumented Release build",
+  "workload": {
+    "prompt_tokens": 512,
+    "output_tokens": 128,
+    "context": 768,
+    "batch": 512,
+    "ubatch": 512,
+    "threads": 16,
+    "gpu_layers": -1,
+    "flash_attn": "off",
+    "warmups": 2,
+    "repetitions": 5,
+    "ctx_checkpoints": 0
+  },
+  "graph_optimizer_env": null,
+  "samples": [
+    {
+      "file": "native_qwen3_0_6b_f16_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 523.01
+    },
+    {
+      "file": "native_qwen3_0_6b_f16_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 361.84200000000004
+    },
+    {
+      "file": "native_qwen3_1_7b_q8_0_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 685.454
+    },
+    {
+      "file": "native_qwen3_1_7b_q8_0_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 491.675
+    },
+    {
+      "file": "native_qwen3_4b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 985.51
+    },
+    {
+      "file": "native_qwen3_4b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 777.2170000000001
+    },
+    {
+      "file": "native_qwen3_8_27b_mixed_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 3423.326
+    },
+    {
+      "file": "native_qwen3_8_27b_mixed_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 2852.086
+    },
+    {
+      "file": "native_qwen3_8b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "graph_mode": "off",
+      "e2e_median_ms": 1294.192
+    },
+    {
+      "file": "native_qwen3_8b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "graph_mode": "on",
+      "e2e_median_ms": 1078.934
+    }
+  ],
+  "limitations": [
+    "Context checkpoints are explicitly disabled in both paired sides; retained *_checkpoint_default.json files use the earlier runtime default and are a separate experiment.",
+    "Actual Graph replay is verified by separate instrumented server requests; their timings are discarded."
+  ],
+  "variant": "controlled CUDA Graph comparison with --ctx-checkpoints 0"
+}

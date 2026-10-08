@@ -1,0 +1,444 @@
+{
+  "schema": "heterollm.cuda-graph-host-cost-sensitivity/v1",
+  "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_8b_q4_k_m_graph_on_result.json",
+  "job_id": "53f6a8fbd97f48b19cb552ceffccd0c3",
+  "scope": "all_completed_report_invocations_including_startup_and_warmup",
+  "invocation_count": 386,
+  "event_count": 400,
+  "event_counts": {
+    "ordinary_submit": 7,
+    "capture": 4,
+    "instantiate": 2,
+    "update": 3,
+    "first_launch_submit": 2,
+    "destroy_graph": 3,
+    "update_failure": 1,
+    "destroy_exec": 1,
+    "replay_submit": 377
+  },
+  "phases": {
+    "ordinary_submit": {
+      "event_count": 7,
+      "measurement_groups": [
+        {
+          "phase": "ordinary_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:1",
+            "node_count": 1296
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 1975700.0,
+            "minimum_ns": 1705400.0,
+            "maximum_ns": 6020600.0,
+            "repeat_mad_ns": 231600.0,
+            "repeat_count": 99
+          },
+          "event_count": 3,
+          "sum_of_event_medians_ns": 5927100.0,
+          "sum_of_event_minima_ns": 5116200.0,
+          "sum_of_event_maxima_ns": 18061800.0
+        },
+        {
+          "phase": "ordinary_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 762
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 1031000.0,
+            "minimum_ns": 976200.0,
+            "maximum_ns": 3402600.0,
+            "repeat_mad_ns": 42600.0,
+            "repeat_count": 99
+          },
+          "event_count": 3,
+          "sum_of_event_medians_ns": 3093000.0,
+          "sum_of_event_minima_ns": 2928600.0,
+          "sum_of_event_maxima_ns": 10207800.0
+        },
+        {
+          "phase": "ordinary_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:0",
+            "node_count": 937
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 1325600.0,
+            "minimum_ns": 1187800.0,
+            "maximum_ns": 4124900.0,
+            "repeat_mad_ns": 99600.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 1325600.0,
+          "sum_of_event_minima_ns": 1187800.0,
+          "sum_of_event_maxima_ns": 4124900.0
+        }
+      ],
+      "sum_of_event_medians_ns": 10345700.0,
+      "sum_of_event_minima_ns": 9232600.0,
+      "sum_of_event_maxima_ns": 32394500.0
+    },
+    "capture": {
+      "event_count": 4,
+      "measurement_groups": [
+        {
+          "phase": "capture",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 762
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 189900.0,
+            "minimum_ns": 185900.0,
+            "maximum_ns": 399600.0,
+            "repeat_mad_ns": 2900.0,
+            "repeat_count": 99
+          },
+          "event_count": 3,
+          "sum_of_event_medians_ns": 569700.0,
+          "sum_of_event_minima_ns": 557700.0,
+          "sum_of_event_maxima_ns": 1198800.0
+        },
+        {
+          "phase": "capture",
+          "structure_binding": {
+            "structure_id": "cuda_structure:0",
+            "node_count": 937
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 233700.0,
+            "minimum_ns": 226400.0,
+            "maximum_ns": 440400.0,
+            "repeat_mad_ns": 5700.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 233700.0,
+          "sum_of_event_minima_ns": 226400.0,
+          "sum_of_event_maxima_ns": 440400.0
+        }
+      ],
+      "sum_of_event_medians_ns": 803400.0,
+      "sum_of_event_minima_ns": 784100.0,
+      "sum_of_event_maxima_ns": 1639200.0
+    },
+    "instantiate": {
+      "event_count": 2,
+      "measurement_groups": [
+        {
+          "phase": "instantiate",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 762
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 765700.0,
+            "minimum_ns": 734900.0,
+            "maximum_ns": 1195100.0,
+            "repeat_mad_ns": 16800.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 765700.0,
+          "sum_of_event_minima_ns": 734900.0,
+          "sum_of_event_maxima_ns": 1195100.0
+        },
+        {
+          "phase": "instantiate",
+          "structure_binding": {
+            "structure_id": "cuda_structure:0",
+            "node_count": 937
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 862500.0,
+            "minimum_ns": 819700.0,
+            "maximum_ns": 1255400.0,
+            "repeat_mad_ns": 27300.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 862500.0,
+          "sum_of_event_minima_ns": 819700.0,
+          "sum_of_event_maxima_ns": 1255400.0
+        }
+      ],
+      "sum_of_event_medians_ns": 1628200.0,
+      "sum_of_event_minima_ns": 1554600.0,
+      "sum_of_event_maxima_ns": 2450500.0
+    },
+    "update": {
+      "event_count": 3,
+      "measurement_groups": [
+        {
+          "phase": "update",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 762,
+            "previous": {
+              "structure_id": "cuda_structure:2",
+              "node_count": 762
+            },
+            "current": {
+              "structure_id": "cuda_structure:2",
+              "node_count": 762
+            }
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 26100.0,
+            "minimum_ns": 22200.0,
+            "maximum_ns": 59400.0,
+            "repeat_mad_ns": 1000.0,
+            "repeat_count": 99
+          },
+          "event_count": 2,
+          "sum_of_event_medians_ns": 52200.0,
+          "sum_of_event_minima_ns": 44400.0,
+          "sum_of_event_maxima_ns": 118800.0
+        },
+        {
+          "phase": "update",
+          "structure_binding": {
+            "structure_id": "cuda_structure:0",
+            "node_count": 937,
+            "previous": {
+              "structure_id": "cuda_structure:0",
+              "node_count": 937
+            },
+            "current": {
+              "structure_id": "cuda_structure:0",
+              "node_count": 937
+            }
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 24900.0,
+            "minimum_ns": 21300.0,
+            "maximum_ns": 45600.0,
+            "repeat_mad_ns": 2800.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 24900.0,
+          "sum_of_event_minima_ns": 21300.0,
+          "sum_of_event_maxima_ns": 45600.0
+        }
+      ],
+      "sum_of_event_medians_ns": 77100.0,
+      "sum_of_event_minima_ns": 65700.0,
+      "sum_of_event_maxima_ns": 164400.0
+    },
+    "update_failure": {
+      "event_count": 1,
+      "measurement_groups": [
+        {
+          "phase": "update_failure",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 762,
+            "previous": {
+              "structure_id": "cuda_structure:0",
+              "node_count": 937
+            },
+            "current": {
+              "structure_id": "cuda_structure:2",
+              "node_count": 762
+            }
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 2300.0,
+            "minimum_ns": 1100.0,
+            "maximum_ns": 8900.0,
+            "repeat_mad_ns": 900.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 2300.0,
+          "sum_of_event_minima_ns": 1100.0,
+          "sum_of_event_maxima_ns": 8900.0
+        }
+      ],
+      "sum_of_event_medians_ns": 2300.0,
+      "sum_of_event_minima_ns": 1100.0,
+      "sum_of_event_maxima_ns": 8900.0
+    },
+    "first_launch_submit": {
+      "event_count": 2,
+      "measurement_groups": [
+        {
+          "phase": "first_launch_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 762
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 108100.0,
+            "minimum_ns": 90400.0,
+            "maximum_ns": 263900.0,
+            "repeat_mad_ns": 10700.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 108100.0,
+          "sum_of_event_minima_ns": 90400.0,
+          "sum_of_event_maxima_ns": 263900.0
+        },
+        {
+          "phase": "first_launch_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:0",
+            "node_count": 937
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 122600.0,
+            "minimum_ns": 100300.0,
+            "maximum_ns": 281400.0,
+            "repeat_mad_ns": 13400.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 122600.0,
+          "sum_of_event_minima_ns": 100300.0,
+          "sum_of_event_maxima_ns": 281400.0
+        }
+      ],
+      "sum_of_event_medians_ns": 230700.0,
+      "sum_of_event_minima_ns": 190700.0,
+      "sum_of_event_maxima_ns": 545300.0
+    },
+    "replay_submit": {
+      "event_count": 377,
+      "measurement_groups": [
+        {
+          "phase": "replay_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 762
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 2000.0,
+            "minimum_ns": 1400.0,
+            "maximum_ns": 5500.0,
+            "repeat_mad_ns": 400.0,
+            "repeat_count": 99
+          },
+          "event_count": 377,
+          "sum_of_event_medians_ns": 754000.0,
+          "sum_of_event_minima_ns": 527800.0,
+          "sum_of_event_maxima_ns": 2073500.0
+        }
+      ],
+      "sum_of_event_medians_ns": 754000.0,
+      "sum_of_event_minima_ns": 527800.0,
+      "sum_of_event_maxima_ns": 2073500.0
+    },
+    "destroy_exec": {
+      "event_count": 1,
+      "measurement_groups": [
+        {
+          "phase": "destroy_exec",
+          "structure_binding": {
+            "structure_id": "cuda_structure:0",
+            "node_count": 937
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 220900.0,
+            "minimum_ns": 194100.0,
+            "maximum_ns": 481300.0,
+            "repeat_mad_ns": 19100.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 220900.0,
+          "sum_of_event_minima_ns": 194100.0,
+          "sum_of_event_maxima_ns": 481300.0
+        }
+      ],
+      "sum_of_event_medians_ns": 220900.0,
+      "sum_of_event_minima_ns": 194100.0,
+      "sum_of_event_maxima_ns": 481300.0
+    },
+    "destroy_graph": {
+      "event_count": 3,
+      "measurement_groups": [
+        {
+          "phase": "destroy_graph",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 762
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 28500.0,
+            "minimum_ns": 25800.0,
+            "maximum_ns": 109200.0,
+            "repeat_mad_ns": 1400.0,
+            "repeat_count": 99
+          },
+          "event_count": 2,
+          "sum_of_event_medians_ns": 57000.0,
+          "sum_of_event_minima_ns": 51600.0,
+          "sum_of_event_maxima_ns": 218400.0
+        },
+        {
+          "phase": "destroy_graph",
+          "structure_binding": {
+            "structure_id": "cuda_structure:0",
+            "node_count": 937
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 39400.0,
+            "minimum_ns": 32100.0,
+            "maximum_ns": 261000.0,
+            "repeat_mad_ns": 5600.0,
+            "repeat_count": 99
+          },
+          "event_count": 1,
+          "sum_of_event_medians_ns": 39400.0,
+          "sum_of_event_minima_ns": 32100.0,
+          "sum_of_event_maxima_ns": 261000.0
+        }
+      ],
+      "sum_of_event_medians_ns": 96400.0,
+      "sum_of_event_minima_ns": 83700.0,
+      "sum_of_event_maxima_ns": 479400.0
+    }
+  },
+  "host_service_totals_ns": {
+    "sum_of_event_medians_ns": 14158700.0,
+    "sum_of_event_minima_ns": 12634400.0,
+    "sum_of_event_maxima_ns": 40237000.0
+  },
+  "prediction_qualified": false,
+  "end_to_end_sensitivity_computed": false,
+  "native_execution_performed": false,
+  "new_measurements_performed": false,
+  "simulation_parameters_modified": false,
+  "unseen_structure_policy": "reject; no interpolation, extrapolation, or ordinary-chain fallback",
+  "interpretation": [
+    "These are additive CPU host-service amounts, not elapsed simulation time.",
+    "Each lifecycle occurrence contributes once. An ordinary-submit occurrence is the whole measured enqueue loop, even when split across many host tasks.",
+    "Sums of observed per-event minima/maxima are sensitivity scenarios, not confidence intervals or observations of a complete run.",
+    "CPU submission can overlap GPU execution. End-to-end sensitivity requires rescheduling the same dependency graph and is not computed here.",
+    "Measurement repeat scatter does not quantify synthetic-to-real kernel bias or prediction error on unseen models."
+  ],
+  "independent_measurement_limitations": [
+    "CUDA event intervals include graph execution and remain diagnostics; never subtract them to replace physical GPU or DRAM costs.",
+    "Kernel functions, launch geometry, parameter footprint and shared memory are synthetic; generalization to real kernel host costs is not yet independently validated.",
+    "Successful update measures an identical captured graph; update_failure uses separately measured source-predicted old/new typed structures with differing node counts. Other parameter changes/failure causes are not independently validated."
+  ]
+}

@@ -1759,6 +1759,16 @@ def _validate_scenario_uncached(
     warnings: List[str] = []
     information: List[str] = []
     diagnostics: List[Mapping[str, object]] = []
+    from .cuda_graph_contract import validate_cuda_graph_scenario_contract
+    try:
+        validate_cuda_graph_scenario_contract(scenario, allow_placement_probe=True)
+    except (KeyError, TypeError, ValueError) as exc:
+        message = "CUDA Graph 配置与编译结构不匹配：{}".format(exc)
+        return ScenarioValidationReport(errors=(message,), errors_en=(str(exc),))
+    if any(isinstance(profile, GPUProfile) and profile.kernel_model is not None
+           and profile.kernel_model.runtime_measurement_mode == "experimental_exact_structure"
+           for group in scenario.component_profiles.values() for profile in group.values()):
+        warnings.append("采用独立结构测量实验成本，泛化精度尚未验证。")
     try:
         execution_view = _execution_view(scenario)
     except (AttributeError, TypeError, ValueError) as exc:
@@ -4951,20 +4961,67 @@ def _apply_planned_graph_launches(tasks):
         return tuple(result)
     scenario = context.scenario
     # Captured membership must come from an explicit runtime binding, never a
-    # fusion flag or a shape-based guess. Existing frontends remain independent.
+    # fusion flag or a shape-based guess. Graph-on without a known transition
+    # must not silently execute the ordinary-launch cost path.
     by_device = {}
+    profiles = {}
     for index, task in enumerate(result):
-        if task.metadata.get("cuda_graph_captured") is True:
-            target = task.metadata.get("target_component")
-            if target:
-                by_device.setdefault(target, []).append(index)
+        target = task.metadata.get("target_component")
+        if (task.metadata.get("phase") == "kernel_launch" and target
+                and _kind(_component(scenario, target)) == "gpu"):
+            if target not in profiles:
+                gpu, _ = _gpu_profiles(scenario, target)
+                profiles[target] = gpu.kernel_model
+            profile = profiles[target]
+            if profile is not None and (profile.graph_enabled
+                    or getattr(profile, "runtime_calibration", None) is not None):
+                from .cuda_graph_lifecycle import SCHEMA, SOURCE_REVISION
+                binding = task.metadata.get("cuda_graph_lifecycle")
+                if (not isinstance(binding, Mapping) or binding.get("schema") != SCHEMA
+                        or binding.get("source_revision") != SOURCE_REVISION
+                        or binding.get("decision") not in {"direct", "graph_launch"}
+                        or task.metadata.get("cuda_graph_captured") is not
+                        (binding.get("decision") == "graph_launch")):
+                    raise ValueError(
+                        "CUDA Graph/runtime costs enabled for {} but task {} has no complete source-derived "
+                        "CUDA Graph lifecycle binding; ordinary-launch fallback is disabled".format(
+                            target, task.task_id))
+        graph_device = task.metadata.get("cuda_graph_device", target)
+        if (task.metadata.get("cuda_graph_lifecycle") is not None
+                or task.metadata.get("cuda_graph_captured") is True):
+            if graph_device:
+                by_device.setdefault(graph_device, []).append(index)
+    replacement_chunks = {}
     for target, indices in by_device.items():
-        gpu, _ = _gpu_profiles(scenario, target)
-        if gpu.kernel_model is not None:
-            revised = apply_captured_graph_launch(tuple(result[i] for i in indices), gpu.kernel_model)
-            for index, task in zip(indices, revised):
-                result[index] = task
-    return tuple(result)
+        if _kind(_component(scenario, target)) != "gpu":
+            raise ValueError("CUDA lifecycle binding requires a GPU component")
+        if target not in profiles:
+            gpu, _ = _gpu_profiles(scenario, target)
+            profiles[target] = gpu.kernel_model
+        if profiles[target] is not None:
+            revised = apply_captured_graph_launch(tuple(result[i] for i in indices), profiles[target])
+            # Independent CPU lifecycle costs insert additional tasks. Preserve
+            # every original task's position and insert each new prerequisite
+            # before the member it prices, rather than truncating with zip().
+            originals = {result[i].task_id: i for i in indices}
+            preceding = []
+            seen = set()
+            for task in revised:
+                preceding.append(task)
+                if task.task_id in originals:
+                    replacement_chunks[originals[task.task_id]] = tuple(preceding)
+                    preceding.clear()
+                    seen.add(task.task_id)
+            if preceding or seen != set(originals):
+                raise ValueError("CUDA runtime pricing did not preserve its original task membership")
+    priced = tuple(task for index, original in enumerate(result)
+                   for task in replacement_chunks.get(index, (original,)))
+    if not any(profile is not None and getattr(profile, "runtime_calibration", None) is not None
+               for profile in profiles.values()):
+        return priced
+    from .cuda_graph_costs import replace_measured_driver_submission_costs
+    return replace_measured_driver_submission_costs(
+        priced, profiles, scenario.host_orchestration_profile.submission_resource_id)
 
 
 class _TaskBuilder:
@@ -6713,12 +6770,16 @@ def _task_segment_cache_put(
     cache: "OrderedDict[Hashable, _TaskSegmentTemplate]",
     key: Hashable,
     template: _TaskSegmentTemplate,
+    *,
+    max_entries: Optional[int] = None,
 ) -> None:
-    if context.leaf_cache_entries <= 0:
+    capacity = (context.leaf_cache_entries if max_entries is None
+                else min(context.leaf_cache_entries, max_entries))
+    if capacity <= 0:
         return
     cache[key] = template
     cache.move_to_end(key)
-    while len(cache) > context.leaf_cache_entries:
+    while len(cache) > capacity:
         cache.popitem(last=False)
 
 
@@ -16037,7 +16098,8 @@ def _gpu_invocation_kv_contract(
 
 
 def _source_f32_kv_contract(scenario, router, plan, rank, layer, token_batch,
-                            context_tokens, kv_materialized_tokens, kv_append_tokens):
+                            context_tokens, kv_materialized_tokens, kv_append_tokens,
+                            *, owner_request_ids=None):
     """Pinned-source ordinary F32 intermediates and separately stored F16 KV."""
     declaration = scenario.workload.metadata.get("native_rope_source_contract")
     if declaration is None:
@@ -16052,13 +16114,18 @@ def _source_f32_kv_contract(scenario, router, plan, rank, layer, token_batch,
     target = _parallel_target(scenario, layer, "attention", rank)
     cache, _offload, ratio = _kv_components(scenario, rank, target, layer)
     bits, artifact = _kv_dtype_bits(scenario, layer)
+    request_ids = (tuple(request.request_id for request in scenario.workload.requests)
+                   if owner_request_ids is None else tuple(owner_request_ids))
     if (not isinstance(declaration, Mapping)
             or declaration.get("schema") != "llama.cpp.cuda-rope/v1"
             or declaration.get("source_revision") != "d3146f2b56c2db4711ac8391871c9e529d1946d7"
             or architecture not in {"qwen3", "qwen35"}
             or not qualified["qualified"] or not _f32_hidden_storage_enabled(scenario)
             or config is None or config.flash_attn or plan.world_size != 1
-            or len(scenario.workload.requests) != 1 or scenario.workload.mtp is not None
+            or len(request_ids) != 1 or request_ids[0] not in {
+                request.request_id for request in scenario.workload.requests}
+            or scenario.workload.scheduler.max_num_seqs != 1 or config.parallel != 1
+            or scenario.workload.mtp is not None
             or token_batch <= 0 or token_batch != kv_materialized_tokens or token_batch != kv_append_tokens
             or target != rank.component_id or _kind(_component(scenario, target)) != "gpu"
             or cache not in {rank.component_id, rank.memory_component_id} or ratio != 0
@@ -16069,7 +16136,7 @@ def _source_f32_kv_contract(scenario, router, plan, rank, layer, token_batch,
         raise ValueError("native F32 cache path requires a 256-aligned effective context and valid append rows")
     width = _physical_kv_width_for_rank(layer, plan.tp_degree)
     identity = "native_kv:{}:{}:rank{}".format(
-        scenario.workload.requests[0].request_id, layer.layer_id, rank.rank)
+        request_ids[0], layer.layer_id, rank.rank)
     return {"status": "applied", "source": "pinned_f32_kv_contract",
             "source_revision": declaration["source_revision"],
             "producer_component": target, "cache_component": cache, "cache_format": "f16",
@@ -16080,7 +16147,7 @@ def _source_f32_kv_contract(scenario, router, plan, rank, layer, token_batch,
             "logical_context_tokens": context_tokens,
             "attention_read_tokens": min(capacity, max(256, math.ceil(context_tokens / 256) * 256)),
             "k_cache_id": identity + ":k", "v_cache_id": identity + ":v",
-            "request_id": scenario.workload.requests[0].request_id,
+            "request_id": request_ids[0],
             "k_set_rows_index_bytes": 8 * token_batch,
             "v_set_rows_index_bytes": 8 * token_batch * width,
             "unpriced_terms": ("conversion_specific_issue_rate_and_index_arithmetic",
@@ -18537,7 +18604,8 @@ def _compile_parallel_layer_body(
         native_qkv_output = native_kv.get("status") == "applied"
         source_f32_kv = _source_f32_kv_contract(
             scenario, router, plan, rank, layer, token_batch,
-            logical_context_tokens, kv_materialized_tokens, kv_append_tokens)
+            logical_context_tokens, kv_materialized_tokens, kv_append_tokens,
+            owner_request_ids=getattr(builder, "_linear_state_owner_request_ids", None))
         source_f32 = source_f32_kv.get("status") == "applied"
         source_base = prefix + ".rank{:03d}.source_f32".format(rank.rank)
 
@@ -23670,6 +23738,14 @@ def _add_host_visible_logits_sampling_commit(
     # read through both the topology endpoint and the CPU memory cost model.
     cpu_dependencies: Tuple[str, ...] = (completed,)
 
+    from .cuda_graph_serving import active_cuda_graph_cohort
+    cuda_cohort = active_cuda_graph_cohort()
+    if cuda_cohort is not None and cuda_cohort.stage in {"model_warmup", "model_seq_rm_probe"}:
+        # Native startup executes llama_decode + synchronization; it neither
+        # samples these logits nor appends a generated token to a request.
+        # Keep the real D2H completion and omit ordinary serving CPU output.
+        return completed
+
     sampling = scenario.sampling_policy
     sampling_implementation = (
         None
@@ -24938,7 +25014,7 @@ def _serving_invocation_segment_binding(
     if scenario.workload.metadata.get("native_rope_source_contract") is not None:
         # Source cache writes contain token offsets and transposed V ranges.
         # A generic dynamic-GEMM replay cannot refresh those physical views.
-        key += (group.context_tokens, group.kv_read_tokens, group.kv_scan_tokens)
+        key += (group.context_tokens, group.kv_read_tokens, group.kv_scan_tokens, group.request_ids)
     if any(layer.is_linear_attention for layer in _execution_layers(scenario)) and any(
         component.metadata.get("physical_memory_config") is not None
         for component in scenario.hardware.components
@@ -25078,7 +25154,11 @@ def _compile_or_replay_serving_invocation(
             required_dynamic_attention_invocations=required_dynamic,
         )
         if captured is not None:
-            _task_segment_cache_put(context, cache, cache_key, captured)
+            # One invocation contains the complete model task DAG. Physical
+            # cache views require context/request-exact keys, so successive
+            # tokens often never reuse these large entries. Keep their exact
+            # keys and rebuilding behavior, with a separate small LRU bound.
+            _task_segment_cache_put(context, cache, cache_key, captured, max_entries=8)
     return group_end
 
 
@@ -26283,6 +26363,15 @@ class TopologyAwareBatchCostProvider:
         self, scenario: ScenarioConfig, cohort: object
     ) -> Mapping[str, object]:
         self._execution_control.raise_if_cancelled()
+        from .cuda_graph_serving import active_cuda_graph_cohort
+        if active_cuda_graph_cohort() is not None:
+            # Lifecycle is runtime state, so immutable whole-cost memoization
+            # cannot reuse a prior warmup/capture/replay decision. Leaf and
+            # operator task templates remain safe: binding occurs afterward.
+            return _estimate_serving_cohort_cost(
+                scenario, cohort, cached_plan=self._plan, cached_router=self._router,
+                scenario_hash=self._scenario_hash, execution_control=self._execution_control,
+                compiled_executor=self._compiled_executor)
         cache_key = _serving_cohort_cache_key(cohort)
         return self._templates.get_or_create(
             cache_key,
@@ -29282,7 +29371,15 @@ def _serving_lowering_from_builder(
             or 0
         ),
     )
-    raw_tasks = _apply_planned_graph_launches(builder.tasks)
+    from .cuda_graph_serving import active_cuda_graph_cohort
+    cuda_cohort = active_cuda_graph_cohort()
+    raw_tasks = tuple(builder.tasks)
+    if cuda_cohort is not None:
+        raw_tasks = cuda_cohort.bind(raw_tasks,
+            tuple(enriched_extra_metadata.get("operator_invocation_groups", ())))
+    raw_tasks = _apply_planned_graph_launches(raw_tasks)
+    if cuda_cohort is not None:
+        cuda_cohort.register_costs(raw_tasks)
     operator_facts, transient_envelopes = (
         _transient_residency_envelopes(
             scenario,

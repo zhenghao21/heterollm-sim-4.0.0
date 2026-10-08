@@ -1,0 +1,118 @@
+{
+  "completed_jobs": 10,
+  "failed_jobs": 0,
+  "physical_cohorts_total": 3860,
+  "matrix_wall_seconds": 4742.484594,
+  "memory_monitor": {
+    "sample_interval_seconds": 45,
+    "samples": 92,
+    "first_sample": "2026-10-08T12:33:33.052142+08:00",
+    "last_sample": "2026-10-08T13:43:25.638843+08:00",
+    "maximum_observed_simulation_private_gib": 20.92,
+    "minimum_observed_system_available_gib": 95.28,
+    "scope": "Only dedicated frontend simulation Python processes on ports 8780-8789; a sampled maximum, not a continuous peak; collection started after submissions and excludes earlier attempts."
+  },
+  "jobs": [
+    {
+      "case": "qwen3_8_27b_mixed",
+      "mode": "on",
+      "job_id": "47e35445f54342e5b46f434cbd5216dd",
+      "started_at": "2026-10-08T04:23:18.652036Z",
+      "finished_at": "2026-10-08T05:36:49.708163Z",
+      "wall_seconds": 4411.056127,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_8_27b_mixed",
+      "mode": "off",
+      "job_id": "12bce61ff70d4694aa591a5c98a32411",
+      "started_at": "2026-10-08T04:27:41.489616Z",
+      "finished_at": "2026-10-08T05:42:21.136630Z",
+      "wall_seconds": 4479.647014,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_0_6b_f16",
+      "mode": "on",
+      "job_id": "1e3587fc817349ecbec16c7eff75399c",
+      "started_at": "2026-10-08T04:28:42.858338Z",
+      "finished_at": "2026-10-08T05:19:06.102793Z",
+      "wall_seconds": 3023.244455,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_0_6b_f16",
+      "mode": "off",
+      "job_id": "316707a701b74af7bc5c4c36e0f83f7d",
+      "started_at": "2026-10-08T04:29:06.134130Z",
+      "finished_at": "2026-10-08T05:20:10.892633Z",
+      "wall_seconds": 3064.758503,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_1_7b_q8_0",
+      "mode": "on",
+      "job_id": "3b73faa98cc44b3cb94dda94c33e24ff",
+      "started_at": "2026-10-08T04:29:20.251275Z",
+      "finished_at": "2026-10-08T05:15:26.980338Z",
+      "wall_seconds": 2766.729063,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_1_7b_q8_0",
+      "mode": "off",
+      "job_id": "3d6afdcf18194d45830ca7a66659f17e",
+      "started_at": "2026-10-08T04:29:34.725957Z",
+      "finished_at": "2026-10-08T05:16:46.459495Z",
+      "wall_seconds": 2831.733538,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_4b_q4_k_m",
+      "mode": "on",
+      "job_id": "f0a5dab324ed43dbb13271aa69b3de03",
+      "started_at": "2026-10-08T04:29:51.695861Z",
+      "finished_at": "2026-10-08T05:32:19.900160Z",
+      "wall_seconds": 3748.204299,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_4b_q4_k_m",
+      "mode": "off",
+      "job_id": "3cd7cdef64cf4defab383f894ba9ec0b",
+      "started_at": "2026-10-08T04:30:10.371674Z",
+      "finished_at": "2026-10-08T05:33:28.456667Z",
+      "wall_seconds": 3798.084993,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_8b_q4_k_m",
+      "mode": "on",
+      "job_id": "53f6a8fbd97f48b19cb552ceffccd0c3",
+      "started_at": "2026-10-08T04:30:27.453120Z",
+      "finished_at": "2026-10-08T05:33:06.051790Z",
+      "wall_seconds": 3758.59867,
+      "physical_cohorts": 386
+    },
+    {
+      "case": "qwen3_8b_q4_k_m",
+      "mode": "off",
+      "job_id": "f38aed939a9444aa962c4dfb2b3e784c",
+      "started_at": "2026-10-08T04:30:42.762910Z",
+      "finished_at": "2026-10-08T05:34:32.155404Z",
+      "wall_seconds": 3829.392494,
+      "physical_cohorts": 386
+    }
+  ],
+  "regression": {
+    "focused_python_tests_passed": 458,
+    "frontend_javascript_tests_passed": 29,
+    "changed_report_renderer_tests_passed": 3,
+    "notes": "Two fixture-path tests rechecked (45 tests), structural-probe preparation checks (18 tests) and C++ compile/link passed after subsequent local fixes."
+  },
+  "report_browser_visual_check": {
+    "status": "blocked_by_browser_url_policy",
+    "reason": "file protocol not allowed; no workaround used",
+    "frontend_regression_screenshot": "frontend_regression.png"
+  }
+}

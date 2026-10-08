@@ -1,0 +1,101 @@
+{
+  "schema": "heterollm.cuda-graph-host-cost-sensitivity/v1",
+  "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\ui_qwen3_1_7b_q8_0_graph_off_result.json",
+  "job_id": "3d6afdcf18194d45830ca7a66659f17e",
+  "scope": "all_completed_report_invocations_including_startup_and_warmup",
+  "invocation_count": 386,
+  "event_count": 386,
+  "event_counts": {
+    "ordinary_submit": 386
+  },
+  "phases": {
+    "ordinary_submit": {
+      "event_count": 386,
+      "measurement_groups": [
+        {
+          "phase": "ordinary_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:1",
+            "node_count": 1062
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 1485300.0,
+            "minimum_ns": 1380000.0,
+            "maximum_ns": 5152000.0,
+            "repeat_mad_ns": 77600.0,
+            "repeat_count": 99
+          },
+          "event_count": 3,
+          "sum_of_event_medians_ns": 4455900.0,
+          "sum_of_event_minima_ns": 4140000.0,
+          "sum_of_event_maxima_ns": 15456000.0
+        },
+        {
+          "phase": "ordinary_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:2",
+            "node_count": 594
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 842100.0,
+            "minimum_ns": 763400.0,
+            "maximum_ns": 2708200.0,
+            "repeat_mad_ns": 51300.0,
+            "repeat_count": 99
+          },
+          "event_count": 381,
+          "sum_of_event_medians_ns": 320840100.0,
+          "sum_of_event_minima_ns": 290855400.0,
+          "sum_of_event_maxima_ns": 1031824200.0
+        },
+        {
+          "phase": "ordinary_submit",
+          "structure_binding": {
+            "structure_id": "cuda_structure:0",
+            "node_count": 729
+          },
+          "measurement_evidence": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_validation_2026-10-08\\runtime_typed_chain_measurements.json",
+          "measurement": {
+            "median_ns": 977900.0,
+            "minimum_ns": 927700.0,
+            "maximum_ns": 3177200.0,
+            "repeat_mad_ns": 42100.0,
+            "repeat_count": 99
+          },
+          "event_count": 2,
+          "sum_of_event_medians_ns": 1955800.0,
+          "sum_of_event_minima_ns": 1855400.0,
+          "sum_of_event_maxima_ns": 6354400.0
+        }
+      ],
+      "sum_of_event_medians_ns": 327251800.0,
+      "sum_of_event_minima_ns": 296850800.0,
+      "sum_of_event_maxima_ns": 1053634600.0
+    }
+  },
+  "host_service_totals_ns": {
+    "sum_of_event_medians_ns": 327251800.0,
+    "sum_of_event_minima_ns": 296850800.0,
+    "sum_of_event_maxima_ns": 1053634600.0
+  },
+  "prediction_qualified": false,
+  "end_to_end_sensitivity_computed": false,
+  "native_execution_performed": false,
+  "new_measurements_performed": false,
+  "simulation_parameters_modified": false,
+  "unseen_structure_policy": "reject; no interpolation, extrapolation, or ordinary-chain fallback",
+  "interpretation": [
+    "These are additive CPU host-service amounts, not elapsed simulation time.",
+    "Each lifecycle occurrence contributes once. An ordinary-submit occurrence is the whole measured enqueue loop, even when split across many host tasks.",
+    "Sums of observed per-event minima/maxima are sensitivity scenarios, not confidence intervals or observations of a complete run.",
+    "CPU submission can overlap GPU execution. End-to-end sensitivity requires rescheduling the same dependency graph and is not computed here.",
+    "Measurement repeat scatter does not quantify synthetic-to-real kernel bias or prediction error on unseen models."
+  ],
+  "independent_measurement_limitations": [
+    "CUDA event intervals include graph execution and remain diagnostics; never subtract them to replace physical GPU or DRAM costs.",
+    "Kernel functions, launch geometry, parameter footprint and shared memory are synthetic; generalization to real kernel host costs is not yet independently validated.",
+    "Successful update measures an identical captured graph; update_failure uses separately measured source-predicted old/new typed structures with differing node counts. Other parameter changes/failure causes are not independently validated."
+  ]
+}

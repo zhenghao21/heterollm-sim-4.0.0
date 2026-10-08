@@ -1,0 +1,82 @@
+[
+  {
+    "slug": "qwen3_8_27b_mixed",
+    "mode": "on",
+    "port": 8784,
+    "job_id": "47e35445f54342e5b46f434cbd5216dd",
+    "prefix": "ui_qwen3_8_27b_mixed_graph_on",
+    "base_url": "http://127.0.0.1:8784"
+  },
+  {
+    "slug": "qwen3_8_27b_mixed",
+    "mode": "off",
+    "port": 8789,
+    "job_id": "12bce61ff70d4694aa591a5c98a32411",
+    "prefix": "ui_qwen3_8_27b_mixed_graph_off",
+    "base_url": "http://127.0.0.1:8789"
+  },
+  {
+    "slug": "qwen3_0_6b_f16",
+    "mode": "on",
+    "port": 8780,
+    "job_id": "1e3587fc817349ecbec16c7eff75399c",
+    "prefix": "ui_qwen3_0_6b_f16_graph_on",
+    "base_url": "http://127.0.0.1:8780"
+  },
+  {
+    "slug": "qwen3_0_6b_f16",
+    "mode": "off",
+    "port": 8785,
+    "job_id": "316707a701b74af7bc5c4c36e0f83f7d",
+    "prefix": "ui_qwen3_0_6b_f16_graph_off",
+    "base_url": "http://127.0.0.1:8785"
+  },
+  {
+    "slug": "qwen3_1_7b_q8_0",
+    "mode": "on",
+    "port": 8781,
+    "job_id": "3b73faa98cc44b3cb94dda94c33e24ff",
+    "prefix": "ui_qwen3_1_7b_q8_0_graph_on",
+    "base_url": "http://127.0.0.1:8781"
+  },
+  {
+    "slug": "qwen3_1_7b_q8_0",
+    "mode": "off",
+    "port": 8786,
+    "job_id": "3d6afdcf18194d45830ca7a66659f17e",
+    "prefix": "ui_qwen3_1_7b_q8_0_graph_off",
+    "base_url": "http://127.0.0.1:8786"
+  },
+  {
+    "slug": "qwen3_4b_q4_k_m",
+    "mode": "on",
+    "port": 8782,
+    "job_id": "f0a5dab324ed43dbb13271aa69b3de03",
+    "prefix": "ui_qwen3_4b_q4_k_m_graph_on",
+    "base_url": "http://127.0.0.1:8782"
+  },
+  {
+    "slug": "qwen3_4b_q4_k_m",
+    "mode": "off",
+    "port": 8787,
+    "job_id": "3cd7cdef64cf4defab383f894ba9ec0b",
+    "prefix": "ui_qwen3_4b_q4_k_m_graph_off",
+    "base_url": "http://127.0.0.1:8787"
+  },
+  {
+    "slug": "qwen3_8b_q4_k_m",
+    "mode": "on",
+    "port": 8783,
+    "job_id": "53f6a8fbd97f48b19cb552ceffccd0c3",
+    "prefix": "ui_qwen3_8b_q4_k_m_graph_on",
+    "base_url": "http://127.0.0.1:8783"
+  },
+  {
+    "slug": "qwen3_8b_q4_k_m",
+    "mode": "off",
+    "port": 8788,
+    "job_id": "f38aed939a9444aa962c4dfb2b3e784c",
+    "prefix": "ui_qwen3_8b_q4_k_m_graph_off",
+    "base_url": "http://127.0.0.1:8788"
+  }
+]

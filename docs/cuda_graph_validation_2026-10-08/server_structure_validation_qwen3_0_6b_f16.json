@@ -1,0 +1,9 @@
+{
+  "qualified": true,
+  "dry_calls": 386,
+  "server_calls": 386,
+  "mismatches": [],
+  "context_checkpoints": 0,
+  "token_values": "fixed structural tokens vs actual native request tokens; equality predicates compared, not pointer addresses",
+  "latency_used": false
+}

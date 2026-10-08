@@ -1,0 +1,55 @@
+{
+  "program": {
+    "schema": "heterollm.cuda-graph-source-program/v1",
+    "graph_enabled": true,
+    "dry_program_path": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_0_6b_f16_dry.jsonl",
+    "capture_program_path": "F:\\codex_project\\_scratch\\37-native-validation-raw\\cuda_graph_2026-10-08\\qwen3_0_6b_f16_capture.jsonl",
+    "request_prefixes": {
+      "00_model_warmup": "model_warmup",
+      "01_model_seq_rm_probe": "model_seq_rm_probe",
+      "02_warmup0": "warmup:0",
+      "03_warmup1": "warmup:1",
+      "04_measured0": "measured:0"
+    }
+  },
+  "requests": [
+    {
+      "request_id": "00_model_warmup",
+      "prompt_tokens": 2,
+      "output_tokens": 1,
+      "arrival_ns": 0
+    },
+    {
+      "request_id": "01_model_seq_rm_probe",
+      "prompt_tokens": 2,
+      "output_tokens": 1,
+      "arrival_ns": 0
+    },
+    {
+      "request_id": "02_warmup0",
+      "prompt_tokens": 512,
+      "output_tokens": 128,
+      "arrival_ns": 0
+    },
+    {
+      "request_id": "03_warmup1",
+      "prompt_tokens": 512,
+      "output_tokens": 128,
+      "arrival_ns": 0
+    },
+    {
+      "request_id": "04_measured0",
+      "prompt_tokens": 512,
+      "output_tokens": 128,
+      "arrival_ns": 0
+    }
+  ],
+  "comparison_request_id": "04_measured0",
+  "qualification": {
+    "source_assisted": true,
+    "native_latency_used": false,
+    "native_context_checkpoints": 0,
+    "explicit_request_order": "lexicographic_request_ids_for_equal_arrival",
+    "startup_output_sampling": "source startup retains logits D2H synchronization and omits CPU sampling; output_tokens=1 is a scheduler wrapper only"
+  }
+}
