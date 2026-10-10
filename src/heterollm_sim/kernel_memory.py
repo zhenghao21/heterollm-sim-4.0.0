@@ -8,7 +8,7 @@ import math
 
 from .cache_state import CacheAccess, ExplicitCacheState
 from .contracts import ResourceDemand
-from .cost_models import HBMProfile
+from .cost_models import HBMProfile, _require_non_negative
 
 
 def _allocation_for(allocator, buffer_id, generation):
@@ -130,10 +130,38 @@ def _allocation_table(task, accesses, backing_accesses, allocator=None):
     return table
 
 
+def _l2_execution_metadata(metadata, duration, demands, *, physical=False):
+    """Keep retained cost views consistent with the dispatched L2 demand."""
+    updated = {**metadata, 'analytical_service_ns': duration,
+               'analytical_energy_pj': sum(d.energy_pj for d in demands)}
+    resource_service = {d.resource_id: d.service_ns for d in demands}
+    reason = 'stateful_l2_physical_recost' if physical else 'stateful_l2_runtime_recost'
+    def audit(value):
+        return {**value, 'analytical_service_ns': duration,
+                'resource_service_ns': resource_service,
+                'pipeline_timing_scope': 'descriptor_before_l2_dispatch',
+                'prediction': {**value.get('prediction', {}),
+                'prediction_ns': duration, 'analytical_ns': duration,
+                'model': 'analytical', 'reason': reason}}
+    if metadata.get('kernel_prediction'):
+        updated['kernel_prediction'] = audit(metadata['kernel_prediction'])
+    for key in ('phase_metadata', 'cost_model'):
+        value = metadata.get(key)
+        if isinstance(value, dict) and isinstance(value.get('kernel_model'), dict):
+            updated[key] = {**value, 'kernel_model': audit(value['kernel_model'])}
+            if key == 'cost_model' and isinstance(value.get('prediction'), dict):
+                updated[key]['prediction'] = updated[key]['kernel_model']['prediction']
+    return updated
+
+
 def resolve_l2_task(task, states, physical_allocator=None):
     contract = task.metadata.get('stateful_l2')
     if contract is None:
         return task
+    if 'cache_energy_pj_per_byte' not in contract:
+        raise ValueError('stateful L2 requires explicit cache_energy_pj_per_byte')
+    cache_energy = contract['cache_energy_pj_per_byte']
+    _require_non_negative('cache_energy_pj_per_byte', cache_energy)
     owner = contract['owner']
     signature = (contract['capacity_bytes'], contract['line_bytes'], contract['write_back'], contract['write_allocate'])
     existing = states.get(owner)
@@ -170,13 +198,16 @@ def resolve_l2_task(task, states, physical_allocator=None):
         if d.resource_id == contract['memory_resource']:
             d = replace(d, service_ns=memory_ns, bytes_moved=reads + writes, energy_pj=(reads + writes) * hbm.energy_pj_per_byte)
         elif d.resource_id == contract['cache_resource']:
-            d = replace(d, service_ns=cache_ns, bytes_moved=requested)
+            d = replace(d, service_ns=cache_ns, bytes_moved=requested,
+                        energy_pj=requested * cache_energy)
         demands.append(d)
     # Measured device wall is invalid under a different cache protocol. The
     # planner prevents combining that surface with mutable L2 for now.
     duration = max((d.service_ns for d in demands if d.resource_id not in contract['envelope_resources']), default=0)
-    duration += contract.get('dependency_ns', 0)
-    memory_completion_ns = max(memory_ns, cache_ns)
+    # This model has one aggregate cache lookup phase, rather than a line
+    # pipeline. Miss fills and dirty evictions become eligible after lookup.
+    memory_completion_ns = cache_ns + memory_ns
+    duration = max(duration, memory_completion_ns) + contract.get('dependency_ns', 0)
     demands = tuple(replace(d, service_ns=(memory_completion_ns if d.resource_id == contract.get('order_resource') else duration))
                     if d.resource_id in contract['envelope_resources'] else d for d in demands)
     report = {'model': 'line_lru_dispatch_order', 'hit_lines': sum(r.hit_lines for r in results),
@@ -188,16 +219,14 @@ def resolve_l2_task(task, states, physical_allocator=None):
               'cache_state_after': asdict(cache.snapshot()),
               'concurrency_policy': 'memory_phase_order_compute_tail_overlap',
               'memory_completion_offset_ns': memory_completion_ns,
+              'backing_arrival_offset_ns': cache_ns if backing_accesses else 0.0,
+              'lookup_timing_model': 'aggregate_lookup_before_backing_service',
               'prediction_confidence': 'low', 'validated': False}
-    prediction = task.metadata.get('kernel_prediction', {})
-    if prediction:
-        prediction = {**prediction, 'prediction': {**prediction.get('prediction', {}),
-                      'prediction_ns': duration, 'model': 'analytical', 'reason': 'stateful_l2_runtime_recost'}}
     metadata_updates = {
-        **({'kernel_prediction': prediction} if prediction else {}),
         'l2_execution': report,
         'analytical_service_ns': duration,
         'analytical_bytes': sum(d.bytes_moved for d in demands),
+        'analytical_energy_pj': sum(d.energy_pj for d in demands),
     }
     # Physical event dispatch needs allocator declarations before it can
     # resolve the backing ranges. Keep these declarations off ordinary HBM
@@ -209,7 +238,9 @@ def resolve_l2_task(task, states, physical_allocator=None):
             {**item, 'physical_owner': item.get('physical_owner', owner)}
             for item in physical_allocations.values()
         ]
-    return replace(task, demands=demands, metadata={**task.metadata, **metadata_updates})
+    return replace(task, demands=demands, metadata={
+        **_l2_execution_metadata(task.metadata, duration, demands),
+        **metadata_updates})
 
 
 def attach_l2_contract(task, *, gpu, hbm, memory_resource, cache_resource, owner, accesses):
@@ -244,6 +275,7 @@ def attach_l2_contract(task, *, gpu, hbm, memory_resource, cache_resource, owner
         'write_back': gpu.cache_hierarchy.write_back, 'write_allocate': gpu.cache_hierarchy.write_allocate,
         'cache_resource': cache_resource, 'memory_resource': memory_resource,
         'cache_bandwidth_gb_s': level.bandwidth_gb_s, 'cache_latency_ns': level.hit_latency_ns,
+        'cache_energy_pj_per_byte': level.energy_pj_per_byte,
         'cache_parallelism': level.transaction_parallelism, 'bandwidth_gb_s': bandwidth,
         'hbm': asdict(hbm), 'accesses': tuple(asdict(a) for a in accesses),
         'invocation_buffers': tuple(a.buffer_id for a in accesses if a.buffer_id.startswith('@invocation:')),

@@ -87,6 +87,34 @@ def test_graph_mode_mismatch_and_unbound_launch_fail_closed():
         apply_cuda_graph_runtime_costs((*tasks, extra), profile)
 
 
+@pytest.mark.parametrize('root_kind', ['device_memory', 'marker'])
+@pytest.mark.parametrize('captured', [False, True])
+def test_independent_device_body_roots_wait_for_graph_submission_only(root_kind, captured):
+    from heterollm_sim.event_kernel import UnifiedEventKernel
+    tasks = bound_tasks(captured)
+    # A complete device body can contain a root that is not a kernel launch,
+    # such as a copy or a cost-free dependency marker.
+    root = replace(tasks[1], dependencies=())
+    if root_kind == 'marker':
+        root = replace(root, category=TaskCategory.SYNCHRONIZATION, demands=())
+    tasks = (tasks[0], root, *tasks[2:])
+    result = apply_cuda_graph_runtime_costs(tasks, SimpleNamespace(
+        runtime_calibration=IndependentCosts(), runtime_host_resource_id='cpu0.cuda_submission',
+        graph_enabled=captured))
+    kernel = UnifiedEventKernel.from_closed_graph(result)
+    events = {}
+    while (event := kernel.step()) is not None:
+        events[event.task.task_id] = event
+    kernel.assert_drained()
+    hosts = [event for ident, event in events.items() if '.cuda_host.' in ident]
+    if captured:
+        assert events[root.task_id].start_ns >= max(event.end_ns for event in hosts)
+    else:
+        assert events[root.task_id].start_ns == 0
+        # Ordinary enqueues remain independent of the preceding GPU body.
+        assert hosts[1].start_ns == hosts[0].end_ns
+
+
 def test_missing_phase_cost_cannot_disappear_as_zero():
     tasks = bound_tasks(True)
     tasks = (replace(tasks[0], metadata={**tasks[0].metadata,

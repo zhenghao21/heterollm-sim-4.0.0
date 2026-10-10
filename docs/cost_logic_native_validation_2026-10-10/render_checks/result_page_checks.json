@@ -1,0 +1,161 @@
+{
+  "checked_utc": "2026-10-10T04:17:36.919Z",
+  "checks": [
+    {
+      "case_id": "llama3_2_1b_q4_k_m",
+      "mode": "on",
+      "url": "http://127.0.0.1:8806/",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cost_logic_native_validation_2026-10-10\\ui_llama3_2_1b_q4_k_m_graph_on_result.json",
+      "render_url": "http://127.0.0.1:8806/",
+      "method": "Original completed snapshot fetched by read-only GET from its original service and loaded through finishRunJob after importing and validating its unchanged scenario; rendering-only, no job submission or end-to-end polling claim.",
+      "status": "completed",
+      "job_id": "7a572ed862fe44f0beffce5794748d0a",
+      "report_stale": false,
+      "run_id": "9c76f458ba6015b4",
+      "view": "results",
+      "page_errors": [],
+      "blocked_new_job_posts": [],
+      "viewports": [
+        {
+          "viewport": "desktop",
+          "width": 1440,
+          "document_width": 1440,
+          "result_visible": true,
+          "metrics": "总历时\n750.7 ms\n7.507 × 108 ns\n首 Token 延迟（引擎边界） p\n50\n12.45 ms\n1.245 × 107 ns\nToken 间延迟（TBT） p\n50\n1.86 ms\n1.86 × 106 ns\n每输出 Token 时间（引擎边界） p\n50\n1.861 ms\n1.861 × 106 ns\n端到端延迟（引擎边界） p\n50\n248.8 ms\n2.488 × 108 ns\nToken 吞吐\n514.2 tok/s\n514.2 tokens/s\n请求吞吐\n6.66 req/s\n6.66 requests/s\n总能耗\n2.472 J\n2.472 × 1012 pJ",
+          "request_rows": 5,
+          "request_text": "00_model_warmup\tfinished\t—\t0 ns\t1.827 ms\tNA / NA\tNA\t1.827 ms\t1\n01_model_seq_rm_probe\tfinished\t—\t0 ns\t2.251 ms\tNA / NA\tNA\t2.251 ms\t1\n02_warmup0\tfinished\t—\t0 ns\t12.45 ms\t1.86 ms / 1.86 ms\t1.863 ms\t249.1 ms\t128\n03_warmup1\tfinished\t—\t0 ns\t12.45 ms\t1.86 ms / 1.86 ms\t1.861 ms\t248.8 ms\t128\n04_measured0\tfinished\t—\t0 ns\t12.45 ms\t1.86 ms / 1.86 ms\t1.861 ms\t248.8 ms\t128",
+          "has_invalid_number": false,
+          "errors": []
+        },
+        {
+          "viewport": "narrow",
+          "width": 390,
+          "document_width": 390,
+          "result_visible": true,
+          "metrics": "总历时\n750.7 ms\n7.507 × 108 ns\n首 Token 延迟（引擎边界） p\n50\n12.45 ms\n1.245 × 107 ns\nToken 间延迟（TBT） p\n50\n1.86 ms\n1.86 × 106 ns\n每输出 Token 时间（引擎边界） p\n50\n1.861 ms\n1.861 × 106 ns\n端到端延迟（引擎边界） p\n50\n248.8 ms\n2.488 × 108 ns\nToken 吞吐\n514.2 tok/s\n514.2 tokens/s\n请求吞吐\n6.66 req/s\n6.66 requests/s\n总能耗\n2.472 J\n2.472 × 1012 pJ",
+          "request_rows": 5,
+          "request_text": "00_model_warmup\nfinished\n—\n0 ns\n1.827 ms\nNA / NA\nNA\n1.827 ms\n1\n01_model_seq_rm_probe\nfinished\n—\n0 ns\n2.251 ms\nNA / NA\nNA\n2.251 ms\n1\n02_warmup0\nfinished\n—\n0 ns\n12.45 ms\n1.86 ms / 1.86 ms\n1.863 ms\n249.1 ms\n128\n03_warmup1\nfinished\n—\n0 ns\n12.45 ms\n1.86 ms / 1.86 ms\n1.861 ms\n248.8 ms\n128\n04_measured0\nfinished\n—\n0 ns\n12.45 ms\n1.86 ms / 1.86 ms\n1.861 ms\n248.8 ms\n128",
+          "has_invalid_number": false,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "mode": "off",
+      "url": "http://127.0.0.1:8794/",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cost_logic_native_validation_2026-10-10\\ui_qwen3_0_6b_f16_graph_off_result.json",
+      "render_url": "http://127.0.0.1:8794/",
+      "method": "Original completed snapshot fetched by read-only GET from its original service and loaded through finishRunJob after importing and validating its unchanged scenario; rendering-only, no job submission or end-to-end polling claim.",
+      "status": "completed",
+      "job_id": "18e773536b1e4f0bbf6041f3ab076b5a",
+      "report_stale": false,
+      "run_id": "9ee87296d82af965",
+      "view": "results",
+      "page_errors": [],
+      "blocked_new_job_posts": [],
+      "viewports": [
+        {
+          "viewport": "desktop",
+          "width": 1440,
+          "document_width": 1440,
+          "result_visible": true,
+          "metrics": "总历时\n1.408 s\n1.408 × 109 ns\n首 Token 延迟（引擎边界） p\n50\n12.57 ms\n1.257 × 107 ns\nToken 间延迟（TBT） p\n50\n3.543 ms\n3.543 × 106 ns\n每输出 Token 时间（引擎边界） p\n50\n3.543 ms\n3.543 × 106 ns\n端到端延迟（引擎边界） p\n50\n462.6 ms\n4.626 × 108 ns\nToken 吞吐\n274.1 tok/s\n274.1 tokens/s\n请求吞吐\n3.551 req/s\n3.551 requests/s\n总能耗\n2.787 J\n2.787 × 1012 pJ",
+          "request_rows": 5,
+          "request_text": "00_model_warmup\tfinished\t—\t0 ns\t10.24 ms\tNA / NA\tNA\t10.24 ms\t1\n01_model_seq_rm_probe\tfinished\t—\t0 ns\t10.24 ms\tNA / NA\tNA\t10.24 ms\t1\n02_warmup0\tfinished\t—\t0 ns\t12.57 ms\t3.543 ms / 3.543 ms\t3.543 ms\t462.6 ms\t128\n03_warmup1\tfinished\t—\t0 ns\t12.58 ms\t3.543 ms / 3.543 ms\t3.543 ms\t462.6 ms\t128\n04_measured0\tfinished\t—\t0 ns\t12.58 ms\t3.543 ms / 3.543 ms\t3.543 ms\t462.6 ms\t128",
+          "has_invalid_number": false,
+          "errors": []
+        },
+        {
+          "viewport": "narrow",
+          "width": 390,
+          "document_width": 390,
+          "result_visible": true,
+          "metrics": "总历时\n1.408 s\n1.408 × 109 ns\n首 Token 延迟（引擎边界） p\n50\n12.57 ms\n1.257 × 107 ns\nToken 间延迟（TBT） p\n50\n3.543 ms\n3.543 × 106 ns\n每输出 Token 时间（引擎边界） p\n50\n3.543 ms\n3.543 × 106 ns\n端到端延迟（引擎边界） p\n50\n462.6 ms\n4.626 × 108 ns\nToken 吞吐\n274.1 tok/s\n274.1 tokens/s\n请求吞吐\n3.551 req/s\n3.551 requests/s\n总能耗\n2.787 J\n2.787 × 1012 pJ",
+          "request_rows": 5,
+          "request_text": "00_model_warmup\nfinished\n—\n0 ns\n10.24 ms\nNA / NA\nNA\n10.24 ms\n1\n01_model_seq_rm_probe\nfinished\n—\n0 ns\n10.24 ms\nNA / NA\nNA\n10.24 ms\n1\n02_warmup0\nfinished\n—\n0 ns\n12.57 ms\n3.543 ms / 3.543 ms\n3.543 ms\n462.6 ms\n128\n03_warmup1\nfinished\n—\n0 ns\n12.58 ms\n3.543 ms / 3.543 ms\n3.543 ms\n462.6 ms\n128\n04_measured0\nfinished\n—\n0 ns\n12.58 ms\n3.543 ms / 3.543 ms\n3.543 ms\n462.6 ms\n128",
+          "has_invalid_number": false,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case_id": "qwen3_0_6b_f16",
+      "mode": "on",
+      "url": "http://127.0.0.1:8813/",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cost_logic_native_validation_2026-10-10\\ui_qwen3_0_6b_f16_graph_on_result.json",
+      "render_url": "http://127.0.0.1:8813/",
+      "method": "Original completed snapshot fetched by read-only GET from its original service and loaded through finishRunJob after importing and validating its unchanged scenario; rendering-only, no job submission or end-to-end polling claim.",
+      "status": "completed",
+      "job_id": "5f4fcbb6a7fa421e955c76e00d62cc50",
+      "report_stale": false,
+      "run_id": "ae0118bd29bfa93a",
+      "view": "results",
+      "page_errors": [],
+      "blocked_new_job_posts": [],
+      "viewports": [
+        {
+          "viewport": "desktop",
+          "width": 1440,
+          "document_width": 1440,
+          "result_visible": true,
+          "metrics": "总历时\n1.41 s\n1.41 × 109 ns\n首 Token 延迟（引擎边界） p\n50\n12.57 ms\n1.257 × 107 ns\nToken 间延迟（TBT） p\n50\n3.544 ms\n3.544 × 106 ns\n每输出 Token 时间（引擎边界） p\n50\n3.545 ms\n3.545 × 106 ns\n端到端延迟（引擎边界） p\n50\n462.8 ms\n4.628 × 108 ns\nToken 吞吐\n273.8 tok/s\n273.8 tokens/s\n请求吞吐\n3.546 req/s\n3.546 requests/s\n总能耗\n2.787 J\n2.787 × 1012 pJ",
+          "request_rows": 5,
+          "request_text": "00_model_warmup\tfinished\t—\t0 ns\t10.24 ms\tNA / NA\tNA\t10.24 ms\t1\n01_model_seq_rm_probe\tfinished\t—\t0 ns\t10.85 ms\tNA / NA\tNA\t10.85 ms\t1\n02_warmup0\tfinished\t—\t0 ns\t12.57 ms\t3.544 ms / 3.544 ms\t3.549 ms\t463.2 ms\t128\n03_warmup1\tfinished\t—\t0 ns\t12.58 ms\t3.544 ms / 3.544 ms\t3.545 ms\t462.8 ms\t128\n04_measured0\tfinished\t—\t0 ns\t12.58 ms\t3.544 ms / 3.544 ms\t3.545 ms\t462.8 ms\t128",
+          "has_invalid_number": false,
+          "errors": []
+        },
+        {
+          "viewport": "narrow",
+          "width": 390,
+          "document_width": 390,
+          "result_visible": true,
+          "metrics": "总历时\n1.41 s\n1.41 × 109 ns\n首 Token 延迟（引擎边界） p\n50\n12.57 ms\n1.257 × 107 ns\nToken 间延迟（TBT） p\n50\n3.544 ms\n3.544 × 106 ns\n每输出 Token 时间（引擎边界） p\n50\n3.545 ms\n3.545 × 106 ns\n端到端延迟（引擎边界） p\n50\n462.8 ms\n4.628 × 108 ns\nToken 吞吐\n273.8 tok/s\n273.8 tokens/s\n请求吞吐\n3.546 req/s\n3.546 requests/s\n总能耗\n2.787 J\n2.787 × 1012 pJ",
+          "request_rows": 5,
+          "request_text": "00_model_warmup\nfinished\n—\n0 ns\n10.24 ms\nNA / NA\nNA\n10.24 ms\n1\n01_model_seq_rm_probe\nfinished\n—\n0 ns\n10.85 ms\nNA / NA\nNA\n10.85 ms\n1\n02_warmup0\nfinished\n—\n0 ns\n12.57 ms\n3.544 ms / 3.544 ms\n3.549 ms\n463.2 ms\n128\n03_warmup1\nfinished\n—\n0 ns\n12.58 ms\n3.544 ms / 3.544 ms\n3.545 ms\n462.8 ms\n128\n04_measured0\nfinished\n—\n0 ns\n12.58 ms\n3.544 ms / 3.544 ms\n3.545 ms\n462.8 ms\n128",
+          "has_invalid_number": false,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "case_id": "qwen3_8_27b_mixed",
+      "mode": "on",
+      "url": "http://127.0.0.1:8809/",
+      "result_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cost_logic_native_validation_2026-10-10\\ui_qwen3_8_27b_mixed_graph_on_result.json",
+      "render_url": "http://127.0.0.1:8809/",
+      "method": "Original completed snapshot fetched by read-only GET from its original service and loaded through finishRunJob after importing and validating its unchanged scenario; rendering-only, no job submission or end-to-end polling claim.",
+      "status": "completed",
+      "job_id": "38daccf325a34ff293015d4a898c9a35",
+      "report_stale": false,
+      "run_id": "63de1b13ae96c2c2",
+      "view": "results",
+      "page_errors": [],
+      "blocked_new_job_posts": [],
+      "viewports": [
+        {
+          "viewport": "desktop",
+          "width": 1440,
+          "document_width": 1440,
+          "result_visible": true,
+          "metrics": "总历时\n8.11 s\n8.11 × 109 ns\n首 Token 延迟（引擎边界） p\n50\n208.1 ms\n2.081 × 108 ns\nToken 间延迟（TBT） p\n50\n19.52 ms\n1.952 × 107 ns\n每输出 Token 时间（引擎边界） p\n50\n19.53 ms\n1.953 × 107 ns\n端到端延迟（引擎边界） p\n50\n2.688 s\n2.688 × 109 ns\nToken 吞吐\n47.59 tok/s\n47.59 tokens/s\n请求吞吐\n0.6165 req/s\n0.6165 requests/s\n总能耗\n47.22 J\n4.722 × 1013 pJ",
+          "request_rows": 5,
+          "request_text": "00_model_warmup\tfinished\t—\t0 ns\t19.58 ms\tNA / NA\tNA\t19.58 ms\t1\n01_model_seq_rm_probe\tfinished\t—\t0 ns\t23.54 ms\tNA / NA\tNA\t23.54 ms\t1\n02_warmup0\tfinished\t—\t0 ns\t208.1 ms\t19.52 ms / 19.52 ms\t19.55 ms\t2.691 s\t128\n03_warmup1\tfinished\t—\t0 ns\t208.2 ms\t19.52 ms / 19.52 ms\t19.53 ms\t2.688 s\t128\n04_measured0\tfinished\t—\t0 ns\t208.2 ms\t19.52 ms / 19.52 ms\t19.53 ms\t2.688 s\t128",
+          "has_invalid_number": false,
+          "errors": []
+        },
+        {
+          "viewport": "narrow",
+          "width": 390,
+          "document_width": 390,
+          "result_visible": true,
+          "metrics": "总历时\n8.11 s\n8.11 × 109 ns\n首 Token 延迟（引擎边界） p\n50\n208.1 ms\n2.081 × 108 ns\nToken 间延迟（TBT） p\n50\n19.52 ms\n1.952 × 107 ns\n每输出 Token 时间（引擎边界） p\n50\n19.53 ms\n1.953 × 107 ns\n端到端延迟（引擎边界） p\n50\n2.688 s\n2.688 × 109 ns\nToken 吞吐\n47.59 tok/s\n47.59 tokens/s\n请求吞吐\n0.6165 req/s\n0.6165 requests/s\n总能耗\n47.22 J\n4.722 × 1013 pJ",
+          "request_rows": 5,
+          "request_text": "00_model_warmup\nfinished\n—\n0 ns\n19.58 ms\nNA / NA\nNA\n19.58 ms\n1\n01_model_seq_rm_probe\nfinished\n—\n0 ns\n23.54 ms\nNA / NA\nNA\n23.54 ms\n1\n02_warmup0\nfinished\n—\n0 ns\n208.1 ms\n19.52 ms / 19.52 ms\n19.55 ms\n2.691 s\n128\n03_warmup1\nfinished\n—\n0 ns\n208.2 ms\n19.52 ms / 19.52 ms\n19.53 ms\n2.688 s\n128\n04_measured0\nfinished\n—\n0 ns\n208.2 ms\n19.52 ms / 19.52 ms\n19.53 ms\n2.688 s\n128",
+          "has_invalid_number": false,
+          "errors": []
+        }
+      ]
+    }
+  ]
+}

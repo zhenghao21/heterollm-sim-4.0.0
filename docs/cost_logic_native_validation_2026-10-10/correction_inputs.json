@@ -1,0 +1,12 @@
+{
+  "schema": "heterollm.cost-logic-rerun-inputs/v1",
+  "prepared_utc": "2026-10-10T02:42:55.518221+00:00",
+  "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_dispatch_validation_2026-10-08",
+  "model_count": 10,
+  "scenario_inputs_changed": false,
+  "native_measurements_reused": true,
+  "native_measurement_manifest": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\cuda_graph_dispatch_validation_2026-10-08\\native_timing_manifest.json",
+  "native_values_used_for_calibration": false,
+  "device_dispatch_calibration_installed": false,
+  "scope": "Rerun unchanged original GGUF frontend inputs after L2 energy/lookup timing, F16 physical identity and invocation-index lifetime, and CUDA Graph device-root submission dependency fixes; native timings reused without fitting."
+}

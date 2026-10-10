@@ -1,9 +1,13 @@
 from dataclasses import asdict, replace
 
+import pytest
+
 from heterollm_sim.component_presets import get_component_preset
 from heterollm_sim.contracts import ResourceDemand, TaskCategory, TaskSpec
-from heterollm_sim.cost_models import HBMProfile
+from heterollm_sim.cost_models import CacheHierarchyProfile, CacheLevelProfile, GPUProfile, HBMProfile, TensorCoreProfile
 from heterollm_sim.event_kernel import UnifiedEventKernel
+from heterollm_sim.cache_state import CacheAccess
+from heterollm_sim.kernel_memory import attach_l2_contract, resolve_l2_task
 from heterollm_sim.memory_types import DramConfig, MemoryKind
 
 
@@ -47,6 +51,7 @@ def _task(task_id, *, config, access):
         "memory_resource": "gddr0.gddr_fabric",
         "cache_bandwidth_gb_s": 1000.0,
         "cache_latency_ns": 1.0,
+        "cache_energy_pj_per_byte": 0.0,
         "cache_parallelism": 1,
         "bandwidth_gb_s": config.interface_bandwidth_gb_s,
         "hbm": asdict(hbm),
@@ -134,6 +139,89 @@ def test_stateful_l2_hit_does_not_submit_an_empty_gddr_transaction():
     assert second.task.metadata["l2_execution"]["hbm_read_bytes"] == 0
     assert "physical_execution" not in second.task.metadata
     assert second.start_ns >= first.task.metadata["physical_completion_ns"]
+
+
+def test_l2_profile_energy_prices_both_cold_and_hot_accesses():
+    level = CacheLevelProfile(name="L2", capacity_bytes=128, line_bytes=64,
+                              bandwidth_gb_s=1000, hit_latency_ns=1,
+                              energy_pj_per_byte=0.6, resource_id="gpu0.l2")
+    gpu = GPUProfile(TensorCoreProfile(1, 1, 1), CacheHierarchyProfile((level,)),
+                     32, 1, 1, 1, 1)
+    hbm = HBMProfile(bandwidth_gb_s=80, energy_pj_per_byte=4,
+                     resource_id="hbm0")
+    task = TaskSpec("read", request_id="request", name="read", category=TaskCategory.MEMORY,
+                    demands=(ResourceDemand("hbm0", 1, bytes_moved=64),))
+    task = attach_l2_contract(task, gpu=gpu, hbm=hbm, memory_resource="hbm0",
+                              cache_resource="gpu0.l2", owner="gpu0.l2",
+                              accesses=(CacheAccess("W", 0, 64, "read", 64),))
+    states = {}
+    cold = resolve_l2_task(task, states)
+    hot = resolve_l2_task(replace(task, task_id="hot"), states)
+    for resolved, expected_memory_energy in ((cold, 256), (hot, 0)):
+        demands = {d.resource_id: d for d in resolved.demands}
+        assert demands["gpu0.l2"].energy_pj == pytest.approx(38.4)
+        assert demands["hbm0"].energy_pj == expected_memory_energy
+        assert demands["gpu0.l2.access_order"].service_ns == pytest.approx(
+            1.8 if expected_memory_energy else 1.0)
+
+
+@pytest.mark.parametrize("energy", (None, -1, float("inf"), float("nan"), True))
+def test_l2_requires_explicit_valid_energy_before_mutating_state(energy):
+    task = _task("invalid-energy", config=_config(), access={})
+    contract = dict(task.metadata["stateful_l2"])
+    if energy is None:
+        contract.pop("cache_energy_pj_per_byte")
+    else:
+        contract["cache_energy_pj_per_byte"] = energy
+    states = {}
+    with pytest.raises(ValueError, match="cache_energy_pj_per_byte"):
+        resolve_l2_task(replace(task, metadata={**task.metadata, "stateful_l2": contract}), states)
+    assert states == {}
+
+
+@pytest.mark.parametrize("dirty", (False, True))
+def test_l2_backing_waits_for_lookup_and_updates_device_envelope(dirty):
+    config = _config()
+    owner = "gddr0.gddr_fabric"
+    access = {"operation": "read", "address": 0, "byte_count": 64,
+              "physical_owner": owner, "resource_id": owner}
+    task = _task("lookup", config=config, access=access)
+    contract = {**task.metadata["stateful_l2"], "capacity_bytes": 64,
+                "cache_latency_ns": 100,
+                "envelope_resources": ("gpu0.l2.access_order", "gpu0.device_stream")}
+    old_prediction = {"prediction": {"prediction_ns": 9999}, "analytical_service_ns": 9999}
+    task = replace(task, demands=task.demands + (ResourceDemand("gpu0.device_stream", 9999),),
+                   metadata={**task.metadata, "stateful_l2": contract,
+                             "kernel_prediction": old_prediction,
+                             "phase_metadata": {"kernel_model": old_prediction},
+                             "cost_model": {"kernel_model": old_prediction}})
+    tasks = []
+    if dirty:
+        seed_contract = {**contract, "accesses": ({"buffer_id": "dirty-W", "offset_bytes": 0,
+                         "size_bytes": 64, "operation": "write", "buffer_size_bytes": 64},)}
+        seed = replace(task, task_id="seed", metadata={**task.metadata, "stateful_l2": seed_contract})
+        tasks.append(seed)
+        task = replace(task, dependencies=("seed",))
+    tasks.append(task)
+    kernel = UnifiedEventKernel.from_closed_graph(tuple(tasks))
+    if dirty:
+        assert kernel.step() is not None
+    event = kernel.step()
+    assert event is not None
+    physical = event.task.metadata["physical_execution"]
+    assert physical["arrival_ns"] == event.start_ns + 100
+    assert event.task.metadata["l2_execution"]["dirty_eviction_bytes"] == (64 if dirty else 0)
+    assert physical["physical_write_bytes"] == (64 if dirty else 0)
+    demands = {d.resource_id: d for d in event.demands}
+    assert demands["gpu0.device_stream"].service_ns == pytest.approx(event.service_ns)
+    assert event.end_ns == physical["completion_ns"]
+    assert event.service_ns == pytest.approx(100 + physical["service_ns"])
+    assert event.task.metadata["l2_execution"]["memory_completion_offset_ns"] == pytest.approx(event.service_ns)
+    for audit in (event.task.metadata["kernel_prediction"],
+                  event.task.metadata["phase_metadata"]["kernel_model"],
+                  event.task.metadata["cost_model"]["kernel_model"]):
+        assert audit["prediction"]["prediction_ns"] == pytest.approx(event.service_ns)
+    assert old_prediction["prediction"]["prediction_ns"] == 9999
 
 
 def test_stateful_l2_preserves_declared_fixed_base():

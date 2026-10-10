@@ -1,0 +1,58 @@
+{
+  "checked_at": "2026-10-10T04:21:06.978Z",
+  "errors": [],
+  "checks": [
+    {
+      "label": "desktop",
+      "width": 1440,
+      "documentWidth": 1440,
+      "title": "成本逻辑修复后：仿真与 native 对照",
+      "rows": 99,
+      "invalid": false,
+      "tables": [
+        {
+          "width": 1402,
+          "scrollWidth": 1402
+        },
+        {
+          "width": 1402,
+          "scrollWidth": 1402
+        },
+        {
+          "width": 1402,
+          "scrollWidth": 1402
+        },
+        {
+          "width": 1402,
+          "scrollWidth": 1402
+        }
+      ]
+    },
+    {
+      "label": "narrow",
+      "width": 390,
+      "documentWidth": 390,
+      "title": "成本逻辑修复后：仿真与 native 对照",
+      "rows": 99,
+      "invalid": false,
+      "tables": [
+        {
+          "width": 368,
+          "scrollWidth": 795
+        },
+        {
+          "width": 368,
+          "scrollWidth": 1047
+        },
+        {
+          "width": 368,
+          "scrollWidth": 602
+        },
+        {
+          "width": 368,
+          "scrollWidth": 893
+        }
+      ]
+    }
+  ]
+}

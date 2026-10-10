@@ -34,6 +34,50 @@ def accesses(task, operation):
     return [row for row in task.metadata.get("memory_accesses", ()) if row["operation"] == operation]
 
 
+def test_prefill_and_decode_set_rows_indices_have_separate_invocation_extents():
+    scenario = case("qwen3_0_6b_f16")
+    request = replace(scenario.workload.requests[-1], prompt_tokens=4,
+                      output_tokens=3, arrival_ns=0)
+    scenario = replace(scenario, workload=replace(scenario.workload, requests=(request,),
+                                                 prompt_tokens=4, output_tokens=3))
+    schedule = p.compile_scenario(scenario)
+    indices = [row for task in schedule.tasks for row in accesses(task, "read")
+               if row["buffer_id"].endswith("_set_rows:indices")]
+    assert indices
+    extents = {}
+    for row in indices:
+        assert row["buffer_id"].startswith("@invocation:")
+        key = row["buffer_id"], row["allocation_generation"]
+        extents.setdefault(key, row["allocation_size_bytes"])
+        assert extents[key] == row["allocation_size_bytes"]
+    k_extents = {row["allocation_size_bytes"] for row in indices
+                 if row["buffer_id"].endswith(".k_set_rows:indices")}
+    assert k_extents == {8, 32}
+
+
+def test_set_rows_indices_are_reclaimed_after_closed_graph_use():
+    scenario = case("qwen3_0_6b_f16")
+    _, tasks = layer_tasks(scenario, 4)
+    stores = tuple(replace(task, dependencies=()) for task in tasks
+                   if task.metadata.get("event_kind") == "kv_native_set_rows"
+                   and task.metadata.get("phase") != "kernel_launch")
+    indices = [row for task in stores for row in accesses(task, "read")
+               if row["buffer_id"].endswith("_set_rows:indices")]
+    assert indices and all(row["allocation_generation"] > 0 for row in indices)
+    kernel = UnifiedEventKernel.from_closed_graph(stores, capture_physical_details=False)
+    while kernel.has_active_tasks:
+        assert kernel.step() is not None
+    kernel._reclaim_physical_allocations(float("inf"))
+    for row in indices:
+        assert kernel.physical_runtime.allocators[row["physical_owner"]].get_allocation(
+            row["buffer_id"], row["allocation_generation"]) is None
+    for task in stores:
+        for row in accesses(task, "write"):
+            assert row["allocation_generation"] == 0
+            assert kernel.physical_runtime.allocators[row["physical_owner"]].get_allocation(
+                row["buffer_id"], 0) is not None
+
+
 def additional_family_case(preset_id):
     from heterollm_sim.gguf_model_catalog import inventory_to_gguf
     from heterollm_sim.gguf_parity import build_model_from_gguf

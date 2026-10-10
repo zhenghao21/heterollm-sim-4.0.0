@@ -262,10 +262,16 @@ def apply_cuda_graph_runtime_costs(tasks, profile):
             for ordinal, event in enumerate(events):
                 last = host_task(event, costs[event], deps, ordinal)
                 deps = (last,)
-            for launch in launches:
-                replacements[launch.task_id] = replace(launch,
-                    dependencies=tuple(dict.fromkeys((*launch.dependencies, last))),
-                    metadata={**launch.metadata, 'cuda_runtime_cost': compact_audit})
+            # Copies and cost-free markers can also be independent roots of
+            # the captured device body. Every root waits for host submission;
+            # descendants retain the original device dependency ordering.
+            for task in ordered:
+                if (task.metadata.get('phase') != 'kernel_launch'
+                        and any(dep in members for dep in task.dependencies)):
+                    continue
+                replacements[task.task_id] = replace(task,
+                    dependencies=tuple(dict.fromkeys((*task.dependencies, last))),
+                    metadata={**task.metadata, 'cuda_runtime_cost': compact_audit})
         else:
             per_call = costs['ordinary_submit'] / len(launches)
             deps = base

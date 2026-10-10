@@ -1,0 +1,321 @@
+{
+  "schema": "heterollm.native-timing-validation/v1",
+  "started_local": "2026-10-08 19:32:40",
+  "native_timing_binary": "original uninstrumented Release build",
+  "llama_cpp_source_revision": "d3146f2b56c2db4711ac8391871c9e529d1946d7",
+  "server_path": "F:\\codex_project\\_runtime_sources\\llama.cpp\\build-native-5080-sm120\\bin\\llama-server.exe",
+  "workload": {
+    "prompt_tokens": 512,
+    "output_tokens": 128,
+    "context": 768,
+    "batch": 512,
+    "ubatch": 512,
+    "threads": 16,
+    "gpu_layers": -1,
+    "flash_attn": "off",
+    "cache_type_k": "f16",
+    "cache_type_v": "f16",
+    "ctx_checkpoints": 0,
+    "warmups": 2,
+    "repetitions": 5
+  },
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.13 (main, Jun 11 2026, 04:05:29) [MSC v.1944 64 bit (AMD64)]",
+    "gpu": "NVIDIA GeForce RTX 5080, 617.14, 16303 MiB",
+    "cpu_name": "AMD Ryzen 9 9950X3D 16-Core Processor          ",
+    "cpu_physical_cores": 16,
+    "cpu_logical_processors": 32,
+    "memory_bytes": 134939398144,
+    "timezone": "China Standard Time"
+  },
+  "timing_isolation": "All weight downloads and full payload/directory identity verification finished before these serial timing runs; no parallel native/structural GPU work in this worker.",
+  "samples": [
+    {
+      "preset_id": "qwen3-0_6b",
+      "case_id": "qwen3_0_6b_f16",
+      "graph_mode": "off",
+      "file": "native_qwen3_0_6b_f16_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 5.303,
+      "engine_median_ms": {
+        "ttft": 18.745,
+        "tpot": 3.859881889763779,
+        "e2e": 509.351
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-0_6b",
+      "case_id": "qwen3_0_6b_f16",
+      "graph_mode": "on",
+      "file": "native_qwen3_0_6b_f16_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 4.179,
+      "engine_median_ms": {
+        "ttft": 18.144,
+        "tpot": 2.6474094488188977,
+        "e2e": 354.365
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-1_7b",
+      "case_id": "qwen3_1_7b_q8_0",
+      "graph_mode": "off",
+      "file": "native_qwen3_1_7b_q8_0_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 6.848,
+      "engine_median_ms": {
+        "ttft": 26.064,
+        "tpot": 5.192448818897638,
+        "e2e": 684.366
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-1_7b",
+      "case_id": "qwen3_1_7b_q8_0",
+      "graph_mode": "on",
+      "file": "native_qwen3_1_7b_q8_0_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 5.439,
+      "engine_median_ms": {
+        "ttft": 26.094,
+        "tpot": 3.5985669291338582,
+        "e2e": 483.11199999999997
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-4b",
+      "case_id": "qwen3_4b_q4_k_m",
+      "graph_mode": "off",
+      "file": "native_qwen3_4b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 9.346,
+      "engine_median_ms": {
+        "ttft": 51.0,
+        "tpot": 7.398244094488189,
+        "e2e": 994.949
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-4b",
+      "case_id": "qwen3_4b_q4_k_m",
+      "graph_mode": "on",
+      "file": "native_qwen3_4b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 7.65,
+      "engine_median_ms": {
+        "ttft": 52.509,
+        "tpot": 5.599047244094487,
+        "e2e": 763.588
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-8b",
+      "case_id": "qwen3_8b_q4_k_m",
+      "graph_mode": "off",
+      "file": "native_qwen3_8b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 12.537,
+      "engine_median_ms": {
+        "ttft": 79.355,
+        "tpot": 9.637204724409449,
+        "e2e": 1306.242
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-8b",
+      "case_id": "qwen3_8b_q4_k_m",
+      "graph_mode": "on",
+      "file": "native_qwen3_8b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 10.919,
+      "engine_median_ms": {
+        "ttft": 79.083,
+        "tpot": 7.963393700787401,
+        "e2e": 1092.472
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3_8-27b-iq3-s-iq4-xs",
+      "case_id": "qwen3_8_27b_mixed",
+      "graph_mode": "off",
+      "file": "native_qwen3_8_27b_mixed_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 31.425,
+      "engine_median_ms": {
+        "ttft": 251.603,
+        "tpot": 24.76611023622047,
+        "e2e": 3395.978
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3_8-27b-iq3-s-iq4-xs",
+      "case_id": "qwen3_8_27b_mixed",
+      "graph_mode": "on",
+      "file": "native_qwen3_8_27b_mixed_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 27.603,
+      "engine_median_ms": {
+        "ttft": 251.386,
+        "tpot": 20.538771653543307,
+        "e2e": 2859.282
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen2_5-0_5b",
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "graph_mode": "off",
+      "file": "native_qwen2_5_0_5b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 4.333,
+      "engine_median_ms": {
+        "ttft": 13.805,
+        "tpot": 3.2248661417322833,
+        "e2e": 423.387
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen2_5-0_5b",
+      "case_id": "qwen2_5_0_5b_q4_k_m",
+      "graph_mode": "on",
+      "file": "native_qwen2_5_0_5b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 2.998,
+      "engine_median_ms": {
+        "ttft": 13.1,
+        "tpot": 1.7813307086614174,
+        "e2e": 238.704
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen2_5-7b",
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "graph_mode": "off",
+      "file": "native_qwen2_5_7b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 11.202,
+      "engine_median_ms": {
+        "ttft": 67.662,
+        "tpot": 8.65447244094488,
+        "e2e": 1166.35
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen2_5-7b",
+      "case_id": "qwen2_5_7b_q4_k_m",
+      "graph_mode": "on",
+      "file": "native_qwen2_5_7b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 10.108,
+      "engine_median_ms": {
+        "ttft": 69.479,
+        "tpot": 7.353496062992126,
+        "e2e": 1001.487
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "llama3_2-1b",
+      "case_id": "llama3_2_1b_q4_k_m",
+      "graph_mode": "off",
+      "file": "native_llama3_2_1b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 4.124,
+      "engine_median_ms": {
+        "ttft": 18.233,
+        "tpot": 2.915488188976378,
+        "e2e": 388.212
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "llama3_2-1b",
+      "case_id": "llama3_2_1b_q4_k_m",
+      "graph_mode": "on",
+      "file": "native_llama3_2_1b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 3.301,
+      "engine_median_ms": {
+        "ttft": 18.792,
+        "tpot": 2.0470078740157485,
+        "e2e": 278.68100000000004
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "llama3_1-8b",
+      "case_id": "llama3_1_8b_q4_k_m",
+      "graph_mode": "off",
+      "file": "native_llama3_1_8b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 11.865,
+      "engine_median_ms": {
+        "ttft": 73.716,
+        "tpot": 9.056614173228347,
+        "e2e": 1222.795
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "llama3_1-8b",
+      "case_id": "llama3_1_8b_q4_k_m",
+      "graph_mode": "on",
+      "file": "native_llama3_1_8b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 10.636,
+      "engine_median_ms": {
+        "ttft": 75.158,
+        "tpot": 7.612259842519685,
+        "e2e": 1041.915
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-14b",
+      "case_id": "qwen3_14b_q4_k_m",
+      "graph_mode": "off",
+      "file": "native_qwen3_14b_q4_k_m_graph_off.json",
+      "status": "completed",
+      "wall_seconds": 19.603,
+      "engine_median_ms": {
+        "ttft": 136.188,
+        "tpot": 15.320062992125983,
+        "e2e": 2082.252
+      },
+      "server_build_info": "b1-d3146f2"
+    },
+    {
+      "preset_id": "qwen3-14b",
+      "case_id": "qwen3_14b_q4_k_m",
+      "graph_mode": "on",
+      "file": "native_qwen3_14b_q4_k_m_graph_on.json",
+      "status": "completed",
+      "wall_seconds": 17.945,
+      "engine_median_ms": {
+        "ttft": 130.967,
+        "tpot": 13.6934094488189,
+        "e2e": 1870.2830000000001
+      },
+      "server_build_info": "b1-d3146f2"
+    }
+  ],
+  "limitations": [
+    "Graph lifecycle is checked in separate instrumented diagnostics; those timings are not retained.",
+    "Native timings are not fitted into simulator costs."
+  ],
+  "finished_local": "2026-10-08 19:36:17",
+  "status": "completed"
+}

@@ -3706,12 +3706,17 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
         if tensor_id and weight_bytes and weight_bytes <= read:
             # Fused logical weight groups need a physical projection identity.
             if task.metadata.get("physical_memory_config") is not None:
-                weight_identity = _gddr_stable_identity(task, task.metadata, "weight")
+                for weight_meta, count in _physical_weight_segments(task.metadata, weight_bytes):
+                    weight_identity = _gddr_stable_identity(task, weight_meta, "weight")
+                    accesses.append(CacheAccess(weight_identity,
+                        int(weight_meta.get("weight_offset_bytes", 0)), count, "read",
+                        weight_meta.get("weight_buffer_size_bytes")))
+                read -= weight_bytes
             else:
                 weight_identity = f"{target_id}:weights:{tensor_id}:{projection}:{rank.tp_rank}"
-            if projection or task.metadata.get("physical_memory_config") is not None:
-                accesses.append(CacheAccess(weight_identity, 0, weight_bytes, "read"))
-                read -= weight_bytes
+                if projection:
+                    accesses.append(CacheAccess(weight_identity, 0, weight_bytes, "read"))
+                    read -= weight_bytes
         input_id = task.metadata.get("input_buffer_id")
         if input_id and read:
             input_identity = (
@@ -3749,8 +3754,7 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
                 allocation_generation=(
                     serving_generation
                     if access.allocation_generation == 0
-                    and "weight" not in access.buffer_id.casefold()
-                    and access.buffer_id not in task.metadata.get("persistent_buffer_ids", ())
+                    and not _is_resident_physical_buffer(task.metadata, access.buffer_id)
                     else access.allocation_generation
                 ),
             )
@@ -3936,11 +3940,11 @@ def _gddr_stable_identity(
             "allocation_id",
         ),
         "weight": (
+            "weight_allocation_id",
             "weight_buffer_id",
             "weight_tensor_id",
             "tensor_id",
             "rhs_tensor_id",
-            "weight_allocation_id",
             "allocation_id",
         ),
         "write": (
@@ -3952,18 +3956,21 @@ def _gddr_stable_identity(
         ),
     }[side]
     declared = next(
-        (metadata.get(key) for key in keys if metadata.get(key) is not None),
+        (metadata.get(key) for key in keys
+         if metadata.get(key) is not None and str(metadata[key]).strip()),
         None,
     )
     if declared is not None and str(declared).strip():
         identity = str(declared).strip()
         suffix = []
-        # Projection labels describe an operator view of a shared activation
-        # buffer.  They must not split the physical allocation identity for
-        # reads/writes; only weight shards use projection as part of their
-        # declared allocation identity.
+        # A physical weight can serve both a split and a fused operator.
+        # Projection distinguishes legacy logical weight groups only; an
+        # explicit physical buffer/allocation already identifies its storage.
         suffix_keys = ("rank", "tp_rank", "pp_rank")
-        if side == "weight":
+        if side == "weight" and not any(
+            metadata.get(key) is not None and str(metadata[key]).strip()
+            for key in ("weight_buffer_id", "weight_allocation_id")
+        ):
             suffix_keys += ("projection_id",)
         for key in suffix_keys:
             value = metadata.get(key)
@@ -3991,6 +3998,43 @@ def _gddr_stable_identity(
             )
         )
     return "{}:operator={}:ordinal={}".format(side, operator, ordinal)
+
+
+def _is_resident_physical_buffer(metadata, identity):
+    """Use declared storage ownership, not words in a temporary op's name."""
+    if not identity:
+        return False
+    if identity in metadata.get("persistent_buffer_ids", ()):
+        return True
+    # Reserved planner namespace for explicitly lowered norm/bias weights.
+    if identity.startswith("weights:"):
+        return True
+    base = identity.removeprefix("tensor:")
+    for suffix in (":rank=", ":tp_rank=", ":pp_rank=", ":projection_id="):
+        base = base.split(suffix, 1)[0]
+    if any(tensor["name"] == base for tensor in metadata.get("f16_weight_tensors", ())):
+        return True
+    return any(
+        metadata.get(key) is not None and str(metadata[key]).strip() == base
+        for key in ("weight_buffer_id", "weight_tensor_id", "weight_allocation_id",
+                    "tensor_id", "rhs_tensor_id")
+    )
+
+
+def _physical_weight_segments(metadata, byte_count):
+    """Keep source-qualified F16 matrices identical across fused/split calls."""
+    tensors = metadata.get("f16_weight_tensors")
+    if not tensors:
+        return ((metadata, byte_count),)
+    if sum(tensor["n_bytes"] for tensor in tensors) != byte_count:
+        raise ValueError("F16 physical weight descriptors must conserve submitted bytes")
+    if len(tensors) > 1 and any(metadata.get(key) for key in (
+        "weight_allocation_id", "weight_offset_bytes", "weight_alias_of", "alias_of"
+    )):
+        raise ValueError("fused F16 weight views require per-matrix allocation descriptors")
+    return tuple(({**metadata, "weight_buffer_id": tensor["name"],
+                   "weight_buffer_size_bytes": tensor["n_bytes"]}, tensor["n_bytes"])
+                 for tensor in tensors)
 
 
 def _gddr_allocation_size(
@@ -4669,23 +4713,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             # so derive a cohort-scoped generation for transient buffers while
             # keeping resident weight allocations on generation zero.  An
             # explicit non-zero generation remains authoritative.
-            weight_ids = {
-                str(metadata[key]).strip()
-                for key in (
-                    "weight_buffer_id",
-                    "weight_tensor_id",
-                    "tensor_id",
-                    "rhs_tensor_id",
-                    "weight_allocation_id",
-                )
-                if metadata.get(key) is not None and str(metadata[key]).strip()
-            }
-            identity_base = (identity or "").removeprefix("tensor:").split(":rank=", 1)[0]
-            is_static_weight = (
-                identity in metadata.get("persistent_buffer_ids", ())
-                or identity_base in weight_ids
-                or "weight" in identity_base.casefold()
-            )
+            is_static_weight = _is_resident_physical_buffer(metadata, identity)
             if (
                 generation_identity is not None
                 and side in {"read", "write"}
@@ -4802,30 +4830,21 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                     alias_offset_bytes=_gddr_access_alias(metadata, "read")[2],
                 )
             if weight:
-                identity = _gddr_stable_identity(task, metadata, "weight")
-                offset = _gddr_non_negative_int(
-                    metadata.get("weight_offset_bytes", 0), "weight_offset_bytes"
-                )
-                append_descriptor(
-                    "read",
-                    weight,
-                    identity=identity,
-                    offset=offset,
-                    allocation_size=_gddr_allocation_size(
-                        scenario,
-                        metadata,
-                        "weight",
-                        identity,
-                        offset,
-                        weight,
-                    ),
-                    generation=_gddr_access_generation(
-                        metadata, "weight", fallback_identity=generation_identity
-                    ),
-                    alias_of=_gddr_access_alias(metadata, "weight")[0],
-                    alias_generation=_gddr_access_alias(metadata, "weight")[1],
-                    alias_offset_bytes=_gddr_access_alias(metadata, "weight")[2],
-                )
+                for weight_meta, count in _physical_weight_segments(metadata, weight):
+                    identity = _gddr_stable_identity(task, weight_meta, "weight")
+                    offset = _gddr_non_negative_int(
+                        weight_meta.get("weight_offset_bytes", 0), "weight_offset_bytes"
+                    )
+                    append_descriptor(
+                        "read", count, identity=identity, offset=offset,
+                        allocation_size=_gddr_allocation_size(
+                            scenario, weight_meta, "weight", identity, offset, count),
+                        generation=_gddr_access_generation(
+                            weight_meta, "weight", fallback_identity=generation_identity),
+                        alias_of=_gddr_access_alias(weight_meta, "weight")[0],
+                        alias_generation=_gddr_access_alias(weight_meta, "weight")[1],
+                        alias_offset_bytes=_gddr_access_alias(weight_meta, "weight")[2],
+                    )
             remaining_read = read_bytes - activation - weight
             if remaining_read:
                 identity = _gddr_stable_identity(task, metadata, "read", 1)
@@ -16433,13 +16452,15 @@ def _add_native_local_kv_writeback(
                 **({"input_tensor_id": contract[part + "_input_tensor_id"]}
                    if part + "_input_tensor_id" in contract else {}),
                 **({"persistent_buffer_ids": (contract["k_cache_id"], contract["v_cache_id"]),
+                    "physical_allocation_scope": "closed_cohort",
                     "persistent_request_buffers": {contract["request_id"]: (contract["k_cache_id"], contract["v_cache_id"])},
                     "buffer_accesses": [
                     {"buffer_id": contract[part + "_input_tensor_id"], "offset_bytes": 0,
                      "size_bytes": 4 * token_batch * kv_width, "operation": "read",
                      "buffer_size_bytes": 4 * token_batch * kv_width},
-                    {"buffer_id": contract[part + "_cache_id"] + ":indices", "offset_bytes": 0,
-                     "size_bytes": part_index_bytes, "operation": "read", "buffer_size_bytes": part_index_bytes},
+                    {"buffer_id": "@invocation:" + builder.request.request_id + ":" + name + "." + part + "_set_rows:indices", "offset_bytes": 0,
+                     "size_bytes": part_index_bytes, "operation": "read", "buffer_size_bytes": part_index_bytes,
+                     "allocation_generation": 1},
                 ] + _source_f32_kv_ranges(contract, part, write=True)}
                    if contract.get("source") == "pinned_f32_kv_contract" else {}),
                 "persistent_output_bytes": target_bytes},

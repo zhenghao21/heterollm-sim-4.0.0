@@ -29,7 +29,7 @@ from typing import (
 
 from .contracts import ResourceDemand, TaskSpec
 from .data_motion import PhysicalRuntimeContext
-from .kernel_memory import resolve_l2_task
+from .kernel_memory import resolve_l2_task, _l2_execution_metadata
 from .runtime_ir import (
     KernelCompletion,
     RUNTIME_ACTION_METADATA_KEY,
@@ -2461,20 +2461,33 @@ class UnifiedEventKernel:
                     task = resolve_l2_task(task, self._l2_states, self.physical_runtime)
                     task, is_physical = _materialize_l2_physical_access(task, self.physical_runtime)
                 if is_physical:
+                    backing_offset_ns = task.metadata.get("l2_execution", {}).get(
+                        "backing_arrival_offset_ns", 0.0
+                    )
                     task = resolve_physical_task(
-                        task, self.physical_runtime, start_ns,
+                        task, self.physical_runtime, start_ns + backing_offset_ns,
                         _caller_managed_transaction=True,
                     )
                     contract = task.metadata.get("stateful_l2")
                     if contract is not None:
                         completion_span = float(task.metadata["physical_completion_ns"]) - float(start_ns)
                         order_resource = contract.get("order_resource")
-                        if order_resource and completion_span > 0:
-                            task = replace(task, demands=tuple(
-                                replace(d, service_ns=max(d.service_ns, completion_span))
-                                if d.resource_id == order_resource else d
-                                for d in task.demands
-                            ))
+                        envelopes = set(contract["envelope_resources"])
+                        excluded_ids = envelopes | set(task.metadata["physical_demands_resource_ids"])
+                        compute_span = max((d.service_ns for d in task.demands
+                                            if d.resource_id not in excluded_ids), default=0.0)
+                        duration = max(compute_span, completion_span) + contract.get("dependency_ns", 0.0)
+                        demands = tuple(
+                            replace(d, service_ns=completion_span if d.resource_id == order_resource else duration)
+                            if d.resource_id in envelopes else d
+                            for d in task.demands
+                        )
+                        task = replace(task, demands=demands, metadata={
+                            **_l2_execution_metadata(task.metadata, duration, demands,
+                                physical=True), "l2_execution": {
+                            **task.metadata["l2_execution"],
+                            "memory_completion_offset_ns": completion_span,
+                        }})
             except Exception:
                 if l2_snapshot is not None:
                     owner, previous = l2_snapshot
