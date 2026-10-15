@@ -446,14 +446,13 @@ def _hbm_core(*, capacity_bytes: int, read_gb_s: float, write_gb_s: float,
 def _hbf_core(*, capacity_bytes: int, read_gb_s: float, write_gb_s: float,
               page_bytes: Optional[int] = None, read_latency_ns: Optional[float] = None,
               program_ns: Optional[float] = None, parallel_units: Optional[int] = None,
-              buffered: bool = False,
               host_granularity_bytes: Optional[int] = None) -> NandCore:
     """Resolve unspecified geometry and timing in the shared catalog."""
     overrides = {"capacity_bytes": capacity_bytes,
         "host_bandwidth_gb_s": max(read_gb_s, write_gb_s),
         "host_read_bandwidth_gb_s": read_gb_s,
         "host_write_bandwidth_gb_s": write_gb_s,
-        "metadata": {"buffered_write_mode": bool(buffered)}}
+        "write_buffer_bytes": 0}
     overrides.update({key: value for key, value in {
         "page_bytes": page_bytes, "page_read_ns": read_latency_ns,
         "page_program_ns": program_ns, "parallel_units": parallel_units,
@@ -620,7 +619,6 @@ def _profile_hardware(profile: CalibratedProfile, *,
             read_latency_ns=read_ns,
             program_ns=program_ns,
             parallel_units=parallel_units,
-            buffered=False,
             host_granularity_bytes=host_granularity,
         )
     return hbm, hbf, {
@@ -778,7 +776,6 @@ def _full_backend_scenario(
             # being treated as a DRAM profile.
             "access_mode": "memory",
             "writable": True,
-            "read_only": False,
             "write_buffer_bytes": 0,
             "memory_service_owner": hbf_profile.resource_id,
             "read_latency_ns": hbf_profile.read_latency_ns,

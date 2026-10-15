@@ -87,7 +87,7 @@ def test_restored_same_index_phase_rejects_discarded_future_bills():
     e.restore(saved)
     # Real intervening traffic changes this replay's downstream completion.
     owner = e.services["hbf"].physical_owner
-    e.runtime.timeline.reserve(owner + ":nand:channel:0", 0, 1_000_000)
+    e.runtime.timeline.reserve(owner + ":nand:host", 0, 1_000_000)
     final = initial.advance()
     assert final.completion_ns > old_final.completion_ns
     before = e.snapshot()
@@ -215,14 +215,14 @@ def buffered_executor(p, *, same_owner=False, relay=False):
     for name, component in original.components.items():
         if name == "hbf":
             config = replace(component.metadata["physical_memory_config"],
-                write_buffer_bytes=65536, metadata={"buffered_write_mode": True})
+                write_buffer_bytes=65536)
             component = replace(component, metadata={**component.metadata,
                                                      "physical_memory_config": config})
         components.append(component)
     if same_owner:
         hbf = next(c for c in components if c.component_id == "hbf")
         components.append(replace(hbf, component_id="hbf-view",
-                                  metadata={**hbf.metadata, "physical_owner": "hbf.memory"}))
+                                  metadata={**hbf.metadata, "memory_service_owner": "hbf.memory"}))
     e = PhysicalKVTransferExecutor(components, relay_components=("hbf",) if relay else ())
     e.bind_page(p)
     return e

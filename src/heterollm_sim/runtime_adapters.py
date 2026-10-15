@@ -148,17 +148,6 @@ class LlamaCppRuntimeConfig:
     def fingerprint(self) -> str:
         return stable_hash({"schema": "llama.cpp-runtime-v1", **self.to_dict()})
 
-    # Read-only aliases retain the terminology used by the original adapter.
-    @property
-    def n_ctx(self) -> int:
-        """llama.cpp naming for the per-request logical context limit."""
-        return self.context
-
-    @property
-    def n_ctx_seq(self) -> int:
-        """Context reservation per sequence in non-unified mode."""
-        return self.context
-
     def kv_capacity_contract(self) -> dict[str, Any]:
         """Describe logical versus physical KV slot semantics without guessing bytes."""
         return {
@@ -172,26 +161,6 @@ class LlamaCppRuntimeConfig:
             "per_slot_context_limit": self.context,
             "offload_kqv": self.offload_kqv,
         }
-
-    @property
-    def batch_size(self) -> int:
-        return self.batch
-
-    @property
-    def ubatch_size(self) -> int:
-        return self.ubatch
-
-    @property
-    def context_length(self) -> int:
-        return self.context
-
-    @property
-    def cache_type_k(self) -> str | None:
-        return self.kv_type_k
-
-    @property
-    def cache_type_v(self) -> str | None:
-        return self.kv_type_v
 
 
 LLAMA_CUDA_OP_OFFLOAD_SCHEMA = "llama.cpp.cuda.host-weight-op-offload/v1"

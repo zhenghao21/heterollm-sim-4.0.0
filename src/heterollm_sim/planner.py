@@ -27,6 +27,7 @@ from .kernel_query_ledger import summarize_kernel_queries
 from .config import ScenarioConfig
 from .attention_bias import projection_bias_workload, resolve_attention_qkv_bias
 from .cache_state import CacheAccess
+from .data_motion import _memory_accesses, _physical_allocations
 from .kernel_memory import attach_l2_contract, paged_buffer_accesses, attention_stream_k_accesses
 from .kernel_model import summarize_kernel_predictions, apply_captured_graph_launch
 
@@ -62,7 +63,6 @@ from .cost_models import (
     GemmWorkload,
     GPUProfile,
     HBMProfile,
-    MMVQ_HBM_MODE_LEGACY,
     MMVQ_HBM_MODE_NOMINAL,
     validate_mmvq_hbm_mode,
     HostMemoryProfile,
@@ -149,13 +149,12 @@ from .llama_gpu_invocations import (
 
 
 def _model_gguf_sha256(model: object) -> Optional[str]:
-    """Read the GGUF digest from both legacy and graph-nested metadata."""
-    metadata = getattr(model, "metadata", None)
+    """Read the GGUF digest from the model graph metadata."""
+    metadata = model.metadata
     if not isinstance(metadata, Mapping):
         return None
-    value = metadata.get("gguf_sha256")
-    if value is None and isinstance(metadata.get("metadata"), Mapping):
-        value = metadata["metadata"].get("gguf_sha256")
+    nested = metadata.get("metadata", {})
+    value = nested.get("gguf_sha256") if isinstance(nested, Mapping) else None
     return str(value) if value is not None else None
 from .scalable_serving import (
     CompiledGraphExecutor,
@@ -673,7 +672,7 @@ class CompilationContext:
             )
             by_tensor[tensor_id] = shards
             for shard in shards:
-                rank_id = str(shard.get("rank_id", shard.get("rank", "")))
+                rank_id = str(shard["rank_id"])
                 target = str(shard.get("compute_component_id", ""))
                 by_rank.setdefault((tensor_id, rank_id), shard)
                 by_target.setdefault((tensor_id, target), shard)
@@ -1598,7 +1597,7 @@ def _reference_lowering_op_mapping_keys(
 def _typed_primitive_mapping_uses(
     scenario: ScenarioConfig,
 ) -> Tuple[Tuple[str, str, OperatorClass, Tuple[str, ...]], ...]:
-    """Return non-GEMM primitive keys and their legacy fallback keys."""
+    """Return primitive keys and the current operator groups they inherit."""
 
     uses: List[Tuple[str, str, OperatorClass, Tuple[str, ...]]] = []
 
@@ -2370,25 +2369,15 @@ def _validate_scenario_uncached(
     for tensor_key, shards_raw in rank_shards_by_tensor.items():
         detail_raw = weight_tensor_details.get(tensor_key, {})
         detail = detail_raw if isinstance(detail_raw, Mapping) else {}
-        primary = scenario.placement.tensor_to_component.get(tensor_key)
-        representative_present = tensor_key in scenario.placement.tensor_bytes
-        representative_bytes = int(
-            scenario.placement.tensor_bytes.get(tensor_key, 0)
-        )
-        if (
-            primary
-            and representative_present
-            and tensor_key not in logical_weight_views
-        ):
-            bytes_by_component[primary] = max(
-                0,
-                bytes_by_component.get(primary, 0) - representative_bytes,
+        if tensor_key in scenario.placement.tensor_bytes:
+            errors.append(
+                "rank-sharded tensor {} must not declare representative tensor_bytes; "
+                "use rank_weight_shards physical_bytes".format(tensor_key)
             )
         seen_ranks = set()
         seen_replicas = set()
         unique_logical_shards: Dict[str, int] = {}
         shard_usage: Dict[str, int] = {}
-        primary_physical: List[int] = []
         total_physical = 0
         storage_targets = set()
         cold_cim_transient = str(detail.get("residency", "")) == "cold_cim_transient"
@@ -2400,26 +2389,15 @@ def _validate_scenario_uncached(
                     )
                 )
                 continue
-            rank_value = shard_raw.get(
-                "rank_id", shard_raw.get("rank")
-            )
-            component_value = shard_raw.get("component_id")
-            storage_value = shard_raw.get("storage_component_id")
-            if (
-                component_value is not None
-                and storage_value is not None
-                and str(component_value) != str(storage_value)
-            ):
+            rank_value = shard_raw.get("rank_id")
+            obsolete_keys = {"rank", "component_id"}.intersection(shard_raw)
+            if obsolete_keys:
                 errors.append(
-                    "权重张量 {} 的 Rank {} component_id 与 storage_component_id 不一致".format(
-                        tensor_key, rank_value
+                    "rank_weight_shards[{}] uses removed fields {}; use rank_id and storage_component_id".format(
+                        tensor_key, ", ".join(sorted(obsolete_keys))
                     )
                 )
-            storage_id = str(
-                storage_value
-                if storage_value is not None
-                else component_value or ""
-            )
+            storage_id = str(shard_raw.get("storage_component_id") or "")
             compute_id = str(shard_raw.get("compute_component_id", ""))
             shard_id_raw = shard_raw.get("shard_id")
             replica_id_raw = shard_raw.get("replica_id")
@@ -2510,8 +2488,6 @@ def _validate_scenario_uncached(
             shard_usage[storage_id] = (
                 shard_usage.get(storage_id, 0) + physical_bytes
             )
-            if primary and storage_id == str(primary):
-                primary_physical.append(physical_bytes)
             total_physical += physical_bytes
         unique_logical_total = sum(unique_logical_shards.values())
         rank_shard_logical_bytes[tensor_key] = unique_logical_total
@@ -2532,23 +2508,6 @@ def _validate_scenario_uncached(
             bytes_by_component[storage_id] = (
                 bytes_by_component.get(storage_id, 0) + byte_count
             )
-        if primary and representative_present:
-            primary_component = components.get(str(primary))
-            expected_representative = (
-                max(primary_physical, default=0)
-                if primary_component is not None
-                and _is_cim(primary_component)
-                else sum(primary_physical)
-            )
-            if representative_bytes != expected_representative:
-                errors.append(
-                    "权重张量 {} 的兼容代表字节数 {} 与主组件 {} 的代表分片字节数 {} 不一致".format(
-                        tensor_key,
-                        representative_bytes,
-                        primary,
-                        expected_representative,
-                    )
-                )
         declared_total = detail.get("total_physical_bytes")
         if declared_total is not None:
             try:
@@ -2618,9 +2577,8 @@ def _validate_scenario_uncached(
                     "control_plane.decision resident replicas for {} disagree with "
                     "rank_weight_shards".format(tensor_key)
                 )
-            # Rank-local metadata already accounts every physical replica and
-            # validates its total.  The schema-0 padded/scalar fields are only
-            # UI representatives and must not multiply capacity.
+            # The rank ledger already accounts every physical replica.
+            # The component-level summary must not multiply that capacity.
             continue
         detail_raw = weight_tensor_details.get(tensor_key, {})
         detail = detail_raw if isinstance(detail_raw, Mapping) else {}
@@ -2923,7 +2881,7 @@ def _validate_scenario_uncached(
                     continue
                 try:
                     rank_number = int(
-                        shard_raw.get("rank_id", shard_raw.get("rank", -1))
+                        shard_raw.get("rank_id", -1)
                     )
                 except (TypeError, ValueError):
                     continue
@@ -2932,10 +2890,7 @@ def _validate_scenario_uncached(
                     shard_raw.get("compute_component_id", "")
                 )
                 storage_id = str(
-                    shard_raw.get(
-                        "storage_component_id",
-                        shard_raw.get("component_id", ""),
-                    )
+                    shard_raw.get("storage_component_id", "")
                 )
                 if plan_rank is None:
                     errors.append(
@@ -3176,16 +3131,16 @@ def _validate_scenario_uncached(
         except ValueError as exc:
             errors.append("KV offload route: {}".format(exc))
 
-    scheduler = getattr(scenario.workload, "scheduler", None)
+    scheduler = scenario.workload.scheduler
     scheduler_preemption = str(
-        getattr(scheduler, "preemption_policy", "auto")
+        scheduler.preemption_policy
     ).lower()
     scheduler_preemption_enabled = bool(
-        getattr(scheduler, "preemption_enabled", True)
+        scheduler.preemption_enabled
     )
-    scheduler_mode = str(getattr(scheduler, "mode", "static"))
+    scheduler_mode = str(scheduler.mode)
     kv_preemption = str(
-        getattr(kv_policy, "preemption_mode", "auto")
+        kv_policy.preemption_mode
         if kv_policy is not None
         else "auto"
     ).lower()
@@ -3198,7 +3153,7 @@ def _validate_scenario_uncached(
     if (
         swap_required
         and kv_policy is not None
-        and float(getattr(kv_policy, "offload_ratio", 1.0)) <= 0
+        and float(kv_policy.offload_ratio) <= 0
     ):
         errors.append("KV swap preemption requires a positive offload_ratio")
     if (
@@ -3380,8 +3335,8 @@ def _validate_scenario_uncached(
         "all operators, collectives, KV traffic, and host orchestration use "
         "the task/transaction-level analytical lowering"
     )
-    scheduler = getattr(scenario.workload, "scheduler", None)
-    scheduler_mode = str(getattr(scheduler, "mode", "static")) if scheduler else "static"
+    scheduler = scenario.workload.scheduler
+    scheduler_mode = str(scheduler.mode) if scheduler else "static"
     if scheduler_mode == "continuous":
         information.append("request scheduling uses deterministic continuous batching")
     else:
@@ -3649,12 +3604,10 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
         # Already-physical/direct kernels bypass the generic descriptor
         # builder. Preserve declared resident ownership on those paths too.
         metadata = dict(task.metadata)
-        for key in ("memory_access", "memory_accesses", "physical_allocations"):
-            rows = metadata.get(key)
+        for key, rows in (("memory_accesses", _memory_accesses(metadata)),
+                          ("physical_allocations", _physical_allocations(metadata))):
             if rows is None:
                 continue
-            single = isinstance(rows, Mapping)
-            rows = (rows,) if single else rows
             updated = []
             for row in rows:
                 if _is_resident_physical_buffer(metadata, row.get("buffer_id")):
@@ -3662,7 +3615,7 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
                         raise ValueError("resident buffer cannot use a transient allocation arena")
                     row = {**row, "allocation_arena": "resident"}
                 updated.append(row)
-            metadata[key] = updated[0] if single else tuple(updated)
+            metadata[key] = tuple(updated)
         task = replace(task, metadata=metadata)
     # Physical GDDR tasks still receive the dynamic L2 contract.  At dispatch
     # the event kernel resolves cache state first and forwards only backing
@@ -3699,9 +3652,7 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
     else:
         read, write = cost.get("read_bytes", 0), cost.get("write_bytes", 0)
     physical = task.metadata.get("physical_memory_config") is not None
-    serving_identity = str(getattr(task, "request_id", ""))
-    generation_identity = (serving_identity if physical and serving_identity.startswith(
-        ("cohort-", "online-cohort", "serving-")) else None)
+    generation_identity = task.request_id if physical else None
 
     def physical_cache_access(metadata, side, count):
         # Cache and backing descriptors describe the same allocation, even
@@ -3728,7 +3679,7 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
             # an unrelated cache backing buffer.
             explicit = tuple({"buffer_id": row["buffer_id"], "operation": row["operation"],
                 "offset_bytes": row.get("offset_bytes", 0), "size_bytes": row["byte_count"],
-                "allocation_generation": row.get("allocation_generation", row.get("generation", 0)),
+                "allocation_generation": row.get("allocation_generation", 0),
                 **({"buffer_size_bytes": row["allocation_size_bytes"]}
                    if row.get("allocation_size_bytes") is not None else {})}
                 for row in backing)
@@ -3742,17 +3693,6 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
         cache_rows = []
         for row in explicit:
             normalized = dict(row)
-            # Physical range projection may carry both spellings. Preserve
-            # the range and reject contradictory values, rather than passing
-            # physical descriptor aliases to the typed cache contract.
-            for alias, canonical in (("byte_count", "size_bytes"),
-                                     ("allocation_size_bytes", "buffer_size_bytes"),
-                                     ("generation", "allocation_generation")):
-                if alias in normalized:
-                    value = normalized.pop(alias)
-                    if canonical in normalized and normalized[canonical] != value:
-                        raise ValueError("conflicting cache access {} and {}".format(alias, canonical))
-                    normalized[canonical] = value
             if physical:
                 resident = _is_resident_physical_buffer(task.metadata, normalized["buffer_id"])
                 side = "weight" if resident else normalized["operation"]
@@ -3948,18 +3888,18 @@ def _aggregate_cache_buffer_projection(accesses, read_bytes, write_bytes):
     result = []
     for operation, target in (("read", read_bytes), ("write", write_bytes)):
         rows = [row for row in accesses if row["operation"] == operation]
-        total = sum(int(row.get("size_bytes", row.get("byte_count", 0))) for row in rows)
+        total = sum(int(row.get("size_bytes", 0)) for row in rows)
         if target < 0 or target > total:
             raise ValueError("aggregate cache traffic exceeds its explicit logical buffer views")
         cumulative = assigned = 0
         for row in rows:
-            size = int(row.get("size_bytes", row.get("byte_count", 0)))
+            size = int(row.get("size_bytes", 0))
             cumulative += size
             next_assigned = target * cumulative // total if total else 0
             count = next_assigned - assigned
             assigned = next_assigned
             if count:
-                result.append({**row, "size_bytes": count, "byte_count": count})
+                result.append({**row, "size_bytes": count})
     return result
 
 
@@ -4089,9 +4029,9 @@ def _gddr_allocation_size(
     """Find a declared stable extent; leave access-derived extents unknown.
 
     ``offset + byte_count`` is sufficient for stable address preview, but it
-    is not a fixed allocation contract.  Returning ``None`` for that fallback
-    lets runtime registration mark the declaration inferred so later accesses
-    to a smaller range do not look like a fixed allocation resize.
+    is not a fixed allocation contract. Returning ``None`` lets the compiler
+    collect the complete graph boundary before emitting an explicit allocation
+    declaration, including accesses in later streaming chunks.
     """
 
     keys = {
@@ -4117,7 +4057,7 @@ def _gddr_allocation_size(
         tensor_id = identity.split(":", 2)[1]
     else:
         tensor_id = ""
-    placement_bytes = getattr(getattr(scenario, "placement", None), "tensor_bytes", {})
+    placement_bytes = scenario.placement.tensor_bytes
     if tensor_id and isinstance(placement_bytes, Mapping):
         value = placement_bytes.get(tensor_id)
         if value is not None:
@@ -4132,28 +4072,27 @@ def _gddr_access_generation(
     fallback_identity: Optional[object] = None,
 ) -> int:
     keys = {
-        "read": ("input_allocation_generation", "input_generation", "allocation_generation", "generation"),
-        "weight": ("weight_allocation_generation", "weight_generation", "allocation_generation", "generation"),
-        "write": ("output_allocation_generation", "output_generation", "allocation_generation", "generation"),
+        "read": ("input_generation", "allocation_generation"),
+        "weight": ("weight_generation", "allocation_generation"),
+        "write": ("output_generation", "allocation_generation"),
     }[side]
+    obsolete = {"generation", "input_allocation_generation", "weight_allocation_generation", "output_allocation_generation"}.intersection(metadata)
+    if obsolete:
+        raise ValueError("unsupported task generation fields: " + ", ".join(sorted(obsolete)))
     for key in keys:
         if metadata.get(key) is not None:
             return _gddr_non_negative_int(metadata[key], key)
     # Read/write descriptors describe transient activation buffers.  They may
-    # have different extents in separate serving cohorts, while weight
-    # descriptors must remain generation-stable so the resident model is not
-    # allocated once per cohort.  Scope transient generations to the cohort's
-    # stable request identity without using Python's randomized hash.
+    # have different extents in separate requests, while weight descriptors
+    # remain generation-stable so the resident model is allocated once.
+    # Scope transient generations to the stable request identity without
+    # using Python's randomized hash.
     if side in {"read", "write"} and fallback_identity is not None:
-        text = str(fallback_identity)
-        digits = "".join(char for char in text if char.isdigit())
-        if digits:
-            # Generation zero is the allocator's initial slot.  Keep the
-            # cohort-derived slot strictly positive so ``cohort-000000`` is
-            # still distinct from ordinary compile-time generation zero.
-            return (int(digits) % (2**31 - 2)) + 1
-        value = sum((index + 1) * ord(char) for index, char in enumerate(text))
-        return (value % (2**31 - 2)) + 1
+        # Encode the complete identity without truncation or collisions from
+        # equal numeric suffixes. The leading byte also preserves leading NUL
+        # bytes and keeps request generations distinct from resident zero.
+        identity = b"\x01" + str(fallback_identity).encode("utf-8")
+        return int.from_bytes(identity, "big")
     return 0
 
 
@@ -4183,6 +4122,18 @@ def _physical_dram_config(scenario: ScenarioConfig, component: ComponentSpec):
     )
 
 
+def _physical_access_from_cache_access(access: Mapping[str, object]) -> Dict[str, object]:
+    """Compile one logical CacheAccess range into a physical descriptor."""
+    row = dict(access)
+    obsolete = {"byte_count", "allocation_size_bytes", "generation", "offset", "tensor_id", "allocation_id", "allocation_bytes"}.intersection(row)
+    if obsolete:
+        raise ValueError("buffer_accesses uses CacheAccess fields; unsupported fields: " + ", ".join(sorted(obsolete)))
+    row["byte_count"] = row.pop("size_bytes")
+    if "buffer_size_bytes" in row:
+        row["allocation_size_bytes"] = row.pop("buffer_size_bytes")
+    return row
+
+
 def _direct_backing_descriptors(task, scenario, component, direct):
     """Bind a direct operand to the same stable allocator as local operands."""
     from .memory_types import DramConfig
@@ -4198,10 +4149,10 @@ def _direct_backing_descriptors(task, scenario, component, direct):
             raise ValueError("direct rhs_buffer_accesses must be a sequence of mappings")
         if any(row.get("operation") != "read" for row in raw):
             raise ValueError("direct rhs_buffer_accesses must contain reads only")
-        if sum(_gddr_non_negative_int(row.get("size_bytes", row.get("byte_count")), "size_bytes")
+        if sum(_gddr_non_negative_int(row["size_bytes"], "size_bytes")
                for row in raw) != reads:
             raise ValueError("direct rhs_buffer_accesses must cover the remote read bytes exactly")
-        rows = [dict(row) for row in raw]
+        rows = [_physical_access_from_cache_access(row) for row in raw]
     else:
         rows = ([{"operation": "read", "byte_count": reads,
                   "buffer_id": _gddr_stable_identity(task, metadata, "weight"),
@@ -4223,7 +4174,7 @@ def _direct_backing_descriptors(task, scenario, component, direct):
                 while remaining:
                     count = min(remaining, extent - offset)
                     rows.append({**first, "byte_count":count, "offset_bytes":offset,
-                        "buffer_size_bytes":extent,
+                        "allocation_size_bytes":extent,
                         "indexed_lookup_address_model":"cyclic_without_token_indices"})
                     remaining -= count
                     offset = 0
@@ -4233,38 +4184,37 @@ def _direct_backing_descriptors(task, scenario, component, direct):
             raise ValueError("direct output_buffer_accesses must be a sequence of mappings")
         if any(row.get("operation") != "write" for row in output):
             raise ValueError("direct output_buffer_accesses must contain writes only")
-        if sum(_gddr_non_negative_int(row.get("size_bytes", row.get("byte_count")), "size_bytes")
+        if sum(_gddr_non_negative_int(row["size_bytes"], "size_bytes")
                for row in output) != writes:
             raise ValueError("direct output_buffer_accesses must cover the remote write bytes exactly")
-        rows.extend(dict(row) for row in output)
+        rows.extend(_physical_access_from_cache_access(row) for row in output)
     elif writes:
         rows.append({"operation": "write", "byte_count": writes,
                      "buffer_id": _gddr_stable_identity(task, metadata, "write"),
                      "offset_bytes": metadata.get("output_offset_bytes", 0)})
     descriptors, bindings = [], []
-    serving = str(task.request_id)
-    generation_identity = serving if serving.startswith(("cohort-", "online-cohort", "serving-")) else None
+    generation_identity = task.request_id
     for row in rows:
         operation = str(row["operation"])
         side = "weight" if operation == "read" else "write"
-        identity = str(row.get("buffer_id") or row.get("tensor_id") or row.get("allocation_id") or "").strip()
+        identity = str(row.get("buffer_id") or "").strip()
         if not identity:
             raise ValueError("direct memory access requires a stable buffer/tensor identity")
-        count = _gddr_non_negative_int(row.get("size_bytes", row.get("byte_count")), "byte_count")
-        offset = _gddr_non_negative_int(row.get("offset_bytes", row.get("offset", 0)), "offset_bytes")
+        count = _gddr_non_negative_int(row.get("byte_count"), "byte_count")
+        offset = _gddr_non_negative_int(row.get("offset_bytes", 0), "offset_bytes")
         if count == 0:
             continue
-        declared = row.get("buffer_size_bytes", row.get("allocation_size_bytes", row.get("allocation_bytes")))
+        declared = row.get("allocation_size_bytes")
         extent = _gddr_allocation_size(scenario, metadata, side, identity, offset, count, declared)
         dynamic_rhs = metadata.get("rhs_is_activation") is True
         default_generation = _gddr_access_generation(metadata, side,
             fallback_identity=generation_identity)
         if dynamic_rhs and side == "weight" and not any(metadata.get(key) is not None
-                for key in ("weight_allocation_generation", "weight_generation", "allocation_generation", "generation")):
+                for key in ("weight_generation", "allocation_generation")):
             default_generation = _gddr_access_generation(metadata, "read", fallback_identity=generation_identity)
         if identity in metadata.get("persistent_buffer_ids", ()):
             default_generation = 0
-        generation = _gddr_non_negative_int(row.get("allocation_generation", row.get("generation", default_generation)), "allocation_generation")
+        generation = _gddr_non_negative_int(row.get("allocation_generation", default_generation), "allocation_generation")
         address = row.get("address")
         source = "explicit_physical_address" if address is not None else "stable_buffer_tensor_offset"
         address = (_gddr_non_negative_int(address, "address") if address is not None else
@@ -4273,7 +4223,7 @@ def _direct_backing_descriptors(task, scenario, component, direct):
             raise ValueError("direct memory access exceeds physical capacity")
         descriptor = {"operation": operation, "byte_count": count,
             "buffer_id": identity, "offset_bytes": offset, "address": address,
-            "address_source": source, "allocation_generation": generation, "generation": generation,
+            "address_source": source, "allocation_generation": generation,
             "physical_owner": str(direct["physical_owner"]), "resource_id": str(direct["resource_id"]),
             "physical_memory_component_id": component.component_id}
         if extent is not None:
@@ -4303,16 +4253,16 @@ def _subtract_direct_buffer_accesses(explicit, remote):
         pending = [(start, start + int(access["byte_count"]))]
         remaining = []
         for row in local:
-            identity = row.get("buffer_id", row.get("tensor_id", row.get("allocation_id")))
+            identity = row.get("buffer_id")
             if identity != access["buffer_id"] or row.get("operation") != access["operation"]:
                 remaining.append(row)
                 continue
-            generation = row.get("allocation_generation", row.get("generation"))
+            generation = row.get("allocation_generation")
             if generation is not None and int(generation) != int(access["allocation_generation"]):
                 remaining.append(row)
                 continue
-            lo = _gddr_non_negative_int(row.get("offset_bytes", row.get("offset", 0)), "offset_bytes")
-            hi = lo + _gddr_non_negative_int(row.get("size_bytes", row.get("byte_count")), "size_bytes")
+            lo = _gddr_non_negative_int(row.get("offset_bytes", 0), "offset_bytes")
+            hi = lo + _gddr_non_negative_int(row.get("size_bytes"), "size_bytes")
             pieces = [(lo, hi)]
             unresolved = []
             for begin, end in pending:
@@ -4329,10 +4279,7 @@ def _subtract_direct_buffer_accesses(explicit, remote):
             pending = unresolved
             for begin, end in pieces:
                 residual = {**row, "offset_bytes": begin}
-                if "size_bytes" in row:
-                    residual["size_bytes"] = end - begin
-                if "byte_count" in row:
-                    residual["byte_count"] = end - begin
+                residual["size_bytes"] = end - begin
                 remaining.append(residual)
         if pending:
             raise ValueError("direct RHS is not represented by the full buffer_accesses contract")
@@ -4358,7 +4305,7 @@ def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfi
     local_writes = _gddr_non_negative_int(direct["local_write_bytes"], "local_write_bytes")
     local_metadata = dict(task.metadata)
     local_metadata["phase_metadata"] = {key: value for key, value in phase.items()
-        if key not in {"direct_memory_access", "physical_memory_config", "memory_access", "memory_accesses"}}
+        if key not in {"direct_memory_access", "physical_memory_config", "memory_accesses"}}
     local_metadata["cost_model"] = {
         **task.metadata.get("cost_model", {}),
         "activation_bytes": local_reads, "weight_bytes": 0,
@@ -4371,8 +4318,7 @@ def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfi
     explicit = task.metadata.get("buffer_accesses")
     if explicit is not None:
         local_metadata["buffer_accesses"] = _subtract_direct_buffer_accesses(explicit, remote_accesses)
-    for key in ("memory_access", "memory_accesses"):
-        local_metadata.pop(key, None)
+    local_metadata.pop("memory_accesses", None)
     preserved = tuple(d for d in task.demands
         if str(d.resource_id) not in {remote_owner, remote_resource, local_resource})
     # Direct-phase demands may have merged local and remote traffic, and the
@@ -4406,7 +4352,7 @@ def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfi
         "physical_memory_configs": configs,
         "physical_owner": primary["physical_owner"],
         "physical_memory_component_id": primary["physical_memory_component_id"],
-        "memory_access": accesses, "memory_accesses": accesses,
+        "memory_accesses": accesses,
         "physical_address_bindings": tuple(local_task.metadata.get("physical_address_bindings", ())) + remote_bindings,
         "direct_memory_byte_conservation": {"logical_read_bytes": expected[0],
             "logical_write_bytes": expected[1], "descriptor_read_bytes": actual[0],
@@ -4449,8 +4395,8 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         if component_kind not in DRAM_COMPONENT_KINDS:
             continue
         service = component.metadata.get("memory_service", {})
-        owner = str(service.get("physical_owner") or component.metadata.get("physical_owner") or default_memory_resource_id(component))
-        resource_ids = {owner, str(service.get("resource_id") or owner), component.component_id + ".access"}
+        owner = str(service.get("physical_owner") or default_memory_resource_id(component))
+        resource_ids = {owner, component.component_id + ".access"}
         profile = _resolve_component_profile(scenario, component.component_id)
         resource_ids.add(profile.resource_id)
         if isinstance(profile, HostMemoryProfile):
@@ -4494,18 +4440,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         }
         task = replace(task, demands=preserved + (ResourceDemand(owner, 0.0, bytes_moved=reads + writes),), metadata=metadata)
         resource_ids = {owner}
-    # Serving cohorts use stable ``cohort-*`` request identities.  Ordinary
-    # compile/planning requests (for example ``tiny-request`` in the runtime
-    # integration tests) intentionally keep generation zero unless the task
-    # metadata declares one.  Scope the derived transient generation to the
-    # serving path so compile-time access descriptors remain backwards
-    # compatible while cohorts cannot resize generation zero in place.
-    request_identity = str(getattr(task, "request_id", ""))
-    generation_identity = (
-        request_identity
-        if request_identity.startswith(("cohort-", "online-cohort", "serving-"))
-        else None
-    )
+    # Every request owns its transient buffers. Resident weights retain their
+    # shared generation, while independently shaped requests must not resize
+    # or reuse one another's activation allocation.
+    generation_identity = task.request_id
     memory_demands = [d for d in task.demands if str(d.resource_id) in resource_ids and d.bytes_moved > 0]
     total_bytes = sum(int(d.bytes_moved) for d in memory_demands)
     if total_bytes <= 0:
@@ -4536,7 +4474,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     logical_views = metadata.get("buffer_accesses")
     if logical_views is not None and metadata.get("buffer_view_cache_policy") == "aggregate_directional_v1":
         directional = _gddr_directional_bytes(task, cost, total_bytes)
-        logical_directional = tuple(sum(int(row.get("size_bytes", row.get("byte_count", 0)))
+        logical_directional = tuple(sum(int(row.get("size_bytes", 0))
             for row in logical_views if row["operation"] == operation) for operation in ("read", "write"))
         if directional != logical_directional:
             physical_views = _aggregate_cache_buffer_projection(logical_views, *directional)
@@ -4545,15 +4483,13 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 "address_precision": "analytical_aggregate_cache_fractional_ranges",
                 "cache_line_identity_coverage": "partial"}
             task = replace(task, metadata=metadata)
-    raw_explicit = metadata.get(
-        "memory_accesses",
-        metadata.get("memory_access", metadata.get("buffer_accesses")),
-    )
-    explicit_items = ()
-    if isinstance(raw_explicit, Mapping):
-        explicit_items = (raw_explicit,)
-    elif isinstance(raw_explicit, (tuple, list)):
-        explicit_items = tuple(raw_explicit)
+    explicit = _memory_accesses(metadata)
+    if explicit is None and metadata.get("buffer_accesses") is not None:
+        explicit = tuple(_physical_access_from_cache_access(row)
+                         for row in metadata["buffer_accesses"])
+    if explicit is not None and not explicit:
+        raise ValueError("GDDR task {} supplied an empty memory access list".format(task.task_id))
+    explicit_items = tuple(explicit or ())
     if explicit_items:
         if not all(isinstance(item, Mapping) for item in explicit_items):
             raise ValueError("GDDR explicit memory accesses must be mappings")
@@ -4562,7 +4498,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             if explicit_address is not None:
                 explicit_address = _gddr_non_negative_int(explicit_address, "address")
                 explicit_size = _gddr_non_negative_int(
-                    item.get("byte_count", item.get("size_bytes")), "byte_count"
+                    item.get("byte_count"), "byte_count"
                 )
                 if explicit_address + explicit_size > capacity:
                     raise ValueError(
@@ -4571,12 +4507,12 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                         )
                     )
         read_bytes = sum(
-            _gddr_non_negative_int(item.get("byte_count", item.get("size_bytes")), "byte_count")
+            _gddr_non_negative_int(item.get("byte_count"), "byte_count")
             for item in explicit_items
             if str(item.get("operation", "")).lower() == "read"
         )
         write_bytes = sum(
-            _gddr_non_negative_int(item.get("byte_count", item.get("size_bytes")), "byte_count")
+            _gddr_non_negative_int(item.get("byte_count"), "byte_count")
             for item in explicit_items
             if str(item.get("operation", "")).lower() == "write"
         )
@@ -4642,7 +4578,6 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             "address_source": address_source,
             "offset_bytes": offset,
             "allocation_generation": generation,
-            "generation": generation,
         }
         if identity is not None:
             descriptor["buffer_id"] = identity
@@ -4667,7 +4602,6 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 "address_source": address_source,
                 "allocation_size_bytes": allocation_size,
                 "allocation_generation": generation,
-                "generation": generation,
                 "alias_of": alias_of,
                 "alias_generation": alias_generation,
                 "alias_offset_bytes": alias_offset_bytes,
@@ -4675,35 +4609,6 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             }
         )
 
-    def explicit_accesses() -> Optional[Sequence[Mapping[str, object]]]:
-        raw = metadata.get("memory_accesses", metadata.get("memory_access"))
-        if raw is None:
-            raw = metadata.get("buffer_accesses")
-        if raw is None:
-            return None
-        if isinstance(raw, Mapping):
-            return (raw,)
-        if isinstance(raw, (tuple, list)):
-            if not raw:
-                raise ValueError(
-                    "GDDR task {} supplied an empty memory access list".format(
-                        task.task_id
-                    )
-                )
-            if not all(isinstance(item, Mapping) for item in raw):
-                raise ValueError(
-                    "GDDR task {} memory access entries must be mappings".format(
-                        task.task_id
-                    )
-                )
-            return tuple(raw)
-        raise ValueError(
-            "GDDR task {} memory accesses must be a mapping or sequence".format(
-                task.task_id
-            )
-        )
-
-    explicit = explicit_accesses()
     if explicit is not None:
         for item in explicit:
             operation = str(item.get("operation", "")).strip().lower()
@@ -4713,7 +4618,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                         task.task_id, operation
                     )
                 )
-            byte_count = item.get("byte_count", item.get("size_bytes"))
+            byte_count = item.get("byte_count")
             if byte_count is None:
                 raise ValueError(
                     "GDDR task {} memory access requires byte_count".format(
@@ -4721,28 +4626,21 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                     )
                 )
             byte_count = _gddr_non_negative_int(byte_count, "byte_count")
-            raw_offset = item.get("offset_bytes", item.get("offset", 0))
+            raw_offset = item.get("offset_bytes", 0)
             offset = _gddr_non_negative_int(raw_offset, "buffer offset")
-            identity_value = item.get(
-                "buffer_id",
-                item.get("tensor_id", item.get("allocation_id")),
-            )
+            identity_value = item.get("buffer_id")
             identity = (
                 str(identity_value).strip()
                 if identity_value is not None and str(identity_value).strip()
                 else None
             )
-            allocation_size = item.get(
-                "buffer_size_bytes", item.get("allocation_size_bytes", item.get("allocation_bytes"))
-            )
+            allocation_size = item.get("allocation_size_bytes")
             side = "write" if operation == "write" else "read"
-            raw_generation = item.get(
-                "allocation_generation", item.get("generation")
-            )
+            raw_generation = item.get("allocation_generation")
             # Stateful-L2 descriptors are materialized with their cache
-            # generation (normally zero).  For serving cohorts that would
-            # reuse one activation tensor identity across different extents,
-            # so derive a cohort-scoped generation for transient buffers while
+            # generation (normally zero). Separate requests can reuse one
+            # activation tensor identity across different extents, so derive
+            # a request-scoped generation for transient buffers while
             # keeping resident weight allocations on generation zero.  An
             # explicit non-zero generation remains authoritative.
             is_static_weight = _is_resident_physical_buffer(metadata, identity)
@@ -4981,7 +4879,6 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     metadata = dict(task.metadata)
     metadata.update({
         "physical_memory_config": raw_config,
-        "memory_access": descriptors[0] if len(descriptors) == 1 else tuple(descriptors),
         "memory_accesses": tuple(descriptors),
         "physical_memory_component_id": component.component_id,
         "physical_owner": owner,
@@ -5002,7 +4899,7 @@ def _assert_physical_memory_demands(task: TaskSpec, scenario: ScenarioConfig) ->
             if component.normalized_kind not in PHYSICAL_MEMORY_COMPONENT_KINDS:
                 continue
             service = component.metadata.get("memory_service", {})
-            resource = service.get("resource_id") or service.get("physical_owner") or default_memory_resource_id(component)
+            resource = service.get("physical_owner") or default_memory_resource_id(component)
             result[str(resource)] = component.component_id
             if component.cost_profile_id is not None and scenario.component_profile_kind(component) is not None:
                 profile = _resolve_component_profile(scenario, component.component_id)
@@ -5017,9 +4914,7 @@ def _assert_physical_memory_demands(task: TaskSpec, scenario: ScenarioConfig) ->
         return result
     context = _active_compilation_context(scenario)
     resources = owners() if context is None else context.invariant(("physical_memory_resource_owners",), owners)
-    accesses = task.metadata.get("memory_accesses", task.metadata.get("memory_access", ()))
-    if isinstance(accesses, Mapping):
-        accesses = (accesses,)
+    accesses = _memory_accesses(task.metadata) or ()
     represented = {str(row.get("resource_id") or row.get("physical_owner"))
                    for row in accesses if isinstance(row, Mapping)}
     represented.update(str(row) for row in task.metadata.get("physical_placeholder_resource_ids", ()))
@@ -5050,7 +4945,7 @@ def _apply_planned_graph_launches(tasks):
                 profiles[target] = gpu.kernel_model
             profile = profiles[target]
             if profile is not None and (profile.graph_enabled
-                    or getattr(profile, "runtime_calibration", None) is not None):
+                    or profile.runtime_calibration is not None):
                 from .cuda_graph_lifecycle import SCHEMA, SOURCE_REVISION
                 binding = task.metadata.get("cuda_graph_lifecycle")
                 if (not isinstance(binding, Mapping) or binding.get("schema") != SCHEMA
@@ -5092,7 +4987,7 @@ def _apply_planned_graph_launches(tasks):
                 raise ValueError("CUDA runtime pricing did not preserve its original task membership")
     priced = tuple(task for index, original in enumerate(result)
                    for task in replacement_chunks.get(index, (original,)))
-    if not any(profile is not None and getattr(profile, "runtime_calibration", None) is not None
+    if not any(profile is not None and profile.runtime_calibration is not None
                for profile in profiles.values()):
         return priced
     from .cuda_graph_costs import replace_measured_driver_submission_costs
@@ -6731,19 +6626,11 @@ class _TaskSegmentTemplate:
                     prefix=prefix,
                     counter_delta=counter_delta,
                 )
-                metadata_source = (
-                    metadata if isinstance(metadata, Mapping) else task.metadata
-                )
-                # A normal TaskSpec metadata root is a dict and its capture plan
-                # always materializes a fresh root.  Keep that isolated root
-                # instead of copying it once more in TaskBuilder.add, while
-                # retaining the historical dict-normalization fallback for
-                # custom mappings.
-                replay_metadata = (
-                    metadata_source
-                    if type(metadata_source) is dict
-                    else dict(metadata_source or {})
-                )
+                if not isinstance(metadata, Mapping):
+                    raise TypeError("task segment metadata replay must produce a mapping")
+                # Reuse the isolated dict produced by the capture plan. Other
+                # supported Mapping types need a mutable root for overrides.
+                replay_metadata = metadata if type(metadata) is dict else dict(metadata)
             if metadata_overrides:
                 for key, value in metadata_overrides.items():
                     if key not in replay_metadata:
@@ -6886,6 +6773,7 @@ class StreamingScheduleIR:
     manifest: RunManifest
     scenario: ScenarioConfig
     requests: Sequence[RequestSpec]
+    physical_allocation_extents: Mapping[Tuple[str, int, str], int]
     # The same physical execution lanes used by the online control-plane
     # runtime.  Keeping this on the IR prevents streaming execution from
     # silently falling back to single-lane resources.
@@ -6909,43 +6797,38 @@ def _scenario_resource_owners(scenario: ScenarioConfig) -> Mapping[str, str]:
     return declared_resource_owners(scenario.hardware)
 
 
-def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[TaskSpec, ...]:
-    """Promote access-derived extents after the complete graph is lowered.
+def _physical_allocation_key(task, row, buffer_id, generation):
+    contract = task.metadata.get("stateful_l2")
+    owner = row.get("physical_owner") or task.metadata.get("physical_owner") or (
+        contract.get("memory_resource") if isinstance(contract, Mapping) else ""
+    )
+    return (buffer_id, generation, str(owner or ""))
 
-    A per-task slice is not a complete allocation contract.  Once all tasks
-    are known, the largest declared or touched range becomes the run-local
-    extent for that buffer/generation.  Explicit extents remain authoritative
-    and conflicting declarations fail before dispatch.
-    """
 
-    extents: Dict[Tuple[str, int, str], int] = {}
-    fixed: Dict[Tuple[str, int, str], int] = {}
-
-    def allocation_key(task, row, buffer_id, generation):
-        contract = task.metadata.get("stateful_l2")
-        owner = row.get("physical_owner") or task.metadata.get("physical_owner") or (
-            contract.get("memory_resource") if isinstance(contract, Mapping) else ""
-        )
-        return (buffer_id, generation, str(owner or ""))
-
+def _collect_physical_allocation_extents(
+    tasks: Sequence[TaskSpec],
+    extents: Dict[Tuple[str, int, str], int],
+    fixed: Dict[Tuple[str, int, str], int],
+) -> None:
+    """Collect the complete allocation boundary without retaining task graphs."""
     for task in tasks:
         if task.metadata.get("physical_memory_config") is None:
             continue
-        accesses = task.metadata.get("memory_accesses", task.metadata.get("memory_access"))
-        if isinstance(accesses, Mapping):
-            accesses = (accesses,)
+        accesses = task.metadata.get("memory_accesses")
+        if accesses is not None and not isinstance(accesses, (tuple, list)):
+            raise ValueError("memory_accesses must be a sequence of access mappings")
         for access in accesses or ():
             if not isinstance(access, Mapping) or not access.get("buffer_id"):
                 continue
             buffer_id = str(access["buffer_id"])
             if buffer_id.startswith("@tasklocal"):
                 buffer_id = str(task.task_id) + buffer_id[len("@tasklocal"):]
-            generation = int(access.get("allocation_generation", access.get("generation", 0)) or 0)
-            offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
-            size = int(access.get("byte_count", access.get("size_bytes", 0)) or 0)
+            generation = int(access.get("allocation_generation", 0) or 0)
+            offset = int(access.get("offset_bytes", 0) or 0)
+            size = int(access.get("byte_count", 0) or 0)
             extent = int(access.get("allocation_size_bytes") or 0)
             required = max(extent, offset + size)
-            key = allocation_key(task, access, buffer_id, generation)
+            key = _physical_allocation_key(task, access, buffer_id, generation)
             previous = extents.get(key, 0)
             extents[key] = max(previous, required)
             if extent:
@@ -6953,7 +6836,7 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
                 if declared is not None and declared != extent:
                     raise ValueError("conflicting physical allocation extent for {} generation {} on {}".format(*key))
                 fixed[key] = extent
-            if key in fixed and required > fixed[key]:
+            if key in fixed and extents[key] > fixed[key]:
                 raise ValueError("physical access exceeds declared allocation {} generation {} on {}".format(*key))
         # Stateful-L2 contracts carry the logical cache accesses separately
         # from the physical preview descriptors.  Their buffer_size_bytes is
@@ -6968,25 +6851,39 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             buffer_id = str(access["buffer_id"])
             if buffer_id.startswith("@tasklocal"):
                 buffer_id = str(task.task_id) + buffer_id[len("@tasklocal"):]
-            generation = int(access.get("allocation_generation", access.get("generation", 0)) or 0)
-            offset = int(access.get("offset_bytes", access.get("offset", 0)) or 0)
-            size = int(access.get("size_bytes", access.get("byte_count", 0)) or 0)
-            extent = int(access.get("buffer_size_bytes", access.get("allocation_size_bytes", 0)) or 0)
-            key = allocation_key(task, access, buffer_id, generation)
+            generation = int(access.get("allocation_generation", 0) or 0)
+            offset = int(access.get("offset_bytes", 0) or 0)
+            size = int(access.get("size_bytes", 0) or 0)
+            extent = int(access.get("buffer_size_bytes", 0) or 0)
+            key = _physical_allocation_key(task, access, buffer_id, generation)
             extents[key] = max(extents.get(key, 0), extent, offset + size)
+
+
+def _promote_physical_allocation_extents(
+    tasks: Sequence[TaskSpec],
+    *,
+    extents: Optional[Mapping[Tuple[str, int, str], int]] = None,
+) -> Tuple[TaskSpec, ...]:
+    """Apply complete graph extents and emit explicit allocation declarations.
+
+    Streaming compilation supplies its precomputed scenario-wide boundary.
+    Other compilation paths collect that boundary from their complete cohort.
+    Explicit extents remain authoritative and conflicts fail before dispatch.
+    """
+    from .data_motion import lower_physical_allocations
+
+    if extents is None:
+        extents = {}
+        _collect_physical_allocation_extents(tasks, extents, {})
     if not extents:
-        return tuple(tasks)
+        return tuple(lower_physical_allocations(task) for task in tasks)
 
     promoted = []
     for task in tasks:
         metadata = dict(task.metadata)
-        accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
-        if isinstance(accesses, Mapping):
-            access_rows = (dict(accesses),)
-            was_mapping = True
-        elif isinstance(accesses, (tuple, list)):
+        accesses = metadata.get("memory_accesses")
+        if isinstance(accesses, (tuple, list)):
             access_rows = tuple(dict(item) for item in accesses)
-            was_mapping = False
         else:
             promoted.append(task)
             continue
@@ -6995,11 +6892,11 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             buffer_id = row.get("buffer_id")
             if not buffer_id:
                 continue
-            generation = int(row.get("allocation_generation", row.get("generation", 0)) or 0)
+            generation = int(row.get("allocation_generation", 0) or 0)
             normalized_buffer_id = str(buffer_id)
             if normalized_buffer_id.startswith("@tasklocal"):
                 normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
-            key = allocation_key(task, row, normalized_buffer_id, generation)
+            key = _physical_allocation_key(task, row, normalized_buffer_id, generation)
             extent = extents.get(key)
             if extent is None or row.get("allocation_size_bytes") is not None:
                 continue
@@ -7013,16 +6910,16 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             if (
                 row.get("address_source") == "stable_buffer_tensor_offset"
                 and isinstance(config, Mapping)
-                and isinstance(row.get("offset_bytes", row.get("offset", 0)), int)
-                and isinstance(row.get("byte_count", row.get("size_bytes", 0)), int)
+                and isinstance(row.get("offset_bytes", 0), int)
+                and isinstance(row.get("byte_count", 0), int)
             ):
                 capacity = int(config.get("capacity_bytes") or 0)
                 burst = int(config.get("burst_bytes") or 0)
                 if capacity > 0 and burst > 0:
                     row["address"] = _gddr_stable_address(
                         normalized_buffer_id,
-                        int(row.get("offset_bytes", row.get("offset", 0))),
-                        int(row.get("byte_count", row.get("size_bytes", 0))),
+                        int(row.get("offset_bytes", 0)),
+                        int(row.get("byte_count", 0)),
                         capacity,
                         burst,
                         int(extent),
@@ -7030,7 +6927,6 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             changed = True
         if changed or metadata.get("physical_allocations") is not None:
             metadata["memory_accesses"] = tuple(access_rows)
-            metadata["memory_access"] = access_rows[0] if was_mapping else tuple(access_rows)
             # The event kernel registers ``physical_allocations`` before it
             # resolves a task's accesses.  A cohort may expose a short
             # per-task declaration first and touch a larger extent later;
@@ -7038,16 +6934,10 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
             # an in-place growth and fail (for example final_norm.output
             # generation 1).  Promote every declaration in the same complete
             # lowered cohort to the already computed run-local extent.
-            declarations = metadata.get("physical_allocations")
-            if isinstance(declarations, Mapping):
-                declaration_rows = (dict(declarations),)
-                declarations_were_mapping = True
-            elif isinstance(declarations, (tuple, list)):
-                declaration_rows = tuple(dict(item) for item in declarations)
-                declarations_were_mapping = False
-            else:
-                declaration_rows = ()
-                declarations_were_mapping = False
+            declarations = metadata.get("physical_allocations", ())
+            if not isinstance(declarations, (tuple, list)):
+                raise ValueError("physical_allocations must be a sequence")
+            declaration_rows = tuple(dict(item) for item in declarations)
             if declaration_rows:
                 updated_declarations = []
                 for item in declaration_rows:
@@ -7058,20 +6948,15 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
                     normalized_buffer_id = str(buffer_id)
                     if normalized_buffer_id.startswith("@tasklocal"):
                         normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
-                    key = allocation_key(task, item, normalized_buffer_id, int(item.get("allocation_generation", item.get("generation", 0)) or 0))
+                    key = _physical_allocation_key(task, item, normalized_buffer_id, int(item.get("generation", 0) or 0))
                     target_extent = extents.get(key)
                     if target_extent is not None:
-                        declared_extent = item.get("size_bytes", item.get("buffer_size_bytes"))
+                        declared_extent = item.get("size_bytes")
                         if declared_extent is not None and int(declared_extent) > target_extent:
                             raise ValueError("physical allocation declaration exceeds promoted extent for {} generation {} on {}".format(*key))
                         item["size_bytes"] = target_extent
-                        item["buffer_size_bytes"] = target_extent
                     updated_declarations.append(item)
-                metadata["physical_allocations"] = (
-                    updated_declarations[0]
-                    if declarations_were_mapping and len(updated_declarations) == 1
-                    else tuple(updated_declarations)
-                )
+                metadata["physical_allocations"] = tuple(updated_declarations)
             bindings = metadata.get("physical_address_bindings")
             if isinstance(bindings, (tuple, list)):
                 updated_bindings = []
@@ -7081,7 +6966,7 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
                     normalized_buffer_id = raw_buffer_id
                     if normalized_buffer_id.startswith("@tasklocal"):
                         normalized_buffer_id = str(task.task_id) + normalized_buffer_id[len("@tasklocal"):]
-                    key = allocation_key(task, item, normalized_buffer_id, int(item.get("allocation_generation", item.get("generation", 0)) or 0))
+                    key = _physical_allocation_key(task, item, normalized_buffer_id, int(item.get("allocation_generation", 0) or 0))
                     if item.get("allocation_size_bytes") is None and key in extents:
                         extent = extents[key]
                         item["allocation_size_bytes"] = extent
@@ -7110,14 +6995,14 @@ def _promote_physical_allocation_extents(tasks: Sequence[TaskSpec]) -> Tuple[Tas
                 rows = []
                 for item in contract.get("accesses", ()):
                     row = dict(item)
-                    key = allocation_key(task, row, str(row.get("buffer_id")), int(row.get("allocation_generation", row.get("generation", 0)) or 0))
+                    key = _physical_allocation_key(task, row, str(row.get("buffer_id")), int(row.get("allocation_generation", 0) or 0))
                     if row.get("buffer_size_bytes") is None and key in extents:
                         row["buffer_size_bytes"] = extents[key]
                     rows.append(row)
                 metadata["stateful_l2"] = {**contract, "accesses": tuple(rows)}
             task = replace(task, metadata=metadata)
         promoted.append(task)
-    return tuple(promoted)
+    return tuple(lower_physical_allocations(task) for task in promoted)
 
 
 def compile_scenario(scenario: ScenarioConfig) -> ScheduleIR:
@@ -7128,7 +7013,7 @@ def compile_scenario(scenario: ScenarioConfig) -> ScheduleIR:
 
 
 def compile_streaming_scenario(scenario: ScenarioConfig) -> StreamingScheduleIR:
-    """Validate a static scenario without materializing its complete graph."""
+    """Compile static allocation bounds without retaining the complete graph."""
 
     _mmvq_hbm_mode(scenario)
     with _compilation_scope(scenario):
@@ -7153,7 +7038,7 @@ def compile_streaming_scenario(scenario: ScenarioConfig) -> StreamingScheduleIR:
             model_name=scenario.model.name,
             hardware_name=scenario.hardware.name,
             workload_name=scenario.workload.name,
-            calibration_version=ANALYTICAL_MODEL_VERSION,
+            analytical_model_version=ANALYTICAL_MODEL_VERSION,
             evidence=EvidenceStatus.ANALYTICAL,
             assumptions=manifest_assumptions,
             assumptions_zh=manifest_assumptions_zh,
@@ -7167,10 +7052,20 @@ def compile_streaming_scenario(scenario: ScenarioConfig) -> StreamingScheduleIR:
                    if "llama_cpp_mmvq_hbm_mode" in scenario.workload.metadata else {}),
             },
         )
+        requests = materialize_requests(scenario)
+        extents: Dict[Tuple[str, int, str], int] = {}
+        fixed: Dict[Tuple[str, int, str], int] = {}
+        # A later decode, MTP round or request can reuse a buffer at a larger
+        # extent. Collect its boundary before any chunk reaches the allocator;
+        # keep only this table and discard each lowered task chunk immediately.
+        for request in requests:
+            for chunk in _iter_parallel_request_task_chunks(scenario, request):
+                _collect_physical_allocation_extents(chunk.tasks, extents, fixed)
         return StreamingScheduleIR(
             manifest=manifest,
             scenario=scenario,
-            requests=materialize_requests(scenario),
+            requests=requests,
+            physical_allocation_extents=extents,
             resource_capacities=_scenario_resource_capacities(scenario),
             resource_owners=_scenario_resource_owners(scenario),
         )
@@ -7199,7 +7094,7 @@ def _compile_scenario_in_context(scenario: ScenarioConfig) -> ScheduleIR:
         model_name=scenario.model.name,
         hardware_name=scenario.hardware.name,
         workload_name=scenario.workload.name,
-        calibration_version=ANALYTICAL_MODEL_VERSION,
+        analytical_model_version=ANALYTICAL_MODEL_VERSION,
         evidence=EvidenceStatus.ANALYTICAL,
         assumptions=manifest_assumptions,
         assumptions_zh=manifest_assumptions_zh,
@@ -7236,9 +7131,9 @@ def _compile_scenario_in_context(scenario: ScenarioConfig) -> ScheduleIR:
 
 
 def iter_request_task_chunks(
-    scenario: ScenarioConfig, request: RequestSpec
+    schedule: StreamingScheduleIR, request: RequestSpec
 ) -> Iterator[RequestTaskChunk]:
-    """Yield exact request-local lowering chunks without retaining the graph.
+    """Yield executable request chunks with the schedule's allocation boundary.
 
     The yielded task sequence is identical to the corresponding slice of
     :func:`compile_scenario`. Chunk boundaries occur only after a
@@ -7246,8 +7141,12 @@ def iter_request_task_chunks(
     terminal task exactly as it does in the complete graph.
     """
 
+    scenario = schedule.scenario
     with _compilation_scope(scenario):
-        yield from _iter_parallel_request_task_chunks(scenario, request)
+        for chunk in _iter_parallel_request_task_chunks(scenario, request):
+            yield replace(chunk, tasks=_promote_physical_allocation_extents(
+                chunk.tasks, extents=schedule.physical_allocation_extents,
+            ))
 
 
 def _mtp_configuration(scenario: ScenarioConfig) -> Optional[object]:
@@ -7273,12 +7172,12 @@ def _mtp_expected_acceptance(
     round_index = int(mtp_round)
     if round_index < 0:
         raise ValueError("MTP round must be non-negative")
-    model = str(getattr(mtp, "acceptance_model", "")).strip().lower()
+    model = str(mtp.acceptance_model).strip().lower()
     if model in {"expected", "expected_prefix"}:
-        raw_rate = getattr(mtp, "acceptance_rate", None)
+        raw_rate = mtp.acceptance_rate
         rate = 0.0 if raw_rate is None else float(raw_rate)
     elif model == "trace":
-        trace = tuple(getattr(mtp, "acceptance_trace", ()) or ())
+        trace = tuple(mtp.acceptance_trace or ())
         if not trace:
             raise ValueError("MTP acceptance_model='trace' requires acceptance_trace")
         rate = float(trace[round_index % len(trace)])
@@ -7420,7 +7319,7 @@ def _weight_source_for_tensor(
                 (
                     shard
                     for shard in rank_shards
-                    if str(shard.get("rank_id", shard.get("rank", "")))
+                    if str(shard["rank_id"])
                     == str(rank.rank)
                     and (
                         not target
@@ -7439,9 +7338,7 @@ def _weight_source_for_tensor(
                 None,
             )
     if selected_shard is not None and residency != "cold_cim_transient":
-        storage = selected_shard.get(
-            "storage_component_id", selected_shard.get("component_id")
-        )
+        storage = selected_shard["storage_component_id"]
         if storage:
             return str(storage), placement_tensor, canonical_owner
 
@@ -7851,18 +7748,12 @@ def _direct_memory_address(
 
     component = _component(scenario, storage)
     values = dict(metadata or {})
-    for key in (
-        "page_offset_bytes",
-        "source_page_offset_bytes",
-        "target_page_offset_bytes",
-        "source_offset_bytes",
-        "target_offset_bytes",
-        "dram_address_bytes",
-        "memory_access_offset_bytes",
-    ):
-        value = values.get(key)
-        if value is not None:
-            return _gddr_non_negative_int(value, key)
+    address = values.get("page_offset_bytes")
+    if address is not None:
+        return _gddr_non_negative_int(address, "page_offset_bytes")
+    address = component.metadata.get("memory_access_offset_bytes")
+    if address is not None:
+        return _gddr_non_negative_int(address, "memory_access_offset_bytes")
     from .physical_contract import require_physical_memory_config
     from .memory_types import DramConfig
     physical = require_physical_memory_config(component)
@@ -7944,36 +7835,11 @@ def _direct_memory_phase(
     for key, value in dict(metadata or {}).items():
         if value is not None:
             phase_metadata[key] = value
-    page_offset = phase_metadata.get("page_offset_bytes")
-    if page_offset is None:
-        page_offset = phase_metadata.get("dram_address_bytes")
-    storage_component = _component(scenario, storage)
-    if page_offset is None:
-        # Preserve explicit offsets authored on the storage component itself;
-        # this is the legacy location used by normalized hardware presets.
-        storage_metadata = storage_component.metadata
-        physical_metadata = storage_metadata.get("physical_memory_config")
-        for key in (
-            "page_offset_bytes",
-            "source_page_offset_bytes",
-            "target_page_offset_bytes",
-            "source_offset_bytes",
-            "target_offset_bytes",
-            "dram_address_bytes",
-            "memory_access_offset_bytes",
-        ):
-            candidate = storage_metadata.get(key)
-            if candidate is None and isinstance(physical_metadata, Mapping):
-                candidate = physical_metadata.get(key)
-            if candidate is not None:
-                page_offset = _gddr_non_negative_int(candidate, key)
-                break
-    if page_offset is None and storage_component.metadata.get("physical_memory_config") is not None:
-        page_offset = _direct_memory_address(
-            scenario, rank, storage,
-            max(moved_reads, moved_writes),
-            phase_metadata,
-        )
+    page_offset = _direct_memory_address(
+        scenario, rank, storage,
+        max(moved_reads, moved_writes),
+        phase_metadata,
+    )
     if not isinstance(page_offset, int) or isinstance(page_offset, bool) or page_offset < 0:
         raise ValueError("direct backing access requires a valid explicit or allocator-derived memory address")
     def compact_service_bill(bill):
@@ -7982,7 +7848,7 @@ def _direct_memory_phase(
         ``PhysicalService.price`` may expose every expanded burst interval and
         payload for audit/replay.  A planner task only needs the aggregate
         service/byte counters; the physical event kernel recomputes the
-        detailed trace from ``physical_memory_config`` and ``memory_access`` at
+        detailed trace from ``physical_memory_config`` and ``memory_accesses`` at
         dispatch.  Keeping those interval tuples in every phase metadata entry
         made one 6 MiB GDDR read occupy tens of megabytes and multiplied that
         cost across a serving cohort.
@@ -8081,11 +7947,13 @@ def _direct_memory_phase(
         if descriptors:
             physical_metadata = {
                 "physical_memory_config": physical_config,
-                "memory_access": descriptors[0] if len(descriptors) == 1 else tuple(descriptors),
+                "memory_accesses": tuple(descriptors),
             }
     return replace(phase, demands=tuple(merged.values()), metadata={**phase.metadata,
-        **({"page_offset_bytes": page_offset, "page_offset_source": "derived_direct_backing"}
-           if page_offset is not None and "page_offset_bytes" not in phase.metadata else {}),
+        "page_offset_bytes": page_offset,
+        **({"page_offset_source": "derived_direct_backing"}
+           if phase_metadata.get("page_offset_bytes") is None
+           and _component(scenario, storage).metadata.get("memory_access_offset_bytes") is None else {}),
         **physical_metadata,
         "direct_memory_access": {"component_id": storage, "physical_owner": service.physical_owner,
             "resource_id": service.resource_id, "read_bytes": moved_reads, "write_bytes": moved_writes,
@@ -8172,7 +8040,6 @@ def _linear_state_endpoint_binding(
             "offset_bytes": 0,
             "allocation_size_bytes": owner_extent,
             "allocation_generation": generation,
-            "generation": generation,
         })
     return {**accesses[0], "address": address, "accesses": tuple(accesses)}
 
@@ -8200,9 +8067,9 @@ def _add_direct_state_access(builder, scenario, router, storage, device, byte_co
     for hop in router.route(source, target, byte_count):
         demands.extend(hop.demands(byte_count))
     service_metadata = dict(service.metadata if service else {})
-    if binding is not None and isinstance(service_metadata.get("memory_access"), Mapping):
-        accesses = tuple({**service_metadata["memory_access"], **row} for row in binding["accesses"])
-        service_metadata["memory_access"] = accesses[0] if len(accesses) == 1 else accesses
+    if binding is not None and service_metadata.get("memory_accesses"):
+        template, = service_metadata["memory_accesses"]
+        service_metadata["memory_accesses"] = tuple({**template, **row} for row in binding["accesses"])
     return builder.add(name, TaskCategory.MEMORY, tuple(demands), dependencies=dependencies,
         advance=False, metadata={**service_metadata, **metadata, "direct_memory_component": storage,
             "access_kind": "READ" if read else "WRITE", "bytes": byte_count,
@@ -8296,6 +8163,13 @@ def _logical_weight_tensor_bytes(
     if mtp_descriptor is not None:
         return _gddr_non_negative_int(mtp_descriptor.weight_bytes, "MTP weight bytes")
     decision = _control_plane_decision_metadata(scenario)
+    shards_by_tensor = decision.get("rank_weight_shards", {})
+    if canonical in shards_by_tensor:
+        logical_shards = {
+            shard["shard_id"]: _gddr_non_negative_int(shard["logical_bytes"], "rank shard logical_bytes")
+            for shard in shards_by_tensor[canonical]
+        }
+        return sum(logical_shards.values())
     details_raw = decision.get("weight_tensor_details", {})
     if isinstance(details_raw, Mapping):
         detail_raw = details_raw.get(canonical, {})
@@ -8442,10 +8316,7 @@ def _weight_tensor_has_active_resident_placement(
     if isinstance(shards_raw, (list, tuple)):
         component_ids.update(
             str(
-                shard.get(
-                    "storage_component_id",
-                    shard.get("component_id", ""),
-                )
+                shard["storage_component_id"]
             )
             for shard in shards_raw
             if isinstance(shard, Mapping)
@@ -8598,6 +8469,13 @@ def _unallocated_component_capacity(
         int(byte_count)
         for tensor_name, byte_count in scenario.placement.tensor_bytes.items()
         if scenario.placement.tensor_to_component.get(tensor_name) == component_id
+    )
+    shards_by_tensor = _control_plane_decision_metadata(scenario).get("rank_weight_shards", {})
+    occupied += sum(
+        shard["physical_bytes"]
+        for shards in shards_by_tensor.values()
+        for shard in shards
+        if shard["storage_component_id"] == component_id
     )
     return max(0, physical_capacity - occupied)
 
@@ -8855,10 +8733,9 @@ def _add_transfer_tasks(
             for row in authored:
                 address = _gddr_stable_address(row["buffer_id"], row.get("offset_bytes", 0), row["size_bytes"],
                     config.capacity_bytes, granularity, row.get("buffer_size_bytes"))
-                rows.append({**row, "address": address, "byte_count": row["size_bytes"],
+                rows.append({**_physical_access_from_cache_access(row), "address": address,
                     "address_source": "stable_buffer_tensor_offset",
-                    "generation": row.get("allocation_generation", 0),
-                    "allocation_size_bytes": row.get("buffer_size_bytes")})
+                    "allocation_generation": row.get("allocation_generation", 0)})
             state_bindings[component_id] = {"address": rows[0]["address"], "accesses": tuple(rows)}
     if scenario is not None and str(transfer_metadata.get("event_kind", "")).startswith("linear_state_"):
         for component_id, address in (
@@ -8902,7 +8779,7 @@ def _add_transfer_tasks(
             row = {"address": address, "buffer_id": identity,
                    "byte_count": byte_count, "offset_bytes": 0,
                    "address_source": "stable_buffer_tensor_offset",
-                   "allocation_generation": generation, "generation": generation}
+                   "allocation_generation": generation}
             state_bindings[component_id] = {"address": address, "accesses": (row,)}
         if source_component in state_bindings:
             source_page_offset = state_bindings[source_component]["address"]
@@ -9089,9 +8966,9 @@ def _add_transfer_tasks(
                 phase_direction = "write"
         phase_metadata.update(transfer_metadata)
         state_binding = state_bindings.get(phase_metadata.get("component_id"))
-        if state_binding is not None and isinstance(phase_metadata.get("memory_access"), Mapping):
-            accesses = tuple({**phase_metadata["memory_access"], **row} for row in state_binding["accesses"])
-            phase_metadata["memory_access"] = accesses[0] if len(accesses) == 1 else accesses
+        if state_binding is not None and phase_metadata.get("memory_accesses"):
+            template, = phase_metadata["memory_accesses"]
+            phase_metadata["memory_accesses"] = tuple({**template, **row} for row in state_binding["accesses"])
         if coherent_dma and context is not None and router is context.router():
             (
                 phase_demands,
@@ -10745,7 +10622,7 @@ def _cpu_profiles(
         # A native llama.cpp CPU path is bounded by n_threads (and batch work
         # by n_threads_batch).  Project the declared thread count onto the
         # existing typed CPU pipeline so ngl=0 runs carry real timing changes.
-        llama_cfg = getattr(scenario, "llama_cpp_config", None)
+        llama_cfg = scenario.llama_cpp_config
         if llama_cfg is not None:
             # llama.cpp uses ``n_threads`` for a one-row graph and
             # ``n_threads_batch`` for a graph invocation with multiple rows.
@@ -11585,30 +11462,14 @@ _ANALYTICAL_MMVQ_PRESETS = frozenset({"blackwell_analytical_v1"})
 def _analytical_mmvq_target_architecture(
     target: ComponentSpec,
 ) -> Optional[Tuple[int, int, int]]:
-    """Resolve explicit CUDA architecture facts for source-only geometry.
-
-    The source rule is independent of a product name.  Existing RTX 5080
-    presets predate the explicit fields, so their catalog identity is kept as
-    a compatibility fallback; every other target must carry the three
-    architecture facts in metadata.  No performance parameter is inferred.
-    """
-    metadata = target.metadata
-    nested = metadata.get("llama_cpp_cuda_architecture")
-    if not isinstance(nested, Mapping):
-        nested = {}
-    def integer(*keys: str) -> Optional[int]:
-        for key in keys:
-            value = metadata.get(key, nested.get(key))
-            if type(value) is int and value > 0:
-                return value
+    """Resolve explicit CUDA architecture facts for source-only geometry."""
+    architecture = target.metadata.get("llama_cpp_cuda_architecture")
+    if not isinstance(architecture, Mapping):
         return None
-    compute_capability = integer("compute_capability", "cuda_compute_capability")
-    highest_compiled_arch = integer("highest_compiled_arch", "cuda_highest_compiled_arch")
-    warp_size = integer("warp_size", "cuda_warp_size")
-    if compute_capability is not None and highest_compiled_arch is not None and warp_size is not None:
-        return compute_capability, highest_compiled_arch, warp_size
-    if metadata.get("component_preset_id") == "nvidia-rtx-5080":
-        return 1200, 1200, 32
+    values = tuple(architecture.get(key) for key in (
+        "compute_capability", "highest_compiled_arch", "warp_size"))
+    if all(type(value) is int and value > 0 for value in values):
+        return values
     return None
 
 
@@ -11651,8 +11512,8 @@ def _analytical_mmvq_source_rule(
     pinned source tables prove dispatch geometry; they do not prove that the
     current process used a particular cubin or that a measured rate applies.
     """
-    config = getattr(scenario, "llama_cpp_config", None)
-    if config is None or getattr(config, "policy", None) != "llama_cpp":
+    config = scenario.llama_cpp_config
+    if config is None or config.policy != "llama_cpp":
         return None, "runtime_policy_not_llama_cpp"
     preset = scenario.workload.metadata.get("llama_cpp_kernel_model_preset")
     if not _analytical_mmvq_preset_allowed(preset):
@@ -11753,9 +11614,7 @@ def _cpu_gemm_cost_key(
     workload: GemmWorkload,
     dispatch: Optional[CPUIQPanelDispatch] = None,
 ) -> Tuple[object, ...]:
-    # Keep the historical key unchanged unless native dispatch facts are used.
-    key = ("cpu_gemm", target_component_id, workload)
-    return key if dispatch is None else key + (dispatch,)
+    return ("cpu_gemm", target_component_id, workload, dispatch)
 
 
 def _cpu_iq_panel_weight_bindings(
@@ -12004,7 +11863,7 @@ def summarize_tensor_storage(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
         meta = task.metadata
         if meta.get("weight_access_semantics") == "full_weight_staging_before_row_lookup":
             ident = meta.get("weight_read_invocation_id")
-            amount = meta.get("rank_weight_capacity_bytes", meta.get("rank_weight_bytes"))
+            amount = meta.get("rank_weight_capacity_bytes")
             if isinstance(ident, str) and ident and type(amount) is int and amount >= 0:
                 staging[ident] = max(staging.get(ident, 0), amount)
         if meta.get("event_kind") != "embedding" or meta.get("phase") not in {"cpu_memory", "gpu_memory"}:
@@ -12050,7 +11909,7 @@ def _coverage_task_id(task: TaskSpec) -> str:
 def summarize_mmvq_hbm_mode(tasks: Sequence[TaskSpec], mode: str) -> Mapping[str, object]:
     """Count actual lowered decisions, never infer applicability from model names."""
     validate_mmvq_hbm_mode(mode)
-    total = applied = fallback = legacy = missing = 0
+    total = applied = fallback = missing = 0
     reasons: Dict[str, int] = {}
     seen = set()
     for task in tasks:
@@ -12066,9 +11925,12 @@ def summarize_mmvq_hbm_mode(tasks: Sequence[TaskSpec], mode: str) -> Mapping[str
         if not isinstance(bandwidth, Mapping):
             missing += 1
             continue
-        if bandwidth.get("requested_mmvq_hbm_mode") != MMVQ_HBM_MODE_NOMINAL:
-            legacy += 1
-        elif bandwidth.get("mmvq_nominal_mode_applied") is True:
+        requested_mode = bandwidth.get("requested_mmvq_hbm_mode")
+        if requested_mode is None:
+            missing += 1
+            continue
+        validate_mmvq_hbm_mode(requested_mode)
+        if bandwidth.get("mmvq_nominal_mode_applied") is True:
             applied += 1
         elif bandwidth.get("mmvq_nominal_mode_applied") is False:
             fallback += 1
@@ -12076,14 +11938,13 @@ def summarize_mmvq_hbm_mode(tasks: Sequence[TaskSpec], mode: str) -> Mapping[str
             reasons[reason] = reasons.get(reason, 0) + 1
         else:
             missing += 1
-    requested = total if mode == MMVQ_HBM_MODE_NOMINAL else 0
     return {
         "schema": "heterollm.mmvq-hbm-mode-coverage/v1", "requested_mode": mode,
         "count_scope": "deduplicated lowered simulator gpu_gemm tasks",
-        "gpu_gemm_tasks": total, "requested_tasks": requested,
-        "applied_tasks": applied, "fallback_tasks": fallback, "legacy_tasks": legacy,
+        "gpu_gemm_tasks": total, "requested_tasks": total,
+        "applied_tasks": applied, "fallback_tasks": fallback,
         "unobserved_tasks": missing,
-        "requested_unaccounted_tasks": requested - applied - fallback,
+        "requested_unaccounted_tasks": total - applied - fallback,
         "fallback_reason_counts": dict(sorted(reasons.items())),
         "accuracy_validated_tasks": 0, "native_dispatch_proven_tasks": 0,
         "native_timing_used": False, "bandwidth_saturation_proven": False,
@@ -12432,9 +12293,7 @@ def _declared_mmvq_work(
     # Shared source-rule geometry is intentionally binary-free.  It is only
     # reachable after the corresponding analytical gate has returned a batch
     # limit, and it never enters an issue-rate or calibrated-sample surface.
-    if not isinstance(target.metadata.get("llama_cpp_mmvq_source_contract"), Mapping) and not isinstance(
-        target.metadata.get("llama_cpp_conversion_source_contract"), Mapping
-    ):
+    if not isinstance(target.metadata.get("llama_cpp_mmvq_source_contract"), Mapping):
         geometry, reason = _analytical_mmvq_source_rule(
             scenario, workload, target, operation_metadata,
             model_weight_read=model_weight_read, rhs_is_activation=rhs_is_activation,
@@ -12449,25 +12308,10 @@ def _declared_mmvq_work(
             "formal_timing_eligible": False,
             "reason": "pinned CUDA source dispatch geometry; no binary receipt or measured rate",
         }
-    # MMVQ geometry has its own immutable source/runtime contract.  The
-    # conversion CTA surface is optional and must not be required merely to
-    # bind the vector kernel's launch geometry.  Keep the old conversion
-    # contract as a compatibility fallback for previously qualified scenarios.
-    source_contract = target.metadata.get("llama_cpp_mmvq_source_contract")
-    conversion = source_contract if isinstance(source_contract, Mapping) else target.metadata.get(
-        "llama_cpp_conversion_source_contract"
-    )
-    if not isinstance(conversion, Mapping):
-        return uncovered("missing_mmvq_runtime_source_contract")
-    mmq = target.metadata.get("llama_cpp_mmq_contract")
-    # A dedicated MMVQ contract is sufficient for vector geometry.  The MMQ
-    # dispatch contract is required only for the legacy conversion-contract
-    # fallback, so disabling MMQ source costing cannot suppress MMVQ geometry.
-    if isinstance(source_contract, Mapping):
-        if source_contract.get("force_cublas") is not False:
-            return uncovered("incompatible_mmvq_dispatch_contract")
-    elif not isinstance(mmq, Mapping) or mmq.get("force_cublas") is not False:
-        return uncovered("missing_or_incompatible_mmq_dispatch_contract")
+    # Vector geometry requires its own source/runtime contract.
+    source_contract = target.metadata["llama_cpp_mmvq_source_contract"]
+    if source_contract.get("force_cublas") is not False:
+        return uncovered("incompatible_mmvq_dispatch_contract")
     captured = scenario.workload.metadata.get("llama_cpp_gpu_native_invocations")
     if not isinstance(captured, Mapping) or captured.get("applied") is not True:
         return uncovered("missing_mmvq_source_capture")
@@ -12485,14 +12329,13 @@ def _declared_mmvq_work(
             return uncovered("mmvq_source_identity_mismatch:" + relative)
         matched[relative] = expected
     binding = {
-        "compute_capability": conversion.get("compute_capability"),
-        "highest_compiled_arch": conversion.get("highest_compiled_arch"),
-        "warp_size": conversion.get("warp_size"),
+        "compute_capability": source_contract.get("compute_capability"),
+        "highest_compiled_arch": source_contract.get("highest_compiled_arch"),
+        "warp_size": source_contract.get("warp_size"),
         "source_hashes": matched,
-        "runtime_binary_sha256": conversion.get("runtime_binary_sha256"),
-        "ordinary_contiguous_2d": conversion.get("ordinary_contiguous_2d"),
-        "force_cublas": conversion.get("force_cublas") if isinstance(source_contract, Mapping)
-        else mmq.get("force_cublas"),
+        "runtime_binary_sha256": source_contract.get("runtime_binary_sha256"),
+        "ordinary_contiguous_2d": source_contract.get("ordinary_contiguous_2d"),
+        "force_cublas": source_contract.get("force_cublas"),
         "mmvq_dispatch_enabled": scenario.workload.metadata.get("llama_cpp_f32_q8_1_mmvq"),
         "has_ids": False,
         "has_fusion": False,
@@ -12589,12 +12432,6 @@ def _declared_mmvq_source_limit(
         return 0
     source_contract = target.metadata.get("llama_cpp_mmvq_source_contract")
     if not isinstance(source_contract, Mapping):
-        source_contract = target.metadata.get("llama_cpp_conversion_source_contract")
-    if not isinstance(source_contract, Mapping):
-        return 0
-    if not isinstance(target.metadata.get("llama_cpp_mmvq_source_contract"), Mapping) and not isinstance(
-        target.metadata.get("llama_cpp_mmq_contract"), Mapping
-    ):
         return 0
     captured = scenario.workload.metadata.get("llama_cpp_gpu_native_invocations")
     if (not isinstance(captured, Mapping) or captured.get("applied") is not True
@@ -12605,7 +12442,7 @@ def _declared_mmvq_source_limit(
 
 def _mmvq_hbm_mode(scenario: ScenarioConfig) -> str:
     return validate_mmvq_hbm_mode(
-        scenario.workload.metadata.get("llama_cpp_mmvq_hbm_mode", MMVQ_HBM_MODE_LEGACY)
+        scenario.workload.metadata.get("llama_cpp_mmvq_hbm_mode", MMVQ_HBM_MODE_NOMINAL)
     )
 
 
@@ -13867,7 +13704,8 @@ def _add_rank_gemm(
                 or calibration_metadata.get("phase")
                 or _execution_phase_from_name(name),
             )
-            if launch_ns is not None and phase.name == "kernel_launch":
+            if (scenario.placement.metadata.get("native_calibration_apply_launch") is True
+                    and launch_ns is not None and phase.name == "kernel_launch"):
                 demands = tuple(
                     ResourceDemand(
                         d.resource_id,
@@ -14214,13 +14052,16 @@ def _add_rank_tensor_kernel(
                 if inferred_phase is not None:
                     execution_phase = inferred_phase
             cal_meta = {
-                "phase": execution_phase or phase.name,
+                "execution_phase": execution_phase,
                 "calibration_stage": (metadata or {}).get("calibration_stage") if metadata else None,
                 "coverage_component": (metadata or {}).get("coverage_component") if metadata else None,
                 "event_kind": (metadata or {}).get("event_kind") if metadata else None,
                 "linear_op": (metadata or {}).get("linear_op") if metadata else None,
                 "projection_id": (metadata or {}).get("projection_id") if metadata else None,
                 "token_shape": (metadata or {}).get("token_shape") if metadata else None,
+                "semantic_dtype": (metadata or {}).get("semantic_dtype"),
+                "semantic_layout": (metadata or {}).get("semantic_layout"),
+                "kernel_family": (metadata or {}).get("kernel_family"),
                 "native_calibration_shape_policy": scenario.placement.metadata.get(
                     "native_calibration_shape_policy"
                 ),
@@ -14248,7 +14089,8 @@ def _add_rank_tensor_kernel(
             # compute calibration so one graph launch is not charged once per
             # semantic operator.
             launch_ns = launch_calibration_ns(calibration, execution_phase)
-            if launch_ns is not None and phase.name == "kernel_launch":
+            if (scenario.placement.metadata.get("native_calibration_apply_launch") is True
+                    and launch_ns is not None and phase.name == "kernel_launch"):
                 demands = tuple(
                     ResourceDemand(
                         d.resource_id,
@@ -14380,13 +14222,16 @@ def _add_rank_fused_attention(
                 if inferred_phase is not None:
                     execution_phase = inferred_phase
             cal_meta = {
-                "phase": execution_phase or phase.name,
+                "execution_phase": execution_phase,
                 "calibration_stage": (metadata or {}).get("calibration_stage") if metadata else None,
                 "coverage_component": (metadata or {}).get("coverage_component") if metadata else None,
                 "event_kind": (metadata or {}).get("event_kind") if metadata else None,
                 "linear_op": (metadata or {}).get("linear_op") if metadata else None,
                 "projection_id": (metadata or {}).get("projection_id") if metadata else None,
                 "token_shape": (metadata or {}).get("token_shape") if metadata else None,
+                "semantic_dtype": (metadata or {}).get("semantic_dtype"),
+                "semantic_layout": (metadata or {}).get("semantic_layout"),
+                "kernel_family": (metadata or {}).get("kernel_family"),
             }
             calibrated_phase = calibrate_cost_phase(
                 replace(phase, demands=demands), cal_meta, calibration,
@@ -14762,13 +14607,16 @@ def _add_rank_primitive(
                 if inferred_phase is not None:
                     execution_phase = inferred_phase
             cal_meta = {
-                "phase": execution_phase or phase.name,
+                "execution_phase": execution_phase,
                 "calibration_stage": (metadata or {}).get("calibration_stage") if metadata else None,
                 "coverage_component": (metadata or {}).get("coverage_component") if metadata else None,
                 "event_kind": (metadata or {}).get("event_kind") if metadata else None,
                 "linear_op": (metadata or {}).get("linear_op") if metadata else None,
                 "projection_id": (metadata or {}).get("projection_id") if metadata else None,
                 "token_shape": (metadata or {}).get("token_shape") if metadata else None,
+                "semantic_dtype": (metadata or {}).get("semantic_dtype"),
+                "semantic_layout": (metadata or {}).get("semantic_layout"),
+                "kernel_family": (metadata or {}).get("kernel_family"),
             }
             calibrated_phase = calibrate_cost_phase(
                 replace(phase, demands=demands), cal_meta, calibration,
@@ -16092,7 +15940,7 @@ def _add_kv_read(
         # these copies itself. A second coarse transfer would both duplicate
         # traffic and invent an unaddressed NAND read during every attention.
         and not (scenario.placement.kv_policy.layout_mode == "paged_pool"
-                 and getattr(scenario.workload.scheduler, "mode", "static") == "continuous")
+                 and scenario.workload.scheduler.mode == "continuous")
         and offload
         and offload_ratio > 0
         and offload != access_component
@@ -17863,7 +17711,7 @@ def _compile_parallel_mtp_proposer(
                         "graph_sequence_index": operator.sequence_index,
                         "prediction_index": descriptor.prediction_index,
                         "declared_weight_bytes": descriptor.weight_bytes,
-                        "rank_weight_bytes": weight_shard.local_size,
+                        "rank_weight_capacity_bytes": weight_shard.local_size,
                         "mtp_ep_replica": ep_rank,
                         "proposed_tokens": verifier_tokens,
                         "draft_tokens": draft_tokens,
@@ -18259,7 +18107,6 @@ def _compile_parallel_embedding(
             "tensor_id": weight_tensor_id,
             "output_tensor_id": output_tensor_id,
             "declared_weight_bytes": declared_weight_bytes,
-            "rank_weight_bytes": rank_weight_bytes,
             "rank_weight_capacity_bytes": rank_weight_bytes,
             "lookup_workload_bytes": lookup_bytes,
             "physical_weight_row_bytes": int(
@@ -21948,7 +21795,7 @@ def _compile_parallel_dense_mlp_uncached(
 ) -> str:
     stage = plan.stage_for_layer(layer)
     ranks = plan.tp_group(stage, 0)
-    gated_mlp = bool(getattr(layer, "gated_mlp", True))
+    gated_mlp = bool(layer.gated_mlp)
     down_shard = shard_extent(
         layer.intermediate_size,
         plan.tp_degree,
@@ -24007,7 +23854,7 @@ def _compile_parallel_lm_head(
                     ),
                     "logits_vocabulary_status": vocabulary_status,
                     "declared_weight_bytes": declared_weight_bytes,
-                    "rank_weight_bytes": rank_weight_bytes,
+                    "rank_weight_capacity_bytes": rank_weight_bytes,
                     **({"final_layer_output_selection": _selection_audit(output_selection, "lm_head")}
                        if output_selection is not None else {}),
                 },
@@ -24854,66 +24701,33 @@ def _emit_parallel_token(
 
 
 def _serving_item_verifier_tokens(item: object) -> int:
-    explicit = getattr(item, "verifier_tokens", None)
-    if explicit is not None:
-        return max(0, int(explicit))
-    return max(
-        0,
-        int(
-            getattr(item, "proposed_tokens", 0)
-            or getattr(item, "token_count", 0)
-        ),
-    )
+    return item.verifier_tokens
 
 
 def _serving_item_main_tokens(item: object) -> int:
-    explicit = getattr(item, "main_tokens", None)
-    if explicit is not None:
-        return max(0, int(explicit))
-    return 1 if str(getattr(item, "phase", "")) == "mtp" else 0
+    return item.main_tokens
 
 
 def _serving_item_draft_tokens(item: object) -> int:
-    explicit = getattr(item, "draft_tokens", None)
-    if explicit is not None:
-        return max(0, int(explicit))
-    return max(
-        0,
-        _serving_item_verifier_tokens(item) - _serving_item_main_tokens(item),
-    )
+    return item.draft_tokens
 
 
 def _serving_item_committed_tokens(item: object) -> int:
-    explicit = getattr(item, "committed_tokens", None)
-    if explicit is not None:
-        return max(0, int(explicit))
-    proposed = _serving_item_verifier_tokens(item)
-    return round_accepted_prefix(
-        proposed,
-        float(getattr(item, "expected_accepted_tokens", 1.0)),
-    )
+    return item.committed_tokens
 
 
 def _serving_item_logit_tokens(item: object) -> int:
-    """Return output-head positions without conflating them with backbone work."""
-
-    token_count = max(0, int(getattr(item, "token_count", 0)))
-    explicit = getattr(item, "logit_tokens", None)
-    if explicit is None:
-        # Compatibility for custom cohorts created before logit positions
-        # became explicit: their historical contract requested every output.
-        return token_count
-    return min(token_count, max(0, int(explicit)))
+    return item.logit_tokens
 
 
 def _serving_item_is_mtp(item: object) -> bool:
-    return str(getattr(item, "phase", "")).strip().lower() == "mtp"
+    return str(item.phase).strip().lower() == "mtp"
 
 
 def _serving_mtp_items(cohort: object) -> Tuple[object, ...]:
     return tuple(
         item
-        for item in tuple(getattr(cohort, "items", ()) or ())
+        for item in tuple(cohort.items or ())
         if _serving_item_is_mtp(item)
     )
 
@@ -25250,19 +25064,19 @@ def _serving_invocation_lanes(
 ) -> Tuple[Tuple[_ServingInvocationLane, ...], ...]:
     """Project each scheduler item into request-local ordered positions."""
 
-    kind = str(getattr(cohort, "kind", "decode"))
+    kind = str(cohort.kind)
     item_lanes: List[Tuple[_ServingInvocationLane, ...]] = []
     for item_index, item in enumerate(
-        tuple(getattr(cohort, "items", ()) or ())
+        tuple(cohort.items or ())
     ):
-        token_count = max(0, int(getattr(item, "token_count", 0)))
-        context = max(0, int(getattr(item, "context_tokens", 0)))
-        phase = str(getattr(item, "phase", kind))
-        append_raw = getattr(item, "kv_append_tokens", None)
+        token_count = max(0, int(item.token_count))
+        context = max(0, int(item.context_tokens))
+        phase = str(item.phase)
+        append_raw = item.kv_append_tokens
         append_tokens = max(
             0, int(token_count if append_raw is None else append_raw)
         )
-        materialized_raw = getattr(item, "kv_materialized_tokens", None)
+        materialized_raw = item.kv_materialized_tokens
         materialized_tokens = max(
             0,
             int(
@@ -25299,7 +25113,7 @@ def _serving_invocation_lanes(
             lanes.append(
                 _ServingInvocationLane(
                     item_index=item_index,
-                    request_id=str(getattr(item, "request_id", "")),
+                    request_id=str(item.request_id),
                     phase=phase,
                     position=position,
                     context_tokens=context + position + 1,
@@ -25329,11 +25143,11 @@ def _serving_cohort_kv_scan_tokens(
 ) -> int:
     """Read a runtime-proven physical scan bound without changing KV owners."""
 
-    metadata = getattr(cohort, "metadata", {})
+    metadata = cohort.metadata
     value = metadata.get(metadata_key) if isinstance(metadata, Mapping) else None
     if value is None:
         return 0
-    items = tuple(getattr(cohort, "items", ()) or ())
+    items = tuple(cohort.items or ())
     if metadata.get("llama_cpp_kv_scan_phase") == "prefill_rectangular":
         occupied = metadata.get("llama_cpp_kv_occupied_rows")
         append_rows = _serving_cohort_kv_shape(cohort)[2]
@@ -25341,15 +25155,15 @@ def _serving_cohort_kv_scan_tokens(
             isinstance(value, bool) or not isinstance(value, int) or value <= 0
             or isinstance(occupied, bool) or not isinstance(occupied, int)
             or occupied < append_rows or occupied > value
-            or str(getattr(cohort, "kind", "")) not in {"prefill", "mixed"}
+            or str(cohort.kind) not in {"prefill", "mixed"}
             or not items
             or any(
-                str(getattr(item, "phase", "")) not in {"prefill", "decode"}
-                or int(getattr(item, "token_count", 0)) <= 0
-                or (str(getattr(item, "phase", "")) == "decode"
-                    and int(getattr(item, "token_count", 0)) != 1)
-                or value < int(getattr(item, "context_tokens", 0))
-                    + int(getattr(item, "token_count", 0))
+                str(item.phase) not in {"prefill", "decode"}
+                or int(item.token_count) <= 0
+                or (str(item.phase) == "decode"
+                    and int(item.token_count) != 1)
+                or value < int(item.context_tokens)
+                    + int(item.token_count)
                 for item in items
             )
         ):
@@ -25357,11 +25171,11 @@ def _serving_cohort_kv_scan_tokens(
         return value
     if (
         isinstance(value, bool) or not isinstance(value, int) or value <= 0
-        or str(getattr(cohort, "kind", "")) != "decode" or not items
+        or str(cohort.kind) != "decode" or not items
         or any(
-            str(getattr(item, "phase", "")) != "decode"
-            or int(getattr(item, "token_count", 0)) != 1
-            or value < int(getattr(item, "context_tokens", 0)) + 1
+            str(item.phase) != "decode"
+            or int(item.token_count) != 1
+            or value < int(item.context_tokens) + 1
             for item in items
         )
     ):
@@ -25383,7 +25197,7 @@ def _serving_invocation_groups(
     state owners without an explicit stateful-batch capability.
     """
 
-    kind = str(getattr(cohort, "kind", "decode"))
+    kind = str(cohort.kind)
     kv_scan_tokens = _serving_cohort_kv_scan_tokens(cohort)
     q4_view_tokens = _serving_cohort_kv_scan_tokens(
         cohort, metadata_key="llama_cpp_q4_kv_materialization_view_tokens_lower_bound",
@@ -25420,7 +25234,7 @@ def _serving_invocation_groups(
         cohort,
         inter_invocation_positions=split_positions,
     )
-    raw_metadata = getattr(cohort, "metadata", {})
+    raw_metadata = cohort.metadata
     metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
     prefill_scan = bool(kv_scan_tokens or q4_view_tokens) and (
         metadata.get("llama_cpp_kv_scan_phase") == "prefill_rectangular"
@@ -26026,13 +25840,8 @@ def _ordered_residency_accesses(
                 "operation": operation,
                 "lifecycle": "temporary",
                 "allocation_id": allocation_id,
-                "tensor_id": allocation_id,
                 "requested_tensor_id": allocation_id,
-                "requested_tensor": allocation_id,
-                "requested_view": allocation_id,
                 "canonical_owner_id": allocation_id,
-                "canonical_owner": allocation_id,
-                "target_id": allocation_id,
                 "physical_tensor": allocation_id,
                 "byte_count": byte_count,
                 "size_bytes": byte_count,
@@ -26113,15 +25922,9 @@ def _ordered_residency_accesses(
         access: Dict[str, object] = {
             "kind": "model_weight",
             "operation": "read",
-            "tensor_id": requested,
             "requested_tensor_id": requested,
-            "requested_tensor": requested,
-            "requested_view": requested,
             "canonical_owner_id": canonical_owner,
-            "canonical_owner": canonical_owner,
-            "target_id": canonical_owner,
             "physical_tensor": physical_tensor,
-            "invocation_id": invocation_id,
             "weight_read_invocation_id": invocation_id,
             "byte_count": byte_count,
             "consumer_task_ids": (task.task_id,),
@@ -26159,8 +25962,8 @@ def _ordered_residency_accesses(
         if physical_group_id is None:
             physical_group_id = metadata.get("mtp_proposer_invocation_group_id")
         if physical_group_id is None:
-            # Offline compilation and older callers have no physical launch
-            # boundary.  Preserve their exact invocation-level behavior.
+            # Offline compilation has no physical launch boundary; its
+            # lifecycle is explicitly scoped to each logical invocation.
             seen_invocations.add(invocation_id)
             ordered_entries.append((task_index, access))
             continue
@@ -26286,7 +26089,6 @@ def _ordered_residency_accesses(
             target_component_id,
             range_identity,
         )
-        merged["invocation_id"] = physical_invocation_id
         merged["weight_read_invocation_id"] = physical_invocation_id
         merged["physical_weight_invocation_id"] = physical_invocation_id
         merged["physical_invocation_group_id"] = physical_group_id
@@ -26372,13 +26174,8 @@ def _ordered_residency_accesses(
         access.update(
             {
                 "operation": "write",
-                "tensor_id": allocation_id,
                 "requested_tensor_id": allocation_id,
-                "requested_tensor": allocation_id,
-                "requested_view": allocation_id,
                 "canonical_owner_id": allocation_id,
-                "canonical_owner": allocation_id,
-                "target_id": allocation_id,
                 "physical_tensor": allocation_id,
                 "byte_count": selected_bytes,
                 "size_bytes": selected_bytes,
@@ -26398,14 +26195,16 @@ def _declared_transient_residency_granule(
     """Return an explicitly declared residency granule, or exact bytes.
 
     The placement-owned runtime allocation contract is the closest planner
-    input to the compiled physical-pool policy.  Serving-runtime metadata is
-    the public fallback, with workload values overriding placement values.
+    input to the compiled physical-pool policy.  Workload serving-runtime
+    metadata supplies the user declaration when no compiled contract exists.
     No KV page size or platform constant is inferred when neither declaration
     is present.
     """
 
-    placement_metadata = getattr(scenario.placement, "metadata", {})
-    workload_metadata = getattr(scenario.workload, "metadata", {})
+    placement_metadata = scenario.placement.metadata
+    workload_metadata = scenario.workload.metadata
+    if "serving_runtime" in placement_metadata:
+        raise ValueError("serving_runtime must be declared in workload.metadata")
     if isinstance(placement_metadata, Mapping):
         ledger = placement_metadata.get("capacity_ledger")
         if isinstance(ledger, Mapping):
@@ -26423,30 +26222,12 @@ def _declared_transient_residency_granule(
                         "residency_granule_bytes"
                     )
 
-    selected: Optional[int] = None
-    selected_source = ""
-    for owner, metadata in (
-        ("placement", placement_metadata),
-        ("workload", workload_metadata),
-    ):
-        if not isinstance(metadata, Mapping):
-            continue
-        runtime = metadata.get("serving_runtime")
-        if not isinstance(runtime, Mapping):
-            continue
-        raw = runtime.get("residency_granule_bytes")
-        if (
-            not isinstance(raw, bool)
-            and isinstance(raw, int)
-            and raw > 0
-        ):
-            selected = raw
-            selected_source = (
-                "{}.metadata.serving_runtime."
-                "residency_granule_bytes"
-            ).format(owner)
-    if selected is not None:
-        return selected, selected_source
+    runtime = workload_metadata.get("serving_runtime", {})
+    if not isinstance(runtime, Mapping):
+        raise ValueError("workload.metadata.serving_runtime must be a mapping")
+    raw = runtime.get("residency_granule_bytes")
+    if not isinstance(raw, bool) and isinstance(raw, int) and raw > 0:
+        return raw, "workload.metadata.serving_runtime.residency_granule_bytes"
     return 1, "exact_unrounded_no_declared_granule"
 
 
@@ -26964,13 +26745,10 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
     audit id.  Per-item shapes are exact and the cache performs no interpolation.
     """
 
-    kind = str(getattr(cohort, "kind", "decode"))
+    kind = str(cohort.kind)
 
-    def item_logit_tokens_key(item: object) -> Optional[int]:
-        explicit = getattr(item, "logit_tokens", None)
-        if explicit is None:
-            return None
-        return int(explicit)
+    def item_logit_tokens_key(item: object) -> int:
+        return item.logit_tokens
 
     if kind in {
         "kv_swap_out",
@@ -26978,7 +26756,7 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
         "linear_state_swap_out",
         "linear_state_swap_in",
     }:
-        raw_metadata = getattr(cohort, "metadata", {})
+        raw_metadata = cohort.metadata
         metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
         return (
             "transfer",
@@ -26988,18 +26766,18 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
             int(metadata.get("byte_count", 0)),
             int(metadata.get("page_count", 0)),
         )
-    items = tuple(getattr(cohort, "items", ()) or ())
+    items = tuple(cohort.items or ())
     item_shapes = tuple(
         (
-            str(getattr(item, "request_id", "")),
-            str(getattr(item, "phase", kind)),
-            max(0, int(getattr(item, "token_count", 0))),
-            max(0, int(getattr(item, "context_tokens", 0))),
+            str(item.request_id),
+            str(item.phase),
+            max(0, int(item.token_count)),
+            max(0, int(item.context_tokens)),
             max(
                 0,
                 int(
-                    getattr(item, "token_count", 0)
-                    if getattr(item, "kv_append_tokens", None) is None
+                    item.token_count
+                    if item.kv_append_tokens is None
                     else getattr(item, "kv_append_tokens")
                 ),
             ),
@@ -27007,11 +26785,11 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
                 0,
                 int(
                     (
-                        getattr(item, "token_count", 0)
-                        if getattr(item, "kv_append_tokens", None) is None
+                        item.token_count
+                        if item.kv_append_tokens is None
                         else getattr(item, "kv_append_tokens")
                     )
-                    if getattr(item, "kv_materialized_tokens", None) is None
+                    if item.kv_materialized_tokens is None
                     else getattr(item, "kv_materialized_tokens")
                 ),
             ),
@@ -27028,7 +26806,7 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
         for item in items
     )
     token_batch = sum(
-        max(0, int(getattr(item, "token_count", 0))) for item in items
+        max(0, int(item.token_count)) for item in items
     )
     proposed_tokens = sum(_serving_item_verifier_tokens(item) for item in items)
     main_tokens = sum(_serving_item_main_tokens(item) for item in items)
@@ -27047,7 +26825,7 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
     q4_view_tokens = _serving_cohort_kv_scan_tokens(
         cohort, metadata_key="llama_cpp_q4_kv_materialization_view_tokens_lower_bound",
     )
-    raw_metadata = getattr(cohort, "metadata", {})
+    raw_metadata = cohort.metadata
     metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
     scan_prefix_identity = (
         (metadata["llama_cpp_kv_scan_phase"], metadata.get("llama_cpp_kv_occupied_rows"))
@@ -27056,7 +26834,7 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
     return (
         "compute",
         kind,
-        float(getattr(cohort, "proposal_cost_scale", 1.0)),
+        float(cohort.proposal_cost_scale),
         item_shapes,
         len(items),
         token_batch,
@@ -27215,15 +26993,15 @@ class TopologyAwareBatchCostProvider:
 
 
 def _serving_cohort_context_tokens(cohort: object) -> int:
-    items = tuple(getattr(cohort, "items", ()) or ())
+    items = tuple(cohort.items or ())
     token_batch = sum(
-        max(0, int(getattr(item, "token_count", 0))) for item in items
+        max(0, int(item.token_count)) for item in items
     )
     if token_batch <= 0:
         return 1
     weighted_context = sum(
-        max(0, int(getattr(item, "context_tokens", 0)))
-        * max(0, int(getattr(item, "token_count", 0)))
+        max(0, int(item.context_tokens))
+        * max(0, int(item.token_count))
         for item in items
     )
     return max(1, int(math.ceil(weighted_context / float(token_batch))))
@@ -27237,20 +27015,20 @@ def _serving_cohort_kv_shape(cohort: object) -> Tuple[int, int, int]:
     rows.  Decode/MTP retain their per-query historical access semantics.
     """
 
-    kind = str(getattr(cohort, "kind", "decode"))
+    kind = str(cohort.kind)
     prior_kv_token_reads = 0
     internal_causal_pairs = 0
     kv_append_tokens = 0
-    for item in tuple(getattr(cohort, "items", ()) or ()):
-        token_count = max(0, int(getattr(item, "token_count", 0)))
-        context_tokens = max(0, int(getattr(item, "context_tokens", 0)))
-        phase = str(getattr(item, "phase", kind))
+    for item in tuple(cohort.items or ()):
+        token_count = max(0, int(item.token_count))
+        context_tokens = max(0, int(item.context_tokens))
+        phase = str(item.phase)
         if kind == "prefill" or phase in {"prefill", "recompute"}:
             prior_kv_token_reads += context_tokens
         else:
             prior_kv_token_reads += token_count * context_tokens
         internal_causal_pairs += token_count * (token_count + 1) // 2
-        raw_append = getattr(item, "kv_append_tokens", None)
+        raw_append = item.kv_append_tokens
         kv_append_tokens += max(
             0,
             int(token_count if raw_append is None else raw_append),
@@ -27262,14 +27040,14 @@ def _serving_cohort_kv_materialized_tokens(cohort: object) -> int:
     """Return actual per-round KV writes, including rejected MTP proposals."""
 
     total = 0
-    for item in tuple(getattr(cohort, "items", ()) or ()):
-        token_count = max(0, int(getattr(item, "token_count", 0)))
-        raw_append = getattr(item, "kv_append_tokens", None)
+    for item in tuple(cohort.items or ()):
+        token_count = max(0, int(item.token_count))
+        raw_append = item.kv_append_tokens
         append_tokens = max(
             0,
             int(token_count if raw_append is None else raw_append),
         )
-        raw_materialized = getattr(item, "kv_materialized_tokens", None)
+        raw_materialized = item.kv_materialized_tokens
         total += max(
             0,
             int(
@@ -27285,9 +27063,9 @@ def _serving_cohort_prior_attention_pairs(cohort: object) -> int:
     """Historical-prompt attention work, independent of external KV reads."""
 
     return sum(
-        max(0, int(getattr(item, "context_tokens", 0)))
-        * max(0, int(getattr(item, "token_count", 0)))
-        for item in tuple(getattr(cohort, "items", ()) or ())
+        max(0, int(item.context_tokens))
+        * max(0, int(item.token_count))
+        for item in tuple(cohort.items or ())
     )
 
 
@@ -27578,7 +27356,7 @@ def _execution_task_facts(
             retained_metadata = {**original_task.metadata,
                 "physical_replay_source": "unresolved_planner_task"}
             if any(key in retained_metadata for key in (
-                    "physical_execution", "physical_execution_by_owner", "physical_demands_resource_ids")):
+                    "physical_execution_by_owner", "physical_demands_resource_ids")):
                 raise ValueError("physical stage source must be an unresolved planner task: " + task_id)
         if retained_metadata:
             fact["metadata"] = retained_metadata
@@ -29325,11 +29103,8 @@ def _physical_execution_rows(tasks):
                 if isinstance(raw, Mapping):
                     yield task, raw, str(raw["kind"]).upper()
             continue
-        raw = task.metadata.get("physical_execution")
-        if isinstance(raw, Mapping):
-            config = task.metadata.get("physical_memory_config")
-            kind_value = config.get("kind", "") if isinstance(config, Mapping) else getattr(config, "kind", "")
-            yield task, raw, str(getattr(kind_value, "value", kind_value)).upper()
+        if "physical_execution" in task.metadata:
+            raise ValueError("physical tasks require physical_execution_by_owner")
 
 
 def _accumulate_physical_resource_totals(resources, task, raw, resource_owners):
@@ -29342,22 +29117,13 @@ def _accumulate_physical_resource_totals(resources, task, raw, resource_owners):
         if resource_id not in busy:
             continue
         if not isinstance(moved, Mapping):
-            contributors = task.metadata.get("physical_execution_by_owner", {})
-            if isinstance(contributors, Mapping) and sum(
-                isinstance(item, Mapping) and resource_id in item.get("resource_busy_ns", {})
-                for item in contributors.values()
-            ) > 1:
-                raise ValueError(
-                    f"shared physical resource {resource_id!r} requires owner resource_bytes; "
-                    "aggregate demand cannot be attributed to multiple owners")
+            raise ValueError("physical owner rows require resource_bytes")
         owner = (resource_owners or {}).get(resource_id, resolved_owners.get(resource_id, "unknown"))
         row = resources.setdefault(resource_id, {
             "owner": owner, "bytes_moved": 0, "service_ns": 0.0, })
         if row["owner"] != owner:
             row["owner"] = resource_id
-        # Older serialized rows lacked owner byte maps. Their ordinary
-        # single-owner demand remains the compatibility fallback.
-        row["bytes_moved"] += int(moved.get(resource_id, 0) if isinstance(moved, Mapping) else demand.bytes_moved)
+        row["bytes_moved"] += int(moved.get(resource_id, 0))
         row["service_ns"] += float(busy[resource_id])
 
 
@@ -29374,8 +29140,8 @@ def _summarize_nand_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
     peaks = {key: 0 for key in ("host_outstanding_at_admission_peak",
              "host_read_outstanding_at_admission_peak", "host_write_outstanding_at_admission_peak")}
     peak_observed = {key: 0 for key in peaks}
-    # Legacy rows omit some counters. Only publish an optional total when
-    # every physical owner recorded it; an absent observation is not zero.
+    # Optional physical counters are published only when every owner recorded
+    # them; an unavailable observation is not zero.
     measured_observed = {key: 0 for key in (
         "logical_read_bytes", "logical_write_bytes", "internal_transfer_bytes",
         "pages_read", "pages_programmed", "pages_touched", "media_waves",
@@ -29490,8 +29256,8 @@ def _lower_serving_cohort(
     cached_router: Optional[TopologyRouter] = None,
     scenario_hash: Optional[str] = None,
 ) -> _ServingCohortLowering:
-    cohort_id = str(getattr(cohort, "cohort_id", "online-cohort"))
-    kind = str(getattr(cohort, "kind", "decode"))
+    cohort_id = str(cohort.cohort_id)
+    kind = str(cohort.kind)
     if kind in {
         "kv_swap_out",
         "kv_swap_in",
@@ -29508,11 +29274,11 @@ def _lower_serving_cohort(
             scenario_hash=scenario_hash,
         )
 
-    items = tuple(getattr(cohort, "items", ()) or ())
+    items = tuple(cohort.items or ())
     if not items:
         raise ValueError("服务批次至少需要包含一个条目")
     mtp_items = _serving_mtp_items(cohort)
-    token_batch = sum(max(0, int(getattr(item, "token_count", 0))) for item in items)
+    token_batch = sum(max(0, int(item.token_count)) for item in items)
     if token_batch <= 0:
         raise ValueError("服务批次的 token_count 必须为正数")
     invocation_groups = _serving_invocation_groups(scenario, cohort)
@@ -29527,7 +29293,7 @@ def _lower_serving_cohort(
     )
     draft_step_request_ids = tuple(
         tuple(
-            str(getattr(item, "request_id", ""))
+            str(item.request_id)
             for item, drafts in zip(mtp_items, draft_counts)
             if drafts > step
         )
@@ -29581,9 +29347,9 @@ def _lower_serving_cohort(
     ] = ()
     if mtp_policy is not None and mtp_policy.enabled:
         catchup_rows = tuple(
-            str(getattr(item, "request_id", ""))
+            str(item.request_id)
             for item in items
-            for _ in range(max(0, int(getattr(item, "token_count", 0))))
+            for _ in range(max(0, int(item.token_count)))
         )
         catchup_groups: List[Mapping[str, object]] = []
         catchup_predecessor_group_id: Optional[str] = None
@@ -29663,7 +29429,7 @@ def _lower_serving_cohort(
         output_tokens=0,
     )
     builder = _TaskBuilder(request)
-    builder._physical_kv_page_table = getattr(cohort, "metadata", {}).get("physical_kv_page_table")
+    builder._physical_kv_page_table = cohort.metadata.get("physical_kv_page_table")
     start = builder.add(
         cohort_id + ".start",
         TaskCategory.POLICY,
@@ -29671,7 +29437,7 @@ def _lower_serving_cohort(
         metadata={
             "event_kind": "serving_cohort_start",
             "participant_request_ids": tuple(
-                str(getattr(item, "request_id", "")) for item in items
+                str(item.request_id) for item in items
             ),
             "cohort_kind": kind,
         },
@@ -29788,9 +29554,9 @@ def _lower_serving_cohort(
             first_decode_invocation=(
                 kind == "decode"
                 and all(
-                    int(getattr(item, "context_tokens", 0) or 0)
+                    int(item.context_tokens or 0)
                     == int(next((r.prompt_tokens for r in scenario.workload.requests
-                                 if r.request_id == str(getattr(item, "request_id", ""))), -1))
+                                 if r.request_id == str(item.request_id)), -1))
                     for item in items
                 )
             ),
@@ -29823,9 +29589,9 @@ def _lower_serving_cohort(
             name=cohort_id + ".target_operator_frontend", execution_phase=kind,
             first_decode_invocation=(
                 kind == "decode" and all(
-                    int(getattr(item, "context_tokens", 0) or 0)
+                    int(item.context_tokens or 0)
                     == int(next((r.prompt_tokens for r in scenario.workload.requests
-                                 if r.request_id == str(getattr(item, "request_id", ""))), -1))
+                                 if r.request_id == str(item.request_id)), -1))
                     for item in items
                 )
             ),
@@ -29911,9 +29677,9 @@ def _lower_serving_cohort(
     item_terminal_rows: List[Mapping[str, object]] = []
     item_terminal_ids: List[str] = []
     for item_index, item in enumerate(items):
-        request_id = str(getattr(item, "request_id", ""))
-        item_phase = str(getattr(item, "phase", kind))
-        raw_cursor = getattr(item, "completion_cursor", None)
+        request_id = str(item.request_id)
+        item_phase = str(item.phase)
+        raw_cursor = item.completion_cursor
         completion_cursor = (
             None if raw_cursor is None else max(0, int(raw_cursor))
         )
@@ -30021,21 +29787,21 @@ def _lower_serving_cohort(
             ),
             "phase_item_counts": {
                 phase: sum(
-                    str(getattr(item, "phase", "")) == phase
+                    str(item.phase) == phase
                     for item in items
                 )
                 for phase in tuple(
-                    dict.fromkeys(str(getattr(item, "phase", "")) for item in items)
+                    dict.fromkeys(str(item.phase) for item in items)
                 )
             },
             "phase_token_counts": {
                 phase: sum(
-                    max(0, int(getattr(item, "token_count", 0)))
+                    max(0, int(item.token_count))
                     for item in items
-                    if str(getattr(item, "phase", "")) == phase
+                    if str(item.phase) == phase
                 )
                 for phase in tuple(
-                    dict.fromkeys(str(getattr(item, "phase", "")) for item in items)
+                    dict.fromkeys(str(item.phase) for item in items)
                 )
             },
             "ragged_context_mean": context_tokens,
@@ -30131,7 +29897,7 @@ def _lower_serving_cohort(
             ),
             "mtp_proposer_request_count": len(
                 {
-                    str(getattr(item, "request_id", ""))
+                    str(item.request_id)
                     for item in mtp_items
                 }
             ),
@@ -30168,7 +29934,7 @@ def _lower_serving_transfer(
     cached_router: Optional[TopologyRouter],
     scenario_hash: Optional[str],
 ) -> _ServingCohortLowering:
-    raw_metadata = getattr(cohort, "metadata", {})
+    raw_metadata = cohort.metadata
     metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
     source = str(metadata.get("source_component", ""))
     target = str(metadata.get("target_component", ""))
@@ -30304,7 +30070,7 @@ def _serving_lowering_from_builder(
         model_name=scenario.model.name,
         hardware_name=scenario.hardware.name,
         workload_name=scenario.workload.name,
-        calibration_version=ANALYTICAL_MODEL_VERSION,
+        analytical_model_version=ANALYTICAL_MODEL_VERSION,
         evidence=EvidenceStatus.ANALYTICAL,
         assumptions=assumptions,
         assumptions_zh=manifest_assumptions_zh,

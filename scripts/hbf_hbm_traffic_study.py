@@ -64,7 +64,7 @@ def run_hot_read_trace(*, hot_reads: int, hbm_pages: int = 25) -> dict[str, Any]
     probe = DynamicKVPool(components, tokens_per_page=TOKENS_PER_PAGE, page_bytes=PAGE,
                           offload_components=("hbf",))
     required_active = HOT_PAGES + (1 if hot_reads < READ_COUNT else 0)
-    admitted = probe.resize("staging-probe", required_active, compatible_components=("hbm",))
+    admitted = probe.resize_detailed("staging-probe", required_active, compatible_components=("hbm",)).success
     if not admitted or hbf_pages < COLD_PAGES:
         return {**base, "runnable": False, "status": "configuration_rejected",
                 "capacity_bytes": dict(probe.capacity_bytes_by_component),
@@ -89,7 +89,7 @@ def run_hot_read_trace(*, hot_reads: int, hbm_pages: int = 25) -> dict[str, Any]
     runtime = PhysicalRuntimeContext(capture_details=False)
     router = TopologyRouter(hardware)
     now = [0.]
-    executor = PhysicalKVTransferExecutor(hardware, runtime=runtime, topology=router,
+    executor = PhysicalKVTransferExecutor(hardware.components, runtime=runtime, topology=router,
                                           arrival_ns=lambda _: now[0], namespace="traffic-hot-read")
     pool = DynamicKVPool(components, tokens_per_page=TOKENS_PER_PAGE, page_bytes=PAGE,
                          topology=router, offload_components=("hbf",), transfer_executor=executor)
@@ -110,7 +110,7 @@ def run_hot_read_trace(*, hot_reads: int, hbm_pages: int = 25) -> dict[str, Any]
         capture_peak()
 
     def seed(request: str, pages: int):
-        if not pool.resize(request, pages, compatible_components=("hbm",)):
+        if not pool.resize_detailed(request, pages, compatible_components=("hbm",)).success:
             raise RuntimeError(pool.last_error or "initial page allocation failed")
         executor.sync_pages(pool.pages())
         capture_peak()

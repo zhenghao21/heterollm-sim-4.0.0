@@ -42,13 +42,6 @@ class RuntimePhase(IntEnum):
     INTERRUPT = 120
     CPU_COMPLETION = 130
 
-    PLACEMENT = PLACEMENT_DECISION
-    ALLOCATOR = ALLOCATION
-    NVME = STORAGE
-    IOMMU_DMA_PCIE = TRANSFER
-    GPU_COMMAND_PROCESSOR = GPU_FRONTEND
-    MMU_TLB_L2_VRAM = MEMORY
-
 
 class InstructionClass(StrEnum):
     """Coarse instruction population carried by one aggregate batch."""
@@ -105,11 +98,6 @@ class RuntimeAction(StrEnum):
     COMPUTE = "compute"
     INTERRUPT = "interrupt"
     CPU_COMPLETE = "cpu_complete"
-
-    ALLOCATION = ALLOCATE
-    GPU_COMMAND_PROCESSOR = GPU_COMMAND_PROCESS
-    MMU_TLB = MMU_TLB_LOOKUP
-    CPU_COMPLETION = CPU_COMPLETE
 
 
 def decode_runtime_metadata(
@@ -210,10 +198,6 @@ class InstructionBatch:
             "byte_count": self.byte_count,
         }
 
-    @property
-    def count(self) -> int:
-        return self.instruction_count
-
 
 @dataclass(frozen=True)
 class ControllerTransactionBatch:
@@ -241,19 +225,11 @@ class ControllerTransactionBatch:
             "byte_count": self.byte_count,
         }
 
-    @property
-    def controller_kind(self) -> ControllerKind:
-        return self.controller
-
-    @property
-    def count(self) -> int:
-        return self.transaction_count
-
 
 def decode_aggregate_metadata(
     task: TaskSpec,
 ) -> Tuple[Optional[InstructionBatch], Optional[ControllerTransactionBatch]]:
-    """Decode typed aggregate batches carried through the legacy ``TaskSpec``."""
+    """Decode typed aggregate batches carried by the scheduler ``TaskSpec``."""
 
     instruction_batch: Optional[InstructionBatch] = None
     raw_instruction = task.metadata.get(RUNTIME_INSTRUCTION_BATCH_METADATA_KEY)
@@ -416,14 +392,6 @@ class ExpansionResult:
             raise TypeError("expansion tasks must be HardwareTask or TaskSpec instances")
         if not isinstance(self.delta, RuntimeDelta):
             raise TypeError("delta must be a RuntimeDelta")
-
-    @property
-    def new_tasks(self) -> Tuple[RuntimeTask, ...]:
-        return self.tasks
-
-    @property
-    def state_delta(self) -> RuntimeDelta:
-        return self.delta
 
 
 @dataclass(frozen=True)

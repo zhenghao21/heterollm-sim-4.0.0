@@ -14,7 +14,7 @@ PAGE = 1024
 
 def config(**changes):
     values = dict(page_bytes=PAGE, host_granularity_bytes=1,
-                  host_bandwidth_gb_s=100., internal_bandwidth_gb_s=100.,
+                  host_bandwidth_gb_s=100., host_read_bandwidth_gb_s=100., host_write_bandwidth_gb_s=100., internal_bandwidth_gb_s=100.,
                   page_read_ns=100., page_program_ns=200., block_erase_ns=2000.)
     values.update(changes)
     return NandConfig(**values)
@@ -43,7 +43,7 @@ def test_erase_then_program_waits_for_physical_array_even_with_spare_execution_l
 def test_uninitialized_virtual_array_wire_alias_uses_exact_history_before_acceleration():
     settings = config(channels=2, targets_per_channel=2, planes_per_lun=2,
                       planes_independent=True, parallel_units=1,
-                      internal_transfer_bytes=768, host_bandwidth_gb_s=17.,
+                      internal_transfer_bytes=768, host_bandwidth_gb_s=17., host_read_bandwidth_gb_s=17., host_write_bandwidth_gb_s=17.,
                       internal_bandwidth_gb_s=3.1, page_read_ns=91.5,
                       page_program_ns=351., block_erase_ns=901.,
                       metadata={'array_resource_prefix': 'shared',
@@ -71,10 +71,9 @@ def test_uninitialized_virtual_array_wire_alias_uses_exact_history_before_accele
 
 @pytest.mark.parametrize('buffered', [False, True])
 def test_empty_flush_does_not_report_a_time_before_last_observation(buffered):
-    core = NandCore(config(write_buffer_bytes=PAGE,
-                          metadata={'buffered_write_mode': buffered}))
-    first = core.flush(now_ns=1000.)
-    earlier = core.flush(now_ns=1.)
+    core = NandCore(config(write_buffer_bytes=PAGE if buffered else 0))
+    first = core.flush_write_buffer(now_ns=1000.)
+    earlier = core.flush_write_buffer(now_ns=1.)
     assert first['media_drain_completion_ns'] == 1000.
     assert earlier['media_drain_start_ns'] == earlier['media_drain_completion_ns'] == 1000.
     written = core.submit(req('old-arrival', Operation.WRITE))
@@ -114,14 +113,14 @@ def test_finite_wear_ratio_is_not_saturated_by_an_overflowed_intermediate_produc
 @pytest.mark.parametrize('cover_rest', [False, True])
 def test_repeated_staged_payload_does_not_fake_full_page_coverage(cover_rest):
     core = NandCore(config(write_buffer_bytes=2 * PAGE,
-                          metadata={'buffered_write_mode': True}))
+                          metadata={}))
     first = core.submit(req('first-half', Operation.WRITE, count=PAGE // 2))
     repeated = core.submit(req('overwrite-first-half', Operation.WRITE, count=PAGE // 2))
     assert first.pages_programmed == repeated.pages_programmed == 0
     if cover_rest:
         core.submit(req('second-half', Operation.WRITE, address=PAGE // 2, count=PAGE // 2))
     assert core.buffered_page_count == 1
-    drained = core.flush(now_ns=0.)
+    drained = core.flush_write_buffer(now_ns=0.)
     assert drained['physical_programs'] == 1
     assert drained['pages_read'] == int(not cover_rest)
     assert drained['host_transfer_bytes'] == PAGE + (PAGE // 2 if cover_rest else 0)
@@ -151,7 +150,7 @@ def test_large_multilane_history_falls_back_without_losing_resource_or_byte_stat
 def test_invalid_batch_is_rejected_before_any_core_or_calendar_mutation(entrypoint, invalid):
     changes = {'partial_page_policy': 'reject'} if invalid == 'partial_rejected' else {}
     if invalid == 'buffer_oversize':
-        changes.update(write_buffer_bytes=PAGE, metadata={'buffered_write_mode': True})
+        changes.update(write_buffer_bytes=PAGE, metadata={})
     core = NandCore(config(**changes))
     core.submit(req('history', Operation.READ))
     before = copy.deepcopy(vars(core))

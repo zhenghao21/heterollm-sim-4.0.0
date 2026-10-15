@@ -260,10 +260,12 @@ class GGUFModelCatalog(ModelCatalog):
         if not preset["generation_allowed"]:
             return {"preset": preset, "model": None, "graph": None}
         model = build_model_from_gguf(inventory_to_gguf(record["inventory"]))
-        metadata = {**model.metadata, "model_preset_id": record["id"], "gguf_preset_origin": deepcopy(record["origin"]),
+        evidence = {**model.metadata["metadata"],
+                    "gguf_preset_origin": deepcopy(record["origin"]),
                     "gguf_preset_changes": deepcopy(record.get("changes", {}))}
         if record.get("changes"):
-            metadata["gguf_derived_inventory"] = True
+            evidence["gguf_derived_inventory"] = True
+        metadata = {**model.metadata, "model_preset_id": record["id"], "metadata": evidence}
         payload = to_primitive(replace(model, name=record["name"], metadata=metadata))
         return {"preset": preset, "model": payload, "graph": payload["graph"]}
 

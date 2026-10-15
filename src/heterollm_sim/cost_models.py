@@ -34,9 +34,8 @@ from .data_motion import memory_service as _memory_service
 from .kernel_model import KernelModelProfile, estimate_kernel
 
 
-MMVQ_HBM_MODE_LEGACY = "legacy_mma_output_wave"
 MMVQ_HBM_MODE_NOMINAL = "nominal_bandwidth_analytical_fallback"
-MMVQ_HBM_MODES = (MMVQ_HBM_MODE_LEGACY, MMVQ_HBM_MODE_NOMINAL)
+MMVQ_HBM_MODES = (MMVQ_HBM_MODE_NOMINAL,)
 
 
 def validate_mmvq_hbm_mode(value: object) -> str:
@@ -214,10 +213,8 @@ class GemmWorkload:
     source_partial_service_ns: float = 0.0
     source_partial_work_units: int = 0
     source_partial_name: str = ""
-    # Appended to preserve the existing positional constructor interface.
     mmvq_issue_contract: Optional[MMVQIssueContract] = None
-    # CIM-only operand arithmetic, not inferred from storage width. Legacy
-    # callers retain integer bit-slice semantics; fp16 must be explicit.
+    # CIM-only operand arithmetic, not inferred from storage width.
     cim_arithmetic: str = "integer"
     cache_protocol: str = "cold_streaming"
     execution_phase: str = "unspecified"
@@ -269,6 +266,8 @@ class GemmWorkload:
             )
         if not isinstance(self.packed_weight_format_segments, tuple):
             raise ValueError("packed_weight_format_segments must be a tuple")
+        if self.packed_weight_transform_operations and not self.packed_weight_format_segments:
+            raise ValueError("packed weight transform work requires explicit format segments")
         if self.packed_weight_format_segments:
             segment_n = 0
             segment_operations = 0
@@ -2157,7 +2156,7 @@ class GPUProfile:
 
     def estimate_gemm(
         self, hbm: HBMProfile, workload: GemmWorkload, *,
-        mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
+        mmvq_hbm_mode: str = MMVQ_HBM_MODE_NOMINAL,
     ) -> CostEstimate:
         return estimate_gpu_gemm(self, hbm, workload, mmvq_hbm_mode=mmvq_hbm_mode)
 
@@ -2788,17 +2787,16 @@ def quantized_shape_efficiency(
         )
         source_effective = min(output, cta_wave, lane)
         # Source MMVQ geometry is evidence only until it has an independently
-        # qualified throughput/occupancy model. Keep the legacy analytical
-        # output-wave factor on the cost path so adding source metadata cannot
-        # change the main demand by itself.
-        legacy_effective = ratio(float(tile_wave.get("output_tile_wave_utilization", 1.0)), 1.0)
+        # qualified throughput/occupancy model. The current analytical cost
+        # uses the output-wave assumption; source geometry is not priced.
+        analytical_effective = ratio(float(tile_wave.get("output_tile_wave_utilization", 1.0)), 1.0)
         return {
             "model": "source_mmvq_geometry_shape_efficiency_v1",
-            "effective": legacy_effective,
+            "effective": analytical_effective,
             "applied_to_compute": True,
             "source_geometry_applied_to_compute": False,
             "source_geometry_effective": source_effective,
-            "legacy_fallback_effective": legacy_effective,
+            "analytical_effective": analytical_effective,
             "output_utilization": output,
             "cta_wave_utilization": cta_wave,
             "active_k_lane_utilization": lane,
@@ -2829,17 +2827,6 @@ def quantized_dequant_work_by_format(
     for format_name, _local_n, operations in workload.packed_weight_format_segments:
         key = str(format_name).strip().upper()
         totals[key] = totals.get(key, 0) + int(operations)
-    if not totals and workload.packed_weight_formats:
-        # Legacy callers may only provide a format tuple and aggregate work.
-        # Preserve that work without pretending it can be attributed to one of
-        # several mixed formats.
-        key = str(workload.packed_weight_formats[0]).strip().upper()
-        if len(workload.packed_weight_formats) == 1:
-            totals[key] = int(workload.packed_weight_transform_operations)
-        else:
-            totals["MIXED_UNATTRIBUTED"] = int(
-                workload.packed_weight_transform_operations
-            )
     return totals
 
 
@@ -2920,7 +2907,7 @@ def _annotate_analytical_estimate(
         "reason": "analytical_gpu_profile", "extrapolated": False,
         "fallback_kind": None,
         "format_coverage": "analytical_profile",
-        "phase": getattr(workload, "execution_phase", "unspecified"),
+        "phase": workload.execution_phase,
         "validated_llm_scope": False,
     }
     return replace(
@@ -2934,7 +2921,7 @@ def _annotate_analytical_estimate(
 
 def estimate_gpu_gemm(
     gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload, *,
-    mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
+    mmvq_hbm_mode: str = MMVQ_HBM_MODE_NOMINAL,
 ) -> CostEstimate:
     validate_mmvq_hbm_mode(mmvq_hbm_mode)
     if workload.mmvf_work is not None and gpu.kernel_model is None:
@@ -2992,11 +2979,11 @@ def estimate_gpu_gemm_placement_proxy(
 
 def _estimate_gpu_gemm_analytical(
     gpu: GPUProfile, hbm: HBMProfile, workload: GemmWorkload, *,
-    mmvq_hbm_mode: str = MMVQ_HBM_MODE_LEGACY,
+    mmvq_hbm_mode: str = MMVQ_HBM_MODE_NOMINAL,
 ) -> CostEstimate:
-    """Estimate resource demand with an optional, unvalidated MMVQ HBM fallback.
+    """Estimate resource demand with an unvalidated nominal MMVQ bandwidth.
 
-    The default preserves historical costs. The nominal mode removes only the
+    The nominal MMVQ model removes the
     MMA output-wave discount for canonical MMVQ work; source geometry does not
     establish that the nominal bandwidth is attained, even with many CTAs.
     """
@@ -3021,13 +3008,13 @@ def _estimate_gpu_gemm_analytical(
         "mmvq_vector_issue_bound": vector_bound,
         "mma_compute_priced": False,
         "execution_resource_kind": "shared_scalar_integer_warp_issue",
-        "overall_timing_completeness": "partial_with_legacy_HBM_fallback",
+        "overall_timing_completeness": "partial_with_nominal_HBM_analytical_fallback",
         "quantized_format_coverage": "source_MMVQ_conditional_issue_bound",
         "quantized_matmul_capability": None, "structural_peak_tops": None,
         "utilization_kind": "modeled_compute_fraction_not_hardware_occupancy",
         "mmvq_source_work": {**workload.mmvq_work.to_metadata(),
             "cost_model_applied": True, "timing_completeness": "conditional_dot_issue_lower_bound_only"},
-        "ignored_legacy_packed_transform_operations": workload.packed_weight_transform_operations,
+        "unpriced_packed_transform_operations": workload.packed_weight_transform_operations,
         "unpack_cost_priced": False,
         "work_units_semantics": "useful_arithmetic_operations_2MNK_not_instruction_slots",
         "issued_operations": None, "mma_shape": None, "tile_count": None,
@@ -3303,7 +3290,7 @@ def _estimate_gpu_gemm_analytical(
                 "source_geometry_hbm_concurrency_applied": False,
                 "source_geometry_hbm_concurrency_reason": (
                     "MMVQ vector CTA/warp geometry is retained as unpriced metadata; "
-                    "MMA output-tile utilization is a legacy analytical fallback only"
+                    "MMA output-tile utilization is an unvalidated analytical assumption"
                 ),
             }
             if workload.mmvq_work is not None
@@ -3319,57 +3306,56 @@ def _estimate_gpu_gemm_analytical(
             "independent MxN output tiles; K tiles are serial reduction"
         ),
     }
-    if mmvq_hbm_mode == "nominal_bandwidth_analytical_fallback":
-        eligible, reason = _mmvq_nominal_hbm_eligibility(workload)
-        hbm_bandwidth_metadata.update(
-            requested_mmvq_hbm_mode=mmvq_hbm_mode,
-            mmvq_nominal_mode_applied=eligible,
-            mmvq_nominal_mode_reason=reason,
-        )
-        if eligible:
-            # Keep the exact byte/cache/resource graph. Source CTA geometry
-            # rejects an MMA interpretation; it does not supply an HBM rate.
-            shape_effective_hbm_bandwidth_gb_s = peak_effective_hbm_bandwidth_gb_s
-            if vector_bound is not None:
-                issue_metadata["overall_timing_completeness"] = (
-                    "partial_with_nominal_HBM_analytical_fallback"
-                )
-            hbm_bandwidth_metadata = {
-                "model": "nominal_bandwidth_analytical_fallback",
-                "requested_mmvq_hbm_mode": mmvq_hbm_mode,
-                "mmvq_nominal_mode_applied": True,
-                "mmvq_nominal_mode_reason": reason,
-                "evidence": EvidenceStatus.ANALYTICAL.value,
-                "validation_status": "unvalidated_nominal_bandwidth_assumption",
-                "validated_kernel_families": (),
-                "validated_hardware": (),
-                "fallback_to_fixed_bandwidth": True,
-                "physical_applicability": "conditional_source_qualified_mmvq_only",
-                "peak_effective_hbm_bandwidth_gb_s": peak_effective_hbm_bandwidth_gb_s,
-                "shape_effective_hbm_bandwidth_gb_s": shape_effective_hbm_bandwidth_gb_s,
-                "applied_hbm_shape_factor": 1.0,
-                "tile_utilization_applied_to_hbm": False,
-                "output_wave_utilization_applied_to_hbm": False,
-                "source_geometry_hbm_concurrency_applied": False,
-                "source_geometry_hbm_concurrency_reason":
-                    "source CTA/warp/K geometry is not a bandwidth utilization measurement",
-                "parallelism_basis": "nominal_profile_bandwidth_no_geometric_discount",
-                "source_cta_count": workload.mmvq_work.cta_count,
-                "profile_sm_count": gpu.sm_count,
-                "source_ctas_below_sm_count": workload.mmvq_work.cta_count < gpu.sm_count,
-                "bandwidth_saturation_proven": False,
-                "native_dispatch_proven": False,
-                "measured_bandwidth_or_occupancy": False,
-                "legacy_mma_output_wave_diagnostic": dict(tile_wave),
-                "legacy_mma_diagnostic_applied_to_hbm": False,
-                "assumptions": (
-                    "the planner's explicit source/runtime MMVQ contract applies",
-                    "profile effective HBM bandwidth is a nominal analytical rate, not measured for this kernel",
-                    "small grids, latency, cache state and register pressure may prevent that rate",
-                    "CTA count at or above SM count does not prove memory saturation",
-                    "this is not a guaranteed service-time bound or an accuracy/coverage claim",
-                ),
-            }
+    eligible, reason = _mmvq_nominal_hbm_eligibility(workload)
+    hbm_bandwidth_metadata.update(
+        requested_mmvq_hbm_mode=mmvq_hbm_mode,
+        mmvq_nominal_mode_applied=eligible,
+        mmvq_nominal_mode_reason=reason,
+    )
+    if eligible:
+        # Keep the exact byte/cache/resource graph. Source CTA geometry
+        # rejects an MMA interpretation; it does not supply an HBM rate.
+        shape_effective_hbm_bandwidth_gb_s = peak_effective_hbm_bandwidth_gb_s
+        if vector_bound is not None:
+            issue_metadata["overall_timing_completeness"] = (
+                "partial_with_nominal_HBM_analytical_fallback"
+            )
+        hbm_bandwidth_metadata = {
+            "model": "nominal_bandwidth_analytical_fallback",
+            "requested_mmvq_hbm_mode": mmvq_hbm_mode,
+            "mmvq_nominal_mode_applied": True,
+            "mmvq_nominal_mode_reason": reason,
+            "evidence": EvidenceStatus.ANALYTICAL.value,
+            "validation_status": "unvalidated_nominal_bandwidth_assumption",
+            "validated_kernel_families": (),
+            "validated_hardware": (),
+            "fallback_to_fixed_bandwidth": True,
+            "physical_applicability": "conditional_source_qualified_mmvq_only",
+            "peak_effective_hbm_bandwidth_gb_s": peak_effective_hbm_bandwidth_gb_s,
+            "shape_effective_hbm_bandwidth_gb_s": shape_effective_hbm_bandwidth_gb_s,
+            "applied_hbm_shape_factor": 1.0,
+            "tile_utilization_applied_to_hbm": False,
+            "output_wave_utilization_applied_to_hbm": False,
+            "source_geometry_hbm_concurrency_applied": False,
+            "source_geometry_hbm_concurrency_reason":
+                "source CTA/warp/K geometry is not a bandwidth utilization measurement",
+            "parallelism_basis": "nominal_profile_bandwidth_no_geometric_discount",
+            "source_cta_count": workload.mmvq_work.cta_count,
+            "profile_sm_count": gpu.sm_count,
+            "source_ctas_below_sm_count": workload.mmvq_work.cta_count < gpu.sm_count,
+            "bandwidth_saturation_proven": False,
+            "native_dispatch_proven": False,
+            "measured_bandwidth_or_occupancy": False,
+            "mma_output_wave_diagnostic": dict(tile_wave),
+            "mma_diagnostic_applied_to_hbm": False,
+            "assumptions": (
+                "the planner's explicit source/runtime MMVQ contract applies",
+                "profile effective HBM bandwidth is a nominal analytical rate, not measured for this kernel",
+                "small grids, latency, cache state and register pressure may prevent that rate",
+                "CTA count at or above SM count does not prove memory saturation",
+                "this is not a guaranteed service-time bound or an accuracy/coverage claim",
+            ),
+        }
     memory_demands, cache_metadata = _cache_memory_demands(
         hierarchy=gpu.cache_hierarchy,
         read_bytes=workload.activation_bytes + workload.weight_bytes + mmq_tail_read_bytes,
@@ -3717,7 +3703,7 @@ def _estimate_gpu_q4_mma_materialized_attention(
         "materialization_consumer_rectangular_scan_applied": rectangular_scan,
         "materialization_consumer_compute_extent": (
             "occupied_rows_rectangular_lower_bound" if rectangular_scan
-            else "legacy_logical_context_mask_trim_unknown"
+            else "logical_context_mask_trim_unmodeled"
         ),
         "physical_kernel_count": 3,
     }
@@ -5028,8 +5014,6 @@ def estimate_cpu_gemm(
         residual_packed_weight_transform_operations
         if quantized_dot_capability is not None
         else residual_packed_weight_transform_operations * workload.m
-        if workload.packed_weight_format_segments
-        else residual_packed_weight_transform_operations
     )
     transform_operations, iq_panel_audit = _cpu_iq_panel_transform_reuse(
         cpu, workload, iq_panel_dispatch, quantized_dot_capability,

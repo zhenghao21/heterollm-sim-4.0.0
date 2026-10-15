@@ -235,10 +235,9 @@ class KernelModelProfile:
     max_ctas_per_sm: int = 16
     warp_size: int = 32
     launch_ns: float | None = None
-    graph_launch_ns: float | None = None
     launch_evidence: str | None = None
-    # Optional independent runtime residual split.  ``launch_ns`` remains the
-    # device enqueue component for backwards compatibility; this component is
+    # Optional independent runtime residual split.  ``launch_ns`` is the
+    # device enqueue component; this component is
     # the host/runtime submission envelope and is charged once per ordinary
     # kernel.  Graph replay is still charged once per explicit replay.
     runtime_submission_ns: float | None = None
@@ -257,11 +256,8 @@ class KernelModelProfile:
     calibration_runtime_sha256: str | None = None
     hardware_limits_evidence: str | None = None
     unverified_parameters: tuple[str, ...] = ()
-    # Optional device-side envelope for one captured graph replay.  Keep these
-    # fields at the end so existing positional profile construction retains its
-    # historical argument order.  This value is deliberately separate from
-    # ``graph_launch_ns``: it is never inferred from the ordinary per-kernel
-    # analytical launch default.
+    # Optional device-side envelope for one captured graph replay. It is never
+    # inferred from the ordinary per-kernel analytical launch default.
     graph_device_launch_ns: float | None = None
     graph_device_launch_evidence: str | None = None
     graph_device_launch_qualified: bool = False
@@ -272,7 +268,7 @@ class KernelModelProfile:
                 raise ValueError(f'{key} is required')
         for key in ('registers_per_sm', 'shared_memory_per_sm', 'max_threads_per_sm', 'max_warps_per_sm', 'max_ctas_per_sm', 'warp_size'):
             _integer(getattr(self, key), key)
-        for key in ('launch_ns', 'graph_launch_ns', 'runtime_submission_ns', 'graph_device_launch_ns'):
+        for key in ('launch_ns', 'runtime_submission_ns', 'graph_device_launch_ns'):
             if getattr(self, key) is not None:
                 _number(getattr(self, key), key, zero=True)
                 if key == 'runtime_submission_ns':
@@ -294,8 +290,6 @@ class KernelModelProfile:
             raise ValueError('graph_device_launch_qualified must be boolean')
         if self.graph_device_launch_qualified and self.graph_device_launch_ns is None:
             raise ValueError('qualified graph device launch calibration requires graph_device_launch_ns')
-        if self.graph_launch_ns is not None and self.graph_device_launch_ns is not None:
-            raise ValueError('graph_launch_ns and graph_device_launch_ns have different cost owners and cannot be combined')
         if not isinstance(self.unverified_parameters, tuple) or any(not isinstance(x, str) or not x for x in self.unverified_parameters):
             raise ValueError('unverified_parameters must be a tuple of nonempty names')
         if self.hardware_limits_evidence is not None and (not isinstance(self.hardware_limits_evidence, str) or not self.hardware_limits_evidence.strip()):
@@ -330,7 +324,7 @@ class KernelModelProfile:
                         raise ValueError(f'runtime calibration {key} differs from the kernel profile')
             if not isinstance(self.runtime_host_resource_id, str) or not self.runtime_host_resource_id.strip():
                 raise ValueError('runtime calibration requires an explicit CPU submission resource')
-            if self.runtime_submission_ns is not None or self.graph_launch_ns is not None:
+            if self.runtime_submission_ns is not None:
                 raise ValueError('structured runtime costs cannot also charge scalar submission costs')
         elif self.runtime_host_resource_id is not None or self.runtime_calibration_binding is not None:
             raise ValueError('runtime submission resource/binding requires runtime_calibration')
@@ -523,7 +517,7 @@ def performance_surface(kernel, shape, analytical_ns):
 
 
 def execution_phase(workload):
-    explicit = getattr(workload, 'execution_phase', 'unspecified')
+    explicit = workload.execution_phase
     return explicit if explicit in ('prefill', 'decode') else 'unspecified'
 
 
@@ -534,7 +528,7 @@ def kernel_calibration_dispatch_signature(workload):
     contains only compile/source specialization fields; shape is still carried
     by ``KernelSample`` so interpolation cannot cross a different template.
     """
-    vector = getattr(workload, 'mmvf_work', None)
+    vector = workload.mmvf_work
     if vector is not None:
         return vector.signature
     type_ids = {
@@ -542,7 +536,7 @@ def kernel_calibration_dispatch_signature(workload):
         'iq3_s': 21, 'iq4_xs': 23,
         'q4_0': 2, 'q5_0': 6, 'q8_0': 8,
     }
-    source = getattr(workload, 'mmvq_work', None)
+    source = workload.mmvq_work
     if source is not None:
         fmt = str(source.weight_format).casefold()
         type_id = type_ids.get(fmt)
@@ -550,7 +544,7 @@ def kernel_calibration_dispatch_signature(workload):
             return None
         return 'mmvq:type={}:m={}:fusion=0:small_k={}:halve_iters=0:warps={}:rows={}'.format(
             type_id, source.m, int(source.small_k), source.warps_per_cta, source.rows_per_cta)
-    source = getattr(workload, 'mmq_work', None)
+    source = workload.mmq_work
     if source is None:
         return None
     fmt = str(source.weight_format).casefold()
@@ -564,14 +558,6 @@ def kernel_calibration_dispatch_signature(workload):
         type_id, source.j, int(source.n % 128 != 0), int(source.fixup_launch))
 
 
-def mmvq_calibration_dispatch_signature(workload):
-    """Backward-compatible MMVQ-only spelling used by old surface tools."""
-    source = getattr(workload, 'mmvq_work', None)
-    if source is None:
-        return None
-    return kernel_calibration_dispatch_signature(workload)
-
-
 def estimate_kernel(gpu, hbm, workload, *, attention=False):
     """Return None for an uncovered dispatch; never invent a CUDA implementation."""
     from .cost_models import CostEstimate, CostPhase
@@ -581,13 +567,13 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
     if attention and workload.q4_mma_view_tokens_lower_bound:
         return None
     phase = execution_phase(workload)
-    dtype = getattr(workload, 'activation_dtype', None) or {8: 'int8', 16: 'fp16', 32: 'fp32'}.get(workload.input_bits if attention else workload.activation_bits, 'unknown')
+    dtype = workload.activation_dtype or {8: 'int8', 16: 'fp16', 32: 'fp32'}.get(workload.input_bits if attention else workload.activation_bits, 'unknown')
     shape = ((workload.batch_tokens, workload.context_tokens, workload.hidden_size) if attention else (workload.m, workload.n, workload.k))
     formats = ((workload.kv_artifact_format.casefold(),) if attention and workload.kv_artifact_format else
                (({8: 'int8', 16: 'fp16', 32: 'fp32'}.get(workload.effective_kv_input_bits, 'unknown'),) if attention else
                 (tuple(f.casefold() for f in workload.packed_weight_formats) or ({8: 'int8', 16: 'fp16', 32: 'fp32'}.get(workload.weight_bits, 'unknown'),))))
     kernel = profile.dispatch(shape=shape, formats=formats, dtype=dtype, phase=phase,
-                              operator='attention' if attention else 'gemm', layout=getattr(workload, 'layout', 'contiguous'),
+                              operator='attention' if attention else 'gemm', layout=workload.layout,
                               output_bits=workload.output_bits, accumulator_bits=None if attention else workload.accumulator_bits,
                               epilogue=None if attention else workload.epilogue_name,
                               attention_kv_hidden_size=workload.effective_kv_hidden_size if attention else None,
@@ -604,12 +590,9 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
     source_surface_excluded = False
     source_surface_exclusion_reason = None
     if kernel.samples and not attention:
-        source = (getattr(workload, 'mmvq_work', None)
-                  or getattr(workload, 'mmq_work', None))
-        if source is None and workload.mmq_work is not None:
-            source_surface_excluded = True
-            source_surface_exclusion_reason = 'source_launch_geometry_not_bound_to_surface'
-        elif source is None:
+        source = (workload.mmvq_work
+                  or workload.mmq_work)
+        if source is None:
             # A source-bound descriptor is only valid for the typed MMVQ path;
             # do not silently reuse it for an ordinary GEMM dispatch.
             if kernel.calibration_source_bound:
@@ -628,7 +611,7 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
             }
             runtime_matches = (
                 profile.calibration_runtime_sha256 is not None
-                and getattr(source, 'runtime_binary_sha256', '') == profile.calibration_runtime_sha256
+                and source.runtime_binary_sha256 == profile.calibration_runtime_sha256
             )
             signature_matches = (
                 expected_signature is not None
@@ -656,7 +639,7 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
     if not attention and workload.mmq_work is not None and 'mmq' not in kernel.kernel_family.casefold():
         return None
     source_residency = None
-    vector = None if attention else getattr(workload, 'mmvf_work', None)
+    vector = None if attention else workload.mmvf_work
     if vector is not None:
         if ('mmvf' not in kernel.kernel_family or workload.m != 1
                 or (workload.k, workload.n, workload.weight_bytes, workload.activation_bytes, workload.output_bytes)
@@ -754,7 +737,7 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
             operations = workload.mmq_work.source_nominal_arithmetic_operations
         unpack = k * n * kernel.unpack_ops_per_weight
         scalar_ops = k * n * kernel.scale_ops_per_weight + workload.epilogue_operations + workload.packed_weight_transform_operations
-        # Explicit descriptor unpack/scale replaces, rather than doubles, legacy dequant work.
+        # Explicit descriptor unpack/scale replaces the aggregate dequant work instead of charging it twice.
         if kernel.unpack_ops_per_weight or kernel.scale_ops_per_weight:
             scalar_ops -= workload.packed_weight_transform_operations
         reduce_ops = m * n * kernel.reduction_ops_per_output
@@ -1012,46 +995,36 @@ def graph_launch_phases(profile, frontend_resource, kernel_count, *, captured):
     if type(captured) is not bool:
         raise ValueError('captured must be boolean')
     # ``launch_ns`` is the calibrated device enqueue component.  A standalone
-    # runtime residual record can still provide the ordinary host submission
-    # rate when no device enqueue value was supplied; graph replay always uses
+    # runtime submission component can supply an ordinary submission rate
+    # when the device enqueue cost is unknown; graph replay always uses
     # its own measured replay rate.
-    legacy_graph_rate = getattr(profile, 'graph_launch_ns', None)
-    device_graph_rate = getattr(profile, 'graph_device_launch_ns', None)
-    if (captured and legacy_graph_rate is not None
-            and device_graph_rate is not None):
-        raise ValueError('graph_launch_ns and graph_device_launch_ns have different cost owners')
+    device_graph_rate = profile.graph_device_launch_ns
     if captured:
-        # ``graph_launch_ns`` is the legacy scalar replay owner.  A profile
-        # that only declares the new explicit device envelope can also use the
-        # scalar lowering path; it has no host lifecycle record to price.
-        rate = (legacy_graph_rate if legacy_graph_rate is not None
-                else device_graph_rate)
-        replay_evidence = (getattr(profile, 'launch_evidence', None)
-                           if legacy_graph_rate is not None
-                           else getattr(profile, 'graph_device_launch_evidence', None))
+        rate = device_graph_rate
+        replay_evidence = profile.graph_device_launch_evidence
     else:
-        launch_rate = getattr(profile, 'launch_ns', None)
-        runtime_submission_rate = getattr(profile, 'runtime_submission_ns', None)
+        launch_rate = profile.launch_ns
+        runtime_submission_rate = profile.runtime_submission_ns
         rate = launch_rate if launch_rate is not None else runtime_submission_rate
-        replay_evidence = getattr(profile, 'launch_evidence', None)
+        replay_evidence = profile.launch_evidence
     if rate is None:
         raise ValueError('selected runtime submission mode has no calibrated launch cost')
-    if captured and legacy_graph_rate is None and not replay_evidence:
+    if captured and not replay_evidence:
         raise ValueError('graph device launch calibration requires evidence')
-    launch_rate = getattr(profile, 'launch_ns', None)
-    runtime_submission_rate = getattr(profile, 'runtime_submission_ns', None)
+    launch_rate = profile.launch_ns
+    runtime_submission_rate = profile.runtime_submission_ns
     ordinary_rate = (
         (launch_rate if launch_rate is not None else 0.0)
         + (runtime_submission_rate or 0.0)
     )
     device_prediction_qualified = (
-        bool(getattr(profile, 'graph_device_launch_qualified', False))
-        if captured and legacy_graph_rate is None and device_graph_rate is not None
+        bool(profile.graph_device_launch_qualified)
+        if captured and device_graph_rate is not None
         else None)
     return CostPhase('cuda_graph_replay' if captured else 'kernel_launch', TaskCategory.COMPUTE,
                      (ResourceDemand(frontend_resource, rate if captured else kernel_count * ordinary_rate),),
                       {'kernel_count': kernel_count, 'submission_count': 1 if captured else kernel_count,
-                      'runtime_id': getattr(profile, 'runtime_id', None), 'evidence': replay_evidence,
+                      'runtime_id': profile.runtime_id, 'evidence': replay_evidence,
                       'captured': captured,
                       **({'prediction_qualified': device_prediction_qualified}
                          if device_prediction_qualified is not None else {}),
@@ -1060,13 +1033,12 @@ def graph_launch_phases(profile, frontend_resource, kernel_count, *, captured):
                           'runtime_submission_ns': runtime_submission_rate or 0.0,
                           'graph_replay_ns': rate if captured else None,
                           'graph_device_launch_ns': (device_graph_rate
-                                                     if captured and legacy_graph_rate is None
+                                                     if captured
                                                      else None),
                           **({'prediction_qualified': device_prediction_qualified}
                              if device_prediction_qualified is not None else {}),
                           'fusion_launches_elided': max(0, kernel_count - 1) if captured else 0,
-                          'runtime_submission_evidence': getattr(
-                              profile, 'runtime_submission_evidence', None),
+                          'runtime_submission_evidence': profile.runtime_submission_evidence,
                       }})
 
 
@@ -1305,7 +1277,6 @@ def llama_blackwell_analytical_profile(hardware_id, runtime_id, *, calibrated=Fa
         from .kernel_level2_surfaces import (
             level2_samples,
             level2_resource,
-            LEVEL2_VALIDATION_ERROR_BY_FORMAT,
             LEVEL2_VALIDATION_ERROR_BY_KEY,
         )
 
@@ -1368,9 +1339,9 @@ def llama_blackwell_analytical_profile(hardware_id, runtime_id, *, calibrated=Fa
                                 calibration_source_bound=True,
                                 dispatch_signature=signature,
                                 calibration_cells=complete_cells(group),
-                                validation_relative_error=LEVEL2_VALIDATION_ERROR_BY_FORMAT.get(
-                                    kernel.weight_formats[0]
-                                ),
+                                validation_relative_error=LEVEL2_VALIDATION_ERROR_BY_KEY[
+                                    "{}:mmvq:{}".format(kernel.phase, kernel.weight_formats[0])
+                                ],
                             ))
                     continue
             if samples and kernel.compute_primitive == 'tensor' and kernel.output_bits == 32:
@@ -1390,9 +1361,7 @@ def llama_blackwell_analytical_profile(hardware_id, runtime_id, *, calibrated=Fa
                         n_values = [sample.n for sample in scoped]
                         k_values = [sample.k for sample in scoped]
                         key = '{}:{}:{}'.format(kernel.phase, 'mmq', kernel.weight_formats[0])
-                        validation_error = LEVEL2_VALIDATION_ERROR_BY_KEY.get(
-                            key, LEVEL2_VALIDATION_ERROR_BY_FORMAT.get(kernel.weight_formats[0])
-                        )
+                        validation_error = LEVEL2_VALIDATION_ERROR_BY_KEY[key]
                         resource = level2_resource(
                             kernel.weight_formats[0], signature,
                             phase=kernel.phase, kernel_family='mmq'
@@ -1413,8 +1382,6 @@ def llama_blackwell_analytical_profile(hardware_id, runtime_id, *, calibrated=Fa
                             warps_per_cta=int(resource.get('warps_per_cta', kernel.warps_per_cta)),
                         ))
                 continue
-                kernel = replace(kernel, samples=samples, surface_model='calibrated_analytical',
-                                 cache_protocol='cold_streaming', calibration_source_bound=True)
             calibrated_kernels.append(kernel)
         kernels = calibrated_kernels
     return KernelModelProfile(hardware_id, runtime_id,

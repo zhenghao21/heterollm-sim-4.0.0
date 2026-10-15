@@ -145,7 +145,7 @@ class DramCoreSemanticsTests(unittest.TestCase):
             self.assertEqual(before, state(core))
         with self.assertRaises(ValueError):
             AccessRequest("zero", "read", 0, 0)
-        for entry in (core.submit, core.execute, core.submit_many):
+        for entry in (core.submit, core.submit_many):
             with self.assertRaisesRegex(TypeError, "AccessRequest"):
                 entry((object(),) if entry == core.submit_many else object())
         self.assertEqual(before, state(core))

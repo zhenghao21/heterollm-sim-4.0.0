@@ -54,7 +54,7 @@ class SessionExperiment:
         self.runtime = PhysicalRuntimeContext()
         router = TopologyRouter(hardware)
         self.executor = PhysicalKVTransferExecutor(
-            hardware, runtime=self.runtime, topology=router,
+            hardware.components, runtime=self.runtime, topology=router,
             arrival_ns=lambda _: self.clock,
             namespace="group04:" + architecture,
         )
@@ -122,8 +122,8 @@ class SessionExperiment:
         self.clock = max(self.clock, requested)
         self.prefix_offers += int(reuse)
         old_ids = {page.logical_page_id for page in self.pool.pages()}
-        success = self.pool.resize(session, self.parameters["pages_per_session"],
-                                   prefix_key="shared" if reuse else None)
+        success = self.pool.resize_detailed(session, self.parameters["pages_per_session"],
+                                            prefix_key="shared" if reuse else None).success
         if not success:
             self.rejected.add(session)
             self.record("create", session, requested, accepted=False,
@@ -263,7 +263,6 @@ class SessionExperiment:
             "active_peak": self.peak_active, "retained_peak": self.peak_retained,
             "live_peak": self.peak_live, "released_sessions": self.released_sessions,
             "prefix_hits": self.prefix_hits,
-            "prefix_reuse_rate_observed": self.prefix_hits / len(self.admitted) if self.admitted else 0,
             "prefix_offered_sessions": self.prefix_offers,
             "prefix_reuse_rate_offered": self.prefix_offers / p["sessions"],
             "prefix_reuse_rate_admitted": self.prefix_hits / len(self.admitted) if self.admitted else None,
@@ -272,7 +271,6 @@ class SessionExperiment:
                 "requested_rate": "target fraction of all offered sessions, including the initial non-reusing seed session",
                 "offered_rate": "prefix_offered_sessions / parameters.sessions; independent of admission",
                 "admitted_rate": "prefix_hits / admitted_sessions; capacity rejection can change this fraction",
-                "legacy_observed_rate": "alias of admitted_rate, with zero when no session is admitted",
             },
             "capacity_bytes": capacity, "peak_bytes": self.peak_bytes,
             "peak_bytes_including_migration_copies": self.peak_with_copy,

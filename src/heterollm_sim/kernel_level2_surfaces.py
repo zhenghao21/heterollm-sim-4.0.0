@@ -12,7 +12,6 @@ LEVEL2_HARDWARE_ID = 'nvidia-rtx-5080'
 LEVEL2_RUNTIME_SHA256 = '8a7275a273c225639a94c6cd544d3a891760f4599bfbe5f6ab1b4d15f556a297'
 LEVEL2_CACHE_PROTOCOL = 'cold_streaming'
 LEVEL2_PROVENANCE = 'independent_synthetic_cold_shape_holdouts_v1'
-LEVEL2_VALIDATION_ERROR_BY_FORMAT = {'q4_k': 0.014279205246379791, 'q6_k': 0.012378700314108204, 'iq4_xs': 0.07811415460203937, 'q5_k': 0.01638701273733143, 'q8_0': 0.03448673440342363}
 LEVEL2_VALIDATION_ERROR_BY_KEY = {'decode:mmvq:q4_k': 0.014279205246379791, 'decode:mmvq:q6_k': 0.012378700314108204, 'decode:mmvq:iq4_xs': 0.07811415460203937, 'decode:mmvq:q5_k': 0.01638701273733143, 'decode:mmvq:q8_0': 0.03448673440342363, 'prefill:mmq:q4_k': 0.03463038216327989, 'prefill:mmq:q6_k': 0.0442807599753913, 'prefill:mmq:iq4_xs': 0.03134188839653295}
 LEVEL2_RESOURCE_BY_KEY = {'prefill:mmq:iq4_xs:mmq:type=23:j=64:fallback=0:stream_k=1': {'registers_per_thread': 255.0, 'shared_memory_per_cta': 49408.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}, 'prefill:mmq:iq4_xs:mmq:type=23:j=128:fallback=0:stream_k=1': {'registers_per_thread': 255.0, 'shared_memory_per_cta': 58880.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}, 'prefill:mmq:iq4_xs:mmq:type=23:j=128:fallback=0:stream_k=0': {'registers_per_thread': 255.0, 'shared_memory_per_cta': 58880.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}, 'prefill:mmq:q4_k:mmq:type=12:j=64:fallback=0:stream_k=1': {'registers_per_thread': 252.0, 'shared_memory_per_cta': 49408.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}, 'prefill:mmq:q4_k:mmq:type=12:j=128:fallback=0:stream_k=1': {'registers_per_thread': 255.0, 'shared_memory_per_cta': 58880.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}, 'prefill:mmq:q4_k:mmq:type=12:j=128:fallback=0:stream_k=0': {'registers_per_thread': 255.0, 'shared_memory_per_cta': 58880.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}, 'prefill:mmq:q6_k:mmq:type=14:j=64:fallback=0:stream_k=1': {'registers_per_thread': 255.0, 'shared_memory_per_cta': 49408.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}, 'prefill:mmq:q6_k:mmq:type=14:j=128:fallback=0:stream_k=1': {'registers_per_thread': 255.0, 'shared_memory_per_cta': 58880.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}, 'prefill:mmq:q6_k:mmq:type=14:j=128:fallback=0:stream_k=0': {'registers_per_thread': 255.0, 'shared_memory_per_cta': 58880.0, 'warps_per_cta': 8, 'block': [32, 8, 1]}}
 
@@ -170,7 +169,7 @@ def level2_samples(weight_format, *, output_bits=32, activation_dtype='fp32', ph
             row['achieved_bandwidth_gb_s'], row['dispatch_signature'],
         )
         for row in _ROWS
-        if row['format'] == fmt and row.get('phase', 'decode') == phase and row.get('kernel_family', 'mmvq') == kernel_family and output_bits == 32 and activation_dtype in {'fp16', 'fp32'}
+        if row['format'] == fmt and row['phase'] == phase and row['kernel_family'] == kernel_family and output_bits == 32 and activation_dtype in {'fp16', 'fp32'}
     )
 
 
@@ -182,6 +181,6 @@ def level2_resource(weight_format, dispatch_signature, *, phase='decode', kernel
 __all__ = [
     'LEVEL2_SCHEMA', 'LEVEL2_HARDWARE_ID', 'LEVEL2_RUNTIME_SHA256',
     'LEVEL2_CACHE_PROTOCOL', 'LEVEL2_PROVENANCE', 'level2_samples',
-    'LEVEL2_VALIDATION_ERROR_BY_FORMAT', 'LEVEL2_VALIDATION_ERROR_BY_KEY',
+    'LEVEL2_VALIDATION_ERROR_BY_KEY',
     'LEVEL2_RESOURCE_BY_KEY', 'level2_resource',
 ]

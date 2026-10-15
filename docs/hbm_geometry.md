@@ -73,7 +73,7 @@ HBM 预设、实验脚本、配置解析和 `reconfigure_physical_config` 共用
 
 所有 `jedec_hbm` 配置入口共用时序校验，包括直接构造、序列化读取、`dataclasses.replace`、预设、实验覆盖、硬件配置及网页编辑。读取已有配置时重算旧输入对应的公式，以区分未改变的派生值和手动改值，再按新的工作条件全量检查；不能靠保留或改写来源标签把非法输入悄悄修成合法值。改变主输入频率时，有效的自动派生值仍会随频率更新；显式固定值若在新频率下低于下限，则直接报错。同时修改几何、频率和时序时，使用新条件判断合法性。
 
-检查内容包括分代列命令/PRE 间隔下限、命令占用、RL/WL 编码、已知组织的 tRFC 下限、当前参考温度范围内的 tREFI 上限，以及 tRASmax 与刷新间隔、tRASmin、读写恢复的可排程关系。较长的最小等待值可以保守合法，最大期限不能任意延长。周期性全 bank 刷新还要求 `tRFC <= tREFI`，否则该策略无法持续执行；这是本模型策略的可排程条件。标记 `timing_constraint_validation=known_jedec_constraints_checked` 只表示这些已知约束通过，仍保留 `timing_validation=not_a_vendor_speed_bin`、厂商时序未知、温度条件未知和 PHY 换向参数未知。它不表示完整协议或真实器件已经验证。
+检查内容包括分代列命令/PRE 间隔下限、命令占用、RL/WL 编码、已知组织的 tRFC 下限、当前实现支持的 tREFI 范围，以及 tRASmax 与刷新间隔、tRASmin、读写恢复的可排程关系。较长的最小等待值可以保守合法，最大期限不能任意延长。周期性全 bank 刷新还要求 `tRFC <= tREFI`，否则该策略无法持续执行；这是本模型策略的可排程条件。标记 `timing_constraint_validation=known_jedec_constraints_checked` 只表示这些已知约束通过，仍保留 `timing_validation=not_a_vendor_speed_bin`、厂商时序未知和 PHY 换向参数未知。它不表示完整协议或真实器件已经验证。
 
 合成时序预设的 tCCDL/S 保留 `max(当前标准最小值, analytical_floor_ns)` 依赖，改变时钟后重新求值，而不是固定保存上一次的 ns 结果。用户显式覆盖同一时序字段时清除该规则，按用户给出的固定实验值执行并标为假设。没有已知标准最小值的合成 tRRD、tFAW、tWTR 仍保留为固定分析假设，不将未知值当作标准零值。
 
@@ -159,7 +159,7 @@ RL / WL 是模式寄存器中的时钟周期编码，不是任意的 ns 延迟�
 
 全 bank REF 命令选择一个 PC，不选择 SID；一次作用于该 PC 的所有 SID、所有 bank。刷新前须使相应 bank 空闲并满足 tRP，刷新后该 PC 在 tRFC 内不可进行阵列访问；另一 PC 仍有自身状态。依据 B 表 30 / §6.3.2.4（p.30 / p.39）、238 表 30 / §6.3.2.4（p.35 / p.46–47）、4A 表 33 / §6.3.2.4（p.42 / p.55–56）。HBM3/4 刷新后的半周期仍有限定命令组合，不能将其当成任意空槽。
 
-tREFI 是平均刷新间隔，正常温度基础表值为最大 3.9 μs；温度条件可能要求减半或四分之一。B 表 38 p.77 还定义低温下的 2 倍/4 倍间隔，是否适用依赖厂商温度条件；当前模型没有实现这两个低温模式，超过 3900 ns 的输入会以超出当前参考温度范围报错，不能说它违反 B 的所有工作模式。HBM3/4 允许受限延期与提前刷新（最多延期 8 次、绝对间隔不超过 9 × tREFI），周期性不延期策略是其一个简单子集。仅记录刷新命令次数而不计预充电及 tRFC 阻塞，会低估时间成本。
+tREFI 是平均刷新间隔。当前周期刷新实现支持 `0 < tREFI <= 3900 ns`，默认采用 3900 ns；超过上限会报 `model_limit`，规则名为 `refresh_interval_scope`。这是本模型支持的静态间隔范围，不是 JEDEC 所有刷新模式的统一上限，也不保证适用于具体器件。HBM3/4 允许受限延期与提前刷新（最多延期 8 次、绝对间隔不超过 9 × tREFI），周期性不延期策略是其一个简单子集。仅记录刷新命令次数而不计预充电及 tRFC 阻塞，会低估时间成本。
 
 以下 tRFC 为原文件 AC 表的全 bank 刷新值，单位 ns；按 die 密度与堆叠层数查表，不能把每通道密度错当成单 die 密度：
 
@@ -174,7 +174,7 @@ tREFI 是平均刷新间隔，正常温度基础表值为最大 3.9 μs；温度
 
 这里的 TBD 是原刷新表实际印出的标记，与前述 AC 最小值单元格留空分别记录；两者都不等于零。缺少有效 tRFC 时，刷新模型应明确禁用并列为未模拟，或者要求显式参考值；不能把其他技术代的数字标成这一代的 JEDEC 数值。REFpb 还需要逐 bank / SID 的刷新覆盖计数与 tRREFD、tRFCpb、tFAW 等约束，不能用全 bank REF 简单拆分来声称完整支持。
 
-默认参考策略仅对上表有确定 tRFC 的已导入组织启用每 3900 ns 一次的周期性全 bank 刷新；HBM3 24 / 32 Gbit 及其他 TBD 组织明确禁用。该策略的温度条件尚未验证，不能用于声称覆盖所有工作温度。
+默认参考策略仅对上表有确定 tRFC 的已导入组织启用每 3900 ns 一次的周期性全 bank 刷新；HBM3 24 / 32 Gbit 及其他 TBD 组织明确禁用。`metadata.refresh_interval_scope` 标明实现支持的间隔范围；该策略不代表完整器件验证。
 
 最大激活时间与刷新开关分别配置。默认 `maximum_active_ns = 9 × 3900 = 35100 ns`，包括因 tRFC 未知而禁用刷新的组织。该字段不能为 0，也不能超过当前 `9*tREFI`；未知刷新周期时使用 3900 ns 参考条件计算上限。导入时检查孤立读写能否在期限内恢复并预充电，发令时继续检查共享资源竞争下的关闭位置，必要时先预充电再激活；排不出合法位置时报错。已知组织的 tRFC 不能以 0 或 `assumption` 标签绕过表中下限；TBD 组织的 0 仍只表示刷新未建模，数据保持约束未覆盖。
 
@@ -188,10 +188,12 @@ HBM 的已知时序约束报错使用 `HBMConfigError`（仍是 `ValueError`）�
 
 协议能够确定命令数、命令口占用、传输字节、阵列依赖与等待时间。32 B 是每 PC 一个突发的数据量，不能按请求字节数无条件计一个 READ / WRITE，也不能将有效页 1 KiB 计成一次数据突发。并行 bank、PC、物理通道的操作可以重叠：延迟取依赖路径与共享资源排程的完成时间；各资源 busy time 的和是另一项统计量，不应当作墙钟耗时。
 
-汇总执行使用独立的 HBM float64 编译路径，仍执行这套命令、SID、行状态和刷新逻辑，并回写与明细路径相同的状态与资源计数。只在 bank 全部关闭、命令口与 PC 完全空闲、且浮点运算可证明精确的时间网格及数值范围内折叠空闲刷新周期；被折叠的刷新次数和占用仍全部计入。需要明细、非零 tFAW、实际合并或重命名本 HBM 资源等未加速情形回到同一套 HBM 明细控制，不切回旧 DRAM 控制模型。内核中无关资源的别名不影响 HBM 加速。
+汇总执行使用独立的 HBM float64 编译路径，仍执行这套命令、SID、行状态和刷新逻辑，并回写与明细路径相同的状态与资源计数。只在 bank 全部关闭、命令口与 PC 完全空闲、且浮点运算可证明精确的时间网格及数值范围内折叠空闲刷新周期；被折叠的刷新次数和占用仍全部计入。需要明细、非零 tFAW、实际合并或重命名本 HBM 资源等未加速情形回到同一套 HBM 明细控制，不切换为分析式 DRAM 控制模型。内核中无关资源的别名不影响 HBM 加速。
 
-`jedec_hbm` 执行使用 `activate_to_read_ns` / `activate_to_write_ns`、`precharge_to_activate_ns`、`write_to_precharge_ns` 等新时序字段。通过 `reconfigure_physical_config` 修改旧 `open_ns` / `close_ns` / `write_recovery_ns` 时，会同步对应新字段；同时显式给出的新字段优先。直接读取已序列化配置时，旧 `open_ns` / `close_ns` / `burst_interval_ns` / `read_recovery_ns` / `write_recovery_ns` 只作兼容保存，不直接参与新执行路径。RL/WL 的 ns 配置必须已经对应整 CK，校验不会自动取整改变输入。
+`jedec_hbm` 只接受命令锚定时序：`activate_to_read_ns` / `activate_to_write_ns`、`precharge_to_activate_ns`、`write_to_precharge_ns`。修改配置时必须使用这些字段；不再把 `open_ns` / `close_ns` / `write_recovery_ns` 自动转换为新时序。`open_ns` / `close_ns` / `read_recovery_ns` / `write_recovery_ns` 属于 `analytical` 分析式模型，不能用来调整 JEDEC HBM。`burst_interval_ns` 在 JEDEC HBM 中由接口速率推导。RL/WL 的 ns 配置必须对应整 CK，校验不会自动取整改变输入。
 
-JEDEC 的电流测量条件与模式在各协议 §9.1（B p.100 起，238 p.149 起，4A p.177 起）。IDD / IPP 等是指定工作模式、供电轨与负载下的电流条件，实际电流数值需要器件数据；标准不提供统一的 pJ/READ、pJ/ACT 或货币单价。若模拟能量，应另给电压、电流及背景电流扣除方式，并按状态驻留时间计算，避免背景能量和命令能量重复计入；已有每字节或每命令能耗常数属于单独的分析模型。
+厂商料号、厂商地址映射、实际速度等级、支持的 RL/WL 子区间、未填阵列时序及 PHY 换向极值仍未由这些寻址表和协议参考工作点确定。初始化、训练、奇偶校验、故障恢复及可选刷新机制也不因支持普通读写而自动得到实现。配置的逐字段来源和未知项保存在 `metadata.parameter_provenance` 与 `metadata.unknown_parameters` 中；协议结构正确与某个真实器件的时序已验证必须分别表达。
 
-厂商料号、厂商地址映射、实际速度等级、支持的 RL/WL 子区间、未填阵列时序、PHY 换向极值、温度刷新条件、电流与能量参数仍未由这些寻址表和协议参考工作点确定。初始化、训练、低功耗、奇偶校验、故障恢复及可选刷新机制也不因支持普通读写而自动得到实现。配置的逐字段来源和未知项保存在 `metadata.parameter_provenance` 与 `metadata.unknown_parameters` 中；协议结构正确与某个真实器件的时序已验证必须分别表达。
+## 当前物理配置接口
+
+序列化的 DRAM 配置必须显式声明 bank-group 时序、控制模式与几何作用域；不再为旧配置补零。NAND 配置必须显式声明共享、读取、写入三项主机带宽，读取和写入不再回退到共享值。`write_buffer_bytes > 0` 启用页合并写缓冲，返回主机确认后通过刷新完成介质写入；设为 `0` 使用写穿模式。原 `metadata.buffered_write_mode` 开关已删除。物理预设使用 `hbm3e_reference`、`hbm3e_reference_flat`、`hbm3e_reference_synthetic_timing` 及对应 HBM4 名称；分析式零 bank-group 控制使用 `hbm_analytical_zero`。

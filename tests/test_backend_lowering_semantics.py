@@ -86,25 +86,41 @@ def test_lowering_preserves_the_declared_physical_allocation_extent():
     assert lowered.metadata["physical_address_bindings"][0]["allocation_size_bytes"] == 4096
 
 
+@pytest.mark.parametrize("obsolete,current", (
+    ("generation", "allocation_generation"), ("size_bytes", "byte_count"),
+    ("offset", "offset_bytes"), ("tensor_id", "buffer_id"),
+    ("buffer_size_bytes", "allocation_size_bytes"),
+))
+def test_lowering_rejects_obsolete_physical_descriptor_fields(obsolete, current):
+    task = _explicit_memory_task()
+    access = dict(task.metadata["memory_accesses"][0])
+    access[obsolete] = access.get(current, 0)
+    task = replace(task, metadata={**task.metadata, "memory_accesses": (access,)})
+    with pytest.raises(ValueError, match="unsupported fields"):
+        _attach_gddr_physical_task(task, scenario())
+
+
 @pytest.mark.parametrize("weight_generation", [None, 7])
-def test_explicit_resident_weight_keeps_its_generation_across_serving_cohorts(weight_generation):
+def test_explicit_resident_weight_keeps_its_generation_across_requests(weight_generation):
     metadata = {"weight_buffer_id": "weight-buffer"}
     if weight_generation is not None:
         metadata["weight_generation"] = weight_generation
     task = _explicit_memory_task(**metadata)
     generations = []
-    for request in ("cohort-001", "cohort-002"):
+    for request in ("plain-001", "other-001"):
         lowered = _attach_gddr_physical_task(replace(task, request_id=request), scenario())
         generations.append(lowered.metadata["memory_accesses"][0]["allocation_generation"])
     assert generations == [weight_generation or 0] * 2
 
 
-def test_explicit_transient_buffer_still_gets_a_distinct_cohort_generation():
+def test_explicit_transient_buffer_gets_a_distinct_request_generation():
     task = _explicit_memory_task()
+    requests = ("plain-001", "other-001", "\0plain-001", "请求-001")
     generations = [_attach_gddr_physical_task(replace(task, request_id=request), scenario())
                    .metadata["memory_accesses"][0]["allocation_generation"]
-                   for request in ("cohort-001", "cohort-002")]
-    assert len(set(generations)) == 2
+                   for request in requests]
+    assert all(generation > 0 for generation in generations)
+    assert len(set(generations)) == len(requests)
 
 
 @pytest.mark.parametrize("kind,summarize", [("HBM", _summarize_dram_task_traffic),
@@ -135,9 +151,8 @@ def test_physical_summary_does_not_round_integer_traffic_through_float(kind, sum
         "read_write_switches", "refresh_wait_ns", "turnaround_wait_ns")),
 ])
 @pytest.mark.parametrize("recording", ["missing", "zero", "value", "partial"])
-@pytest.mark.parametrize("legacy", [False, True])
 def test_physical_summary_distinguishes_unknown_optional_counters_from_zero(
-        kind, summarize, optional, recording, legacy):
+        kind, summarize, optional, recording):
     rows = [{"kind": kind, "logical_bytes": 64, "physical_bytes": 128}]
     if recording != "missing":
         rows[0].update(dict.fromkeys(optional, 0))
@@ -145,13 +160,8 @@ def test_physical_summary_distinguishes_unknown_optional_counters_from_zero(
         rows[0].update({key: 0.25 if key.endswith("_ns") else 2**53 + 1 for key in optional})
     if recording == "partial":
         rows.append({"kind": kind, "logical_bytes": 64, "physical_bytes": 128})
-    if legacy:
-        tasks = tuple(TaskSpec(str(index), "r", "legacy", TaskCategory.MEMORY,
-            metadata={"physical_memory_config": {"kind": kind}, "physical_execution": row})
-            for index, row in enumerate(rows))
-    else:
-        tasks = (TaskSpec("owners", "r", "owners", TaskCategory.MEMORY,
-            metadata={"physical_execution_by_owner": {str(i): row for i, row in enumerate(rows)}}),)
+    tasks = (TaskSpec("owners", "r", "owners", TaskCategory.MEMORY,
+        metadata={"physical_execution_by_owner": {str(i): row for i, row in enumerate(rows)}}),)
     summary = summarize(tasks)
     assert summary["logical_bytes"] == 64 * len(rows)
     for key in optional:
@@ -172,7 +182,7 @@ def test_optional_summary_preserves_counters_emitted_by_the_actual_core(kind, su
     config = (make_hbm_config if kind == "HBM" else make_hbf_config)(capacity_bytes=1048576)
     task = TaskSpec("read", "r", "read", TaskCategory.MEMORY,
         metadata={"physical_memory_config": config, "physical_owner": "memory",
-                  "memory_access": {"operation": "read", "address": 0, "byte_count": 100}})
+                  "memory_accesses": ({"operation": "read", "address": 0, "byte_count": 100},)})
     resolved = resolve_physical_task(task, PhysicalRuntimeContext(), 0.)
     raw = resolved.metadata["physical_execution_by_owner"]["memory"]
     summary = summarize((resolved,))
@@ -180,7 +190,7 @@ def test_optional_summary_preserves_counters_emitted_by_the_actual_core(kind, su
         if key.startswith("nand_"):
             continue
         assert summary[key] == raw.get(key)
-        assert availability["status"] == ("recorded" if key in raw else "not_recorded")
+        assert availability["status"] == ("recorded" if raw.get(key) is not None else "not_recorded")
 
 
 def test_initial_control_root_honors_the_same_action_overrides_as_later_tasks():

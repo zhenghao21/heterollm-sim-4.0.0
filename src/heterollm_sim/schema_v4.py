@@ -1,27 +1,20 @@
-"""V4 authoring/runtime profiles and the explicit offline V3 importer.
-
-The normal scenario parser is intentionally *not* a compatibility layer.  It
-accepts only :data:`AUTHORING_SCHEMA_VERSION`; callers that still own a V3
-document must run the explicit offline ``heterollm-import-v3`` command first.
-"""
+"""Current authoring schema and runtime controller profiles."""
 
 from __future__ import annotations
 
-import argparse
-from copy import deepcopy
 from dataclasses import dataclass, field, fields
 import math
 from numbers import Real
-from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Tuple, Type, TypeVar
+
+if TYPE_CHECKING:
+    from .ir import HardwareSpec
 
 
 AUTHORING_SCHEMA_VERSION = "4.0.0"
 SIMULATION_SCHEMA_VERSION = "4.0.0"
 RUNTIME_PROFILE_SCHEMA_VERSION = AUTHORING_SCHEMA_VERSION
 CONTROLLER_PROFILE_SCHEMA_VERSION = AUTHORING_SCHEMA_VERSION
-LEGACY_AUTHORING_SCHEMA_VERSION = "3.0.0"
-LEGACY_MAPPING_FINGERPRINT_SCHEMA = "automatic-mapping-deployment-v3"
 CONTROL_PLANE_FINGERPRINT_SCHEMA = "runtime-control-plane-v4"
 
 
@@ -316,25 +309,14 @@ class ControllerProfile:
                 )
 
     @classmethod
-    def architecture_default(cls, hardware: Any) -> "ControllerProfile":
+    def architecture_default(cls, hardware: HardwareSpec) -> "ControllerProfile":
         """Build a deterministic default keyed by declared GPU component IDs."""
 
-        components = (
-            hardware.get("components", ())
-            if isinstance(hardware, Mapping)
-            else getattr(hardware, "components", ())
-        )
-        gpu_ids = []
-        for raw in components or ():
-            kind = raw.get("kind", "") if isinstance(raw, Mapping) else getattr(raw, "kind", "")
-            component_id = (
-                raw.get("component_id", "")
-                if isinstance(raw, Mapping)
-                else getattr(raw, "component_id", "")
-            )
-            normalized = str(kind).strip().lower().replace("-", "_").replace(" ", "_")
-            if normalized == "gpu" and str(component_id).strip():
-                gpu_ids.append(str(component_id))
+        gpu_ids = [
+            component.component_id
+            for component in hardware.components
+            if component.normalized_kind == "gpu"
+        ]
         if not gpu_ids:
             gpu_ids = ["gpu0"]
         return cls(
@@ -424,183 +406,6 @@ def runtime_profile_from_dict(data: Mapping[str, Any]) -> ControllerProfile:
     return ControllerProfile(**values)
 
 
-def _upgrade_authoring_versions(value: Any) -> Any:
-    """Upgrade V3 authoring nodes without rewriting opaque user metadata."""
-
-    if isinstance(value, Mapping):
-        return {
-            str(name): (
-                AUTHORING_SCHEMA_VERSION
-                if name == "schema_version" and item == LEGACY_AUTHORING_SCHEMA_VERSION
-                else deepcopy(item)
-                if name in {"metadata", "attributes"}
-                else _upgrade_authoring_versions(item)
-            )
-            for name, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_upgrade_authoring_versions(item) for item in value]
-    if isinstance(value, tuple):
-        return [_upgrade_authoring_versions(item) for item in value]
-    return value
-
-
-_POLICY_KEYS = ("locked_op_keys", "locked_tensor_ids", "options")
-_DECISION_KEYS = (
-    "aggregate_weight_backing",
-    "aggregate_weight_backing_bytes",
-    "operator_execution_targets",
-    "rank_weight_shards",
-    "logical_weight_views",
-    "logical_weight_aliases",
-    "cold_cim_streaming_tensors",
-    "resident_cim_replicas",
-    "weight_tensor_details",
-    "route",
-    "routes",
-)
-
-
-def _migrate_control_plane_metadata(placement: Mapping[str, Any]) -> Dict[str, Any]:
-    migrated = deepcopy(dict(placement))
-    metadata = dict(_mapping(migrated.get("metadata", {}), "placement.metadata"))
-    legacy_explicit_placement = {
-        field_name: deepcopy(
-            dict(_mapping(migrated.get(field_name, {}), "placement.{}".format(field_name)))
-        )
-        for field_name in (
-            "op_to_component",
-            "tensor_to_component",
-            "tensor_bytes",
-        )
-    }
-    for field_name in legacy_explicit_placement:
-        migrated[field_name] = {}
-    raw_auto = metadata.pop("auto_mapping", None)
-    old_marker: Optional[str] = None
-    if raw_auto is not None or any(legacy_explicit_placement.values()):
-        auto: Dict[str, Any] = {}
-        if raw_auto is not None:
-            auto = dict(_mapping(raw_auto, "placement.metadata.auto_mapping"))
-        existing = metadata.get("control_plane")
-        if existing is not None:
-            raise ValueError(
-                "V3 placement metadata cannot contain both auto_mapping and control_plane"
-            )
-    if raw_auto is not None:
-        marker = auto.get("fingerprint_schema")
-        if marker is not None:
-            old_marker = str(marker)
-            if old_marker != LEGACY_MAPPING_FINGERPRINT_SCHEMA:
-                raise ValueError(
-                    "unsupported V3 placement.metadata.auto_mapping fingerprint_schema: {}".format(
-                        old_marker
-                    )
-                )
-    if raw_auto is not None or any(legacy_explicit_placement.values()):
-        legacy_policy = {
-            key: deepcopy(auto[key]) for key in _POLICY_KEYS if key in auto
-        }
-        legacy_decision = {
-            key: deepcopy(auto[key]) for key in _DECISION_KEYS if key in auto
-        }
-        metadata["control_plane"] = {
-            "policy": {},
-            "decision": {},
-            "evidence": {
-                "status": "migrated",
-                "migrated_from": {
-                    "schema_version": LEGACY_AUTHORING_SCHEMA_VERSION,
-                    "artifact": "placement.metadata.auto_mapping",
-                    "fingerprint_schema": old_marker,
-                },
-                "legacy_v3_explicit_placement": legacy_explicit_placement,
-                "legacy_v3_auto_mapping": {
-                    "policy": legacy_policy,
-                    "decision": legacy_decision,
-                },
-            },
-        }
-    migrated["metadata"] = metadata
-    return migrated
-
-
-def _migrate_v3_scenario_payload(data: Mapping[str, Any]) -> Dict[str, Any]:
-    """Return an explicit V4 payload without invoking the normal parser.
-
-    The importer is deterministic and offline.  It preserves namespaced /v1
-    artifacts and retains old placement, lock, option, and solver output only
-    as read-only evidence.  It never turns legacy decisions into executable
-    V4 authoring placement or control-plane policy.
-    """
-
-    source = _mapping(data, "scenario")
-    source_version = source.get("schema_version")
-    if source_version != LEGACY_AUTHORING_SCHEMA_VERSION:
-        raise ValueError(
-            "V3 importer requires scenario.schema_version exactly {}; got {}".format(
-                LEGACY_AUTHORING_SCHEMA_VERSION, source_version
-            )
-        )
-    migrated = _upgrade_authoring_versions(deepcopy(dict(source)))
-    migrated["placement"] = _migrate_control_plane_metadata(
-        _mapping(migrated.get("placement"), "placement")
-    )
-    profiles = dict(_mapping(migrated.get("profiles"), "profiles"))
-    if "runtime" in profiles:
-        raise ValueError("V3 payload unexpectedly contains profiles.runtime")
-    runtime = ControllerProfile.architecture_default(
-        _mapping(migrated.get("hardware"), "hardware")
-    )
-    from .serde import to_primitive
-
-    profiles["runtime"] = to_primitive(runtime)
-    migrated["profiles"] = profiles
-    return migrated
-
-
-def _import_v3_scenario_file(
-    source: Path, destination: Path, *, overwrite: bool = False
-) -> Path:
-    """Migrate and validate one JSON file, refusing accidental overwrite."""
-
-    from .config import scenario_from_dict
-    from .serde import read_json, write_json
-
-    source = Path(source)
-    destination = Path(destination)
-    if source.resolve() == destination.resolve():
-        raise ValueError("source and destination must be different paths")
-    if destination.exists() and not overwrite:
-        raise FileExistsError("destination already exists: {}".format(destination))
-    migrated = _migrate_v3_scenario_payload(read_json(source))
-    scenario_from_dict(migrated)
-    write_json(destination, migrated)
-    return destination
-
-
-def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Explicit offline HeteroLLM V3-to-V4 scenario importer"
-    )
-    parser.add_argument("source", type=Path, help="V3 scenario JSON input")
-    parser.add_argument("destination", type=Path, help="V4 scenario JSON output")
-    parser.add_argument(
-        "--force", action="store_true", help="replace an existing destination"
-    )
-    args = parser.parse_args(argv)
-    _import_v3_scenario_file(
-        args.source,
-        args.destination,
-        overwrite=args.force,
-    )
-    return 0
-
-
-if __name__ == "__main__":  # pragma: no cover - exercised through the entry point
-    raise SystemExit(main())
-
-
 __all__ = [
     "AUTHORING_SCHEMA_VERSION",
     "CONTROLLER_PROFILE_SCHEMA_VERSION",
@@ -612,8 +417,6 @@ __all__ = [
     "GPUL2CacheProfile",
     "GPUMMUTLBProfile",
     "GPUVRAMControllerProfile",
-    "LEGACY_AUTHORING_SCHEMA_VERSION",
-    "LEGACY_MAPPING_FINGERPRINT_SCHEMA",
     "NVMePageCacheProfile",
     "PCIeDMAIOMMUProfile",
     "RUNTIME_PROFILE_SCHEMA_VERSION",

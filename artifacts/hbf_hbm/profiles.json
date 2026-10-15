@@ -202,10 +202,7 @@
         "hbm_read_gb_s": 4000,
         "hbm_write_gb_s": 4000,
         "hbf_read_gb_s": 1200,
-        "hbf_write_gb_s": 1200,
-        "thermal_effective_cap_gb_s": 202.27,
-        "thermal_power_w": 53.72,
-        "mapping": "nominal and thermal-cap runs are separate; do not add the cap to nominal bandwidth"
+        "hbf_write_gb_s": 1200
       },
       "latency": {
         "hbf_read_us": 20,
@@ -242,7 +239,6 @@
       },
       "buffering": {
         "controller_page_cache": "two page-cache buffers per bank (OCP §5.3)",
-        "thermal_throttle": true,
         "source": "OCP/Section 8.1"
       },
       "slo": {
@@ -272,8 +268,7 @@
       },
       "calibration_notes": [
         "Table 3(c) bandwidth is a shared secondary-tier modeled value; it is mapped to the host leg and not counted twice.",
-        "The paper supplies full TokenSim trace scheduling, near-tier capacity changes and queueing; this profile only supplies the physical memory path.",
-        "The thermal cap is reported as a separate sensitivity because it is a sustained write-heavy limit."
+        "The paper supplies full TokenSim trace scheduling, near-tier capacity changes and queueing; this profile only supplies the physical memory path."
       ],
       "parameter_provenance": "Selected published parameters checked against the cited arXiv version on 2026-10-13; assumptions and derived service geometry remain explicit.",
       "calibrated_to_silicon": false,
@@ -355,7 +350,6 @@
       "profile_id": "son_hbf",
       "variant": "nominal",
       "latency_override_us": null,
-      "thermal": false,
       "applied": {
         "bandwidth_variant": "nominal",
         "hbm_read_gb_s": 1600.0,
@@ -5134,7 +5128,6 @@
       "profile_id": "son_hbf_plus",
       "variant": "nominal",
       "latency_override_us": null,
-      "thermal": false,
       "applied": {
         "bandwidth_variant": "nominal",
         "hbm_read_gb_s": 0.0,
@@ -9877,7 +9870,6 @@
       "profile_id": "hbf_sucks_hbf2_b200",
       "variant": "nominal",
       "latency_override_us": null,
-      "thermal": false,
       "applied": {
         "bandwidth_variant": "nominal",
         "hbm_read_gb_s": 4000.0,
@@ -14654,142 +14646,6 @@
     },
     {
       "profile_id": "hbf_sucks_hbf2_b200",
-      "variant": "thermal_cap",
-      "latency_override_us": null,
-      "thermal": true,
-      "applied": {
-        "bandwidth_variant": "thermal_effective_cap",
-        "hbm_read_gb_s": 4000.0,
-        "hbm_write_gb_s": 4000.0,
-        "hbf_read_gb_s": 202.27,
-        "hbf_write_gb_s": 202.27,
-        "hbf_write_was_unspecified": false,
-        "hbf_page_bytes": 4096,
-        "hbf_parallel_units": 128,
-        "hbf_host_granularity_bytes": 64,
-        "hbf_read_latency_ns": 20000.0,
-        "hbf_program_ns": 200000.0
-      },
-      "hbm_only": {
-        "service_ns": 203.72800000000007,
-        "service_us": 0.20372800000000008,
-        "step_service_ns": [
-          61.432000000000016,
-          47.432000000000016,
-          47.432000000000016,
-          47.432000000000016
-        ],
-        "max_step_service_ns": 61.432000000000016,
-        "logical_bytes": 294912,
-        "useful_bandwidth_gb_s": 1447.5771617058033,
-        "tiers": {
-          "hbm": {
-            "logical_bytes": 294912,
-            "logical_read_bytes": 262144,
-            "logical_write_bytes": 32768,
-            "physical_read_bytes": 262144,
-            "physical_write_bytes": 32768,
-            "queue_wait_ns": 0.0,
-            "write_buffer_wait_ns": 0.0
-          },
-          "hbf": {
-            "logical_bytes": 0,
-            "physical_read_bytes": 0,
-            "physical_write_bytes": 0
-          }
-        },
-        "traffic": {
-          "kv_pages": 8,
-          "steps": 4,
-          "page_bytes": 4096
-        },
-        "slo_threshold_ns": null,
-        "memory_service_slo_met": null,
-        "slo_scope": "maximum single-step memory service only; excludes compute and serving queueing"
-      },
-      "all_hbf": {
-        "service_ns": 880810.168428338,
-        "service_us": 880.810168428338,
-        "step_service_ns": [
-          220202.5421070846,
-          220202.54210708447,
-          220202.54210708442,
-          220202.54210708453
-        ],
-        "max_step_service_ns": 220202.5421070846,
-        "logical_bytes": 294912,
-        "useful_bandwidth_gb_s": 0.33481902295272353,
-        "tiers": {
-          "hbm": {
-            "logical_bytes": 131072,
-            "logical_read_bytes": 131072,
-            "logical_write_bytes": 0,
-            "physical_read_bytes": 131072,
-            "physical_write_bytes": 0,
-            "queue_wait_ns": 0.0,
-            "write_buffer_wait_ns": 0.0
-          },
-          "hbf": {
-            "logical_bytes": 163840,
-            "logical_read_bytes": 131072,
-            "logical_write_bytes": 32768,
-            "physical_read_bytes": 131072,
-            "physical_write_bytes": 32768,
-            "queue_wait_ns": 0.0,
-            "write_buffer_wait_ns": 0.0
-          }
-        },
-        "traffic": {
-          "kv_pages": 8,
-          "steps": 4,
-          "page_bytes": 4096
-        },
-        "slo_threshold_ns": null,
-        "memory_service_slo_met": null,
-        "slo_scope": "maximum single-step memory service only; excludes compute and serving queueing"
-      },
-      "hot_cold": {
-        "placement_semantics": "static half-KV read partition; no session pause, write-on-evict, migration or prefetch is executed in this microbenchmark",
-        "service_ns": 80324.0835714639,
-        "service_us": 80.3240835714639,
-        "step_service_ns": [
-          20081.020892865978,
-          20081.020892865978,
-          20081.020892865978,
-          20081.020892865963
-        ],
-        "max_step_service_ns": 20081.020892865978,
-        "logical_bytes": 294912,
-        "useful_bandwidth_gb_s": 3.6715264823111045,
-        "tiers": {
-          "hbm": {
-            "logical_bytes": 229376,
-            "logical_read_bytes": 196608,
-            "logical_write_bytes": 32768
-          },
-          "hbf": {
-            "logical_bytes": 65536,
-            "logical_read_bytes": 65536,
-            "logical_write_bytes": 0
-          }
-        },
-        "traffic": {
-          "kv_pages": 8,
-          "cold_pages_on_hbf": 4,
-          "steps": 4
-        },
-        "slo_threshold_ns": null,
-        "memory_service_slo_met": null,
-        "slo_scope": "maximum single-step memory service only; excludes compute and serving queueing"
-      },
-      "comparability": {
-        "metric": "fixed logical memory service time and useful bandwidth",
-        "full_paper_tps_comparable": false,
-        "reason": "No full GPU compute, continuous batching, paper trace replay, or paper-specific SLO admission is in this backend entry point."
-      }
-    },
-    {
-      "profile_id": "hbf_sucks_hbf2_b200",
       "experiment": "media_latency_sweep",
       "latency_sweep": [
         {
@@ -14825,7 +14681,6 @@
       "profile_id": "hot_cold_b200",
       "variant": "nominal",
       "latency_override_us": null,
-      "thermal": false,
       "applied": {
         "bandwidth_variant": "nominal",
         "hbm_read_gb_s": 8000.0,
@@ -19619,28 +19474,6 @@
       }
     },
     {
-      "profile_id": "hbf_sucks_hbf2_b200",
-      "variant": "thermal_cap",
-      "sim_hbf_vs_hbm_service_ratio": 4323.461519419705,
-      "sim_hot_cold_vs_hbm_service_ratio": 394.27120264010773,
-      "full_backend": {
-        "visible_output_tokens_per_s": null,
-        "goodput_visible_output_tokens_per_s": null,
-        "ttft_ns": null,
-        "tpot_ns": null,
-        "hbm_visible_output_tokens_per_s": null,
-        "hbf_vs_hbm_visible_tps_ratio": null,
-        "hbf_storage_task_count": null,
-        "hbm_storage_task_count": null,
-        "paper_tps_comparable": false
-      },
-      "paper_reference": {
-        "metric": "E2E latency vs capacity-matched SSD",
-        "reported_range": "2–5.5x",
-        "status": "not_comparable"
-      }
-    },
-    {
       "profile_id": "hot_cold_b200",
       "variant": "nominal",
       "sim_hbf_vs_hbm_service_ratio": null,
@@ -19676,7 +19509,6 @@
     "executed": [
       "physical_memory_alternatives",
       "media_latency_sweep",
-      "static_bandwidth_cap_sensitivity",
       "resume_block_fetch",
       "paired_full_backend_kv_probe"
     ],
@@ -19704,7 +19536,6 @@
     "Hot-Cold original agent trajectories and simulator are not public; the block-fetch run is a mechanism check only.",
     "HBF+ serving retains an extra HBM support tier; it is a synthetic KV-placement probe, not the paper's HBF-only package.",
     "Hot-Cold writable serving uses explicit assumed write bandwidth/program latency; its published read-only resume diagnostic does not validate these assumptions.",
-    "The thermal-cap row is a fixed bandwidth sensitivity, not a dynamic temperature/throttling simulation.",
     "Full-backend TPS/TTFT/TPOT/SLO-goodput are reported for a small synthetic trace, but are not paper-comparable without the paper model, trace and topology."
   ]
 }

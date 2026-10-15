@@ -9,7 +9,7 @@ from heterollm_sim.physical_contract import (
     parse_execution_physical_config, reconfigure_physical_config,
 )
 from heterollm_sim.physical_presets import (
-    _PHYSICAL_CONFIG_CATALOG, load_physical_config, physical_config_profile_ids,
+    _PHYSICAL_CONFIG_CATALOG, physical_config_profile_ids,
     resolve_physical_config,
 )
 
@@ -25,20 +25,40 @@ class PhysicalConfigCatalogTests(unittest.TestCase):
                 self.assertEqual(asdict(parse_execution_physical_config(asdict(config))), asdict(config))
                 self.assertEqual(config.metadata["physical_config_profile_id"], profile_id)
 
-    def test_legacy_profile_preserves_full_study_physical_parameters(self):
-        legacy = asdict(resolve_physical_config("hbm_legacy_zero"))
+    def test_analytical_profile_has_explicit_study_physical_parameters(self):
+        analytical = asdict(resolve_physical_config("hbm_analytical_zero"))
         expected = asdict(make_hbm_config(rows_per_bank=524288, burst_interval_ns=0.0))
-        legacy.pop("metadata")
+        analytical.pop("metadata")
         expected.pop("metadata")
-        self.assertEqual(legacy, expected)
+        self.assertEqual(analytical, expected)
 
     def test_geometry_control_only_changes_bank_partition(self):
-        legacy = asdict(resolve_physical_config("hbm_legacy_zero"))
+        analytical = asdict(resolve_physical_config("hbm_analytical_zero"))
         control = asdict(resolve_physical_config("hbm_group_geometry_control"))
         for field in ("metadata", "bank_groups_per_rank", "banks_per_group"):
-            legacy.pop(field)
+            analytical.pop(field)
             control.pop(field)
-        self.assertEqual(legacy, control)
+        self.assertEqual(analytical, control)
+
+    def test_obsolete_profile_names_are_not_resolved(self):
+        for profile_id in ("hbm_legacy_zero", "hbm_group_geometry_zero",
+                           "hbm3e_reference_flat_zero", "hbm4_reference_flat_zero",
+                           "published_hbm", "published_hbm_serving"):
+            with self.subTest(profile_id=profile_id), self.assertRaisesRegex(ValueError, "unknown physical config profile"):
+                resolve_physical_config(profile_id)
+
+    def test_nand_execution_requires_explicit_directional_bandwidths(self):
+        for name in ("host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s"):
+            raw = asdict(resolve_physical_config("hbf_synthetic"))
+            raw.pop(name)
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, name):
+                parse_execution_physical_config(raw)
+
+    def test_jedec_hbm_rejects_analytical_timing_overrides(self):
+        original = resolve_physical_config("hbm3e_reference")
+        for name in ("open_ns", "close_ns", "read_recovery_ns", "write_recovery_ns", "burst_interval_ns"):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, "command-anchored"):
+                reconfigure_physical_config(original, overrides={name: 20.0})
 
     def test_synthetic_profile_only_adds_declared_group_timings(self):
         control = resolve_physical_config("hbm_group_geometry_control")
@@ -137,17 +157,17 @@ class PhysicalConfigCatalogTests(unittest.TestCase):
 
     def test_catalog_and_caller_metadata_are_isolated(self):
         overrides = {"metadata": {"nested": ["authored"]}}
-        a = load_physical_config("hbf_synthetic", overrides=overrides)
+        a = resolve_physical_config("hbf_synthetic", overrides=overrides)
         a.metadata["nested"].append("changed")
         self.assertEqual(overrides["metadata"]["nested"], ["authored"])
         self.assertNotIn("nested", resolve_physical_config("hbf_synthetic").metadata)
         self.assertEqual(a.metadata["physical_config_override_fields"], ["metadata"])
 
     def test_unknown_or_malformed_updates_are_rejected(self):
-        for profile_id, overrides in (("missing", {}), ("hbm_legacy_zero", {"row_byets": 128}),
-                                      ("hbm_legacy_zero", {"kind": "HBF"}),
-                                      ("hbm_legacy_zero", {"column_same_group_ns": -1}),
-                                      ("hbm_legacy_zero", {"metadata": None})):
+        for profile_id, overrides in (("missing", {}), ("hbm_analytical_zero", {"row_byets": 128}),
+                                      ("hbm_analytical_zero", {"kind": "HBF"}),
+                                      ("hbm_analytical_zero", {"column_same_group_ns": -1}),
+                                      ("hbm_analytical_zero", {"metadata": None})):
             with self.subTest(profile_id=profile_id, overrides=overrides):
                 with self.assertRaises(ValueError):
                     resolve_physical_config(profile_id, overrides=overrides)
@@ -157,7 +177,7 @@ class PhysicalConfigCatalogTests(unittest.TestCase):
             reconfigure_physical_config({"kind": "HBM"}, overrides={"capacity_bytes": 4096})
 
     def test_dram_capacity_growth_is_explicit_and_does_not_round_capacity(self):
-        base = resolve_physical_config("hbm_legacy_zero")
+        base = resolve_physical_config("hbm_analytical_zero")
         capacity = base.capacity_bytes + 64
         with self.assertRaisesRegex(ValueError, "physical geometry"):
             reconfigure_physical_config(base, overrides={"capacity_bytes": capacity})

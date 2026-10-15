@@ -24,11 +24,6 @@ DRAM_COMPONENT_KINDS = frozenset({
 NAND_COMPONENT_KINDS = frozenset({"hbf", "ssd", "high_io_ssd", "nvme"})
 PHYSICAL_MEMORY_COMPONENT_KINDS = DRAM_COMPONENT_KINDS | NAND_COMPONENT_KINDS
 
-# This additive group/rank timing extension is intentionally optional for old
-# serialized configurations. Each field is validated by DramConfig when
-# present; omission means zero/disabled, never a family-specific timing guess.
-DRAM_OPTIONAL_BANK_GROUP_TIMING_FIELDS = frozenset(DRAM_BANK_GROUP_TIMING_FIELDS)
-
 _DRAM_REQUIRED = frozenset({
     "kind", "channels", "subchannels_per_channel", "pseudo_channels_per_channel",
     "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank",
@@ -36,11 +31,14 @@ _DRAM_REQUIRED = frozenset({
     "open_ns", "close_ns", "read_latency_ns", "write_latency_ns",
     "burst_interval_ns", "read_recovery_ns", "write_recovery_ns",
     "read_to_write_ns", "write_to_read_ns", "max_outstanding_requests",
+    "control_mode", "bank_geometry_scope", "stack_interface_mode",
+    *DRAM_BANK_GROUP_TIMING_FIELDS,
 })
 _NAND_REQUIRED = frozenset({
     "kind", "channels", "targets_per_channel", "dies_per_target", "luns_per_die",
     "planes_per_lun", "blocks_per_plane", "pages_per_block", "page_bytes",
     "host_granularity_bytes", "host_bandwidth_gb_s", "internal_bandwidth_gb_s",
+    "host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s",
     "page_read_ns", "page_program_ns", "block_erase_ns", "front_ns",
     "planes_independent", "partial_page_policy", "max_outstanding_requests",
 })
@@ -51,7 +49,7 @@ def _validate_standard_hbm_organization(config, prefix):
 
     This checks the limited organization tables represented by the HBM
     builder. It does not verify a vendor part, timing values, or provenance
-    supplied by an external author. Synthetic and legacy inputs are untouched.
+    supplied by an external author. Analytical inputs are untouched.
     """
     if (isinstance(config, DramConfig)
             and str(config.metadata.get("control_status", "")).startswith("jedec_")
@@ -135,8 +133,7 @@ def parse_required_physical_config(component_id, kind, raw):
 def require_physical_memory_config(component):
     """Return a validated core config, or identify the incomplete component."""
     prefix = "component {} ({}): ".format(component.component_id, component.kind)
-    legacy_mode = component.metadata.get("memory_execution_mode")
-    if legacy_mode is not None and str(legacy_mode).strip().lower() != "physical":
+    if "memory_execution_mode" in component.metadata:
         raise ValueError(prefix + "memory_execution_mode is no longer configurable; remove the obsolete setting. All memory execution requires its physical DRAM/NAND core")
     parsed = parse_required_physical_config(
         component.component_id, component.normalized_kind,
@@ -197,8 +194,7 @@ def parse_execution_physical_config(raw):
         raise ValueError("physical_memory_config missing explicit fields: kind")
     value = raw["kind"]
     kind = str(getattr(value, "value", value)).strip().upper().replace("-", "")
-    component_kind = "gddr" if kind in {"GDDR6", "GDDR6X", "GDDR7"} else kind.lower()
-    return parse_required_physical_config("execution", component_kind, raw)
+    return parse_required_physical_config("execution", kind.lower(), raw)
 
 
 def reconfigure_physical_config(config, *, overrides=None, expand_geometry=False):
@@ -224,16 +220,11 @@ def reconfigure_physical_config(config, *, overrides=None, expand_geometry=False
     payload = asdict(parsed)
     updates = deepcopy(dict(overrides))
     if isinstance(parsed, DramConfig) and updates.get("control_mode", parsed.control_mode) == "jedec_hbm":
-        # Preserve the meaning of old experiment knobs while giving the new
-        # command-anchored fields precedence when both are explicitly supplied.
-        for old, targets in {
-            "open_ns": ("activate_to_read_ns", "activate_to_write_ns"),
-            "close_ns": ("precharge_to_activate_ns",),
-            "write_recovery_ns": ("write_to_precharge_ns",),
-        }.items():
-            if old in updates:
-                for name in targets:
-                    updates.setdefault(name, updates[old])
+        analytical_only = {"open_ns", "close_ns", "read_recovery_ns", "write_recovery_ns", "burst_interval_ns"}
+        unsupported = analytical_only.intersection(updates)
+        if unsupported:
+            raise ValueError("JEDEC HBM overrides require command-anchored timing fields; analytical-only or derived fields: "
+                             + ", ".join(sorted(unsupported)))
     if "metadata" in updates:
         if not isinstance(updates["metadata"], Mapping):
             raise ValueError("physical config metadata must be a mapping")
@@ -345,8 +336,8 @@ def reconfigure_physical_config(config, *, overrides=None, expand_geometry=False
             unknown = metadata.get("unconfigured_timing_parameters", [])
             metadata["unconfigured_timing_parameters"] = [name for name in unknown if not payload.get(name)]
             if payload["control_mode"] != "jedec_hbm":
-                metadata["control_status"] = "legacy_analytical_control"
-                metadata["control_basis"] = "explicit legacy model selection; JEDEC command rules are not executed"
+                metadata["control_status"] = "analytical_control"
+                metadata["control_basis"] = "explicit analytical model selection; JEDEC command rules are not executed"
             elif changed:
                 metadata["control_status"] = "jedec_command_model_on_custom_geometry"
             metadata["parameter_provenance"] = provenance

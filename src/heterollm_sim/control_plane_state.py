@@ -34,9 +34,7 @@ def control_plane_section(
 ) -> Mapping[str, Any]:
     """Return one V4 ``placement.metadata.control_plane`` section.
 
-    The normal V4 runtime never interprets legacy placement metadata.  V3
-    artifacts must pass through the explicit importer before reaching this
-    accessor.
+    Only the current control-plane metadata structure is supported.
     """
 
     if not isinstance(scenario, ScenarioConfig):

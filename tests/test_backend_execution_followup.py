@@ -19,7 +19,7 @@ def test_nand_internal_stages_overlap_busy_host_wire(as_mapping, alias, operatio
     task = TaskSpec("z-io", "r", "io", TaskCategory.MEMORY, metadata={
         "physical_memory_config": asdict(config) if as_mapping else config,
         "physical_owner": "nand",
-        "memory_access": {"operation": operation, "address": 0, "byte_count": 64}})
+        "memory_accesses": ({"operation": operation, "address": 0, "byte_count": 64},)})
     blocking = TaskSpec("a-wire", "r", "other transfer", TaskCategory.MEMORY,
                         demands=(ResourceDemand("wire", 10000.),))
     kernel = UnifiedEventKernel.from_closed_graph((blocking, task), resource_owners=owners)
@@ -49,9 +49,9 @@ def test_pool_owned_pages_are_borrowed_not_reclaimed_by_cohort(external, generat
         "physical_memory_config": config, "physical_owner": "memory",
         "physical_external_allocations": (key,) if external else (),
         "persistent_request_buffers": {"request": ("pool-page",)},
-        "memory_access": {"operation": "read", "buffer_id": "pool-page",
+        "memory_accesses": ({"operation": "read", "buffer_id": "pool-page",
             "allocation_generation": generation, "byte_count": 64,
-            "allocation_size_bytes": 4096}})
+            "allocation_size_bytes": 4096},)})
     kernel = UnifiedEventKernel.from_closed_graph((task,))
     kernel.physical_runtime.runtime(config, "memory")
     allocator = kernel.physical_runtime.allocators["memory"]
@@ -75,9 +75,9 @@ def test_json_pool_keys_do_not_duplicate_workspace_capacity(generation):
         "physical_memory_config": asdict(make_hbm_config(capacity_bytes=1048576)),
         "physical_owner": "memory",
         "physical_external_allocations": [["memory", "pool-page", generation]],
-        "memory_access": {"operation": "read", "buffer_id": "pool-page",
+        "memory_accesses": ({"operation": "read", "buffer_id": "pool-page",
             "allocation_generation": generation, "byte_count": 64,
-            "allocation_size_bytes": 4096}})
+            "allocation_size_bytes": 4096},)})
     bound = physical_workspace_bound((task,))
     assert bound["bytes_by_owner"] == {}
     assert bound["resident_bytes_by_owner"] == {}

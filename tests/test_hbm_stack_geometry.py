@@ -50,16 +50,18 @@ def test_independent_stacks_double_capacity_bandwidth_and_have_separate_lanes():
 
 
 @pytest.mark.parametrize("kind", ["DDR", "HBM"])
-def test_legacy_die_geometry_and_shared_interface_keep_existing_semantics(kind):
+def test_per_die_geometry_and_shared_interface_require_explicit_scope(kind):
     config = DramConfig(kind=kind, channels=2, stacks=3, dies_per_stack=4,
                         banks_per_group=2, rows_per_bank=8, row_bytes=128, burst_bytes=32)
     assert config.lane_count == 2
     assert config.capacity_bytes == 3 * 4 * 2 * 2 * 8 * 128
     assert config.physical_interface_bandwidth_gb_s == pytest.approx(51.2)
     serialized = asdict(config)
+    assert parse_execution_physical_config(serialized) == config
     serialized.pop("bank_geometry_scope")
     serialized.pop("stack_interface_mode")
-    assert parse_execution_physical_config(serialized) == config
+    with pytest.raises(ValueError, match="bank_geometry_scope, stack_interface_mode"):
+        parse_execution_physical_config(serialized)
 
 
 @pytest.mark.parametrize("scope", ["per_die", "per_stack"])

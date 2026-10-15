@@ -72,7 +72,7 @@ def metric(row, name, quantile=None):
 
 
 def context_extrapolation(row):
-    return row.get("model_structure", {}).get("context_extrapolation", row.get("context_extrapolation"))
+    return row["model_structure"]["context_extrapolation"]
 
 
 def nullable_numbers(value):
@@ -161,7 +161,7 @@ def named_context_figure(groups, output):
             if full_row(r) and str(r.get("id", "")).startswith(("model/","model-capacity/"))
             and r.get("inventory_role")!='capacity_control_512gib' and r.get("placement") in (A, B)]
     model_order = {"llama3_1-8b": 0, "llama3_1-70b": 1}
-    model_ids = sorted({r.get("parameters", {}).get("model_id", r.get("model", "unknown")) for r in rows},
+    model_ids = sorted({r["parameters"]["model_id"] for r in rows},
                        key=lambda name: (model_order.get(name, 2), name))
     nrows = max(1, len(model_ids))
     fig, axes = plt.subplots(nrows, 2, figsize=(13, 3.65 * nrows + 2.0), squeeze=False)
@@ -172,7 +172,7 @@ def named_context_figure(groups, output):
     if not model_ids:
         for ax in axes.flat: missing(ax)
     for index, model_id in enumerate(model_ids):
-        selected = [r for r in rows if r.get("parameters", {}).get("model_id", r.get("model")) == model_id]
+        selected = [r for r in rows if r["parameters"]["model_id"] == model_id]
         title = selected[0].get("model", model_id)
         left, right = axes[index]
         for architecture in (A, B):

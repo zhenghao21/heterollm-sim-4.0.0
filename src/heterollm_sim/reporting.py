@@ -39,6 +39,7 @@ from .control_plane import ControlPlaneBootstrap, bootstrap_control_plane
 from .control_plane_state import control_plane_decision
 from .execution_control import ExecutionControl
 from .engine import simulate_schedule
+from .parallel import LogicalRank
 from .metrics import (
     MetricsSummary,
     bound_change_point_intervals,
@@ -107,15 +108,6 @@ class OnlineScenarioResult:
     retention_policy: str
     validation_information: Tuple[str, ...] = ()
 
-    @property
-    def trace(self) -> ServingResult:
-        return self.serving
-
-    @property
-    def metrics(self) -> ServingResult:
-        return self.serving
-
-
 RunResult = Union[ScenarioResult, OnlineScenarioResult]
 StaticRunResult = ScenarioResult
 
@@ -153,17 +145,15 @@ def run_scenario(
     """Plan, validate, and execute through the V4 unified event kernel."""
 
     from .llama_scenario import prepare_llama_scenario
-    from .data_motion import reset_physical_runtimes
 
     authored = scenario
     scenario = prepare_llama_scenario(scenario)
-    reset_physical_runtimes()
     if batch_lowerer is not None and scenario is not authored:
         raise ValueError("prepare llama runtime before constructing a custom batch lowerer")
 
-    scheduler = getattr(scenario.workload, "scheduler", None)
+    scheduler = scenario.workload.scheduler
     scheduler_mode = (
-        str(getattr(scheduler, "mode", "static")) if scheduler else "static"
+        scheduler.mode if scheduler else "static"
     )
     selected_policy = (
         RetentionPolicy.AGGREGATE
@@ -239,9 +229,9 @@ def _run_scenario_in_context(
     validation = validate_scenario(scenario)
     validation.raise_for_errors()
     execution_control.report("validation", 1, 1, message="场景校验完成")
-    scheduler = getattr(scenario.workload, "scheduler", None)
+    scheduler = scenario.workload.scheduler
     scheduler_mode = (
-        str(getattr(scheduler, "mode", "static")) if scheduler else "static"
+        scheduler.mode if scheduler else "static"
     )
     if scheduler_mode == "continuous":
         active_batch_lowerer = batch_lowerer or TopologyAwareBatchCostProvider(
@@ -275,7 +265,7 @@ def _run_scenario_in_context(
             model_name=scenario.model.name,
             hardware_name=scenario.hardware.name,
             workload_name=scenario.workload.name,
-            calibration_version=ANALYTICAL_MODEL_VERSION,
+            analytical_model_version=ANALYTICAL_MODEL_VERSION,
             evidence=EvidenceStatus.ANALYTICAL,
             assumptions=manifest_assumptions,
             assumptions_zh=manifest_assumptions_zh,
@@ -467,7 +457,7 @@ def _online_token_times(result: OnlineScenarioResult) -> Dict[str, List[float]]:
 
 def _paged_kv_cost_ledger(result: OnlineScenarioResult) -> Mapping[str, Any]:
     """Already executed paged I/O, which does not emit serving batches."""
-    metrics = getattr(result.serving, "runtime_kernel_metrics", {})
+    metrics = result.serving.runtime_kernel_metrics
     transfers = metrics.get("paged_kv_transfers", {}) if isinstance(metrics, Mapping) else {}
     ledger = transfers.get("cost_ledger", {}) if isinstance(transfers, Mapping) else {}
     return ledger if isinstance(ledger, Mapping) else {}
@@ -961,7 +951,7 @@ def _memory_layout(
         )
         shards.sort(
             key=lambda item: (
-                _non_negative_int(item.get("rank_id", item.get("rank"))),
+                _non_negative_int(item.get("rank_id")),
                 str(item.get("storage_component_id", "")),
                 str(item.get("compute_component_id", "")),
             )
@@ -981,7 +971,7 @@ def _memory_layout(
                         {
                             "logical_id": logical_id,
                             "rank": _integer_or_none(
-                                shard.get("rank_id", shard.get("rank"))
+                                shard.get("rank_id")
                             ),
                             "component_id": component_id or None,
                             "reason": "physical_bytes_missing_or_invalid",
@@ -990,7 +980,7 @@ def _memory_layout(
                     continue
                 if not component_id or length_bytes <= 0:
                     continue
-                rank = _integer_or_none(shard.get("rank_id", shard.get("rank")))
+                rank = _integer_or_none(shard.get("rank_id"))
                 tp_rank = _non_negative_int(shard.get("tp_rank"))
                 pp_rank = _non_negative_int(shard.get("pp_rank"))
                 ep_rank = _non_negative_int(shard.get("ep_rank"))
@@ -1236,8 +1226,22 @@ def _link_protocols(scenario: ScenarioConfig) -> Dict[str, str]:
 
 
 def _trace_metadata(metadata: Mapping[str, Any]) -> Dict[str, Any]:
+    def encode_identity(value: Any, key: str = "") -> Any:
+        # Allocation generations identify request-owned buffers. Their full
+        # integer identity can exceed JavaScript's exact-number range, so the
+        # report represents identities as decimal strings at every depth.
+        if type(value) is int and (key == "generation" or key.endswith("_generation")):
+            return str(value)
+        if isinstance(value, Mapping):
+            return {str(name): encode_identity(item, str(name)) for name, item in value.items()}
+        if isinstance(value, list):
+            if key == "physical_external_allocations":
+                return [[owner, buffer_id, str(generation)] for owner, buffer_id, generation in value]
+            return [encode_identity(item) for item in value]
+        return value
+
     return {
-        str(key): to_primitive(value)
+        str(key): encode_identity(to_primitive(value), str(key))
         for key, value in metadata.items()
         if not str(key).startswith("_engine_")
     }
@@ -1245,7 +1249,7 @@ def _trace_metadata(metadata: Mapping[str, Any]) -> Dict[str, Any]:
 
 def _rank_payload(
     metadata: Mapping[str, Any],
-    rank_components: Optional[Mapping[int, Any]] = None,
+    rank_components: Optional[Mapping[int, LogicalRank]] = None,
 ) -> Dict[str, Any]:
     rank = _integer_or_none(metadata.get("rank"))
     rank_detail = (
@@ -1255,7 +1259,7 @@ def _rank_payload(
     )
     component = metadata.get("compute_component_id")
     if component is None and rank_detail is not None:
-        component = getattr(rank_detail, "component_id", rank_detail)
+        component = rank_detail.component_id
     tp_rank = _integer_or_none(metadata.get("tp_rank"))
     pp_rank = _integer_or_none(metadata.get("pp_rank"))
     ep_rank = _integer_or_none(metadata.get("ep_rank"))
@@ -1264,17 +1268,17 @@ def _rank_payload(
         "tp_rank": (
             tp_rank
             if tp_rank is not None
-            else _integer_or_none(getattr(rank_detail, "tp_rank", None))
+            else rank_detail.tp_rank if rank_detail is not None else None
         ),
         "pp_rank": (
             pp_rank
             if pp_rank is not None
-            else _integer_or_none(getattr(rank_detail, "pp_rank", None))
+            else rank_detail.pp_rank if rank_detail is not None else None
         ),
         "ep_rank": (
             ep_rank
             if ep_rank is not None
-            else _integer_or_none(getattr(rank_detail, "ep_rank", None))
+            else rank_detail.ep_rank if rank_detail is not None else None
         ),
         "component_id": str(component) if component else None,
     }
@@ -1369,7 +1373,7 @@ def _task_event(
     lookup: Mapping[Tuple[str, Optional[int]], Dict[str, Any]],
     protocols: Mapping[str, str],
     scenario: Optional[ScenarioConfig] = None,
-    rank_components: Optional[Mapping[int, Any]] = None,
+    rank_components: Optional[Mapping[int, LogicalRank]] = None,
     batch_id: Optional[str] = None,
     time_offset_ns: float = 0.0,
 ) -> Dict[str, Any]:
@@ -1596,8 +1600,7 @@ def _task_event(
         }
         if instruction_route_status is not None:
             transfer["route_status"] = instruction_route_status
-    marker = getattr(task, "marker", None)
-    marker_value = getattr(marker, "value", None)
+    marker_value = task.marker.value if task.marker is not None else None
     event_kind = metadata.get("event_kind") or marker_value or task.category.value
     phase = metadata.get("phase") or event_kind
     return {
@@ -1891,8 +1894,8 @@ def _prefetch_semantics(
     The online scheduler performs page-accurate moves only for the paged KV
     pool.  The static planner has no page identities, so its ``kv_prefetch``
     tasks are an analytical remote-transfer estimate.  A positive distance on
-    a legacy single-tier runtime is retained in the policy for compatibility,
-    but does not mean that the runtime performed a prefetch.
+    a single-tier runtime is reported as unsupported; it does not mean that
+    the runtime performed a prefetch.
     """
 
     distance = max(0, int(scenario.placement.kv_policy.prefetch_distance))
@@ -1906,14 +1909,14 @@ def _prefetch_semantics(
     if mode not in {"static", "online"}:
         mode = "static"
     policy = scenario.placement.kv_policy
-    layout_mode = str(getattr(policy, "layout_mode", "") or "").strip().lower()
+    layout_mode = str(policy.layout_mode or "").strip().lower()
     paged_pool = layout_mode == "paged_pool" and bool(
-        getattr(policy, "pool_components", ())
+        policy.pool_components
     )
     has_remote_source = (
-        bool(getattr(policy, "offload_component", None))
-        and getattr(policy, "offload_component", None)
-        != getattr(policy, "cache_component", None)
+        bool(policy.offload_component)
+        and policy.offload_component
+        != policy.cache_component
     )
     if distance <= 0:
         implementation = "disabled"
@@ -1956,7 +1959,7 @@ def _prefetch_semantics(
 def _sequence_length_semantics(scenario: ScenarioConfig) -> Dict[str, Any]:
     return {
         "max_sequence_length": int(
-            getattr(scenario.model, "max_sequence_length", 0) or 0
+            scenario.model.max_sequence_length or 0
         ),
         "request_validation_rule": (
             "prompt_tokens + output_tokens <= max_sequence_length"
@@ -1974,7 +1977,7 @@ def _deadline_semantics(
     """Expose whether deadline metadata affects scheduling or only reporting."""
 
     configured = any(
-        getattr(request, "deadline_ns", None) is not None
+        request.deadline_ns is not None
         for request in scenario.workload.requests
     )
     return {
@@ -2005,9 +2008,9 @@ def _slo_semantics(
 
     policy = scheduler
     if policy is None:
-        policy = getattr(scenario.workload, "scheduler", None)
-    ttft = getattr(policy, "slo_ttft_ns", None) if policy is not None else None
-    tbt = getattr(policy, "slo_tbt_ns", None) if policy is not None else None
+        policy = scenario.workload.scheduler
+    ttft = policy.slo_ttft_ns if policy is not None else None
+    tbt = policy.slo_tbt_ns if policy is not None else None
     configured = ttft is not None or tbt is not None
     return {
         "configured": configured,
@@ -2226,12 +2229,14 @@ def _visualization_payload(
         logical_event_total = result.execution.task_count
         selected = result.trace.tasks[start : start + options.event_limit]
         protocols = _link_protocols(result.scenario)
+        rank_components = {rank.rank: rank for rank in _parallel_plan(result.scenario).ranks}
         events = [
             _task_event(
                 task,
                 lookup=lookup,
                 protocols=protocols,
                 scenario=result.scenario,
+                rank_components=rank_components,
             )
             for task in selected
         ]
@@ -2386,7 +2391,7 @@ def replay_online_batch_trace(
         )
     limitations = [
         "这是单独重新仿真的代表性批次任务图；不会重新执行调度准入，也不会改变原运行指标。",
-        "回放使用新的物理运行状态，未恢复原批次之前的 DRAM 行状态、缓存、NAND 暂存、温度和资源争用；事件时间不代表原运行的逐算子实录，即使批次总耗时相等。",
+        "回放使用新的物理运行状态，未恢复原批次之前的 DRAM 行状态、缓存、NAND 暂存和资源争用；事件时间不代表原运行的逐算子实录，即使批次总耗时相等。",
         "长短不齐的请求上下文继续沿用在线 lowerer 的加权平均批次语义。",
         "KV read 仅表示外部持久化 KV Cache 读取；prefill/recompute 的历史 prompt 注意力仍保留在 causal pairs、算力及普通 attention/activation 流量中。",
         "内存区间是组件本地的确定性逻辑字节区间，不是 JEDEC 物理地址。",
@@ -2530,13 +2535,13 @@ def _finite_non_negative(value: Any) -> float:
 def _online_runtime_origin_ns(serving: Any) -> float:
     """Return the absolute start of the online measurement window."""
 
-    return _finite_non_negative(getattr(serving, "runtime_origin_ns", 0.0))
+    return _finite_non_negative(serving.runtime_origin_ns)
 
 
 def _online_elapsed_makespan_ns(serving: Any) -> float:
     """Return serving duration while preserving absolute event timestamps."""
 
-    end_ns = _finite_non_negative(getattr(serving, "makespan_ns", 0.0))
+    end_ns = _finite_non_negative(serving.makespan_ns)
     return max(0.0, end_ns - _online_runtime_origin_ns(serving))
 
 
@@ -3034,14 +3039,15 @@ def _metadata_write_bytes(task: Any, total_bytes: float) -> Optional[float]:
         return min(total_bytes, output_bytes)
 
     cost_model = metadata.get("cost_model", {})
-    if isinstance(cost_model, Mapping):
-        write_bytes = _finite_non_negative_bytes_or_none(
-            cost_model.get("write_bytes")
-        )
-    else:
-        write_bytes = _finite_non_negative_bytes_or_none(
-            getattr(cost_model, "write_bytes", None)
-        )
+    # Compact execution metadata keeps only a presence marker. Detailed
+    # planner metadata always stores the cost estimate as a mapping.
+    if cost_model is True:
+        return None
+    if not isinstance(cost_model, Mapping):
+        raise ValueError("cost_model must be a mapping or the compact True marker")
+    write_bytes = _finite_non_negative_bytes_or_none(
+        cost_model.get("write_bytes")
+    )
     if write_bytes is None:
         return None
     return min(total_bytes, write_bytes)
@@ -3926,141 +3932,21 @@ def _component_timeseries(result: RunResult) -> Dict[str, Any]:
     }
 
 
-def _is_mtp_marker(value: object) -> bool:
-    return str(value).strip().lower() == "mtp"
-
-
-def _metadata_marks_mtp(metadata: Mapping[str, Any]) -> bool:
-    return any(
-        _is_mtp_marker(metadata.get(key))
-        for key in (
-            "phase",
-            "kind",
-            "batch_kind",
-            "cohort_kind",
-            "item_phase",
-        )
-    )
-
-
-def _item_has_mtp_candidate_work(item: object) -> bool:
-    draft_tokens = getattr(item, "draft_tokens", None)
-    if draft_tokens is not None:
-        return _non_negative_int(draft_tokens) > 0
-    verifier_tokens = getattr(item, "verifier_tokens", None)
-    if verifier_tokens is None:
-        verifier_tokens = (
-            getattr(item, "proposed_tokens", 0)
-            or getattr(item, "token_count", 0)
-        )
-    main_tokens = getattr(item, "main_tokens", None)
-    if main_tokens is None:
-        main_tokens = 1 if _is_mtp_marker(getattr(item, "phase", None)) else 0
-    return _non_negative_int(verifier_tokens) > _non_negative_int(main_tokens)
-
-
-def _event_has_mtp_candidate_work(details: Mapping[str, Any]) -> bool:
-    if (
-        _non_negative_int(details.get("draft_tokens")) > 0
-        or _non_negative_int(details.get("accepted_draft_tokens")) > 0
-        or _non_negative_int(details.get("rejected_draft_tokens")) > 0
-    ):
-        return True
-    verifier_tokens = details.get("verifier_tokens", details.get("proposed", 0))
-    return _non_negative_int(verifier_tokens) > _non_negative_int(
-        details.get("main_tokens")
-    )
-
-
 def _online_mtp_token_events(serving: ServingResult) -> Tuple[Any, ...]:
-    mtp_cohort_ids: set[str] = set()
-    mixed_mtp_cohort_ids: set[str] = set()
-    mtp_item_keys: set[Tuple[str, str]] = set()
-
-    for batch in serving.batches:
-        cohort_id = str(batch.cohort_id)
-        items = tuple(getattr(batch, "items", ()) or ())
-        generation_items = tuple(
-            item
-            for item in items
-            if str(getattr(item, "phase", batch.kind)) not in {
-                "prefill",
-                "recompute",
-            }
-        )
-        phase_mtp_items = tuple(
-            item
-            for item in generation_items
-            if _is_mtp_marker(getattr(item, "phase", None))
-        )
-        mtp_items = tuple(
-            item for item in phase_mtp_items if _item_has_mtp_candidate_work(item)
-        )
-        for item in mtp_items:
-            mtp_item_keys.add((cohort_id, str(getattr(item, "request_id", ""))))
-        if mtp_items:
-            # Whole-cohort attribution is safe only when every item is real
-            # MTP candidate work.  Comparing with generation_items used to
-            # discard prefill/recompute items first, so a mixed cohort looked
-            # pure and its final-prefill token leaked into the MTP summary.
-            if len(mtp_items) == len(items):
-                mtp_cohort_ids.add(cohort_id)
-            else:
-                mixed_mtp_cohort_ids.add(cohort_id)
-            continue
-        if phase_mtp_items:
-            mixed_mtp_cohort_ids.add(cohort_id)
-            continue
-        raw_metadata = getattr(batch, "metadata", {})
-        batch_metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
-        raw_cost_metadata = getattr(batch.cost, "metadata", {})
-        cost_metadata = (
-            raw_cost_metadata if isinstance(raw_cost_metadata, Mapping) else {}
-        )
-        if (
-            _is_mtp_marker(getattr(batch, "kind", None))
-            or _metadata_marks_mtp(batch_metadata)
-            or _metadata_marks_mtp(cost_metadata)
-        ):
-            mtp_cohort_ids.add(cohort_id)
-
-    for event in serving.events:
-        details = event.details if isinstance(event.details, Mapping) else {}
-        if (
-            event.cohort_id is not None
-            and _metadata_marks_mtp(details)
-            and _event_has_mtp_candidate_work(details)
-        ):
-            mtp_cohort_ids.add(str(event.cohort_id))
-
-    def is_mtp_token_event(event: Any) -> bool:
-        if event.event_type != "tokens_committed" or event.cohort_id is None:
-            return False
-        request_metric = serving.request_metrics.get(event.request_id)
-        if request_metric is None or request_metric.status != RequestStatus.FINISHED:
-            # A rejected request may have produced a partial stream before
-            # the terminal admission decision.  It must not contribute to
-            # successful MTP acceptance or committed-token projections.
-            return False
-        cohort_id = str(event.cohort_id)
-        details = event.details if isinstance(event.details, Mapping) else {}
-        if str(details.get("source", "")).strip().lower() in {
-            "prefill",
-            "recompute",
-        }:
-            return False
-        if (cohort_id, str(event.request_id)) in mtp_item_keys:
-            return True
-        if _metadata_marks_mtp(details) and _event_has_mtp_candidate_work(
-            details
-        ):
-            return True
-        return (
-            cohort_id in mtp_cohort_ids
-            and cohort_id not in mixed_mtp_cohort_ids
-        )
-
-    return tuple(event for event in serving.events if is_mtp_token_event(event))
+    mtp_items = {
+        (batch.cohort_id, item.request_id)
+        for batch in serving.batches
+        for item in batch.items
+        if item.phase == "mtp" and item.draft_tokens > 0
+    }
+    return tuple(
+        event for event in serving.events
+        if event.event_type == "tokens_committed"
+        and (event.cohort_id, event.request_id) in mtp_items
+        and event.details.get("source") not in {"prefill", "recompute"}
+        and event.request_id in serving.request_metrics
+        and serving.request_metrics[event.request_id].status == RequestStatus.FINISHED
+    )
 
 
 _PREFILL_SERVICE_PHASES = {"prefill", "recompute"}
@@ -4085,20 +3971,13 @@ def _sim_subtarget_mean_ms(
 
 
 def _sim_subtarget_batch_metadata(batch: Any) -> Dict[str, Any]:
-    metadata: Dict[str, Any] = {}
-    raw_batch_metadata = getattr(batch, "metadata", {})
-    if isinstance(raw_batch_metadata, Mapping):
-        metadata.update(raw_batch_metadata)
-    raw_cost_metadata = getattr(getattr(batch, "cost", None), "metadata", {})
-    if isinstance(raw_cost_metadata, Mapping):
-        metadata.update(raw_cost_metadata)
-    return metadata
+    return {**batch.metadata, **batch.cost.metadata}
 
 
 def _sim_subtarget_batch_wall_ns(batch: Any) -> Optional[float]:
     try:
-        start_ns = float(getattr(batch, "start_ns"))
-        end_ns = float(getattr(batch, "end_ns"))
+        start_ns = float(batch.start_ns)
+        end_ns = float(batch.end_ns)
     except (TypeError, ValueError, OverflowError):
         return None
     duration_ns = end_ns - start_ns
@@ -4113,8 +3992,8 @@ def _sim_subtarget_batch_interval_ns(
     """Return a finite batch wall interval for report-only projections."""
 
     try:
-        start_ns = float(getattr(batch, "start_ns"))
-        end_ns = float(getattr(batch, "end_ns"))
+        start_ns = float(batch.start_ns)
+        end_ns = float(batch.end_ns)
     except (TypeError, ValueError, OverflowError):
         return None
     if (
@@ -4128,12 +4007,12 @@ def _sim_subtarget_batch_interval_ns(
 
 def _sim_subtarget_batch_phases(batch: Any) -> set[str]:
     phases = {
-        str(getattr(item, "phase", "")).strip().lower()
-        for item in tuple(getattr(batch, "items", ()) or ())
-        if str(getattr(item, "phase", "")).strip()
+        str(item.phase).strip().lower()
+        for item in batch.items
+        if str(item.phase).strip()
     }
     if not phases:
-        kind = str(getattr(batch, "kind", "")).strip().lower()
+        kind = str(batch.kind).strip().lower()
         if kind:
             phases.add(kind)
     return phases
@@ -4141,7 +4020,7 @@ def _sim_subtarget_batch_phases(batch: Any) -> set[str]:
 
 def _sim_subtarget_batch_is_mixed(batch: Any) -> bool:
     phases = _sim_subtarget_batch_phases(batch)
-    return len(phases) > 1 or str(getattr(batch, "kind", "")).lower() == "mixed"
+    return len(phases) > 1 or str(batch.kind).lower() == "mixed"
 
 
 def _online_subtarget_request_rows(
@@ -4188,16 +4067,16 @@ def _online_subtarget_request_rows(
             malformed_batches += 1
             continue
         interval = _sim_subtarget_batch_interval_ns(batch)
-        items = tuple(getattr(batch, "items", ()) or ())
+        items = batch.items
         declared_request_ids = {
             str(request_id)
-            for request_id in tuple(getattr(batch, "request_ids", ()) or ())
+            for request_id in batch.request_ids
             if str(request_id)
         }
         item_request_ids = {
-            str(getattr(item, "request_id", ""))
+            str(item.request_id)
             for item in items
-            if str(getattr(item, "request_id", ""))
+            if str(item.request_id)
         }
         if declared_request_ids and not declared_request_ids <= item_request_ids:
             batch_item_coverage_complete = False
@@ -4209,9 +4088,9 @@ def _online_subtarget_request_rows(
             continue
         mixed = _sim_subtarget_batch_is_mixed(batch)
         serviced_request_ids = {
-            str(getattr(item, "request_id", ""))
+            str(item.request_id)
             for item in items
-            if str(getattr(item, "phase", "")).strip().lower()
+            if str(item.phase).strip().lower()
             in _PREFILL_SERVICE_PHASES
         }
         for request_id in serviced_request_ids:
@@ -4279,15 +4158,13 @@ def _online_subtarget_request_rows(
                 "ttft_residual_additive_ns": None,
             },
         )
-        queue_delay = getattr(metric, "queue_delay_ns", None)
-        if queue_delay is None and getattr(metric, "start_ns", None) is not None:
-            queue_delay = float(metric.start_ns) - float(metric.arrival_ns)
+        queue_delay = metric.queue_delay_ns
         row["initial_queue_delay_ns"] = (
             None if queue_delay is None else float(queue_delay)
         )
         prefill_service_ns = row.get("prefill_service_ns")
         prefill_wall_union_ns = row.get("prefill_wall_union_ns")
-        ttft_ns = getattr(metric, "ttft_ns", None)
+        ttft_ns = metric.ttft_ns
         if prefill_wall_union_ns is None or ttft_ns is None:
             row["ttft_residual_ns"] = None
         else:
@@ -4328,7 +4205,7 @@ def _online_generation_subtargets(
     batch_wall_coverage_complete = True
     batch_item_coverage_complete = True
     for batch in serving.batches:
-        cohort_id = str(getattr(batch, "cohort_id", ""))
+        cohort_id = str(batch.cohort_id)
         if not cohort_id:
             continue
         if cohort_id in batch_by_cohort:
@@ -4349,9 +4226,9 @@ def _online_generation_subtargets(
     token_events = 0
     malformed_token_events = 0
     for event in serving.events:
-        if getattr(event, "event_type", None) != "tokens_committed":
+        if event.event_type != "tokens_committed":
             continue
-        request_metric = serving.request_metrics.get(getattr(event, "request_id", None))
+        request_metric = serving.request_metrics.get(event.request_id)
         if request_metric is None or request_metric.status != RequestStatus.FINISHED:
             continue
         token_events += 1
@@ -4445,9 +4322,9 @@ def _online_mtp_draft_subtargets(serving: ServingResult) -> Dict[str, Any]:
     accepted_draft_tokens = 0
     malformed_token_events = 0
     for event in serving.events:
-        if getattr(event, "event_type", None) != "tokens_committed":
+        if event.event_type != "tokens_committed":
             continue
-        request_metric = serving.request_metrics.get(getattr(event, "request_id", None))
+        request_metric = serving.request_metrics.get(event.request_id)
         if request_metric is None or request_metric.status != RequestStatus.FINISHED:
             continue
         details = event.details if isinstance(event.details, Mapping) else None
@@ -4532,7 +4409,7 @@ def _online_gpu_active_proxy(result: OnlineScenarioResult) -> Dict[str, Any]:
         wall_ns = _sim_subtarget_batch_wall_ns(batch)
         if wall_ns is None or wall_ns <= 0.0:
             continue
-        if str(getattr(batch, "kind", "")).lower() not in compute_batch_kinds:
+        if str(batch.kind).lower() not in compute_batch_kinds:
             continue
         metadata = _sim_subtarget_batch_metadata(batch)
         raw_schedule = metadata.get("execution_stage_schedule")
@@ -4643,13 +4520,13 @@ def _sim_hardware_mtp_rows(batch: Any) -> Tuple[Dict[str, int], bool]:
     }
     mtp_items = tuple(
         item
-        for item in tuple(getattr(batch, "items", ()) or ())
-        if str(getattr(item, "phase", "")).strip().lower() == "mtp"
+        for item in batch.items
+        if str(item.phase).strip().lower() == "mtp"
     )
     for item in mtp_items:
         values = []
         for field in ("main_tokens", "draft_tokens", "committed_tokens"):
-            value = _sim_hardware_non_negative_int(getattr(item, field, None))
+            value = _sim_hardware_non_negative_int(getattr(item, field))
             values.append(value)
         if any(value is None for value in values):
             return totals, False
@@ -4738,7 +4615,7 @@ def _sim_hardware_phase_ledger(
     batch_rows = tuple(batches or ())
     metadata_rows = tuple(_sim_subtarget_batch_metadata(batch) for batch in batch_rows)
     owner_enabled = bool(
-        getattr(owner_residency_metrics, "enabled", False)
+        (owner_residency_metrics is not None and owner_residency_metrics.enabled)
         or any(row.get("owner_residency_enabled") is True for row in metadata_rows)
     )
 
@@ -4810,13 +4687,13 @@ def _sim_hardware_phase_ledger(
     controller_complete = True
 
     for batch, metadata in zip(batch_rows, metadata_rows):
-        cohort_id = str(getattr(batch, "cohort_id", "")).strip()
+        cohort_id = str(batch.cohort_id).strip()
         if cohort_id:
             cohort_ids.append(cohort_id)
         else:
             cohort_missing = True
 
-        kind = str(getattr(batch, "kind", "")).strip().lower() or "unknown"
+        kind = str(batch.kind).strip().lower() or "unknown"
         is_transfer = kind in _SIM_HARDWARE_TRANSFER_KINDS
         kind_row = by_kind.setdefault(
             kind, {"batch_count": 0, "physical_rows": 0}
@@ -5364,7 +5241,7 @@ def _online_simulated_subtargets(
             "completed_requests": len(completed),
             "batch_count": len(serving.batches),
             "batch_item_count": sum(
-                len(tuple(getattr(batch, "items", ()) or ()))
+                len(batch.items)
                 for batch in serving.batches
             ),
             "tokens_committed_events": generation_diagnostics.get("token_events", 0),
@@ -5524,7 +5401,6 @@ def _online_report_core(
         row = {
             "request_id": request_id,
             "status": metric.status.value,
-            "reason": metric.rejection_reason,
             "rejection_reason": metric.rejection_reason,
             "arrival_ns": metric.arrival_ns,
             "first_token_ns": metric.first_token_ns,
@@ -5857,7 +5733,7 @@ def _online_report_dict(
     dram_traffic = _sum_batch_dram_traffic(result)
     analytical_coverage = {
         "evidence": "analytical",
-        "calibration_version": ANALYTICAL_MODEL_VERSION,
+        "analytical_model_version": ANALYTICAL_MODEL_VERSION,
         "model": core.model_coverage,
         "runtime": _sum_batch_coverage(result),
         "runtime_references": _sum_batch_coverage_references(result),
@@ -5885,7 +5761,6 @@ def _online_report_dict(
         "retention_policy": result.retention_policy,
         "trace_fidelity": TraceFidelity.AGGREGATE.value,
         "result_semantics": result_semantics,
-        "measurement_semantics": result_semantics,
         "summary": core.summary,
         "requests": core.requests,
         "resource_utilization": core.resource_utilization,
@@ -5897,40 +5772,6 @@ def _online_report_dict(
         "owner_residency": to_primitive(serving.owner_residency_metrics),
         "kv_cache": {
             **to_primitive(serving.kv_metrics),
-            # Stable, UI-facing names keep the analysis independent from the
-            # internal dataclass field spelling and remain additive for old
-            # consumers.
-            "kv_layout_mode": serving.kv_metrics.layout_mode,
-            "split_mode": serving.kv_metrics.split_mode,
-            "kv_unified": serving.kv_metrics.kv_unified,
-            "kv_capacity_bytes_by_component": dict(
-                serving.kv_metrics.capacity_bytes_by_component
-            ),
-            "kv_used_bytes_by_component": dict(
-                serving.kv_metrics.used_bytes_by_component
-            ),
-            "kv_peak_bytes_by_component": dict(
-                serving.kv_metrics.peak_bytes_by_component
-            ),
-            "kv_layer_owner": dict(serving.kv_metrics.layer_owner),
-            "kv_layer_components": dict(serving.kv_metrics.layer_owner),
-            "kv_layer_bytes_per_token": dict(
-                serving.kv_metrics.layer_bytes_per_token
-            ),
-            "kv_layer_bytes_per_page": dict(
-                serving.kv_metrics.layer_bytes_per_page
-            ),
-            "kv_layer_component_shards": {
-                layer: list(components)
-                for layer, components in serving.kv_metrics.layer_component_shards.items()
-            },
-            "kv_component_owner_layers": {
-                component: list(layers)
-                for component, layers in serving.kv_metrics.component_owner_layers.items()
-            },
-            "kv_bottleneck_component": serving.kv_metrics.bottleneck_component,
-            "effective_physical_capacity": serving.kv_metrics.effective_physical_capacity_bytes,
-            "kv_idle_slots_cleared": serving.kv_metrics.idle_slots_cleared,
             "prefetch_distance_modeled": _prefetch_semantics(
                 result.scenario, execution_mode="online"
             )["modeled"],
@@ -6031,45 +5872,15 @@ def _static_kv_report(result: StaticRunResult) -> Dict[str, Any]:
         else None
     )
 
-    # Keep the static report compatible with lightweight plan doubles used by
-    # callers that only provide the legacy KV fields.  ``Mock`` attributes are
-    # intentionally ignored here instead of being coerced with ``dict()``.
     kv_policy = plan.kv_policy
-    component_capacity = getattr(kv_policy, "capacity_bytes_by_component", {})
-    component_capacity = (
-        component_capacity if isinstance(component_capacity, Mapping) else {}
-    )
-    component_bytes = getattr(kv_policy, "component_bytes_per_page", {})
-    component_bytes = component_bytes if isinstance(component_bytes, Mapping) else {}
-    # Legacy single-component KV publishes capacity by cache component but
-    # does not populate the partitioned-layout byte map.  Attribute the
-    # aggregate page quantum to that one declared component so the static
-    # report keeps capacity, used, peak, and free values on the same scope.
-    layout_mode = getattr(kv_policy, "layout_mode", "legacy_single")
-    legacy_cache_component = getattr(kv_policy, "cache_component", None)
-    if (
-        not component_bytes
-        and layout_mode == "legacy_single"
-        and isinstance(legacy_cache_component, str)
-        and legacy_cache_component
-    ):
-        component_bytes = {
-            legacy_cache_component: int(kv_policy.bytes_per_page)
-        }
-    layer_components = getattr(kv_policy, "kv_layer_components", {})
-    layer_components = layer_components if isinstance(layer_components, Mapping) else {}
-    layer_bytes_per_token = getattr(kv_policy, "kv_layer_bytes_per_token", {})
-    layer_bytes_per_token = (
-        layer_bytes_per_token
-        if isinstance(layer_bytes_per_token, Mapping)
-        else {}
-    )
-    layer_bytes_per_page = getattr(kv_policy, "kv_layer_bytes_per_page", {})
-    layer_bytes_per_page = (
-        layer_bytes_per_page if isinstance(layer_bytes_per_page, Mapping) else {}
-    )
-    layer_shards = getattr(kv_policy, "kv_layer_component_shards", {})
-    layer_shards = layer_shards if isinstance(layer_shards, Mapping) else {}
+    component_capacity = kv_policy.capacity_bytes_by_component
+    component_bytes = kv_policy.component_bytes_per_page
+    if not component_bytes and kv_policy.layout_mode == "legacy_single" and kv_policy.cache_component:
+        component_bytes = {kv_policy.cache_component: kv_policy.bytes_per_page}
+    layer_components = kv_policy.kv_layer_components
+    layer_bytes_per_token = kv_policy.kv_layer_bytes_per_token
+    layer_bytes_per_page = kv_policy.kv_layer_bytes_per_page
+    layer_shards = kv_policy.kv_layer_component_shards
 
     return {
         "mode": "static",
@@ -6081,24 +5892,26 @@ def _static_kv_report(result: StaticRunResult) -> Dict[str, Any]:
         // max(1, int(plan.kv_policy.tokens_per_page)),
         "capacity_pages": int(plan.kv_policy.capacity_pages),
         "capacity_bytes": int(plan.kv_policy.capacity_bytes),
-        "kv_layout_mode": getattr(plan.kv_policy, "layout_mode", "legacy_single"),
+        "layout_mode": plan.kv_policy.layout_mode,
         "split_mode": split_mode,
-        "kv_unified": getattr(plan.kv_policy, "kv_unified", True),
-        "logical_context_tokens": getattr(plan.kv_policy, "logical_context_tokens", 0),
-        "n_seq_max": getattr(plan.kv_policy, "n_seq_max", 0),
-        "kv_capacity_bytes_by_component": dict(component_capacity),
-        "kv_used_bytes_by_component": {
+        "kv_unified": plan.kv_policy.kv_unified,
+        "logical_context_tokens": plan.kv_policy.logical_context_tokens,
+        "n_seq_max": plan.kv_policy.n_seq_max,
+        "capacity_bytes_by_component": dict(component_capacity),
+        "used_bytes_by_component": {
             component: int(peak_pages * bytes_per_page)
             for component, bytes_per_page in component_bytes.items()
         },
-        "kv_peak_bytes_by_component": {
+        "peak_bytes_by_component": {
             component: int(peak_pages * bytes_per_page)
             for component, bytes_per_page in component_bytes.items()
         },
-        "kv_layer_owner": dict(layer_components),
-        "kv_layer_bytes_per_token": dict(layer_bytes_per_token),
-        "kv_layer_bytes_per_page": dict(layer_bytes_per_page),
-        "kv_component_owner_layers": {
+        "layer_owner": dict(layer_components),
+        "layer_bytes_per_token": dict(layer_bytes_per_token),
+        "layer_bytes_per_page": dict(layer_bytes_per_page),
+        "layer_component_shards": {layer: list(owners) for layer, owners in layer_shards.items()},
+        "bottleneck_component": kv_policy.bottleneck_component,
+        "component_owner_layers": {
             component: [
                 layer
                 for layer, owners in layer_shards.items()
@@ -6106,7 +5919,7 @@ def _static_kv_report(result: StaticRunResult) -> Dict[str, Any]:
             ]
             for component in component_capacity
         },
-        "effective_physical_capacity": int(plan.kv_policy.capacity_bytes),
+        "effective_physical_capacity_bytes": int(plan.kv_policy.capacity_bytes),
         "peak_used_pages": peak_pages,
         "peak_used_bytes": peak_pages * int(plan.kv_policy.bytes_per_page),
         "peak_semantics": "conservative_all_materialized_requests_prompt_plus_output_minus_one",
@@ -6117,12 +5930,10 @@ def _static_kv_report(result: StaticRunResult) -> Dict[str, Any]:
         "logical_prefill_read_bytes": phase_value("prefill", "kv_read", "logical"),
         "logical_prefill_write_bytes": phase_value("prefill", "kv_append", "logical"),
         "logical_decode_read_bytes": phase_value("decode", "kv_read", "logical"),
-        "logical_decode_write_bytes": phase_value("decode", "kv_append", "logical"),
         "logical_decode_append_bytes": phase_value("decode", "kv_append", "logical"),
         "physical_prefill_read_bytes": phase_value("prefill", "kv_read", "physical"),
         "physical_prefill_write_bytes": phase_value("prefill", "kv_append", "physical"),
         "physical_decode_read_bytes": phase_value("decode", "kv_read", "physical"),
-        "physical_decode_write_bytes": phase_value("decode", "kv_append", "physical"),
         "physical_decode_append_bytes": phase_value("decode", "kv_append", "physical"),
         "prefetch_events": event_counts.get("kv_prefetch", 0),
         "prefetch_bytes": physical_event_bytes.get("kv_prefetch", 0),
@@ -6277,7 +6088,7 @@ def _report_dict_in_context(
     )
     analytical_coverage = {
         "evidence": "analytical",
-        "calibration_version": ANALYTICAL_MODEL_VERSION,
+        "analytical_model_version": ANALYTICAL_MODEL_VERSION,
         "model": model_coverage,
         "runtime": execution.analytical_coverage,
     }
@@ -6291,7 +6102,6 @@ def _report_dict_in_context(
         "execution_mode": "static",
         "retention_policy": result.retention_policy,
         "result_semantics": result_semantics,
-        "measurement_semantics": result_semantics,
         "trace_fidelity": {
             RetentionPolicy.EXACT: TraceFidelity.EXACT.value,
             RetentionPolicy.STREAMING: TraceFidelity.REPRESENTATIVE.value,
@@ -6319,27 +6129,21 @@ def _report_dict_in_context(
                 "declared_weight_bytes": mtp_model["declared_weight_bytes"],
                 "operator_ids": mtp_model["operator_ids"],
                 "weight_tensor_ids": mtp_model["weight_tensor_ids"],
-                "method": getattr(mtp_policy, "method", "disabled"),
+                "method": mtp_policy.method,
                 "candidate_tokens": int(
-                    getattr(mtp_policy, "candidate_tokens", 1)
+                    mtp_policy.candidate_tokens
                 ),
                 "candidate_tokens_semantics": "max_draft_tokens",
                 "verifier_width_at_max": 1
-                + int(getattr(mtp_policy, "candidate_tokens", 1)),
+                + int(mtp_policy.candidate_tokens),
                 "min_draft_tokens": int(
-                    getattr(mtp_policy, "min_draft_tokens", 0)
+                    mtp_policy.min_draft_tokens
                 ),
-                "continuation_threshold": getattr(
-                    mtp_policy, "continuation_threshold", None
-                ),
-                "proposal_length_model": getattr(
-                    mtp_policy, "proposal_length_model", "max"
-                ),
-                "expected_draft_tokens_per_round": getattr(
-                    mtp_policy, "expected_draft_tokens_per_round", None
-                ),
+                "continuation_threshold": mtp_policy.continuation_threshold,
+                "proposal_length_model": mtp_policy.proposal_length_model,
+                "expected_draft_tokens_per_round": mtp_policy.expected_draft_tokens_per_round,
                 "draft_length_trace": list(
-                    getattr(mtp_policy, "draft_length_trace", ())
+                    mtp_policy.draft_length_trace
                 ),
                 "proposed_tokens": proposed_tokens,
                 "accepted_tokens": accepted_tokens,

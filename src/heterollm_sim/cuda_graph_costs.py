@@ -15,20 +15,18 @@ def _graph_device_dispatch_config(profile):
     """Read the optional, explicitly owned device replay envelope.
 
     Host lifecycle measurements and device dispatch measurements have different
-    owners.  Keep the device value opt-in and fail closed for ad-hoc profile
-    objects as well as for the validated ``KernelModelProfile`` dataclass.
+    owners.  Keep the device value opt-in on the current
+    ``KernelModelProfile`` contract.
     """
-    value = getattr(profile, 'graph_device_launch_ns', None)
-    evidence = getattr(profile, 'graph_device_launch_evidence', None)
-    qualified = getattr(profile, 'graph_device_launch_qualified', False)
+    value = profile.graph_device_launch_ns
+    evidence = profile.graph_device_launch_evidence
+    qualified = profile.graph_device_launch_qualified
     if type(qualified) is not bool:
         raise ValueError('graph device launch qualification must be boolean')
     if value is None:
         if evidence is not None or qualified:
             raise ValueError('graph device launch evidence requires graph_device_launch_ns')
         return None, None, False
-    if getattr(profile, 'graph_launch_ns', None) is not None:
-        raise ValueError('graph_launch_ns and graph_device_launch_ns have different cost owners')
     if (isinstance(value, bool) or not isinstance(value, (int, float))
             or not math.isfinite(float(value)) or value < 0):
         raise ValueError('graph_device_launch_ns must be a finite nonnegative number')
@@ -110,7 +108,7 @@ def replace_measured_driver_submission_costs(tasks, profiles, submission_resourc
     the verified host-only demand for the same device and physical invocation.
     """
     active = {target: profile for target, profile in profiles.items()
-              if profile is not None and getattr(profile, 'runtime_calibration', None) is not None}
+              if profile is not None and profile.runtime_calibration is not None}
     if not active:
         return tuple(tasks)
     task_map = {task.task_id: task for task in tasks}
@@ -124,7 +122,7 @@ def replace_measured_driver_submission_costs(tasks, profiles, submission_resourc
             host_audits.setdefault(audit.get('audit_id'), []).append(task)
         if 'cuda_graph_lifecycle_events' not in meta:
             continue
-        target = meta.get('cuda_graph_device', meta.get('target_component'))
+        target = meta.get('cuda_graph_device')
         if target in active:
             key = (target, meta.get('operator_invocation_group_id'))
             owners.setdefault(key, []).append(task)
@@ -252,7 +250,7 @@ def apply_cuda_graph_runtime_costs(tasks, profile):
             raise ValueError('CUDA capture membership contradicts lifecycle decision')
         node_count = meta.get('cuda_graph_node_count')
         topology = meta.get('cuda_graph_topology')
-        measurement_mode = getattr(profile, 'runtime_measurement_mode', 'qualified')
+        measurement_mode = profile.runtime_measurement_mode
         phase_structures = meta.get('cuda_graph_phase_structures')
         if phase_structures is not None and (not isinstance(phase_structures, Mapping) or set(phase_structures) != set(events)):
             raise ValueError('CUDA lifecycle phase structure bindings are incomplete')
@@ -370,7 +368,7 @@ def apply_cuda_graph_runtime_costs(tasks, profile):
             # The normal host-only profile has no device replay envelope.  Do
             # not build a second launch tuple in that hot path; the helper
             # still validates the profile and returns an O(1) no-op audit.
-            device_launch_ns = getattr(profile, 'graph_device_launch_ns', None)
+            device_launch_ns = profile.graph_device_launch_ns
             dispatch_inputs = (
                 tuple(replacements.get(launch.task_id, launch) for launch in launches)
                 if device_launch_ns is not None else launches)

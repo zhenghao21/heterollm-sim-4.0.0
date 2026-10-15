@@ -31,14 +31,13 @@ def stateful_l2_agent_scenario():
 def test_full_agent_serving_with_stateful_l2_uses_live_cache_for_migration(monkeypatch):
     import heterollm_sim.event_kernel as kernel_module
     scenario = stateful_l2_agent_scenario()
-    runner = _OnlineRuntime(compile_serving_plan(scenario), TopologyAwareBatchCostProvider(scenario),
-                            apply_measurement_start_residency=False)
+    runner = _OnlineRuntime(compile_serving_plan(scenario), TopologyAwareBatchCostProvider(scenario))
     executor = runner._paged_pool_transfer_executor
     original = kernel_module.resolve_l2_task
     page_accesses, caches = [], {}
 
-    def observe(task, states, physical_allocator=None):
-        resolved = original(task, states, physical_allocator)
+    def observe(task, states, physical_runtime=None):
+        resolved = original(task, states, physical_runtime)
         if states is executor.cache_states:
             contract = task.metadata.get("stateful_l2", {})
             if contract:
@@ -84,8 +83,7 @@ def test_full_agent_serving_with_stateful_l2_uses_live_cache_for_migration(monke
 def test_gpu_kv_uses_actual_pool_pages_across_session_handoff_and_migration(monkeypatch, cold):
     import heterollm_sim.data_motion as kernel_module
     scenario = build_agent_scenario(background=False, write_budget_bytes=None if cold else 0)
-    runner = _OnlineRuntime(compile_serving_plan(scenario), TopologyAwareBatchCostProvider(scenario),
-                            apply_measurement_start_residency=False)
+    runner = _OnlineRuntime(compile_serving_plan(scenario), TopologyAwareBatchCostProvider(scenario))
     executor = runner._paged_pool_transfer_executor
     original = kernel_module.resolve_physical_task
     accesses = []
@@ -99,7 +97,7 @@ def test_gpu_kv_uses_actual_pool_pages_across_session_handoff_and_migration(monk
                 assert not name.startswith("kv:agent-"), "GPU must not create a second KV allocation"
                 if not name.startswith(executor.namespace + ":"):
                     continue
-                generation = access.get("allocation_generation", access.get("generation", 0))
+                generation = access.get("allocation_generation", 0)
                 key = (access["physical_owner"], name, generation)
                 assert key in borrowed
                 bound = [binding for binding in executor._bindings.values()

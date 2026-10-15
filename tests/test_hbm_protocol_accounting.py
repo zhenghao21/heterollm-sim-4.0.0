@@ -65,9 +65,9 @@ def test_half_duplex_burst_bytes_and_core_time_are_not_billed_twice():
     task = physical_task(config, [{"operation":"read", "address":0, "byte_count":1},
                                   {"operation":"write", "address":0, "byte_count":1}])
     kernel = UnifiedEventKernel()
-    kernel.add_tasks((task,))
+    kernel.submit((task,))
     event = kernel.step()
-    billed = event.task.metadata["physical_execution"]
+    billed = next(iter(event.task.metadata["physical_execution_by_owner"].values()))
     assert (billed["logical_read_bytes"], billed["logical_write_bytes"]) == (1, 1)
     assert (billed["physical_read_bytes"], billed["physical_write_bytes"]) == (32, 32)
     assert event.end_ns == billed["completion_ns"] == 2.
@@ -108,12 +108,12 @@ def test_command_counts_and_bus_occupancy_are_summed_across_accesses_and_reports
     task = physical_task(tiny_config(), [{"operation":"read", "address":0, "byte_count":1},
                                          {"operation":"read", "address":32, "byte_count":1}])
     resolved = resolve_physical_task(task, PhysicalRuntimeContext(), 0.)
-    for row in (resolved.metadata["physical_execution"], resolved.metadata["physical_execution_by_owner"]["memory"],
+    for row in (next(iter(resolved.metadata["physical_execution_by_owner"].values())), resolved.metadata["physical_execution_by_owner"]["memory"],
                 summarize_batch(observations).counters):
         assert all(row[key] == 3 for key in DRAM_CONTROL_COUNT_FIELDS)
         assert all(row[key] == 1.5 for key in DRAM_CONTROL_TIME_FIELDS)
     ledger = _summarize_dram_task_traffic([resolved])
-    result = SimpleNamespace(serving=SimpleNamespace(batches=[
+    result = SimpleNamespace(serving=SimpleNamespace(runtime_kernel_metrics={}, batches=[
         SimpleNamespace(cost=SimpleNamespace(metadata={"dram_traffic":ledger}))]))
     streamed = {}
     _merge_dram_traffic(streamed, ledger)
@@ -126,7 +126,7 @@ def test_command_counts_and_bus_occupancy_are_summed_across_accesses_and_reports
 def test_unknown_or_partial_command_observations_do_not_become_zero():
     field = "refresh_commands"
     ledgers = [{"task_count":1, field:2}, {"task_count":1}]
-    result = SimpleNamespace(serving=SimpleNamespace(batches=[
+    result = SimpleNamespace(serving=SimpleNamespace(runtime_kernel_metrics={}, batches=[
         SimpleNamespace(cost=SimpleNamespace(metadata={"dram_traffic":row})) for row in ledgers]))
     streamed = {}
     for ledger in ledgers:
@@ -151,7 +151,7 @@ def test_partial_access_observations_are_not_published_as_a_complete_task(monkey
     task = physical_task(tiny_config(), [{"operation":"read", "address":0, "byte_count":1},
                                          {"operation":"read", "address":32, "byte_count":1}])
     resolved = resolve_physical_task(task, PhysicalRuntimeContext(), 0.)
-    assert resolved.metadata["physical_execution"]["refresh_commands"] is None
+    assert next(iter(resolved.metadata["physical_execution_by_owner"].values()))["refresh_commands"] is None
     assert resolved.metadata["physical_execution_by_owner"]["memory"]["refresh_commands"] is None
     assert _summarize_dram_task_traffic([resolved])["refresh_commands"] is None
 
@@ -162,10 +162,10 @@ def test_jedec_kernel_uses_core_completion_and_physical_dq_occupancy_once():
     direct = DramCore(config).run(requests)
     uncapped = DramCore(replace(config, read_bandwidth_gb_s=512., write_bandwidth_gb_s=512.)).run(requests)
     kernel = UnifiedEventKernel()
-    kernel.add_tasks((physical_task(config, [
+    kernel.submit((physical_task(config, [
         {"operation":"read", "address":0, "byte_count":1} for _ in requests]),))
     event = kernel.step()
-    billed = event.task.metadata["physical_execution"]
+    billed = next(iter(event.task.metadata["physical_execution_by_owner"].values()))
     assert event.end_ns == billed["completion_ns"] == direct.last_completion_ns
     assert event.end_ns > uncapped.last_completion_ns
     assert (billed["logical_read_bytes"], billed["physical_read_bytes"]) == (3, 96)
@@ -196,8 +196,8 @@ def test_jedec_runtime_replay_restores_real_pc_and_command_bus_state():
     runtime.restore(saved)
     assert core._hbm_control_state == control
     second = resolve_physical_task(follow, runtime, 0.)
-    assert first.metadata["physical_execution"] == second.metadata["physical_execution"]
-    billed = second.metadata["physical_execution"]
+    assert next(iter(first.metadata["physical_execution_by_owner"].values())) == next(iter(second.metadata["physical_execution_by_owner"].values()))
+    billed = next(iter(second.metadata["physical_execution_by_owner"].values()))
     # Adjacent 32-byte bursts select the two PCs of the same physical channel.
     assert set(k for k in billed["resource_busy_ns"] if "column_command:" in k) == {
         "memory:dram:column_command:0:0"}

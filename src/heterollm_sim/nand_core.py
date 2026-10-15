@@ -65,9 +65,7 @@ class NandCore:
         # zero preserves the existing write-through path.
         self._write_buffer_pending: list[tuple[float, int]] = []
         self._write_buffer_occupancy = 0
-        # ``buffered_write_mode`` is an explicit opt-in.  Keeping the state
-        # separate means legacy positive write_buffer_bytes configurations
-        # retain their write-through timing and completion semantics.
+        # A positive capacity always uses host acknowledgements and page merge.
         self._buffered_write_mode = config.buffered_write_mode
         self._staged_pages: Dict[tuple[int, ...], _StagedPage] = {}
         self._buffer_merge_bytes = 0
@@ -131,8 +129,10 @@ class NandCore:
         The reservation timeline still models each leg separately; this helper
         only fixes the derived bottleneck/utilization metric.
         """
-        # Keep the no-operation form as the legacy aggregate ceiling used by
-        # batch summaries. A transaction uses its own directional host link.
+        if operation is not None and Operation(operation) is Operation.ERASE:
+            return 0.0  # Erase operates on the array and carries no host payload.
+        # Batch summaries use the shared interface ceiling. Each transaction
+        # uses its own directional host link.
         host_bandwidth = (
             float(self.config.host_bandwidth_gb_s)
             if operation is None
@@ -200,8 +200,10 @@ class NandCore:
             return {}
         return {"nand_observations": {
             "events": tuple(self._observation_events[first:]),
-            "configured_plane_count": self.config.channels*self.config.targets_per_channel*self.config.dies_per_target*self.config.luns_per_die*self.config.planes_per_lun,
-            "plane_owner_prefix": str(self.config.metadata.get("array_resource_prefix", "nand:array")),
+            "configured_planes_by_owner": {
+                str(self.config.metadata.get("array_resource_prefix", "nand:array")):
+                    self.config.channels*self.config.targets_per_channel*self.config.dies_per_target*self.config.luns_per_die*self.config.planes_per_lun,
+            },
             "wear_enabled": self.config.wear_model is not None,
             "scope": "actual modeled physical page array operations; queue is eligible-to-array-start waiting, excluding in-service operations; physical mapping geometry is authored, not calibrated",
         }}
@@ -273,8 +275,6 @@ class NandCore:
             else:
                 retained.append((release_ns, byte_count))
         if released:
-            if not self._buffered_write_mode:
-                self._write_buffer_occupancy = max(0, self._write_buffer_occupancy - released)
             self._write_buffer_pending = retained
 
     def _admit_write_buffer(
@@ -288,7 +288,7 @@ class NandCore:
         payload_bytes = self._write_buffer_payload_bytes(request)
         if not payload_bytes:
             if self._buffered_write_mode and request.operation is Operation.ERASE and self._staged_pages:
-                drained = self.flush(now_ns=effective_arrival)
+                drained = self.flush_write_buffer(now_ns=effective_arrival)
                 arrival = max(effective_arrival, drained["media_drain_completion_ns"])
                 self._release_write_buffer(arrival)
                 return arrival, 0, arrival - effective_arrival, drained
@@ -301,49 +301,27 @@ class NandCore:
                 .format(payload_bytes, capacity)
             )
         initial_arrival = effective_arrival
-        if self._buffered_write_mode:
-            drain_counters = {}
-            # In buffered mode occupancy persists until an explicit or
-            # automatic drain.  A full buffer therefore stalls admission at
-            # the media-drain completion point instead of pretending that a
-            # host acknowledgement freed the bytes.
+        drain_counters = {}
+        # Acknowledged payload remains occupied until a media drain completes.
+        self._release_write_buffer(effective_arrival)
+        while self._held_write_buffer_bytes() + payload_bytes > capacity:
+            if self._staged_pages:
+                drained = self.flush_write_buffer(now_ns=effective_arrival)
+                for key in ("physical_programs", "physical_write_bytes", "pages_read", "physical_read_bytes", "internal_transfer_bytes"):
+                    drain_counters[key] = drain_counters.get(key, 0) + drained.get(key, 0)
+                effective_arrival = max(effective_arrival, float(drained["media_drain_completion_ns"]))
+            else:
+                # An explicit flush retains its sources until media completion.
+                future = [end for end, _count in self._write_buffer_pending if end > effective_arrival]
+                if not future:
+                    raise RuntimeError("write buffer occupancy cannot be drained")
+                effective_arrival = min(future)
             self._release_write_buffer(effective_arrival)
-            while self._held_write_buffer_bytes() + payload_bytes > capacity:
-                if self._staged_pages:
-                    drained = self.flush(now_ns=effective_arrival)
-                    for key in ("physical_programs", "physical_write_bytes", "pages_read", "physical_read_bytes", "internal_transfer_bytes"):
-                        drain_counters[key] = drain_counters.get(key, 0) + drained.get(key, 0)
-                    effective_arrival = max(effective_arrival, float(drained["media_drain_completion_ns"]))
-                else:
-                    # Explicit flush schedules future work; its source bytes
-                    # cannot be overwritten merely because they left the
-                    # dirty-page map. Preserve the same media-complete release
-                    # contract as automatic draining and write-through staging.
-                    future = [end for end, _count in self._write_buffer_pending if end > effective_arrival]
-                    if not future:
-                        raise RuntimeError("write buffer occupancy cannot be drained")
-                    effective_arrival = min(future)
-                self._release_write_buffer(effective_arrival)
-            return effective_arrival, payload_bytes, max(0.0, effective_arrival - initial_arrival), drain_counters
-        while True:
-            self._release_write_buffer(effective_arrival)
-            if self._write_buffer_occupancy + payload_bytes <= capacity:
-                return effective_arrival, payload_bytes, max(0.0, effective_arrival - initial_arrival), {}
-            future = [
-                release_ns for release_ns, _ in self._write_buffer_pending
-                if release_ns > effective_arrival
-            ]
-            if not future:
-                raise RuntimeError("write buffer occupancy cannot be drained")
-            effective_arrival = min(future)
+        return effective_arrival, payload_bytes, max(0.0, effective_arrival - initial_arrival), drain_counters
 
-    def _reserve_write_buffer(self, completion_ns: float, payload_bytes: int) -> None:
+    def _reserve_write_buffer(self, payload_bytes: int) -> None:
         if payload_bytes <= 0:
             return
-        if self._buffered_write_mode:
-            self._write_buffer_occupancy += payload_bytes
-            return
-        self._write_buffer_pending.append((completion_ns, payload_bytes))
         self._write_buffer_occupancy += payload_bytes
 
     def discard_staged_pages(self, address: int, byte_count: int, *, now_ns: Optional[float] = None) -> dict:
@@ -511,20 +489,6 @@ class NandCore:
             **self._observations(observation_start),
         }
 
-    def drain(self, *, now_ns: Optional[float] = None) -> dict:
-        """Alias for :meth:`flush_write_buffer` used by serving callers."""
-
-        return self.flush_write_buffer(now_ns=now_ns)
-
-    def flush(self, *, now_ns: Optional[float] = None) -> dict:
-        """Short alias for explicit write-buffer draining."""
-
-        return self.flush_write_buffer(now_ns=now_ns)
-
-    def execute(self, request: AccessRequest) -> TransactionResult:
-        """Submit one request through the same admission gate as batches."""
-        return self.submit(request)
-
     def submit(self, request: AccessRequest) -> TransactionResult:
         self._validate_request(request)
         self._observation_events = []
@@ -591,7 +555,7 @@ class NandCore:
             **self.timeline.metrics_delta(before_metrics),
             **self._observations(),
         })
-        self._reserve_write_buffer(result.completion_ns, write_buffer_bytes)
+        self._reserve_write_buffer(write_buffer_bytes)
         self._acceptance_ns = effective_arrival
         self._inflight = [*inflight, result.completion_ns]
         self._inflight_operations = [*admitted, (result.completion_ns, request.operation)]
@@ -897,7 +861,7 @@ class NandCore:
 
 
 def nand_service(config: NandConfig, request: AccessRequest, *, timeline: Optional[ResourceTimeline] = None) -> TransactionResult:
-    return NandCore(config, timeline).execute(request)
+    return NandCore(config, timeline).submit(request)
 
 
 def summarize_nand_observations(observations):
@@ -908,8 +872,7 @@ def summarize_nand_observations(observations):
     events = tuple(event for item in observations for event in item.get("events", ()))
     planes_by_owner = {}
     for item in observations:
-        for owner, count in item.get("configured_planes_by_owner", {
-                item.get("plane_owner_prefix", "nand:array"): item.get("configured_plane_count", 0)}).items():
+        for owner, count in item["configured_planes_by_owner"].items():
             if owner in planes_by_owner and planes_by_owner[owner] != count:
                 raise ValueError("NAND observation geometry changed within one physical owner")
             planes_by_owner[owner] = count

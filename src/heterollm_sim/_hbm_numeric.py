@@ -1,6 +1,6 @@
 """Float64 execution of the JEDEC HBM normal-operation controller.
 
-This is a compiled representation of _hbm_control, not the legacy DRAM
+This is a compiled representation of _hbm_control, not the analytical DRAM
 accelerator. Physical CA ports, PC data pipes, SID histories and refresh
 remain distinct. No fast-math or parallel reductions are used.
 """
@@ -26,6 +26,10 @@ TIMING_FIELDS = (
 
 @njit(cache=True, nogil=True, fastmath=False)
 def _align(value, quantum):
+    # Match _Controller.align: recognize exact represented ticks without
+    # treating a later external arrival as aligned through a tolerance.
+    if value == round(value / quantum) * quantum:
+        return value
     return max(value, math.ceil(value / quantum) * quantum)
 
 

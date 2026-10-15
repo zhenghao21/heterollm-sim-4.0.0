@@ -61,7 +61,7 @@ def test_multi_access_observations_and_detail_bounds_describe_the_whole_task():
                   "memory_accesses": ({"operation": "read", "address": 0, "byte_count": 32768},
                                       {"operation": "read", "address": 0, "byte_count": 16384})})
     resolved = resolve_physical_task(task, PhysicalRuntimeContext(), 0.)
-    physical = resolved.metadata["physical_execution"]
+    physical = next(iter(resolved.metadata["physical_execution_by_owner"].values()))
     assert len(physical["nand_observations"]["events"]) == 3
     assert physical["details_truncated"]
     assert physical["intervals_truncated"]
@@ -78,7 +78,7 @@ def test_alias_of_replaced_physical_preview_does_not_survive_as_second_bill():
         demands=(ResourceDemand("preview-view", 999., bytes_moved=64),
                  ResourceDemand("compute", 5.)),
         metadata={"physical_memory_config": c, "physical_owner": "dram",
-                  "memory_access": {"operation": "read", "address": 0, "byte_count": 64}})
+                  "memory_accesses": ({"operation": "read", "address": 0, "byte_count": 64},)})
     resolved = resolve_physical_task(task, runtime, 0.)
     assert "preview-view" not in {d.resource_id for d in resolved.demands}
     assert sum(d.bytes_moved for d in resolved.demands) == 64
@@ -92,9 +92,9 @@ def test_complete_stages_keep_owner_bytes_after_payload_recorder_is_full():
     task = replace(task, metadata={**task.metadata, "physical_memory_configs": configs,
                                   "physical_memory_config": configs["a"]})
     resolved = resolve_physical_task(task, PhysicalRuntimeContext(), 0.)
-    physical = resolved.metadata["physical_execution"]
-    assert physical["intervals_truncated"]
-    assert not physical["details_truncated"]
+    physical = tuple(resolved.metadata["physical_execution_by_owner"].values())
+    assert any(row["intervals_truncated"] for row in physical)
+    assert not any(row["details_truncated"] for row in physical)
     intervals = _task_resource_intervals(resolved, resolved.demands, 0.)
     shared = [item for item in intervals if item.resource_id == "shared:0"]
     assert [item.bytes_moved for item in shared] == [64, 64]
@@ -109,7 +109,8 @@ def test_parallel_owners_with_different_payload_bounds_keep_their_own_bytes():
     runtime = PhysicalRuntimeContext()
     runtime.timeline.lane_available["shared:0"] = [0., 0.]
     resolved = resolve_physical_task(task, runtime, 0.)
-    payloads = resolved.metadata["physical_execution"]["resource_interval_payloads"]["shared:0"]
+    payloads = [item for row in resolved.metadata["physical_execution_by_owner"].values()
+                for item in row["resource_interval_payloads"].get("shared:0", ())]
     assert len(payloads) == 1 and payloads[0][2] == 64
     intervals = _task_resource_intervals(resolved, resolved.demands, 0.)
     shared = [item for item in intervals if item.resource_id == "shared:0"]
@@ -118,30 +119,29 @@ def test_parallel_owners_with_different_payload_bounds_keep_their_own_bytes():
     assert sum(item.bytes_moved for item in shared) == 128
 
 
-def test_legacy_shared_owner_bill_requires_attributable_byte_counts():
+def test_shared_owner_bill_requires_attributable_byte_counts():
     resolved = resolve_physical_task(shared_task(("dram", "dram")), PhysicalRuntimeContext(), 0.)
     owners = {owner: {key: value for key, value in row.items()
                       if key != "resource_bytes"}
               for owner, row in resolved.metadata["physical_execution_by_owner"].items()}
     resolved = replace(resolved, metadata={**resolved.metadata, "physical_execution_by_owner": owners})
-    with pytest.raises(ValueError, match="requires owner resource_bytes"):
+    with pytest.raises(ValueError, match="require resource_bytes"):
         _summarize_dram_task_traffic([resolved])
 
 
 @pytest.mark.parametrize("count", [1, 2])
-def test_legacy_interval_fallback_never_copies_a_bill_to_multiple_intervals(count):
+def test_owner_payload_intervals_keep_exact_byte_counts(count):
     demand = ResourceDemand("wire", float(count), bytes_moved=128)
-    task = TaskSpec("legacy", "r", "legacy intervals", TaskCategory.MEMORY,
+    task = TaskSpec("payloads", "r", "owner payload intervals", TaskCategory.MEMORY,
         demands=(demand,), metadata={
-            "physical_execution": {"resource_intervals": {"wire": [(2.*i, 2.*i+1) for i in range(count)]},
-                                   "resource_bytes": {"wire": 128}},
-            "physical_demands_resource_ids": ("wire",)})
-    if count > 1:
-        with pytest.raises(ValueError, match="requires per-interval byte"):
-            _task_resource_intervals(task, task.demands, 0.)
-    else:
-        intervals = _task_resource_intervals(task, task.demands, 0.)
-        assert sum(item.bytes_moved for item in intervals) == 128
+            "physical_execution_by_owner": {"memory": {
+                "resource_interval_payloads": {"wire": [(2.*i, 2.*i+1, 128 // count) for i in range(count)]},
+                "resource_bytes": {"wire": 128}}},
+            "physical_demands_resource_ids": ("wire",),
+            "physical_nonmemory_demand_ids": ()})
+    intervals = _task_resource_intervals(task, task.demands, 0.)
+    assert len(intervals) == count
+    assert sum(item.bytes_moved for item in intervals) == 128
 
 
 @pytest.mark.parametrize("detail_limit", [2, 100])
@@ -154,7 +154,7 @@ def test_simultaneous_reservations_retain_multiplicity_with_partial_or_full_payl
         resource_capacities={"ca": 2, "wire": 2}, capture_physical_details=True)
     kernel.submit([TaskSpec("parallel", "r", "parallel physical", TaskCategory.MEMORY,
         metadata={"physical_memory_config": c, "physical_owner": "memory",
-                  "memory_access": {"operation": "read", "address": 0, "byte_count": 128}})])
+                  "memory_accesses": ({"operation": "read", "address": 0, "byte_count": 128},)})])
     event = kernel.step()
     intervals = _task_resource_intervals(event.task, event.demands, event.start_ns)
     commands = [item for item in intervals if item.resource_id == "ca"]

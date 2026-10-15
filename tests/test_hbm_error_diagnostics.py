@@ -96,6 +96,6 @@ def test_capacity_alignment_is_identified_as_a_model_requirement():
 
 def test_legacy_directional_budget_error_retains_its_existing_exception_type():
     with pytest.raises(ValueError, match="directional bandwidth cannot exceed") as captured:
-        DramConfig.from_mapping(reference(control_mode="legacy", refresh_policy="disabled",
+        DramConfig.from_mapping(reference(control_mode="analytical", refresh_policy="disabled",
                                           read_bandwidth_gb_s=2048.))
     assert type(captured.value) is ValueError

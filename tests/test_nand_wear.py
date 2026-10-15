@@ -21,7 +21,7 @@ def config(**kwargs):
     values = dict(channels=1, targets_per_channel=1, dies_per_target=1,
         luns_per_die=1, planes_per_lun=4, planes_independent=True,
         blocks_per_plane=2, pages_per_block=256, page_bytes=PAGE,
-        host_granularity_bytes=1, host_bandwidth_gb_s=100., internal_bandwidth_gb_s=100.,
+        host_granularity_bytes=1, host_bandwidth_gb_s=100., host_read_bandwidth_gb_s=100., host_write_bandwidth_gb_s=100., internal_bandwidth_gb_s=100.,
         front_ns=0., page_read_ns=100., page_program_ns=200., block_erase_ns=300.)
     values.update(kwargs)
     return make_hbf_config(**values)
@@ -121,7 +121,7 @@ def test_partial_physical_observations_remain_partial_after_batch_aggregation():
         return SimpleNamespace(task_id=name,demands=(),metadata={"physical_execution_by_owner":{
             "hbf0":{"kind":"HBF",**row.counters}}})
     ledger = _summarize_nand_task_traffic([task("yes",True),task("no",False)])
-    result = SimpleNamespace(serving=SimpleNamespace(batches=[SimpleNamespace(cost=SimpleNamespace(
+    result = SimpleNamespace(serving=SimpleNamespace(runtime_kernel_metrics={}, batches=[SimpleNamespace(cost=SimpleNamespace(
         metadata={"storage_traffic":ledger}))]))
     output = _sum_batch_storage_traffic(result)
     assert output["metric_availability"]["nand_read_queue_depth"]["status"] == "partial"

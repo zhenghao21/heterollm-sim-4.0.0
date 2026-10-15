@@ -30,7 +30,7 @@ def fixture(*, payload=4096, hbf_capacity=32768, active_hbf=False, ledger=None,
 
 
 def allocate(pool, executor, count):
-    assert pool.resize("request", count)
+    assert pool.resize_detailed("request", count).success
     executor.sync_pages(pool.pages())
     return pool.request_pages("request")
 
@@ -58,7 +58,7 @@ def test_small_hbf_capacity_rejects_third_page_before_physical_submission():
     assert pool.restore_page(pages[0].logical_page_id, "hbm")
     assert ledger.used_bytes == {"hbm": 8192, "hbf": 16384}
     assert pool.offload_page(pages[2].logical_page_id, "hbf")
-    assert pool.resize("request", 0)
+    assert pool.resize_detailed("request", 0).success
     executor.sync_pages(pool.pages())
     assert ledger.used_bytes == {"hbm": 0, "hbf": 0}
     assert all(not allocator.allocations() for allocator in executor.runtime.allocators.values())
@@ -67,7 +67,7 @@ def test_small_hbf_capacity_rejects_third_page_before_physical_submission():
 def test_active_nand_resize_and_probe_reserve_whole_pages_atomically():
     pool, executor, ledger = fixture(active_hbf=True)
     assert not pool.can_resize("request", 3)
-    assert not pool.resize("request", 3)
+    assert not pool.resize_detailed("request", 3).success
     assert not pool.pages() and ledger.used_bytes == {"hbm": 0, "hbf": 0}
     pages = allocate(pool, executor, 2)
     assert ledger.used_bytes["hbf"] == 32768
@@ -113,7 +113,7 @@ def test_async_reserves_two_distinct_footprints_and_releases_correct_side(action
         assert ledger.used_bytes == {"hbm": 0, "hbf": 16384}
     assert ledger.peak_used_bytes == {"hbm": 4160, "hbf": 16384}
     assert not pool._pending_moves
-    assert pool.resize("request", 0)
+    assert pool.resize_detailed("request", 0).success
     executor.sync_pages(pool.pages())
     assert ledger.used_bytes == {"hbm": 0, "hbf": 0}
 
@@ -153,7 +153,7 @@ def test_rejected_asymmetric_ledger_transfer_reverses_source_and_physical_plan()
 def test_late_executor_attachment_reconciles_existing_logical_pages(capacity, success):
     pool, executor, ledger = fixture(hbf_capacity=capacity, active_hbf=True,
                                     attach=False, declared_config=False)
-    assert pool.resize("request", 2)
+    assert pool.resize_detailed("request", 2).success
     assert ledger.used_bytes["hbf"] == 8192
     if success:
         pool.set_transfer_executor(executor)

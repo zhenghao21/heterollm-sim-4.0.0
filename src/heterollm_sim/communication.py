@@ -24,30 +24,19 @@ from .ir import (
 )
 
 
-_GDDR_PROTOCOLS = frozenset({"gddr", "gddr6", "gddr6x", "gddr7"})
-
-
 def _normalized_protocol(value: object) -> str:
     return str(value or "").strip().lower().replace("-", "").replace("_", "")
 
 
 def _is_local_memory_protocol(value: object) -> bool:
     normalized = _normalized_protocol(value)
-    return normalized in {"hbm", "hbmstack", "hbf", "ddr", "dram", "tsv", "lpddr5x"} or normalized in _GDDR_PROTOCOLS
+    return normalized in {"hbm", "hbmstack", "hbf", "ddr", "dram", "tsv", "lpddr5x", "gddr"}
 
 
 def _is_storage_endpoint(component: ComponentSpec) -> bool:
-    """Recognize formal storage endpoints during config normalization.
+    """Recognize storage endpoints from the normalized hardware contract."""
 
-    ``ComponentSpec.is_storage`` is the authoritative property after IR
-    normalization.  The explicit kind fallback keeps topology routing useful
-    while a newly-authored GDDR component is being normalized by the config
-    layer and avoids silently charging its local link as a second bus.
-    """
-
-    return component.is_storage or component.normalized_kind in {
-        "gddr", "gddr_memory", "gddr6", "gddr6x", "gddr7",
-    }
+    return component.is_storage
 
 
 def _non_negative_integer(value: object, name: str) -> int:
@@ -89,7 +78,6 @@ def declared_resource_owners(hardware: HardwareSpec) -> Mapping[str, str]:
         bind(logical, owner)
     for component in hardware.components:
         common = (component.metadata.get("memory_service", {}).get("physical_owner")
-                  or component.metadata.get("physical_owner")
                   or component.metadata.get("memory_service_owner")
                   or (default_memory_resource_id(component) if component.is_storage else None))
         for direction in ("read", "write"):
@@ -440,22 +428,19 @@ class TopologyRouter:
         service_ref = link.metadata.get("service_ref")
         source_flag = str(link.metadata.get("bandwidth_source", "")).strip().lower()
         memory_component = None
-        if service_ref or source_flag in {"component", "memory_component", "shared_component"}:
+        if not service_ref and source_flag in {"component", "memory_component", "shared_component"}:
+            raise ValueError("link {} service_ref is required for a memory-service link".format(link.link_id))
+        if service_ref:
             candidates = [self.components[ident] for ident in (source_component, target_component)
-                          if _is_storage_endpoint(self.components[ident])]
-            if service_ref:
-                candidates = [item for item in candidates if str(service_ref) in {
-                    item.component_id, item.component_id + ".access",
-                    str(item.metadata.get("memory_service", {}).get("service_id", "")),
-                }]
+                          if _is_storage_endpoint(self.components[ident])
+                          and service_ref == ident + ".access"]
             if len(candidates) != 1:
-                raise ValueError("link {} service_ref must identify one storage endpoint".format(link.link_id))
+                raise ValueError("link {} service_ref must identify one storage endpoint as <component_id>.access".format(link.link_id))
             memory_component = candidates[0]
             owner = resolve_service(memory_component).resource_id
             declared = link.metadata.get("bandwidth_resource_id")
             if declared and declared != owner:
-                raise ValueError("link {} bandwidth_resource_id conflicts with service_ref {}".format(link.link_id, service_ref or memory_component.component_id))
-            service_ref = memory_component.component_id + ".access"
+                raise ValueError("link {} bandwidth_resource_id conflicts with service_ref {}".format(link.link_id, service_ref))
         bandwidth = float(link.bandwidth_gbps)
         if memory_component is not None:
             direction = "read" if memory_component.component_id == source_component else "write"
@@ -763,7 +748,7 @@ class TopologyRouter:
     ) -> Optional[TransferPhase]:
         """Fold one fully declared host-DMA span into an atomic task phase.
 
-        This is deliberately fail-closed.  The legacy serial phases remain
+        This is deliberately fail-closed.  Explicit serial phases remain
         authoritative unless every routed link explicitly opts in, a
         multi-link route declares one shared span, exactly one PCIe anchor is
         present, both active-memory endpoints expose their physical service,

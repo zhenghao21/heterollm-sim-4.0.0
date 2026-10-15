@@ -588,8 +588,8 @@ def _metadata(item: ProtocolPresetDefinition) -> Dict[str, Any]:
         "limitations": list(item.limitations),
         "catalog_version": CATALOG_VERSION,
     }
-    if item.protocol.upper() in {"GDDR", "GDDR6", "GDDR6X", "GDDR7"}:
-        payload["generation"] = item.version.upper() if item.version.upper() in {"GDDR6", "GDDR6X", "GDDR7"} else item.protocol.upper()
+    if item.protocol.upper() == "GDDR":
+        payload["generation"] = item.version.upper()
     return payload
 
 
@@ -609,8 +609,8 @@ def _simulation_defaults(item: ProtocolPresetDefinition) -> Dict[str, Any]:
         "bandwidth_semantics": "one_way_capacity",
         "manual_override_allowed": True,
     }
-    if item.protocol.upper() in {"GDDR", "GDDR6", "GDDR6X", "GDDR7"}:
-        metadata["generation"] = item.version.upper() if item.version.upper() in {"GDDR6", "GDDR6X", "GDDR7"} else item.protocol.upper()
+    if item.protocol.upper() == "GDDR":
+        metadata["generation"] = item.version.upper()
         metadata["protocol_family"] = "GDDR"
     return {
         "source_port": {

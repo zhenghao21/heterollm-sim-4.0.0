@@ -1854,7 +1854,6 @@
           ]
         },
         {
-          "section": "条件成本/功耗/面积/预算",
           "backends": {
             "economics": "formula_only"
           },
@@ -1883,7 +1882,6 @@
               }
             ]
           },
-          "limitations": "使用已测TPS作输入，价格/功率/面积为假设，未重新执行内存或热反馈。",
           "source_references": [
             {
               "path": "scripts/hbf_hbm_provisioning.py",
@@ -1900,7 +1898,10 @@
           ],
           "selector": "rows[*].conditional_cost / conditional_5yr_cost / conditional_slo_cost / budget_checks"
         }
-      ]
+      ],
+      "selected_candidate_id": null,
+      "feasible_candidate_ids": [],
+      "analysis_update": "Existing execution data retained; purchase-only costs and remaining budget checks recalculated without rerunning simulation."
     },
     {
       "id": "12_ablation_paths",
@@ -2314,156 +2315,6 @@
           ],
           "selector": [
             "agent-write-budget"
-          ],
-          "shared_call_chain": "historical_full_serving_call_chain"
-        }
-      ]
-    },
-    {
-      "id": "14_thermal_wear",
-      "title": "⑭ 动态热、磨损与物理页队列",
-      "artifact": "artifacts/hbf_hbm/14_thermal_wear.json",
-      "main_artifact": "artifacts/hbf_hbm/results.json",
-      "main_row_count": 6,
-      "sections": [
-        {
-          "section": "4个长负载轨迹",
-          "backends": {
-            "HBF": "NandCore",
-            "HBM": "no_submitted_access",
-            "thermal_wear": "online_analytical_state_changes_NandCore_stage_durations"
-          },
-          "evidence": {
-            "row_count": 4,
-            "dram_owner_row_counts": {},
-            "nand_operator_owner_row_counts": {},
-            "aggregate_hbm_resource_ids": [],
-            "samples": [
-              {
-                "id": "trace-thermal-0-wear-0",
-                "mode": "physical_nand_trace_microbenchmark",
-                "node_tps": null
-              },
-              {
-                "id": "trace-thermal-1-wear-0",
-                "mode": "physical_nand_trace_microbenchmark",
-                "node_tps": null
-              }
-            ]
-          },
-          "limitations": "NAND在线反馈真实改变后续任务时间；P/E由显式erase增加，无FTL。",
-          "source_references": [
-            {
-              "path": "scripts/hbf_hbm_thermal_wear_study.py",
-              "line": 60,
-              "revision": "d4a9fee8adb29912a36d9d74ca119e68c25cfb73",
-              "excerpt": "core = NandCore(config, capture_details=False)"
-            },
-            {
-              "path": "scripts/hbf_hbm_thermal_wear_study.py",
-              "line": 69,
-              "revision": "d4a9fee8adb29912a36d9d74ca119e68c25cfb73",
-              "excerpt": "row = core.submit(AccessRequest(str(operation_count), operation, page*PAGE, PAGE, arrival))"
-            }
-          ],
-          "selector": "trace_rows[*]"
-        },
-        {
-          "section": "A阴性对照2点",
-          "backends": {
-            "HBM_operator": "aggregate_service_v1",
-            "host_DDR": "DramCore",
-            "GPU_compute": "operator_cost_model_and_event_scheduler",
-            "HBF": "no_submitted_access"
-          },
-          "evidence": {
-            "row_count": 2,
-            "dram_owner_row_counts": {
-              "cpu0.memory": 2
-            },
-            "nand_operator_owner_row_counts": {},
-            "aggregate_hbm_resource_ids": [
-              "hbm0.hbm_fabric"
-            ],
-            "samples": [
-              {
-                "id": "14-A_hbm_only-thermal-0-wear-0",
-                "mode": "full_operator_serving",
-                "placement": "A_hbm_only",
-                "node_tps": 30336.472196948056
-              },
-              {
-                "id": "14-A_hbm_only-thermal-1-wear-1",
-                "mode": "full_operator_serving",
-                "placement": "A_hbm_only",
-                "node_tps": 30336.472196948056
-              }
-            ]
-          },
-          "limitations": "未访问HBF，所以调整其热参数不影响A；不是物理HBM热实验。",
-          "source_references": [
-            {
-              "path": "scripts/hbf_hbm_thermal_wear_study.py",
-              "line": 100,
-              "revision": "d4a9fee8adb29912a36d9d74ca119e68c25cfb73",
-              "excerpt": "scenario = build_study_scenario(architecture, prompt=prompt, batch=1, output=output,"
-            }
-          ],
-          "selector": [
-            "14-A_hbm_only-thermal-0-wear-0",
-            "14-A_hbm_only-thermal-1-wear-1"
-          ],
-          "shared_call_chain": "historical_full_serving_call_chain"
-        },
-        {
-          "section": "B服务反馈4点",
-          "backends": {
-            "HBM_operator": "aggregate_service_v1",
-            "host_DDR": "DramCore",
-            "GPU_compute": "operator_cost_model_and_event_scheduler",
-            "HBF_KV": "NandCore",
-            "thermal_wear": "NandCore_online_feedback"
-          },
-          "evidence": {
-            "row_count": 4,
-            "dram_owner_row_counts": {
-              "cpu0.memory": 4
-            },
-            "nand_operator_owner_row_counts": {
-              "hbf0.memory": 4
-            },
-            "aggregate_hbm_resource_ids": [
-              "hbm0.hbm_fabric"
-            ],
-            "samples": [
-              {
-                "id": "14-B_all_kv_hbf-thermal-0-wear-0",
-                "mode": "full_operator_serving",
-                "placement": "B_all_kv_hbf",
-                "node_tps": 8667.400831302202
-              },
-              {
-                "id": "14-B_all_kv_hbf-thermal-1-wear-0",
-                "mode": "full_operator_serving",
-                "placement": "B_all_kv_hbf",
-                "node_tps": 5153.011726801468
-              }
-            ]
-          },
-          "limitations": "HBF事件确实反馈服务，不是TPS乘降额；共同HBM仍聚合，参数未外部校准。",
-          "source_references": [
-            {
-              "path": "scripts/hbf_hbm_thermal_wear_study.py",
-              "line": 107,
-              "revision": "d4a9fee8adb29912a36d9d74ca119e68c25cfb73",
-              "excerpt": "metadata[\"physical_memory_config\"] = replace(config, detailed_observability=True,"
-            }
-          ],
-          "selector": [
-            "14-B_all_kv_hbf-thermal-0-wear-0",
-            "14-B_all_kv_hbf-thermal-1-wear-0",
-            "14-B_all_kv_hbf-thermal-0-wear-1",
-            "14-B_all_kv_hbf-thermal-1-wear-1"
           ],
           "shared_call_chain": "historical_full_serving_call_chain"
         }
@@ -3484,9 +3335,7 @@
     "path": "artifacts/hbf_hbm/economics.json",
     "classification": "formula_only",
     "sections": {
-      "cost_power_area_TCO": "假设参数与已有TPS后算",
-      "uniform_wear_estimate": "写率/容量/P-E/GC系数后算，不推进NandCore",
-      "rc_thermal_trace": "独立RC解析式，没有服务TPS反馈；不同于14组Core在线热状态"
+      "uniform_wear_estimate": "写率/容量/P-E/GC系数后算，不推进NandCore"
     },
     "sources": [
       {
@@ -3504,8 +3353,7 @@
       {
         "path": "scripts/hbf_hbm_economics.py",
         "line": 139,
-        "revision": "d4a9fee8adb29912a36d9d74ca119e68c25cfb73",
-        "excerpt": "def rc_thermal_trace(*, active_power_w: float, threshold_c: float,"
+        "revision": "d4a9fee8adb29912a36d9d74ca119e68c25cfb73"
       }
     ]
   },

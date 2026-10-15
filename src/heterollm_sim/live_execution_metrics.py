@@ -117,14 +117,14 @@ class LiveCohortMetrics:
             info = event.resource_predecessors.get(demand.resource_id)
             if info is None:
                 continue
-            if info.get("end_ns", event.start_ns) > event.start_ns:
+            if info["end_ns"] > event.start_ns:
                 continue  # Internal Core wait is already in this task's span.
             lane = int(info.get("lane", event.resource_lanes.get(demand.resource_id, 0)))
-            resource_id = str(info.get("resource_id", demand.resource_id))
+            resource_id = info["resource_id"]
             previous = self._resource_paths.get((resource_id, lane))
             # Other cohorts can interleave on the same lane. An older task
             # from this cohort must not replace the actual external predecessor.
-            if previous is not None and str(info.get("task_id", "")) == previous[0]:
+            if previous is not None and info["task_id"] == previous[0]:
                 start_path = _better_path(previous[1], start_path)
         duration = event.end_ns - event.start_ns
         self._end_paths[task.task_id] = _extend_path(

@@ -79,7 +79,7 @@ def build_ablation_scenario(medium="hbf", ablation="ideal", *, batch=4, prompt=1
         write_bandwidth_gbps=profile.write_bandwidth_gb_s*8,
         ports=tuple(replace(p,bandwidth_gbps=bandwidth*8) for p in source.ports),
         metadata={"physical_memory_config":physical,"memory_service_owner":ident+".memory",
-            "access_mode":"memory","writable":True,"read_only":False,
+            "access_mode":"memory","writable":True,
             "read_latency_ns":profile.read_latency_ns,"write_latency_ns":profile.write_latency_ns,
             "transfer_granularity_bytes":64,"max_outstanding_requests":profile.max_outstanding_requests,
             "parallel_lanes":profile.parallel_lanes,

@@ -1,8 +1,10 @@
 """Compiled HBM must preserve the authoritative normal-operation controller."""
 from dataclasses import replace
+import math
 
 import pytest
 
+from heterollm_sim import _compiled_hbm
 from heterollm_sim._compiled_hbm import execute_hbm_numeric
 from heterollm_sim._hbm_control import _Controller
 from heterollm_sim.dram_core import DramCore
@@ -47,6 +49,63 @@ def assert_same(reference, numeric, request):
         assert getattr(numeric.timeline, field) == getattr(reference.timeline, field), field
 
 
+@pytest.mark.parametrize("quantum", [2.56, 1.28, 20.48, 10.24])
+def test_clock_alignment_is_idempotent_without_accepting_later_arrivals(quantum):
+    from heterollm_sim._hbm_numeric import _align
+
+    tick = round(21072650.24 / quantum)
+    grid = tick * quantum
+    for align in (_Controller.align, _align):
+        assert align(grid, quantum) == grid
+        below = math.nextafter(grid, -math.inf)
+        assert align(below, quantum) == grid
+        above = math.nextafter(grid, math.inf)
+        following = align(above, quantum)
+        assert following == (tick + 1) * quantum
+        assert following > above
+        assert align(following, quantum) == following
+
+
+def deadline_configuration():
+    return configuration(channels=1, command_clock_ns=20.48, data_rate_mt_s=195.3125,
+        read_latency_ns=655.36, write_latency_ns=163.84, activate_to_read_ns=14.,
+        activate_to_write_ns=14., read_to_precharge_ns=0., column_same_group_ns=81.92,
+        column_different_group_ns=40.96, column_different_sid_ns=61.44,
+        precharge_to_precharge_ns=40.96)
+
+
+def test_repeated_column_alignment_keeps_read_before_active_deadline():
+    c = deadline_configuration()
+    reference, numeric = DramCore(c, capture_details=False), DramCore(c, capture_details=False)
+    assert_same(reference, numeric, AccessRequest("warm", "read", 0, 32, 21037547.52))
+    for core in (reference, numeric):
+        ready = core.timeline.available_ns("dram:column_command:0:0")
+        core.timeline.reserve("dram:column_command:0:0", ready, 21072650.24 - ready)
+    assert_same(reference, numeric,
+                AccessRequest("before-deadline", "read", 0, 32, 21038547.52))
+    for core in (reference, numeric):
+        bank = next(iter(core._hbm_control_state["banks"].values()))
+        deadline = bank["last_activate"] + c.maximum_active_ns
+        assert bank["precharge_ready"] <= deadline
+        assert core.timeline.last_intervals["dram:column_command:0:0"][0] == 21072650.240000002
+    assert_same(reference, numeric,
+                AccessRequest("after-deadline", "read", 0, 32, 21072691.2))
+
+
+@pytest.mark.parametrize("numeric", [False, True])
+def test_clock_alignment_still_rejects_blocked_precharge_deadline(numeric):
+    c = deadline_configuration()
+    core = DramCore(c, capture_details=False)
+    execute = execute_hbm_numeric if numeric else lambda core, request: _Controller(core, request).execute()
+    execute(core, AccessRequest("warm", "read", 0, 32, 21037547.52))
+    bank = next(iter(core._hbm_control_state["banks"].values()))
+    deadline = bank["last_activate"] + c.maximum_active_ns
+    ready = core.timeline.available_ns("dram:row_command:0:0")
+    core.timeline.reserve("dram:row_command:0:0", ready, deadline + c.command_clock_ns - ready)
+    with pytest.raises(ValueError, match="tRASmax deadline cannot be met by a legal PRE"):
+        execute(core, AccessRequest("blocked", "read", 0, 32, deadline))
+
+
 @pytest.mark.parametrize("generation,clock,refresh", [
     ("HBM2E", 1., False), ("HBM3E", 1., False),
     ("HBM3E", .7, True), ("HBM4", .625, True),
@@ -83,6 +142,23 @@ def test_compiled_preserves_interleaving_stacks_and_direction_budget():
         core.timeline.reserve("dram:data:3", 0., 200., direction="write")
     for index, op in enumerate(("read", "write", "read")):
         assert_same(reference, numeric, AccessRequest(str(index), op, index * 4111, 270011, index * 3.))
+
+
+def test_compiled_reuses_saved_bank_mappings(monkeypatch):
+    c = configuration()
+    reference, numeric = DramCore(c, capture_details=False), DramCore(c, capture_details=False)
+    mapped_addresses = []
+    original_mapping = _compiled_hbm.map_dram_address
+
+    def observe_mapping(config, address):
+        mapped_addresses.append(address)
+        return original_mapping(config, address)
+
+    monkeypatch.setattr(_compiled_hbm, "map_dram_address", observe_mapping)
+    row_span = c.lane_count * c.bank_count * c.row_bytes
+    for index, (address, size) in enumerate(((0, 32), (row_span, 32), (32, 32), (0, 4096), (0, 4096))):
+        assert_same(reference, numeric, AccessRequest(str(index), "read", address, size))
+        assert len(mapped_addresses) == len(numeric._hbm_control_state["banks"])
 
 
 def test_numeric_declines_nonzero_faw_without_mutation():
@@ -171,3 +247,121 @@ def test_refresh_cannot_precharge_an_open_row_after_its_deadline():
         request = AccessRequest("blocked", "read", 0, 32, 1000.)
         with pytest.raises(ValueError, match="tRASmax.*refresh PRE"):
             execute_hbm_numeric(core, request) if numeric else _Controller(core, request).execute()
+
+
+def assert_core_state_equal(actual, expected):
+    assert {key: value for key, value in vars(actual).items() if key != "timeline"} == {
+        key: value for key, value in vars(expected).items() if key != "timeline"}
+    assert vars(actual.timeline) == vars(expected.timeline)
+
+
+@pytest.mark.parametrize("refresh", [False, True])
+def test_four_tib_profile_uses_compiled_hbm_at_last_bank(refresh):
+    from heterollm_sim.memory_mapping import map_dram_address
+    from heterollm_sim.physical_contract import reconfigure_physical_config
+    from heterollm_sim.physical_presets import resolve_physical_config
+
+    c = resolve_physical_config("hbm3e_reference", overrides={
+        "capacity_bytes": 4 * 1024 ** 4, "read_bandwidth_gb_s": 1600.,
+        "write_bandwidth_gb_s": 1600., "interface_bandwidth_gb_s": 1600.})
+    if refresh:
+        c = reconfigure_physical_config(c, overrides={"refresh_policy": "all_bank",
+            "refresh_interval_ns": 3900., "refresh_cycle_ns": 400.})
+    assert c.lane_count * c.bank_count == 131_072
+    assert c.stacks == 64 and c.stack_interface_mode == "independent"
+    end = c.effective_capacity_bytes
+    last = map_dram_address(c, end - 1)
+    assert (last.stack, last.lane, last.channel, last.pseudo_channel,
+            last.bank_group, last.bank, last.row, last.column) == (
+        63, 2047, 15, 1, 15, 3, 32767, 31)
+    last_bank = (c.lane_count * c.bank_count - 1) * c.burst_bytes
+    reference, numeric = DramCore(c, capture_details=False), DramCore(c, capture_details=False)
+    for index, (op, address, size, arrival) in enumerate((
+            ("read", 0, 1, 0.), ("read", last_bank + 3, 29, 0.),
+            ("write", end - 1, 1, 1.), ("read", end - 65, 65, 40000.))):
+        request = AccessRequest(str(index), op, address, size, arrival)
+        actual = numeric.submit(request)
+        assert actual.counters["compiled_hbm_float64"] is True
+        expected = reference._submit_validated(request,
+            execute=lambda accepted: _Controller(reference, accepted).execute())
+        assert replace(actual, counters={key: value for key, value in actual.counters.items()
+                                        if key != "compiled_hbm_float64"}) == expected
+        assert_core_state_equal(numeric, reference)
+    if refresh:
+        assert actual.counters["refresh_commands"] > 0
+
+
+def test_numeric_declines_above_hbm_bank_limit_without_mutation():
+    c = configuration(stacks=65, channels=16, bank_groups_per_rank=16)
+    assert c.lane_count * c.bank_count > _compiled_hbm.MAX_HBM_NUMERIC_BANKS
+    core = DramCore(c, capture_details=False)
+    assert execute_hbm_numeric(core, AccessRequest("too-many-banks", "read", 0, 32)) is None
+    assert_core_state_equal(core, DramCore(c, capture_details=False))
+
+
+@pytest.mark.parametrize("queue_depth", [1, 3])
+@pytest.mark.parametrize("refresh", [False, True])
+def test_compiled_batch_preserves_each_request_and_following_submission(queue_depth, refresh):
+    c = configuration(max_outstanding_requests=queue_depth, maximum_active_ns=2000.,
+        refresh_policy="all_bank" if refresh else "disabled",
+        refresh_interval_ns=400. if refresh else 0., refresh_cycle_ns=40. if refresh else 0.)
+    sequential, batch = DramCore(c, capture_details=False), DramCore(c, capture_details=False)
+    for core in (sequential, batch):
+        core.timeline.reserve("dram:data:3", 0., 200., direction="write")
+        core.submit(AccessRequest("warm", "read", 0, 4096))
+    row_span = c.lane_count * c.bank_count * c.row_bytes
+    requests = tuple(AccessRequest(str(index), op, address, count, arrival)
+        for index, (op, address, count, arrival) in enumerate((
+            ("read", 3, 61, 0.), ("write", 65, 65, 0.),
+            ("read", 2055, 257, 1.), ("write", row_span + 31, 33, 5.),
+            ("read", 32, 96, 5000.), ("write", 2 * row_span + 1, 64, 5000.),
+            ("read", 0, 129, 2.))))
+    expected = tuple(sequential.submit(request) for request in requests)
+    actual = batch.submit_many(requests)
+    assert actual == expected
+    assert any(result.counters["queue_wait_ns"] > 0 for result in actual)
+    assert all(result.counters["compiled_hbm_float64"] for result in actual)
+    assert_core_state_equal(batch, sequential)
+    following = AccessRequest("following", "write", row_span + 7, 1025, 6000.)
+    assert batch.submit(following) == sequential.submit(following)
+    assert_core_state_equal(batch, sequential)
+
+
+@pytest.mark.parametrize("details,faw", [(True, 0.), (False, 20.)])
+def test_compiled_batch_declines_to_authoritative_controller(details, faw):
+    c = configuration(four_activate_window_ns=faw)
+    sequential, batch = DramCore(c, capture_details=details), DramCore(c, capture_details=details)
+    requests = (AccessRequest("read", "read", 3, 129), AccessRequest("write", "write", 32, 97))
+    assert batch.submit_many(requests) == tuple(sequential.submit(request) for request in requests)
+    assert_core_state_equal(batch, sequential)
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_compiled_batch_keeps_successful_prefix_when_numeric_stops(failure, monkeypatch):
+    c = configuration(max_outstanding_requests=1)
+    sequential, batch = DramCore(c, capture_details=False), DramCore(c, capture_details=False)
+    requests = tuple(AccessRequest(str(i), "write" if i % 2 else "read", i * 67, 97) for i in range(4))
+    original = _compiled_hbm._HBMNumericState.execute
+
+    def stop_after_numeric_mutation(packed, request):
+        result = original(packed, request)
+        if request.request_id == "2":
+            if failure:
+                raise ValueError("injected numeric failure")
+            return None
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(_compiled_hbm._HBMNumericState, "execute", stop_after_numeric_mutation)
+        if failure:
+            with pytest.raises(ValueError, match="injected numeric failure"):
+                tuple(sequential.submit(request) for request in requests)
+            with pytest.raises(ValueError, match="injected numeric failure"):
+                batch.submit_many(requests)
+        else:
+            expected = tuple(sequential.submit(request) for request in requests)
+            assert batch.submit_many(requests) == expected
+        assert_core_state_equal(batch, sequential)
+    if failure:
+        assert batch.submit_many(requests[2:]) == tuple(sequential.submit(request) for request in requests[2:])
+        assert_core_state_equal(batch, sequential)

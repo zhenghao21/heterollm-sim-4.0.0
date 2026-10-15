@@ -238,7 +238,7 @@
         "服务：A/B × 磨损关/开；128输入/8输出、2请求、间隔50 μs。开时初始P/E=3000，program最多2倍。",
         "物理轨迹：关/开；32轮，每轮4擦除＋4编程＋32读，读偏斜29:1:1:1，轮间空闲32 ms。",
         "4 KiB页、4物理plane/2有效槽，host/internal100 GB/s；读4 μs、program75 μs、erase3 ms；初始P/E2968→3000，rated3000、增长系数1、上限2倍。",
-        "没有热/功耗或完整FTL，不是器件寿命预测。"
+        "没有完整FTL，不是器件寿命预测。"
       ],
       "metrics": "TPS/TTFT反馈、擦写/P-E、队列深度与等待、plane失衡；物理轨迹无模型TPS",
       "source": "scripts/hbf_hbm_wear_study.py"

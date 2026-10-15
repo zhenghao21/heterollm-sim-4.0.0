@@ -72,7 +72,7 @@ def test_physical_service_and_resolver_observe_identical_group_history(details):
     assert sum(bill["physical_bytes"] for bill in bills) == 256
     combined = resolve_physical_task(task(config), PhysicalRuntimeContext(capture_details=details), 0.)
     assert combined.metadata["physical_completion_ns"] == 24.
-    assert combined.metadata["physical_execution"]["physical_read_bytes"] == 256
+    assert next(iter(combined.metadata["physical_execution_by_owner"].values()))["physical_read_bytes"] == 256
     assert len({d.resource_id for d in combined.demands}) == len(combined.demands)
     assert sum(d.service_ns for d in combined.demands) == 12.
 
@@ -94,7 +94,7 @@ def test_snapshot_twice_restores_nested_group_clocks_and_activation_window():
         result = resolve_physical_task(task(config, (64, 192, 4096, 0)), runtime, 0.)
         assert core._bank_group_state != frozen_groups
         assert saved_groups == frozen_groups
-        outcomes.append((result.demands, result.metadata["physical_execution"]))
+        outcomes.append((result.demands, next(iter(result.metadata["physical_execution_by_owner"].values()))))
         runtime.restore(saved)
         assert runtime.runtimes["hbm"].core is core
         assert core._bank_group_state == frozen_groups
@@ -119,7 +119,7 @@ def test_post_core_failure_restores_group_history_before_retry(entry):
             return service.price_batch([{"operation": "read", "address": 64,
                                          "byte_count": 64}], runtime=runtime)
         resolved = resolve_physical_task(task(config, (64,)), runtime, 0.)
-        return resolved.demands, resolved.metadata["physical_execution"]
+        return resolved.demands, next(iter(resolved.metadata["physical_execution_by_owner"].values()))
 
     original = DramCore.submit
     def fail_after_execution(core, request):

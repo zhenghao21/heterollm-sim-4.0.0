@@ -21,7 +21,7 @@ import importlib
 from itertools import product
 import math
 import time
-from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from .communication import TopologyRouter
 from .attention_bias import resolve_attention_qkv_bias
@@ -64,6 +64,7 @@ from .control_plane_state import (
     MAPPING_FINGERPRINT_ALGORITHM,
     MAPPING_FINGERPRINT_SCHEMA,
     mapping_input_fingerprint,
+    control_plane_decision,
 )
 from .parallel import ParallelPlan, build_parallel_plan
 from .precision import layer_precision_bits
@@ -336,6 +337,7 @@ class _Matrix:
     weight_bits: Optional[int] = None
     packed_weight_formats: Tuple[str, ...] = ()
     packed_weight_transform_operations: int = 0
+    packed_weight_format_segments: Tuple[Tuple[str, int, int], ...] = ()
     projection_id: Optional[str] = None
     descriptor_audit: Mapping[str, Any] = field(default_factory=dict)
     declared_allocation_bytes: Optional[int] = None
@@ -790,7 +792,7 @@ def _load_policy_targets(
             )
         )
     remaining = count
-    # Legacy ``tail`` counts output/MTP units before transformer blocks.
+    # ``tail`` counts output/MTP units before transformer blocks.
     # ``llama_tail`` mirrors llama.cpp --n-gpu-layers semantics.  llama.cpp
     # counts the output layer in the offload budget (25/25 for a 24-layer
     # model), then places the remaining budget on the final transformer
@@ -1175,19 +1177,12 @@ def plan_runtime_placement(
             generated_op_keys.append(requirement.mapping_key)
         if requirement.tensor_id and candidate.tensor_component_id:
             tensor_mapping[requirement.tensor_id] = candidate.tensor_component_id
-            if requirement.state_tensor:
+            if requirement.state_tensor or candidate.rank_tensor_shards:
                 tensor_bytes.pop(requirement.tensor_id, None)
             else:
                 placement_bytes = requirement.tensor_bytes
                 if candidate.padded_weight_bytes and weights_resident:
                     placement_bytes = candidate.padded_weight_bytes
-                elif candidate.rank_tensor_shards:
-                    placement_bytes = sum(
-                        shard.physical_bytes
-                        for shard in candidate.rank_tensor_shards
-                        if shard.storage_component_id
-                        == candidate.tensor_component_id
-                    )
                 tensor_bytes[requirement.tensor_id] = placement_bytes
             generated_tensor_ids.append(requirement.tensor_id)
             if candidate.streaming_backing_component_id:
@@ -1239,7 +1234,6 @@ def plan_runtime_placement(
                 # later replanning use the same capacity as the solver.
                 backing_id = decision.tensor_id + "#cold_backing"
                 tensor_mapping[backing_id] = cold_cim_backing_components[decision.tensor_id]
-                tensor_bytes[backing_id] = cold_cim_backing_bytes[decision.tensor_id]
                 generated_tensor_ids.append(backing_id)
     for decision in decisions:
         if decision.padded_weight_bytes and decision.tensor_id:
@@ -1303,7 +1297,8 @@ def plan_runtime_placement(
             total_physical_bytes = physical_tensor_bytes.get(tensor_id)
         detail = {
             "logical_bytes": decision.tensor_bytes,
-            "placement_bytes": physical_tensor_bytes.get(tensor_id),
+            **({"placement_bytes": physical_tensor_bytes.get(tensor_id)}
+               if not decision.rank_tensor_shards else {}),
             "padded_bytes_per_replica": (
                 decision.padded_weight_bytes or None
             ),
@@ -1409,7 +1404,6 @@ def plan_runtime_placement(
                     "pp_rank": shard.pp_rank,
                     "ep_rank": shard.ep_rank,
                     "compute_component_id": shard.compute_component_id,
-                    "component_id": shard.storage_component_id,
                     "storage_component_id": shard.storage_component_id,
                     "shard_id": shard_id,
                     "replica_id": "{}#rank-{:04d}".format(
@@ -1434,10 +1428,11 @@ def plan_runtime_placement(
         # One shared packed source, not a dense copy per CIM execution rank.
         rank_weight_shards[backing_id] = [{
             **rank_weight_shards[tensor_id][0],
-            "component_id": component_id,
             "storage_component_id": component_id,
             "shard_id": backing_id,
             "replica_id": backing_id,
+            "shard_index": 0,
+            "shard_count": 1,
             "logical_bytes": byte_count,
             "physical_bytes": byte_count,
             "shard_kind": "packed_backing",
@@ -1454,10 +1449,8 @@ def plan_runtime_placement(
         "weight_semantics": (
             "cold CIM backing is derived from declared host/offload topology "
             "and recorded per logical tensor without materializing an aggregate "
-            "model_weights placement; warm CIM PlacementSpec.tensor_bytes are "
-            "padded bytes per replica; "
-            "rank_shards charge every rank-local physical shard and keep only "
-            "one representative PlacementSpec entry for execution lowering; "
+            "model_weights placement; rank_weight_shards records every physical "
+            "weight allocation, including CIM padding and shared cold backing; "
             "main lm_head is a logical alias of embedding_weights"
             + (
                 "; explicit warm tied runtime copies retain one file owner and "
@@ -1660,8 +1653,11 @@ def _projection_matrix(
     layer: LayerSpec,
     projection_id: str,
     fallback: _Matrix,
+    *,
+    tp_degree: int = 1,
+    tp_rank: int = 0,
 ) -> _Matrix:
-    """Return descriptor-backed geometry/storage or the legacy matrix.
+    """Return physical descriptor geometry or the analytical matrix.
 
     Projection descriptors describe the GGUF backing representation.  Their
     byte counts are intentionally kept on the matrix instead of replacing the
@@ -1671,6 +1667,8 @@ def _projection_matrix(
     projection = materialize_weight_projection(
         layer.metadata,
         projection_id,
+        tp_degree=tp_degree,
+        tp_rank=tp_rank,
     )
     if projection is None:
         return fallback
@@ -1690,6 +1688,12 @@ def _projection_matrix(
         ),
         packed_weight_transform_operations=(
             projection.fused_dequant_operations
+        ),
+        packed_weight_format_segments=tuple(
+            (segment.segment.artifact_spec.name, segment.local_n,
+             segment.local_block_count * segment.segment.artifact_spec.block_size
+             * segment.segment.artifact_spec.dequant_operations_per_weight)
+            for segment in projection.segments
         ),
         projection_id=projection.projection_id,
         descriptor_audit=projection.audit_metadata(),
@@ -1770,7 +1774,7 @@ def _derive_requirements(
 
     for layer in execution_layers:
         h = layer.hidden_size
-        head_dim = _attention_head_dim(layer)
+        head_dim = layer.effective_attention_head_dim
         q_width = layer.attention_heads * head_dim
         kv_width = layer.effective_kv_heads * head_dim
         attention_descriptor = None
@@ -2932,6 +2936,12 @@ def _cim_rank_padded_weight_bytes(
     total = 0
     for matrix in requirement.matrices:
         local_n = _ceil_div(matrix.n, parallel.tp_degree)
+        if matrix.projection_id is not None:
+            matrix = _projection_matrix(
+                layer, matrix.projection_id, matrix,
+                tp_degree=parallel.tp_degree, tp_rank=rank.tp_rank,
+            )
+            local_n = matrix.n
         resident_count = matrix.resident_count
         if requirement.kind == "experts":
             resident_count = matrix.resident_count // parallel.ep_degree
@@ -2950,6 +2960,7 @@ def _cim_rank_padded_weight_bytes(
             cim_arithmetic=_cim_operand_arithmetic(layer),
             packed_weight_formats=matrix.packed_weight_formats,
             packed_weight_transform_operations=matrix.packed_weight_transform_operations,
+            packed_weight_format_segments=matrix.packed_weight_format_segments,
             weight_metadata_bytes=matrix.weight_metadata_bytes,
             weight_storage_bytes=(
                 matrix.weight_storage_bytes if parallel.tp_degree == 1 else None
@@ -3660,7 +3671,7 @@ def _operator_cost(
 
         return _gpu_profiles(scenario, gpu_component_id, memory_component_id)
 
-    def typed_workload(m: int) -> object:
+    def typed_workload(m: int) -> Union[ElementwiseWorkload, ReductionWorkload, MemoryWorkload]:
         activation_bits = _activation_bits(layer)
         context_tokens = max(
             1,
@@ -3807,8 +3818,8 @@ def _operator_cost(
         # service is the deterministic queueing surrogate. GPU candidates use
         # each rank target's explicitly bound GPU/HBM profiles.
         if _kind(compute) == "cpu":
-            read_bytes = int(getattr(workload, "read_bytes", 0))
-            write_bytes = int(getattr(workload, "write_bytes", 0))
+            read_bytes = workload.read_bytes
+            write_bytes = workload.write_bytes
             for execution_gpu in execution_gpus:
                 if execution_gpu.component_id == compute.component_id:
                     continue
@@ -3902,6 +3913,9 @@ def _operator_cost(
                     matrix.packed_weight_transform_operations
                     if descriptor_backing
                     else 0
+                ),
+                packed_weight_format_segments=(
+                    matrix.packed_weight_format_segments if descriptor_backing else ()
                 ),
                 weight_storage_bytes=weight_storage_bytes,
                 weight_metadata_bytes=weight_metadata_bytes,
@@ -4201,7 +4215,7 @@ def _derive_fusion_opportunities(
                 layer.layer_id
             )
         else:
-            head_dim = _attention_head_dim(layer)
+            head_dim = layer.effective_attention_head_dim
             q_width = layer.attention_heads * head_dim
             kv_width = layer.effective_kv_heads * head_dim
             attention_descriptor = resolve_attention_execution_descriptor(
@@ -5111,20 +5125,14 @@ def _base_capacity_usage(
         component_id = scenario.placement.tensor_to_component.get(tensor_id)
         if component_id:
             usage[str(component_id)] = usage.get(str(component_id), 0) + int(byte_count)
+    shards_by_tensor = control_plane_decision(scenario).get("rank_weight_shards", {})
+    for tensor_id, shards in shards_by_tensor.items():
+        if tensor_id in excluded:
+            continue
+        for shard in shards:
+            component_id = shard["storage_component_id"]
+            usage[component_id] = usage.get(component_id, 0) + shard["physical_bytes"]
     return usage
-
-
-def _attention_head_dim(layer: LayerSpec) -> int:
-    explicit = getattr(layer, "attention_head_dim", 0)
-    if not explicit:
-        explicit = layer.metadata.get("attention_head_dim", 0)
-    try:
-        value = int(explicit)
-    except (TypeError, ValueError):
-        value = 0
-    if value > 0:
-        return value
-    return int(math.ceil(layer.hidden_size / float(layer.attention_heads)))
 
 
 def _cim_operand_arithmetic(layer: LayerSpec) -> str:

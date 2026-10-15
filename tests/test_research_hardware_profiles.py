@@ -53,7 +53,7 @@ def test_serving_uses_hbm3e_reference_geometry_and_explicit_timing_assumptions()
 
 
 def test_three_timing_profiles_keep_non_group_physical_variables_identical():
-    ids = ("hbm3e_reference_flat_zero", "hbm3e_reference", "hbm3e_reference_synthetic_timing")
+    ids = ("hbm3e_reference_flat", "hbm3e_reference", "hbm3e_reference_synthetic_timing")
     configs = [physical(study.build_study_scenario("A_hbm_only", prompt=4, output=2,
                        hbm_timing_profile=profile)) for profile in ids]
     assert [(c.bank_groups_per_rank, c.banks_per_group) for c in configs] == [(1, 64), (16, 4), (16, 4)]
@@ -92,7 +92,7 @@ def test_undisclosed_hbf_geometry_is_resolved_by_catalog():
         "host_bandwidth_gb_s": profile.bandwidth["hbf_read_gb_s"],
         "host_read_bandwidth_gb_s": profile.bandwidth["hbf_read_gb_s"],
         "host_write_bandwidth_gb_s": profile.bandwidth["hbf_write_gb_s"],
-        "metadata": {"buffered_write_mode": False}}, expand_geometry=True)
+        "write_buffer_bytes": 0}, expand_geometry=True)
     assert hbf.config == expected
 
 

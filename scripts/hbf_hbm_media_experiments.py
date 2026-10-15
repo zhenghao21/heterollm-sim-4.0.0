@@ -161,7 +161,7 @@ def _append_trace(*, append_bytes: int, write_buffer_bytes: int, program_ns: flo
         ),
         "merge_bytes": merge_bytes,
         "flushed_pages": int(drain.get("flushed_pages", 0)),
-        "physical_programs": sum(item.physical_programs for item in results) + int(drain.get("physical_programs", 0)),
+        "physical_programs": sum(item.pages_programmed for item in results) + int(drain.get("physical_programs", 0)),
         "write_buffer_peak_bytes": peak,
         "write_buffer_remaining_bytes_after_drain": core.pending_write_buffer_bytes,
         "buffered_pages_remaining_after_drain": core.buffered_page_count,
@@ -322,7 +322,7 @@ def _run_path_row(path: str, payload_bytes: int = 16 * PAGE, *, relay_capacity_b
     for flow in ("weight", "kv"):
         use_relay = path == "relay" or (path == "dual" and flow == "weight")
         executor = PhysicalKVTransferExecutor(
-            hardware, runtime=runtime,
+            hardware.components, runtime=runtime,
             topology=relay_topology if use_relay else direct_topology,
             relay_components=("relay_hbm",) if use_relay else (), namespace=flow,
         )

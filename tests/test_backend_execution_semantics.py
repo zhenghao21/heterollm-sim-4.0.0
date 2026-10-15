@@ -29,7 +29,7 @@ def core_schedule(lanes=1, limit=100):
                              pseudo_channels_per_channel=1, max_expanded_segments=limit)
     tasks = (TaskSpec("a-core", "r", "core read", TaskCategory.MEMORY,
         metadata={"physical_memory_config": config, "physical_owner": "memory",
-                  "memory_access": {"operation": "read", "address": 0, "byte_count": 64*lanes}}),
+                  "memory_accesses": ({"operation": "read", "address": 0, "byte_count": 64*lanes},)}),
         *(TaskSpec("z-compute"+str(i), "r", "wire consumer", TaskCategory.COMPUTE,
                    demands=(ResourceDemand("wire", 100.+i),)) for i in range(lanes)))
     return ScheduleIR(manifest(), tasks, resource_capacities={"wire": lanes},
@@ -115,7 +115,7 @@ def test_resolved_core_combined_counters_keep_integer_types_and_fractional_time(
             {"operation": "read", "address": 64, "byte_count": 64},
         )})
     result = resolve_physical_task(task, PhysicalRuntimeContext(), 0.)
-    combined = result.metadata["physical_execution"]
+    combined = next(iter(result.metadata["physical_execution_by_owner"].values()))
     for key, value in (("physical_read_bytes", 128), ("burst_count", 2)):
         assert combined[key] == value
         assert type(combined[key]) is int
@@ -150,12 +150,12 @@ def test_streaming_nand_ledger_preserves_v2_counts_observations_and_unknown_fiel
     for index, operation in enumerate(("read", "write")):
         task = TaskSpec(str(index), "r", operation, TaskCategory.MEMORY,
             metadata={"physical_memory_config": config, "physical_owner": "nand",
-                      "memory_access": {"operation": operation, "address": 0, "byte_count": 100}})
+                      "memory_accesses": ({"operation": operation, "address": 0, "byte_count": 100},)})
         ledgers.append(_summarize_nand_task_traffic([resolve_physical_task(task, runtime, 0.)]))
     total = {}
     for ledger in ledgers:
         _merge_storage_traffic(total, ledger)
-    online = _sum_batch_storage_traffic(SimpleNamespace(serving=SimpleNamespace(batches=[
+    online = _sum_batch_storage_traffic(SimpleNamespace(serving=SimpleNamespace(runtime_kernel_metrics={}, batches=[
         SimpleNamespace(cost=SimpleNamespace(metadata={"storage_traffic": ledger})) for ledger in ledgers])))
     for key in ("logical_read_bytes", "logical_write_bytes", "internal_transfer_bytes", "pages_read",
                 "pages_programmed", "host_outstanding_at_admission_peak", "page_access_payload_utilization"):
@@ -174,7 +174,7 @@ def test_chunk_registration_does_not_bill_an_unexecuted_media_preview(role):
     task = TaskSpec("read", "r", "read", TaskCategory.MEMORY,
         metadata={"physical_memory_config": make_hbf_config(capacity_bytes=1048576),
                   "physical_owner": "nand",
-                  "memory_access": {"operation": "read", "address": 0, "byte_count": 100}})
+                  "memory_accesses": ({"operation": "read", "address": 0, "byte_count": 100},)})
     preview = resolve_physical_task(task, PhysicalRuntimeContext(), 0.)
     metadata = dict(preview.metadata)
     metadata.pop("physical_execution_role", None)
@@ -206,7 +206,7 @@ def test_resource_owner_is_not_misattributed_across_batch_or_stream_boundaries(m
         merge(total, ledger)
     key = "dram_traffic" if medium == "dram" else "storage_traffic"
     report = _sum_batch_dram_traffic if medium == "dram" else _sum_batch_storage_traffic
-    online = report(SimpleNamespace(serving=SimpleNamespace(batches=[
+    online = report(SimpleNamespace(serving=SimpleNamespace(runtime_kernel_metrics={}, batches=[
         SimpleNamespace(cost=SimpleNamespace(metadata={key: ledger})) for ledger in ledgers])))
     for result in (total, online):
         assert result["resource_totals"]["wire"] == {

@@ -89,8 +89,8 @@ def _source_file_identities_valid(sources) -> bool:
     for source in sources:
         if not isinstance(source, Mapping):
             return False
-        name = source.get('path', source.get('filename'))
-        size = source.get('size', source.get('size_bytes'))
+        name = source.get('path')
+        size = source.get('size')
         digest = source.get('sha256')
         if (not isinstance(name, str) or not name or type(size) is not int or size <= 0
                 or not isinstance(digest, str) or not re.fullmatch('[0-9a-fA-F]{64}', digest)):
@@ -134,20 +134,18 @@ def _qualification(scenario, contract) -> dict[str, Any]:
             or contract.get('accuracy_validated') is not False):
         reasons.append('tensor_storage_source_contract_unverified')
     view = model_graph_execution_view(scenario.model.graph, schema_version=scenario.model.schema_version)
-    # The GGUF graph builder nests its audit metadata under "metadata".
-    # Accept legacy flat bindings too, but reject conflicting identities.
+    # The GGUF graph builder stores audit bindings in nested metadata.
     metadata = {}
     for owner in (scenario.model.graph.attributes, scenario.model.metadata):
         if not isinstance(owner, Mapping):
             continue
         nested = owner.get("metadata")
-        for mapping in ((nested if isinstance(nested, Mapping) else {}), owner):
-            for key, value in mapping.items():
-                if key == "metadata":
-                    continue
-                if key in {"gguf_sha256", "gguf_embedding_binding", "gguf_sources", "gguf_tensor_count"} and key in metadata and metadata[key] != value:
-                    reasons.append("conflicting_nested_gguf_evidence")
-                metadata[key] = value
+        if not isinstance(nested, Mapping):
+            continue
+        for key, value in nested.items():
+            if key in {"gguf_sha256", "gguf_embedding_binding", "gguf_sources", "gguf_tensor_count"} and key in metadata and metadata[key] != value:
+                reasons.append("conflicting_nested_gguf_evidence")
+            metadata[key] = value
     architectures = contract.get('architectures', ())
     if (not isinstance(architectures, (list, tuple, set, frozenset))
             or view.architecture not in _ARCHITECTURES or view.architecture not in architectures):

@@ -16,7 +16,7 @@ def physical_task(config):
     return TaskSpec("read", "request", "HBM read", TaskCategory.MEMORY,
         demands=(ResourceDemand("hbm0", 0., bytes_moved=64),),
         metadata={"physical_owner": "hbm0", "physical_memory_config": config,
-            "memory_access": {"operation": "read", "address": 0, "byte_count": 64}})
+            "memory_accesses": ({"operation": "read", "address": 0, "byte_count": 64},)})
 
 
 @pytest.mark.parametrize("omitted", ["read_latency_ns", "channels"])
@@ -36,7 +36,7 @@ def test_typed_and_complete_mapping_execute_identical_actual_dram_requests():
     for raw in (config, asdict(config)):
         runtime = PhysicalRuntimeContext()
         resolved = resolve_physical_task(physical_task(raw), runtime, 0.)
-        physical = resolved.metadata["physical_execution"]
+        physical = next(iter(resolved.metadata["physical_execution_by_owner"].values()))
         assert physical["physical_read_bytes"] == 64
         assert physical["physical_write_bytes"] == 0
         assert physical["completion_ns"] > 37.

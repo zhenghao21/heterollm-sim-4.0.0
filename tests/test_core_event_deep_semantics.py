@@ -53,7 +53,7 @@ def test_normal_and_core_demands_share_alias_calendar(medium, capture_details):
     assert kernel.step().end_ns == 100000
     kernel.submit([physical_task(config)])
     event = kernel.step()
-    execution = event.task.metadata["physical_execution"]
+    execution = next(iter(event.task.metadata["physical_execution_by_owner"].values()))
     assert "wire" in execution["resource_busy_ns"]
     assert physical_resource not in kernel._resource_lane_available
     wire_end = kernel._resource_lane_available["wire"][0]

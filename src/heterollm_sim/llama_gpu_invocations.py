@@ -381,12 +381,8 @@ def apply_llama_gpu_invocation_contract(
     if payload.get("status")!="conditional" or payload.get("fusion_enabled") not in (True,False):
         return uncovered("captured_kernel_fusion_control_required")
     model=scenario.model
-    model_sha=model.metadata.get("gguf_sha256")
     nested=model.metadata.get("metadata",{})
-    nested_sha=nested.get("gguf_sha256") if isinstance(nested,Mapping) else None
-    if model_sha is not None and nested_sha is not None and str(model_sha).lower()!=str(nested_sha).lower():
-        return uncovered("conflicting_flat_and_nested_model_identity")
-    if model_sha is None:model_sha=nested_sha
+    model_sha=nested.get("gguf_sha256") if isinstance(nested,Mapping) else None
     if not isinstance(model_sha,str) or re.fullmatch(r"[0-9a-fA-F]{64}",model_sha) is None:
         return uncovered("source_model_identity_missing")
     rope_mode=payload.get("architecture_rope_modes",{}).get(model.architecture)

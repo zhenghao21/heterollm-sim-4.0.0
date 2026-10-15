@@ -107,7 +107,7 @@ class PhysicalHbmServingTests(unittest.TestCase):
         self.assertEqual(rows[0]["core"], "DramCore")
         self.assertGreater(rows[0]["logical_read_bytes"], 0)
         self.assertGreater(rows[0]["logical_write_bytes"], 0)
-        self.assertGreater(result.serving.kv_metrics.logical_decode_write_bytes, 0)
+        self.assertGreater(result.serving.kv_metrics.logical_decode_append_bytes, 0)
         for cohort in summary["cohorts"]:
             if cohort["phase"] != "decode":
                 continue

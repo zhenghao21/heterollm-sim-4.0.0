@@ -652,42 +652,6 @@
       }
     },
     {
-      "id": "06_internal_feedback",
-      "title_zh": "完整服务中的消融、真实多轮会话与动态热反馈",
-      "caption_zh": "分别对照理想介质、静态/启发式冷热策略和开关热磨损反馈。所有倍率只使用同一列对应基准；压力参数不代表真实设备。",
-      "status": "complete",
-      "files": {
-        "png": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\hbf_hbm\\figures\\06_internal_feedback.png",
-        "svg": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\hbf_hbm\\figures\\06_internal_feedback.svg"
-      },
-      "relative_files": {
-        "png": "06_internal_feedback.png",
-        "svg": "06_internal_feedback.svg"
-      },
-      "source_row_ids": [
-        "ablation/hbm/ideal",
-        "ablation/hbf/ideal",
-        "ablation/hbf/read_latency",
-        "ablation/hbf/write_restriction",
-        "ablation/hbf/finite_concurrency",
-        "ablation/hbf/read_write",
-        "ablation/hbf/read_write_finite",
-        "agent-static-cold",
-        "agent-heuristic",
-        "14-B_all_kv_hbf-thermal-0-wear-0",
-        "14-B_all_kv_hbf-thermal-1-wear-0",
-        "14-B_all_kv_hbf-thermal-0-wear-1",
-        "14-B_all_kv_hbf-thermal-1-wear-1"
-      ],
-      "source_row_count": 13,
-      "observations": [],
-      "row_scope": "full_operator_serving only",
-      "report_relative_files": {
-        "png": "figures/06_internal_feedback.png",
-        "svg": "figures/06_internal_feedback.svg"
-      }
-    },
-    {
       "id": "07_sustained_slo",
       "title_zh": "持续负载与session/GPU边界",
       "caption_zh": "负载搜索使用三个轨迹长度核验。并发边界与到达率边界采用不同的明确工作负载，不混为统一生产容量。",

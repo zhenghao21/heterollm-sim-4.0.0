@@ -3,7 +3,7 @@
 The supported subset is ACT/PREpb/PREab/RD/WR/REFab in pseudo-channel mode.
 Command occupancy, array eligibility and DQ transfer are separate quantities.
 Configured maximum row-active deadlines also apply with refresh disabled.
-Training, low-power states, auto-precharge and refresh postponement are not
+Training, auto-precharge and refresh postponement are not
 implemented. Timing values are supplied by DramConfig, with their provenance
 owned by the configuration builder rather than inferred here.
 """
@@ -78,6 +78,10 @@ class _Controller:
 
     @staticmethod
     def align(value, quantum):
+        # Division can round an already represented clock tick just above
+        # its integer index. Preserve that exact grid point on repeated use.
+        if value == round(value / quantum) * quantum:
+            return value
         return max(value, math.ceil(value / quantum) * quantum)
 
     def command(self, key, kind, earliest, cycles, name, *, rising=False):

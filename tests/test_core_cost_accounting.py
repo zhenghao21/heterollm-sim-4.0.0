@@ -56,8 +56,7 @@ def test_late_rejected_access_rolls_back_executed_core_and_allocation():
 @pytest.mark.parametrize("medium", ["dram", "nand"])
 def test_restore_point_remains_valid_after_resumed_execution(medium):
     config = (make_hbm_config(capacity_bytes=1024 * 1024) if medium == "dram"
-              else make_hbf_config(capacity_bytes=4 * 16384, write_buffer_bytes=16384,
-                                   metadata={"buffered_write_mode": True}))
+              else make_hbf_config(capacity_bytes=4 * 16384, write_buffer_bytes=16384))
     runtime = PhysicalRuntimeContext(config=config, physical_owner="memory")
     core = runtime.runtimes["memory"].core
     saved = runtime.snapshot()
@@ -76,8 +75,7 @@ def test_restore_point_remains_valid_after_resumed_execution(medium):
 
 def test_task_aggregates_buffer_waits_and_merges_instead_of_last_request():
     config = make_hbf_config(capacity_bytes=65536, page_bytes=4096,
-                             host_granularity_bytes=1, write_buffer_bytes=2048,
-                             metadata={"buffered_write_mode": True})
+                             host_granularity_bytes=1, write_buffer_bytes=2048)
     addresses = (0, 1024, 8192, 9216)
     accesses = [{"operation": "write", "address": address, "byte_count": 1024}
                 for address in addresses]
@@ -87,7 +85,7 @@ def test_task_aggregates_buffer_waits_and_merges_instead_of_last_request():
     resolved = resolve_physical_task(task(config, accesses), PhysicalRuntimeContext(), 0.0)
     expected_wait = sum(r.write_buffer_wait_ns for r in expected)
     assert expected_wait > 0
-    for row in (resolved.metadata["physical_execution"],
+    for row in (next(iter(resolved.metadata["physical_execution_by_owner"].values())),
                 resolved.metadata["physical_execution_by_owner"]["memory"]):
         assert row["write_buffer_wait_ns"] == pytest.approx(expected_wait)
         assert row["write_buffer_bytes"] == 4096
@@ -111,7 +109,7 @@ def test_memory_bytes_are_charged_once_and_compute_demand_preserved(medium):
     original = replace(original, demands=(ResourceDemand("gpu:compute", 200),
                                           ResourceDemand("memory", 999999)))
     resolved = resolve_physical_task(original, PhysicalRuntimeContext(), 0.0)
-    execution = resolved.metadata["physical_execution"]
+    execution = next(iter(resolved.metadata["physical_execution_by_owner"].values()))
     assert execution["physical_bytes"] == expected_media_bytes
     assert resolved.demands[0] == ResourceDemand("gpu:compute", 200)
     assert all(d.resource_id != "memory" for d in resolved.demands)

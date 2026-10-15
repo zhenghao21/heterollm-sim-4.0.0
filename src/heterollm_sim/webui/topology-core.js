@@ -93,7 +93,8 @@
     const source = object(raw);
     const validIds = new Set(array(componentIds).map(String));
     const sourceLayout = object(source.layout);
-    const sourcePositions = object(sourceLayout.positions ?? source.positions);
+    if (Object.hasOwn(source, "positions")) throw new Error("拓扑视图只接受 layout.positions。");
+    const sourcePositions = object(sourceLayout.positions);
     const positions = {};
     for (const id of validIds) {
       const position = sourcePositions[id];
@@ -107,14 +108,15 @@
     const groups = [];
     for (const candidate of array(source.groups)) {
       const group = object(candidate);
+      if (Object.hasOwn(group, "id") || Object.hasOwn(group, "root_id")) throw new Error("拓扑分组只接受 group_id 和 root。");
       const members = [];
       for (const member of array(group.members).map(String)) {
         if (validIds.has(member) && !occupied.has(member) && !members.includes(member)) members.push(member);
       }
       if (!members.length) continue;
       members.forEach((member) => occupied.add(member));
-      const id = uniqueId(group.group_id || group.id || "group", groupIds);
-      const requestedRoot = String(group.root ?? group.root_id ?? "");
+      const id = uniqueId(group.group_id || "group", groupIds);
+      const requestedRoot = String(group.root ?? "");
       groups.push({
         group_id: id,
         label: String(group.label || id),
@@ -776,8 +778,8 @@
   }
 
   function normalizedOccupiedSegment(segment) {
-    const a = segment?.a || segment?.start || { x: segment?.x1, y: segment?.y1 };
-    const b = segment?.b || segment?.end || { x: segment?.x2, y: segment?.y2 };
+    const a = { x: segment?.x1, y: segment?.y1 };
+    const b = { x: segment?.x2, y: segment?.y2 };
     const x1 = Number(a?.x);
     const y1 = Number(a?.y);
     const x2 = Number(b?.x);
@@ -787,10 +789,6 @@
       key: String(entry?.key ?? ""),
       point: { x: Number(entry?.point?.x), y: Number(entry?.point?.y) },
     })).filter((entry) => entry.key && Number.isFinite(entry.point.x) && Number.isFinite(entry.point.y));
-    if (segment?.portKey && segment?.endpoint) endpointPorts.push({
-      key: String(segment.portKey),
-      point: { x: Number(segment.endpoint.x), y: Number(segment.endpoint.y) },
-    });
     return { x1, y1, x2, y2, endpointPorts, routeId: segment?.routeId };
   }
 

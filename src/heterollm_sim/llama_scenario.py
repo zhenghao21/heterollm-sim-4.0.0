@@ -22,6 +22,16 @@ from .runtime_adapters import (
 from .parallel import build_parallel_plan
 
 
+def _gguf_metadata(scenario: ScenarioConfig) -> dict[str, Any]:
+    """Read GGUF evidence from the graph builder's nested metadata contract."""
+    metadata: dict[str, Any] = {}
+    for owner in (scenario.model.graph.attributes, scenario.model.metadata):
+        nested = owner.get("metadata")
+        if isinstance(nested, Mapping):
+            metadata.update(nested)
+    return metadata
+
+
 def llama_cpp_gpu_layer_mapping(
     scenario: ScenarioConfig, config: LlamaCppRuntimeConfig
 ) -> Mapping[str, Any]:
@@ -38,16 +48,7 @@ def llama_cpp_gpu_layer_mapping(
     output_units = 1
     simulator_units = executable_layers + output_units
     native_layers = int(config.gpu_layers)
-    metadata: dict[str, Any] = {}
-    graph_attributes = getattr(scenario.model.graph, "attributes", {})
-    graph_metadata = (
-        graph_attributes.get("metadata", {})
-        if isinstance(graph_attributes, Mapping)
-        else {}
-    )
-    for source in (getattr(scenario.model, "metadata", {}), graph_metadata):
-        if isinstance(source, Mapping):
-            metadata.update(source)
+    metadata = _gguf_metadata(scenario)
     result: dict[str, Any] = {
         "native_gpu_layers": native_layers,
         "simulator_gpu_layers": (
@@ -394,11 +395,8 @@ def llama_final_norm_static_binding(scenario: ScenarioConfig, config: LlamaCppRu
     ggml-backend.cpp weight preference and adjacent-backend expansion. Runtime
     buffer overrides/dispatch are not claimed as observed by this static rule.
     """
-    metadata = dict(scenario.model.metadata)
-    nested = scenario.model.graph.attributes.get("metadata", {})
-    if isinstance(nested, Mapping):
-        metadata.update(nested)
-    raw = metadata.get("gguf_output_norm_binding", metadata.get("final_norm_weight_binding"))
+    metadata = _gguf_metadata(scenario)
+    raw = metadata.get("gguf_output_norm_binding")
     if not isinstance(raw, Mapping):
         return {"schema": "llama.cpp.final-norm-static/v1", "status": "weight_binding_missing",
                 "native_dispatch_proven": False, "accuracy_validated": False}
@@ -434,7 +432,7 @@ def llama_final_norm_static_binding(scenario: ScenarioConfig, config: LlamaCppRu
             "weight": {**{k: raw[k] for k in ("name", "type", "n_bytes", "offset") if k in raw},
                        "shape": tuple(shape), "bits": bits},
             "graph_pattern_binding": graph_pattern,
-            "epsilon": metadata.get("gguf_norm_epsilon", metadata.get("final_norm_epsilon")),
+            "epsilon": metadata.get("gguf_norm_epsilon"),
             # This locked revision counts output in the tail: i_gpu_start is
             # n_layer_all + 1 - n_gpu_layers and dev_output uses il=n_layer_all.
             "output_device_candidate": "cpu" if config.gpu_layers == 0 else "rank_gpu",

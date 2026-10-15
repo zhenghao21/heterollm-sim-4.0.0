@@ -70,7 +70,7 @@ DRAM_BANK_GROUP_TIMING_FIELDS = (
 )
 
 # HBM command occupancy and array constraints are separate quantities. These
-# fields are optional on legacy analytical DRAM inputs; the JEDEC HBM command
+# fields are unused by the analytical DRAM model; the JEDEC HBM command
 # mode requires an explicitly authored clock and command format.
 HBM_CONTROL_TIMING_FIELDS = (
     "command_clock_ns", "activate_command_cycles", "precharge_command_cycles",
@@ -86,15 +86,6 @@ def _coerce_dram_kind(value: Any, generation: Any = "") -> tuple[MemoryKind, str
 
     raw = str(getattr(value, "value", value)).strip().upper().replace("-", "")
     generation_text = str(generation or "").strip().upper().replace("-", "")
-    # Accept generation-shaped kind values as an authoring convenience while
-    # retaining the generation in the canonical config.
-    if raw in _GDDR_GENERATIONS:
-        if generation_text and generation_text != raw:
-            raise ValueError(
-                "kind {} conflicts with generation {}".format(raw, generation_text)
-            )
-        generation_text = generation_text or raw
-        raw = "GDDR"
     if raw == "GDDR" and generation_text:
         if generation_text not in _GDDR_GENERATIONS:
             raise ValueError(
@@ -114,8 +105,8 @@ def _coerce_dram_kind(value: Any, generation: Any = "") -> tuple[MemoryKind, str
 def parse_physical_memory_config(values: Any) -> "DramConfig | NandConfig":
     """Parse one physical memory config through a single explicit dispatcher.
 
-    Unknown kinds fail before entering the NAND branch.  Generation aliases
-    such as ``GDDR7`` are canonicalized to ``kind=GDDR, generation=GDDR7``.
+    Unknown kinds fail before entering the NAND branch. GDDR generations
+    are declared separately as ``kind=GDDR, generation=GDDR7``.
     This parser does not select a family preset: omitted low-level fields
     retain the dataclass's illustrative defaults. Simulation components must
     pass physical_contract's explicit-field validation before using it.
@@ -129,8 +120,6 @@ def parse_physical_memory_config(values: Any) -> "DramConfig | NandConfig":
     payload = dict(raw)
     kind_value = payload.get("kind")
     kind_name = str(getattr(kind_value, "value", kind_value or "")).strip().upper().replace("-", "")
-    if kind_name in _GDDR_GENERATIONS:
-        return DramConfig.from_mapping(payload)
     if kind_name in {"DDR", "LPDDR", "HBM", "GDDR"}:
         return DramConfig.from_mapping(payload)
     if kind_name in {"SSD", "HBF"}:
@@ -191,7 +180,7 @@ class DramConfig:
     data_width_bits: int = 64
     data_rate_mt_s: float = 3200.0
     # Effective per-pin Gbit/s already includes DDR/PAM encoding effects.
-    # Explicit GDDR rate mode uses it once, without changing legacy MT/s.
+    # Explicit GDDR rate mode uses it once, independently of the MT/s input.
     effective_pin_data_rate_gbps: Optional[float] = None
     bandwidth_input_mode: str = "bandwidth"
     lane_bandwidth_gb_s: Optional[float] = None
@@ -218,7 +207,6 @@ class DramConfig:
     # intervals are start to start; its rolling window permits at most 4 ACTs.
     # WRITE->READ intervals run from the last write data end to read command
     # start and remain separate from data-bus direction turnaround.
-    # Appended after metadata to retain legacy positional construction.
     column_same_group_ns: float = 0.0
     column_different_group_ns: float = 0.0
     activate_same_group_ns: float = 0.0
@@ -231,7 +219,7 @@ class DramConfig:
     # Defaults retain the original generic DRAM organization and shared bus.
     bank_geometry_scope: str = "per_die"
     stack_interface_mode: str = "shared"
-    control_mode: str = "legacy"
+    control_mode: str = "analytical"
     command_clock_ns: float = 0.0
     activate_command_cycles: float = 0.0
     precharge_command_cycles: float = 0.0
@@ -285,8 +273,8 @@ class DramConfig:
             raise ValueError("bank_geometry_scope must be per_die or per_stack")
         if self.stack_interface_mode not in {"shared", "independent"}:
             raise ValueError("stack_interface_mode must be shared or independent")
-        if self.control_mode not in {"legacy", "jedec_hbm"}:
-            raise ValueError("control_mode must be legacy or jedec_hbm")
+        if self.control_mode not in {"analytical", "jedec_hbm"}:
+            raise ValueError("control_mode must be analytical or jedec_hbm")
         if self.refresh_policy not in {"disabled", "all_bank"}:
             raise ValueError("refresh_policy must be disabled or all_bank")
         for name in HBM_CONTROL_TIMING_FIELDS:
@@ -595,17 +583,15 @@ class NandConfig:
     internal_transfer_bytes: Optional[int] = None
     host_bandwidth_gb_s: float = 4.0
     internal_bandwidth_gb_s: float = 8.0
-    # Optional directional host-link ceilings.  Older physical configs only
-    # provide ``host_bandwidth_gb_s``; in that case both directions continue
-    # to use the legacy shared value.
-    host_read_bandwidth_gb_s: Optional[float] = field(default=None, kw_only=True)
-    host_write_bandwidth_gb_s: Optional[float] = field(default=None, kw_only=True)
+    # Explicit directional ceilings are independent of the shared host link.
+    host_read_bandwidth_gb_s: float = field(default=4.0, kw_only=True)
+    host_write_bandwidth_gb_s: float = field(default=4.0, kw_only=True)
     page_read_ns: float = 50000.0
     page_program_ns: float = 800000.0
     block_erase_ns: float = 3000000.0
     front_ns: float = 0.0
     # Host-side write staging capacity.  Zero preserves write-through
-    # behavior; positive values model finite admission buffering without
+    # behavior; positive values model finite page-merging buffering without
     # adding an FTL or garbage-collection state machine.
     write_buffer_bytes: int = field(default=0, kw_only=True)
     wear_model: Optional[NandWearConfig | Mapping[str, Any]] = field(default=None, kw_only=True)
@@ -662,19 +648,17 @@ class NandConfig:
             if name.endswith("bandwidth_gb_s") and value <= 0:
                 raise ValueError(f"{name} must be positive")
         for name in ("host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s"):
-            value = getattr(self, name)
-            if value is not None:
-                value = _nonnegative(name, value)
-                if value <= 0:
-                    raise ValueError(f"{name} must be positive when provided")
-                if value > float(self.host_bandwidth_gb_s):
-                    raise ValueError(
-                        f"{name} cannot exceed host_bandwidth_gb_s"
-                    )
+            value = _nonnegative(name, getattr(self, name))
+            if value <= 0:
+                raise ValueError(f"{name} must be positive")
+            if value > float(self.host_bandwidth_gb_s):
+                raise ValueError(f"{name} cannot exceed host_bandwidth_gb_s")
         if self.partial_page_policy not in {"read_modify_write", "reject"}:
             raise ValueError("partial_page_policy must be read_modify_write or reject")
         if not isinstance(self.metadata, Mapping):
             raise ValueError("metadata must be a mapping")
+        if "buffered_write_mode" in self.metadata:
+            raise ValueError("metadata.buffered_write_mode is no longer supported; set write_buffer_bytes to a positive capacity or zero")
         if self.capacity_bytes is not None and self.capacity_bytes > self.computed_capacity_bytes:
             raise ValueError("capacity_bytes cannot exceed the declared physical geometry")
         if self.capacity_bytes is None:
@@ -708,18 +692,13 @@ class NandConfig:
         return ((self.page_bytes + quantum - 1) // quantum) * quantum
 
     def host_bandwidth_for(self, operation: Operation | str) -> float:
-        """Return the host-link ceiling for one direction.
-
-        Directional fields are optional to keep serialized configurations
-        written before this extension valid.  Missing fields fall back to the
-        original shared ``host_bandwidth_gb_s`` value.
-        """
+        """Return the authored host-link ceiling for one direction."""
         op = operation if isinstance(operation, Operation) else Operation(str(operation).lower())
-        if op is Operation.READ and self.host_read_bandwidth_gb_s is not None:
+        if op is Operation.READ:
             return float(self.host_read_bandwidth_gb_s)
-        if op is Operation.WRITE and self.host_write_bandwidth_gb_s is not None:
+        if op is Operation.WRITE:
             return float(self.host_write_bandwidth_gb_s)
-        return float(self.host_bandwidth_gb_s)
+        raise ValueError("host bandwidth requires a read or write operation")
 
     @property
     def effective_host_read_bandwidth_gb_s(self) -> float:
@@ -731,15 +710,8 @@ class NandConfig:
 
     @property
     def buffered_write_mode(self) -> bool:
-        """Whether host writes use a page-merging staging buffer.
-
-        The default remains the historical write-through behavior.  This
-        explicit metadata switch is deliberately kept outside the geometry
-        fields so serialized configurations can opt into the richer model
-        without changing their existing timing contract.
-        """
-
-        return self.metadata.get("buffered_write_mode", False) is True
+        """A positive staging capacity enables host-ack/page-merge semantics."""
+        return self.write_buffer_bytes > 0
 
 
 @dataclass(frozen=True)
@@ -818,7 +790,7 @@ class TransactionResult:
 
     @property
     def internal_transfer_bytes(self) -> int:
-        return int(self.counters.get("internal_transfer_bytes", self.transfer_bytes))
+        return int(self.counters["internal_transfer_bytes"])
 
     @property
     def physical_read_bytes(self) -> int:
@@ -851,10 +823,6 @@ class TransactionResult:
     @property
     def merge_bytes(self) -> int:
         return int(self.counters.get("merge_bytes", 0))
-
-    @property
-    def physical_programs(self) -> int:
-        return int(self.counters.get("physical_programs", self.counters.get("pages_programmed", 0)))
 
     @property
     def host_ack_completion_ns(self) -> Optional[float]:
@@ -928,7 +896,7 @@ class BatchResult:
 
     @property
     def internal_transfer_bytes(self) -> int:
-        return int(self.counters.get("internal_transfer_bytes", self.transfer_bytes))
+        return int(self.counters["internal_transfer_bytes"])
 
     @property
     def pages_read(self) -> int:
@@ -1004,21 +972,17 @@ def make_gddr_config(**kwargs: Any) -> DramConfig:
 def make_ssd_config(**kwargs: Any) -> NandConfig:
     kwargs["kind"] = MemoryKind.SSD
     kwargs.setdefault("host_bandwidth_gb_s", 112.0)
+    kwargs.setdefault("host_read_bandwidth_gb_s", 112.0)
+    kwargs.setdefault("host_write_bandwidth_gb_s", 112.0)
     kwargs.setdefault("internal_bandwidth_gb_s", 112.0)
     return NandConfig(**kwargs)
 
 
 def make_hbf_config(**kwargs: Any) -> NandConfig:
     kwargs["kind"] = MemoryKind.HBF
-    # Keep an explicitly supplied legacy shared bandwidth authoritative.  For
-    # the no-argument HBF helper, expose the analytical directional envelope
-    # used by the presets so a write request cannot silently inherit the read
-    # ceiling.
-    shared_host_supplied = "host_bandwidth_gb_s" in kwargs
     kwargs.setdefault("host_bandwidth_gb_s", 488.0)
-    if not shared_host_supplied:
-        kwargs.setdefault("host_read_bandwidth_gb_s", 488.0)
-        kwargs.setdefault("host_write_bandwidth_gb_s", 27.2)
+    kwargs.setdefault("host_read_bandwidth_gb_s", 488.0)
+    kwargs.setdefault("host_write_bandwidth_gb_s", 27.2)
     kwargs.setdefault("internal_bandwidth_gb_s", 488.0)
     kwargs.setdefault("page_read_ns", 4_000.0)
     kwargs.setdefault("page_program_ns", 75_000.0)

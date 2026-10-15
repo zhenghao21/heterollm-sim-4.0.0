@@ -54,9 +54,11 @@ def _source_mmvq_executed_k(meta, geometry):
             return None, "mmvq_source_execution_component_mismatch"
         # These optional assertions must not contradict the narrow contract.
         # Absence leaves native/layout proof false; it never establishes layout.
+        obsolete = {"channel", "nchannels", "channel_count", "sample", "nsamples", "sample_count"}.intersection(audit)
+        if obsolete:
+            return None, "unsupported_mmvq_source_fields"
         conditions = {"has_ids": False, "has_fusion": False,
-            "channels": 1, "channel": 1, "nchannels": 1, "channel_count": 1,
-            "samples": 1, "sample": 1, "nsamples": 1, "sample_count": 1,
+            "channels": 1, "samples": 1,
             "ordinary_contiguous_2d": True, "force_cublas": False,
             "mmvq_dispatch_enabled": True, "layout": "ordinary_contiguous_2d"}
         if any(key in audit and not _same_source_value(audit[key], value)
@@ -75,7 +77,7 @@ def summarize_kernel_queries(tasks):
         meta = task.metadata
         if meta.get("phase") != "gpu_gemm":
             continue
-        identity = getattr(task, "task_id", None)
+        identity = task.task_id
         if not isinstance(identity, str) or not identity:
             raise ValueError("kernel query ledger requires task identity")
         geometry = meta.get("kernel_query_geometry")

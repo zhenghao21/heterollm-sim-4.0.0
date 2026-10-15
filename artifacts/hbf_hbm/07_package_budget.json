@@ -1089,7 +1089,7 @@
       "can_infer_optimal_hbm_hbf_ratio": false,
       "limitations": [
         "Toy slot capacities intentionally invert the real HBF density advantage; these results verify accounting only.",
-        "No GPU compute, cost, area or thermal model; slots are assumed interchangeable and cannot establish a real package optimum.",
+        "No GPU compute, cost or area model; slots are assumed interchangeable and cannot establish a real package optimum.",
         "The 3-HBM/1-HBF point fits the entire trace in HBM, leaving its HBF slot idle."
       ],
       "rows": [
@@ -1717,7 +1717,7 @@
       "容量不足行及不可运行原因"
     ],
     "unsupported": [
-      "真实封装、功耗、面积和商业产品校准",
+      "真实封装、面积和商业产品校准",
       "商用最优比例、完整GPU吞吐、成本或热约束下的配置选择",
       "TPS、TTFT 不适用于预算微基准"
     ]
@@ -1727,7 +1727,7 @@
     "Every row has four assumed interchangeable slots. Capacity, peak directional bandwidth, parallel service lanes and HBF buffering change together with the selected mix.",
     "HBM-first placement is striped across slots of each tier; weights precede KV. This is one explicit policy, not an optimized placement search.",
     "The same resident set is read at every step and its final two KV pages are updated. The experiment does not grow the resident set or execute transformer operators.",
-    "Independent per-slot memory interfaces are priced by production DRAM/NAND cores. No shared GPU interconnect, compute, energy, monetary, area or thermal budget is modeled.",
+    "Independent per-slot memory interfaces are priced by production DRAM/NAND cores. No shared GPU interconnect, compute, monetary or area budget is modeled.",
     "An infeasible all-HBM point demonstrates this normalized capacity limit; it does not define an infinite speedup or establish a commercial HBM/HBF optimum."
   ]
 }

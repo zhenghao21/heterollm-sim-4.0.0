@@ -16,7 +16,6 @@ class PagedPoolServingTests(unittest.TestCase):
         plan = compile_serving_plan(self._scenario_with_hbf())
         runtime = _OnlineRuntime(
             plan, lambda *_: BatchCost(0.0),
-            apply_measurement_start_residency=False,
         )
         return runtime, runtime.states[plan.requests[0].request_id]
 
@@ -154,7 +153,6 @@ class PagedPoolServingTests(unittest.TestCase):
         runtime = _OnlineRuntime(
             plan,
             lambda *_: BatchCost(0.0),
-            apply_measurement_start_residency=False,
         )
         request = runtime.states[plan.requests[0].request_id]
         pool = runtime.ledger.paged_pool
@@ -231,7 +229,6 @@ class PagedPoolServingTests(unittest.TestCase):
         runtime = _OnlineRuntime(
             plan,
             lambda *_: BatchCost(0.0),
-            apply_measurement_start_residency=False,
         )
         resource = runtime._resource_snapshot([])
         self.assertEqual(resource["kv_capacity_pages"], 10)
@@ -256,7 +253,6 @@ class PagedPoolServingTests(unittest.TestCase):
         runtime = _OnlineRuntime(
             plan,
             lambda *_: BatchCost(0.0),
-            apply_measurement_start_residency=False,
         )
         executor = runtime._paged_pool_transfer_executor
         self.assertIsNotNone(executor)

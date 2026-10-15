@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 from .ir import ComponentSpec, LinkSpec, PortSpec, SCHEMA_VERSION
+from .memory_types import DRAM_BANK_GROUP_TIMING_FIELDS
 from .physical_presets import make_analytical_dram_config, make_analytical_nand_config
 from .serde import to_primitive
 
@@ -238,10 +239,6 @@ def _gb(value: float) -> int:
     return int(value * 1_000_000_000)
 
 
-def _tb(value: float) -> int:
-    return int(value * 1_000_000_000_000)
-
-
 def _source(
     title: str,
     url: str,
@@ -270,13 +267,6 @@ def _source_metadata(sources: Sequence[ComponentSource]) -> Tuple[Dict[str, str]
 def _port_metadata(extras: Mapping[str, Any] = {}) -> Dict[str, Any]:
     return {
         "capability_units": dict(PORT_CAPABILITY_UNITS),
-        **dict(extras),
-    }
-
-
-def _link_metadata(extras: Mapping[str, Any] = {}) -> Dict[str, Any]:
-    return {
-        "capability_units": dict(LINK_CAPABILITY_UNITS),
         **dict(extras),
     }
 
@@ -811,7 +801,7 @@ def _gddr_preset(
         "interface_bits": interface_bits,
         "interface_bandwidth_gb_s": bandwidth_gbps / 8.0,
         "signal_encoding": signal_encoding,
-        "kind_policy": "GDDR 代际保留在 technology；ComponentSpec.kind 固定为 gddr。",
+        "kind_policy": "GDDR 执行代际由 physical_memory_config.generation 声明；technology 仅用于产品说明。",
         "interface_protocol": generation,
     }
     component = ComponentSpec(
@@ -869,6 +859,9 @@ def _gddr_preset(
                     "interface_bandwidth_gb_s": bandwidth_gbps / 8.0,
                     "stacks": 1,
                     "dies_per_stack": 1,
+                    "bank_geometry_scope": "per_die",
+                    "stack_interface_mode": "shared",
+                    "control_mode": "analytical",
                     "ranks_per_channel": 1,
                     "bank_groups_per_rank": 4,
                     "banks_per_group": 4,
@@ -885,6 +878,7 @@ def _gddr_preset(
                     "write_recovery_ns": 15.0,
                     "read_to_write_ns": 0.0,
                     "write_to_read_ns": 0.0,
+                    **dict.fromkeys(DRAM_BANK_GROUP_TIMING_FIELDS, 0.0),
                     "max_outstanding_requests": 64,
                     "capacity_bytes": _gb(capacity_gb),
                     "metadata": {
@@ -915,164 +909,6 @@ def _gddr_preset(
     )
 
 
-def _hbm_product_slice_preset(
-    preset_id: str,
-    name: str,
-    *,
-    generation: str,
-    visible_capacity_gb: float,
-    raw_capacity_gb: float,
-    bandwidth_gbps: float,
-    product_stack_count: int,
-    unit_count_status: str,
-    unit_count_formula: str,
-    product_family: str,
-    sources: Sequence[ComponentSource],
-    evidence_level: str = S2_VENDOR_DECLARED,
-    analytical_pim: bool = False,
-) -> ComponentPresetDefinition:
-    """Create a per-stack product slice derived from public product totals."""
-
-    limitations = (
-        "该模板是产品总可见容量与总显存带宽按物理堆叠数守恒拆分的单颗切片，不代表厂商逐堆叠公布了独立可用值。",
-        "原始堆叠容量与产品可见容量分别记录；未扣除 ECC、刷新、控制器或封装开销。",
-    ) + (
-        ("HBM-PIM 数值是分析参考，不对应通用量产部件。",)
-        if analytical_pim
-        else ()
-    )
-    source_basis = "{} product aggregate and stack-count provenance".format(
-        product_family
-    )
-    component_id = preset_id.replace("-", "_")
-    physical_channels = 8 if generation in {"HBM2", "HBM2E"} else 16
-    cost_profile_template, cost_profile_parameter_basis = _hbm_cost_profile_template(
-        component_id,
-        bandwidth_gbps,
-    )
-    component = ComponentSpec(
-        component_id=component_id,
-        kind="hbm",
-        cost_profile_id=_default_cost_profile_id("hbm"),
-        ports=(
-            PortSpec(
-                port_id="host",
-                protocol="HBM",
-                role="device",
-                version=generation,
-                lanes=physical_channels,
-                bandwidth_gbps=bandwidth_gbps,
-                metadata=_port_metadata({
-                    "channels": physical_channels,
-                    "physical_channel_total": physical_channels,
-                    "channels_per_stack": physical_channels,
-                    "bandwidth_scope": "derived_product_stack_slice",
-                }),
-            ),
-        ),
-        capacity_bytes=_gb(visible_capacity_gb),
-        read_bandwidth_gbps=bandwidth_gbps,
-        write_bandwidth_gbps=bandwidth_gbps,
-        metadata=_component_metadata(
-            preset_id,
-            technology={
-                "generation": generation,
-                "product_family": product_family,
-                "visible_capacity_gb": visible_capacity_gb,
-                "raw_capacity_gb": raw_capacity_gb,
-                "product_stack_count": product_stack_count,
-                "kind_policy": "HBM 代际只写入 metadata；ComponentSpec.kind 固定保持为 hbm。",
-            },
-            sources=sources,
-            evidence_level=evidence_level,
-            limitations=limitations,
-            notes="用于物理 HBM 拓扑展开的单颗产品切片模板。",
-            measurement_basis="产品总可见容量和单向显存带宽按堆叠数等分；原始容量另存，不把推导值伪装成逐堆叠厂商规格。",
-            extras={
-                "revision": "{}-product-slice".format(generation),
-                "value_scope": "单颗物理 HBM 堆叠的产品可见切片",
-                "conditions": ["十进制容量与带宽单位", unit_count_status],
-                "derived_formula": unit_count_formula,
-                "physical_composition": {
-                    "simulator_representation": "single_physical_unit_node",
-                    "simulator_node_count": 1,
-                    "physical_unit_kind": "HBM_stack",
-                    "physical_unit_count": 1,
-                    "physical_unit_count_status": "explicit_physical_node",
-                    "known_multiple": product_stack_count > 1,
-                    "controller_component_id": "",
-                    "memory_subsystem_id": "standalone_component_preset",
-                    "unit_index": 0,
-                    "unit_count_in_product": product_stack_count,
-                    "unit_count_status": unit_count_status,
-                    "unit_count_formula": unit_count_formula,
-                    "unit_capacity_bytes": _gb(visible_capacity_gb),
-                    "product_total_capacity_bytes": _gb(
-                        visible_capacity_gb * product_stack_count
-                    ),
-                    "unit_raw_capacity_bytes": None,
-                    "nominal_stack_capacity_budget_bytes": _gb(raw_capacity_gb),
-                    "raw_capacity_status": "unknown_product_die_organization",
-                    "product_total_raw_capacity_bytes": None,
-                    "capacity_accounting": "product_visible_budget_separate_from_selected_JEDEC_reference_raw_capacity",
-                    "unit_bandwidth_gbps": bandwidth_gbps,
-                    "product_total_bandwidth_gbps": bandwidth_gbps
-                    * product_stack_count,
-                    "component_preset_id": preset_id,
-                    "component_preset_status": "self",
-                    "source_basis": source_basis,
-                },
-                "parameter_basis": {
-                    "capacity_bytes": "product visible capacity / unit_count_in_product",
-                    "read_bandwidth_gbps": "product total bandwidth / unit_count_in_product",
-                    "write_bandwidth_gbps": "symmetric analytical envelope from the same per-stack interface",
-                    "unit_count": unit_count_status,
-                    "unit_count_formula": unit_count_formula,
-                    "source_basis": source_basis,
-                },
-                "provenance": {
-                    "value_status": (
-                        "analytical_reference"
-                        if analytical_pim
-                        else "derived_per_physical_stack"
-                    ),
-                    "unit_count_status": unit_count_status,
-                    "source_basis": source_basis,
-                },
-                "read_latency_ns": cost_profile_template["read_latency_ns"],
-                "write_latency_ns": cost_profile_template["write_latency_ns"],
-                "transfer_granularity_bytes": cost_profile_template["transaction_bytes"],
-                "max_outstanding_requests": cost_profile_template["max_outstanding_requests"],
-                "cost_profile_template": cost_profile_template,
-                "cost_profile_parameter_basis": cost_profile_parameter_basis,
-                "cost_profile_key": "hbm",
-                "expires_at": "2027-08-23",
-                "physical_memory_config": make_analytical_dram_config(
-                    kind="HBM", generation=generation,
-                    capacity_bytes=_gb(visible_capacity_gb),
-                    read_bandwidth_gbps=bandwidth_gbps,
-                    write_bandwidth_gbps=bandwidth_gbps,
-                    channels=physical_channels, scope="derived_product_visible_hbm_stack_slice",
-                ),
-            },
-        ),
-    )
-    geometry = component.metadata["physical_memory_config"]["metadata"]
-    composition = component.metadata["physical_composition"]
-    composition["unit_raw_capacity_bytes"] = geometry["raw_capacity_bytes"]
-    composition["product_total_raw_capacity_bytes"] = geometry["raw_capacity_bytes"] * product_stack_count
-    composition["raw_capacity_status"] = "selected_JEDEC_reference_not_verified_product_geometry"
-    return ComponentPresetDefinition(
-        preset_id=preset_id,
-        name=name,
-        family="HBM Product Slice",
-        component=component,
-        sources=tuple(sources),
-        evidence_level=evidence_level,
-        limitations=limitations,
-        notes="物理 HBM 拓扑展开使用的单颗产品切片；推导与来源状态可机读。",
-        tags=("memory", generation.lower(), "physical-stack", "product-slice"),
-    )
 def _gpu_hbm_controller_ports(
     *,
     generation: str,
@@ -1323,96 +1159,6 @@ def _ssd_preset(
     )
 
 
-JEDEC_HBM3_SOURCE = _source(
-    "JEDEC JESD238 (2022) High Bandwidth Memory DRAM (HBM3), original PDF mirror",
-    "https://gitcode.com/Open-source-documentation-tutorial/69c72",
-    S1_STANDARD,
-    publisher="JEDEC",
-)
-JEDEC_HBM4_SOURCE = _source(
-    "JEDEC JESD270-4A High Bandwidth Memory DRAM (HBM4)",
-    "https://www.jedec.org/standards-documents/docs/jesd270-4a",
-    S1_STANDARD,
-    publisher="JEDEC",
-)
-SAMSUNG_HBM3_SOURCE = _source(
-    "Samsung HBM3 product specifications",
-    "https://semiconductor.samsung.com/dram/hbm/hbm3/",
-    S2_VENDOR_DECLARED,
-    publisher="Samsung Semiconductor",
-)
-SAMSUNG_HBM3E_SOURCE = _source(
-    "Samsung HBM3E product specifications",
-    "https://semiconductor.samsung.com/dram/hbm/hbm3e/",
-    S2_VENDOR_DECLARED,
-    publisher="Samsung Semiconductor",
-)
-SAMSUNG_HBM4_SOURCE = _source(
-    "Samsung HBM4 product specifications",
-    "https://semiconductor.samsung.com/dram/hbm/hbm4/",
-    S2_VENDOR_DECLARED,
-    publisher="Samsung Semiconductor",
-)
-SAMSUNG_HBM_SOURCE = _source(
-    "Samsung HBM product family",
-    "https://semiconductor.samsung.com/dram/hbm/",
-    S2_VENDOR_DECLARED,
-    publisher="Samsung Semiconductor",
-)
-MICRON_HBM3E_SOURCE = _source(
-    "Micron HBM3E product specifications",
-    "https://www.micron.com/products/memory/hbm/hbm3e",
-    S2_VENDOR_DECLARED,
-    publisher="Micron",
-)
-NVIDIA_H100_SOURCE = _source(
-    "NVIDIA H100 GPU product specifications",
-    "https://www.nvidia.com/en-us/data-center/h100/",
-    S2_VENDOR_DECLARED,
-    publisher="NVIDIA",
-)
-NVIDIA_H200_SOURCE = _source(
-    "NVIDIA H200 GPU product specifications",
-    "https://www.nvidia.com/en-us/data-center/h200/",
-    S2_VENDOR_DECLARED,
-    publisher="NVIDIA",
-)
-NVIDIA_GH200_SOURCE = _source(
-    "NVIDIA Grace Hopper Superchip product specifications",
-    "https://www.nvidia.com/en-us/data-center/grace-hopper-superchip/",
-    S2_VENDOR_DECLARED,
-    publisher="NVIDIA",
-)
-NVIDIA_GB200_SOURCE = _source(
-    "NVIDIA GB200 NVL72 reference architecture",
-    "https://www.nvidia.com/en-us/data-center/gb200-nvl72/",
-    S2_VENDOR_DECLARED,
-    publisher="NVIDIA",
-)
-NVIDIA_B200_SOURCE = _source(
-    "NVIDIA DGX B200 system specifications",
-    "https://www.nvidia.com/en-us/data-center/dgx-b200/",
-    S2_VENDOR_DECLARED,
-    publisher="NVIDIA",
-)
-NVIDIA_BLACKWELL_SOURCE = _source(
-    "NVIDIA Blackwell Architecture",
-    "https://www.nvidia.com/en-us/data-center/technologies/blackwell-architecture/",
-    S2_VENDOR_DECLARED,
-    publisher="NVIDIA",
-)
-AMD_MI300A_SOURCE = _source(
-    "AMD Instinct MI300A product specifications",
-    "https://www.amd.com/en/products/accelerators/instinct/mi300/mi300a.html",
-    S2_VENDOR_DECLARED,
-    publisher="AMD",
-)
-AMD_MI300X_SOURCE = _source(
-    "AMD Instinct MI300X product specifications",
-    "https://www.amd.com/en/products/accelerators/instinct/mi300/mi300x.html",
-    S2_VENDOR_DECLARED,
-    publisher="AMD",
-)
 AMD_RYZEN_9_9950X3D_SOURCE = _source(
     "AMD Ryzen 9 9950X3D Desktop Processor specifications",
     "https://www.amd.com/en/products/processors/desktops/ryzen/9000-series/amd-ryzen-9-9950x3d.html",
@@ -1434,50 +1180,12 @@ MICRON_GDDR_SOURCE = _source(
     publisher="Micron",
     accessed_at="2026-10-05",
 )
-MICRON_GDDR7_SOURCE = _source(
-    "Micron GDDR7 product and technology overview",
-    "https://www.micron.com/products/memory/graphics-memory/gddr7",
-    S2_VENDOR_DECLARED,
-    publisher="Micron",
-    accessed_at="2026-10-05",
-)
 NVIDIA_BLACKWELL_ARCHITECTURE_PDF_SOURCE = _source(
     "NVIDIA RTX Blackwell GPU Architecture technical brief (GeForce RTX 5080 table)",
     "https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf",
     S2_VENDOR_DECLARED,
     publisher="NVIDIA",
     accessed_at="2026-09-27",
-)
-INTEL_GAUDI3_SOURCE = _source(
-    "Intel Gaudi 3 AI accelerator product specifications",
-    "https://www.intel.com/content/www/us/en/products/details/processors/ai-accelerators/gaudi.html",
-    S2_VENDOR_DECLARED,
-    publisher="Intel",
-)
-SAMSUNG_HBM_PIM_SOURCE = _source(
-    "Samsung HBM-PIM technology reference",
-    "https://semiconductor.samsung.com/news-events/tech-blog/hbm-pim-cutting-edge-memory-technology-to-accelerate-next-generation-ai/",
-    S2_VENDOR_DECLARED,
-    publisher="Samsung Semiconductor",
-)
-SAMSUNG_PM1743_WHITE_PAPER_SOURCE = _source(
-    "Samsung PM1743 white paper",
-    "https://download.semiconductor.samsung.com/resources/white-paper/PM1743_White_Paper_240510.pdf",
-    S2_VENDOR_DECLARED,
-    publisher="Samsung Semiconductor",
-    published_at="2024-05-10",
-)
-SAMSUNG_PM1743_PRODUCT_SOURCE = _source(
-    "Samsung PM1743 product page",
-    "https://semiconductor.samsung.com/ssd/enterprise-ssd/pm1743/",
-    S2_VENDOR_DECLARED,
-    publisher="Samsung Semiconductor",
-)
-SOLIDIGM_D7_P5810_SOURCE = _source(
-    "Solidigm D7-P5810 product brief",
-    "https://www.solidigm.com/content/dam/solidigm/en/site/products/data-center/product-briefs/d7-5810/documents/solidigm-d7-p5810-product-brief.pdf",
-    S2_VENDOR_DECLARED,
-    publisher="Solidigm",
 )
 SK_HYNIX_HBF_SOURCE = _source(
     "SK hynix and Sandisk HBF OCP specification announcement",
@@ -1657,108 +1365,6 @@ def _grace_lpddr_preset(
         limitations=limitations,
         notes="Grace 主机内存产品级聚合组件。",
         tags=("memory", "host-memory", "lpddr5x", "aggregate"),
-    )
-
-
-def _grace_cpu_preset(
-    preset_id: str,
-    name: str,
-    *,
-    product_family: str,
-    gpu_port_count: int,
-    memory_bandwidth_gbps: float,
-    source: ComponentSource,
-) -> ComponentPresetDefinition:
-    limitations = (
-        "厂商未声明可跨工作负载使用的 CPU 推理峰值，因此 peak_ops_per_s 保持 0.0 unknown sentinel；执行成本只认该组件经 cost_profile_id 显式绑定的 profiles.components.cpu registry 条目。",
-        "CPU 节点不内嵌 LPDDR5X 容量；主机内存必须使用独立 host_memory 组件和显式链路。",
-    )
-    component_id = preset_id.replace("-", "_")
-    cost_profile_template, cost_profile_parameter_basis = _cpu_cost_profile_template(
-        component_id,
-    )
-    ports = tuple(
-        PortSpec(
-            port_id="gpu{}".format(index),
-            protocol="NVLink-C2C",
-            role="endpoint",
-            version=product_family,
-            bandwidth_gbps=3600.0,
-            metadata=_port_metadata(
-                {
-                    "source_display_value": "每方向 450 GB/s；官方界面聚合展示 900 GB/s",
-                    "bandwidth_basis": "symmetric_half_of_vendor_aggregate_interface",
-                }
-            ),
-        )
-        for index in range(gpu_port_count)
-    ) + (
-        PortSpec(
-            port_id="memory",
-            protocol="LPDDR5X",
-            role="controller",
-            version=product_family,
-            bandwidth_gbps=memory_bandwidth_gbps,
-            metadata=_port_metadata(
-                {"bandwidth_scope": "vendor_per_grace_aggregate"}
-            ),
-        ),
-    )
-    component = ComponentSpec(
-        component_id=component_id,
-        kind="cpu",
-        cost_profile_id=_default_cost_profile_id("cpu"),
-        ports=ports,
-        capacity_bytes=0,
-        peak_ops_per_s=0.0,
-        metadata=_component_metadata(
-            preset_id,
-            technology={
-                "architecture": "Arm Neoverse V2",
-                "core_count": 72,
-                "core_count_semantics": "physical_core_count",
-                "vector_isa": "4×128 位 SVE2",
-                "product_family": product_family,
-            },
-            sources=(source,),
-            evidence_level=S2_VENDOR_DECLARED,
-            limitations=limitations,
-            notes="Grace CPU 计算侧模板；载入后须显式绑定 profiles.components.cpu 中的 Profile，才可校准分类吞吐和延迟。",
-            measurement_basis="采用厂商公开的 72 核 Grace CPU、产品级一致性接口和 LPDDR5X 聚合带宽；不推导未公开的通用 OPS。",
-            extras={
-                "component_scope": "compute_side_only",
-                "external_memory_required": True,
-                "unknown_value_sentinels": {
-                    "peak_ops_per_s": "0.0 means not vendor-declared; the component's explicit profiles.components.cpu binding is authoritative"
-                },
-                "capability_applicability": {
-                    "capacity_bytes": "not_applicable; capacity belongs to a separate host_memory component",
-                    "peak_ops_per_s": "reporting mirror only; the component-bound profiles.components.cpu entry owns categorized execution cost",
-                },
-                "cpu_profile_required": True,
-                "value_scope": "单颗 Grace CPU 计算侧组件",
-                "conditions": [
-                    "CPU 与可达 host_memory 组件必须各自显式绑定 profiles.components.cpu / profiles.components.host_memory registry 条目",
-                    "NVLink-C2C 单向值由 900 GB/s 聚合界面值对称除二",
-                ],
-                "derived_formula": "450 GB/s × 8 = 3600 Gb/s；LPDDR5X GB/s × 8 写入 IR",
-                "expires_at": "2027-08-27",
-                "cost_profile_template": cost_profile_template,
-                "cost_profile_parameter_basis": cost_profile_parameter_basis,
-                "cost_profile_key": "cpu",
-            },
-        ),
-    )
-    return ComponentPresetDefinition(
-        preset_id=preset_id,
-        name=name,
-        family="NVIDIA Grace CPU",
-        component=component,
-        sources=(source,),
-        evidence_level=S2_VENDOR_DECLARED,
-        limitations=limitations,
-        notes="Grace CPU 计算侧模板；吞吐成本由可编辑 CPU Profile 提供。",
-        tags=("cpu", "grace", "arm", "neoverse-v2"),
     )
 
 
@@ -2052,336 +1658,7 @@ def _consumer_gpu_preset(
     )
 
 
-_LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
-    _grace_cpu_preset(
-        "nvidia-grace-cpu-gh200",
-        "NVIDIA Grace CPU for GH200",
-        product_family="GH200",
-        gpu_port_count=1,
-        memory_bandwidth_gbps=4000.0,
-        source=NVIDIA_GH200_SOURCE,
-    ),
-    _grace_cpu_preset(
-        "nvidia-grace-cpu-gb200",
-        "NVIDIA Grace CPU for GB200",
-        product_family="GB200",
-        gpu_port_count=2,
-        memory_bandwidth_gbps=4096.0,
-        source=NVIDIA_GB200_SOURCE,
-    ),
-    _hbm_preset(
-        "hbm2e-16gb-3_2",
-        "HBM2E 16GB 409.6 GB/s Analytical Stack",
-        generation="HBM2E",
-        pin_speed_gbps=3.2,
-        io_bits=1024,
-        channels=8,
-        capacity_gb=16.0,
-        bandwidth_gbps=3276.8,
-        evidence_level=A_ANALYTICAL,
-        limitations=(
-            "HBM2E 每引脚 3.2 的速度档按 1024 位接口换算，作为分析模板而非指定产品逐堆叠规格。",
-            "模板不自动代表 Gaudi 3 的产品级等分带宽；Gaudi 3 请使用对应 product-slice 预设。",
-        ),
-        notes="单颗 HBM2E 16GB 分析模板。",
-        sources=(SAMSUNG_HBM_SOURCE,),
-    ),
-    _hbm_product_slice_preset(
-        "hbm3-16gb-0_670tbs-h100-slice",
-        "H100 HBM3 16GB 670 GB/s Product Slice",
-        generation="HBM3",
-        visible_capacity_gb=16.0,
-        raw_capacity_gb=16.0,
-        bandwidth_gbps=5360.0,
-        product_stack_count=5,
-        unit_count_status="vendor_documented_active_stacks",
-        unit_count_formula="5 active HBM3 stacks × 16 GB = 80 GB; 3.35 TB/s / 5 = 670 GB/s",
-        product_family="NVIDIA H100 SXM",
-        sources=(NVIDIA_H100_SOURCE,),
-    ),
-    _hbm_product_slice_preset(
-        "hbm3-16gb-0_667tbs-product-slice",
-        "GH200 HBM3 16GB 666.667 GB/s Product Slice",
-        generation="HBM3",
-        visible_capacity_gb=16.0,
-        raw_capacity_gb=16.0,
-        bandwidth_gbps=32000.0 / 6.0,
-        product_stack_count=6,
-        unit_count_status="derived_from_GH200_total_plus_full_GH100_6_stack_implementation",
-        unit_count_formula="96 GB / 16 GB = 6; 4 TB/s / 6 = 666.667 GB/s",
-        product_family="NVIDIA GH200 96GB HBM3 variant",
-        sources=(NVIDIA_GH200_SOURCE, NVIDIA_H100_SOURCE),
-    ),
-    _hbm_product_slice_preset(
-        "hbm3e-24gb-0_833tbs-gh200-slice",
-        "GH200 HBM3E 24GB 833.333 GB/s Product Slice",
-        generation="HBM3E",
-        visible_capacity_gb=24.0,
-        raw_capacity_gb=24.0,
-        bandwidth_gbps=40000.0 / 6.0,
-        product_stack_count=6,
-        unit_count_status="derived_from_product_total_and_24GB_stack_class",
-        unit_count_formula="144 GB / 24 GB = 6; 5 TB/s / 6 = 833.333 GB/s",
-        product_family="NVIDIA GH200 144GB HBM3E variant",
-        sources=(NVIDIA_GH200_SOURCE, SAMSUNG_HBM3E_SOURCE),
-    ),
-    _hbm_product_slice_preset(
-        "hbm3-16gb-0_6625tbs-mi300a-slice",
-        "MI300A HBM3 16GB 662.5 GB/s Product Slice",
-        generation="HBM3",
-        visible_capacity_gb=16.0,
-        raw_capacity_gb=16.0,
-        bandwidth_gbps=5300.0,
-        product_stack_count=8,
-        unit_count_status="derived_cross_source_product_architecture",
-        unit_count_formula="128 GB / 8 = 16 GB; 5.3 TB/s / 8 = 662.5 GB/s",
-        product_family="AMD MI300A",
-        sources=(AMD_MI300A_SOURCE,),
-    ),
-    _hbm_product_slice_preset(
-        "hbm3-24gb-0_665625tbs-mi300x-slice",
-        "MI300X HBM3 24GB 665.625 GB/s Product Slice",
-        generation="HBM3",
-        visible_capacity_gb=24.0,
-        raw_capacity_gb=24.0,
-        bandwidth_gbps=5325.0,
-        product_stack_count=8,
-        unit_count_status="vendor_documented_stacks",
-        unit_count_formula="192 GB / 8 = 24 GB; 5.325 TB/s / 8 = 665.625 GB/s",
-        product_family="AMD MI300X",
-        sources=(AMD_MI300X_SOURCE,),
-    ),
-    _hbm_product_slice_preset(
-        "hbm3e-24gb-0_800tbs-h200-slice",
-        "H200 HBM3E 24GB-class 800 GB/s Product Slice",
-        generation="HBM3E",
-        visible_capacity_gb=23.5,
-        raw_capacity_gb=24.0,
-        bandwidth_gbps=6400.0,
-        product_stack_count=6,
-        unit_count_status="derived_from_product_total_and_24GB_stack_class",
-        unit_count_formula="144 GB raw / 24 GB = 6; 141 GB visible / 6 = 23.5 GB; 4.8 TB/s / 6 = 800 GB/s",
-        product_family="NVIDIA H200 SXM",
-        sources=(NVIDIA_H200_SOURCE, SAMSUNG_HBM3E_SOURCE),
-    ),
-    _hbm_product_slice_preset(
-        "hbm3e-24gb-1_000tbs-gb200-slice",
-        "GB200 HBM3E 24GB-class 1 TB/s Product Slice",
-        generation="HBM3E",
-        visible_capacity_gb=23.25,
-        raw_capacity_gb=24.0,
-        bandwidth_gbps=8000.0,
-        product_stack_count=8,
-        unit_count_status="vendor_documented_stack_sites",
-        unit_count_formula="8 stack sites per GPU; 186 GB visible / 8 = 23.25 GB; 8 TB/s / 8 = 1 TB/s",
-        product_family="NVIDIA GB200",
-        sources=(NVIDIA_GB200_SOURCE, SAMSUNG_HBM3E_SOURCE),
-    ),
-    _hbm_product_slice_preset(
-        "nvidia-b200-hbm3e-90gb-4tbps-analysis",
-        "NVIDIA B200 HBM3E 90GB 4TB/s Analytical Endpoint",
-        generation="HBM3E",
-        visible_capacity_gb=90.0,
-        raw_capacity_gb=90.0,
-        bandwidth_gbps=32_000.0,
-        product_stack_count=2,
-        unit_count_status="analytical_two_modeled_hbm_nodes",
-        unit_count_formula=(
-            "NVIDIA DGX B200 1,440 GB / 8 GPUs = 180 GB and 64 TB/s / 8 GPUs = "
-            "8 TB/s per B200; user-requested two modeled endpoints split equally"
-        ),
-        product_family="NVIDIA B200 SXM 180GB",
-        sources=(NVIDIA_B200_SOURCE, NVIDIA_BLACKWELL_SOURCE, SAMSUNG_HBM3E_SOURCE),
-        evidence_level=A_ANALYTICAL,
-    ),
-    _hbm_product_slice_preset(
-        "hbm2e-16gb-0_4625tbs-gaudi3-slice",
-        "Gaudi 3 HBM2E 16GB 462.5 GB/s Product Slice",
-        generation="HBM2E",
-        visible_capacity_gb=16.0,
-        raw_capacity_gb=16.0,
-        bandwidth_gbps=3700.0,
-        product_stack_count=8,
-        unit_count_status="vendor_documented_stacks",
-        unit_count_formula="128 GB / 8 = 16 GB; 3.7 TB/s / 8 = 462.5 GB/s",
-        product_family="Intel Gaudi 3",
-        sources=(INTEL_GAUDI3_SOURCE,),
-    ),
-    _hbm_product_slice_preset(
-        "hbm-pim-16gb-3_2-analysis",
-        "HBM2E-PIM 16GB 409.6 GB/s Analytical Stack",
-        generation="HBM2E",
-        visible_capacity_gb=16.0,
-        raw_capacity_gb=16.0,
-        bandwidth_gbps=3276.8,
-        product_stack_count=1,
-        unit_count_status="experimental_reference_scope",
-        unit_count_formula="one analytical HBM2E-PIM reference stack",
-        product_family="Samsung HBM-PIM analytical reference",
-        sources=(SAMSUNG_HBM_PIM_SOURCE,),
-        evidence_level=A_ANALYTICAL,
-        analytical_pim=True,
-    ),
-    _grace_lpddr_preset(
-        "lpddr5x-gh200-480gb-500gbs-aggregate",
-        "GH200 Grace LPDDR5X 480GB 500 GB/s Aggregate",
-        product_family="GH200",
-        bandwidth_gbps=4000.0,
-        source=NVIDIA_GH200_SOURCE,
-    ),
-    _grace_lpddr_preset(
-        "lpddr5x-gb200-480gb-512gbs-aggregate",
-        "GB200 Grace LPDDR5X 480GB 512 GB/s Aggregate",
-        product_family="GB200",
-        bandwidth_gbps=4096.0,
-        source=NVIDIA_GB200_SOURCE,
-    ),
-    _hbm_preset(
-        "jedec-hbm3-24gb-6_4",
-        "JEDEC HBM3 24GB 819.2 GB/s Stack",
-        generation="HBM3",
-        pin_speed_gbps=6.4,
-        io_bits=1024,
-        channels=16,
-        capacity_gb=24.0,
-        bandwidth_gbps=6553.6,
-        evidence_level=S1_STANDARD,
-        limitations=(
-            "容量选用常见 24GB 堆叠作为模板；JESD238B.01 还允许其他芯粒密度和堆叠高度。",
-            "模板只表示单个 HBM 堆叠，不包含 GPU 控制器或封装互连。",
-        ),
-        notes="HBM3 代际写入 metadata，同时保持 ComponentSpec.kind 为 hbm。",
-        sources=(JEDEC_HBM3_SOURCE, SAMSUNG_HBM3_SOURCE),
-    ),
-    _hbm_preset(
-        "hbm3e-24gb-8_0",
-        "HBM3E 24GB 1.024 TB/s Stack",
-        generation="HBM3E",
-        pin_speed_gbps=8.0,
-        io_bits=1024,
-        channels=16,
-        capacity_gb=24.0,
-        bandwidth_gbps=8192.0,
-        evidence_level=A_ANALYTICAL,
-        limitations=(
-            "1.024 TB/s 是 HBM3E 常见速度档分析模板；公开供应商页面也可能展示更高峰值。",
-            "带宽按公开 HBM3E 接口形态线性换算，未引入供应商时序或 ECC 模型。",
-        ),
-        notes="适用于需要早期或常见 HBM3E 速度档、而不是最高公开速度档的拓扑分析。",
-        sources=(SAMSUNG_HBM3E_SOURCE, MICRON_HBM3E_SOURCE),
-    ),
-    _hbm_preset(
-        "hbm3e-36gb-9_2",
-        "HBM3E 36GB 1177.6 GB/s Stack",
-        generation="HBM3E",
-        pin_speed_gbps=9.2,
-        io_bits=1024,
-        channels=16,
-        capacity_gb=36.0,
-        bandwidth_gbps=9420.8,
-        evidence_level=S2_VENDOR_DECLARED,
-        limitations=(
-            "36GB 表示 12-high HBM3E 模板；若使用 8-high 24GB 器件请调整 capacity_bytes。",
-            "供应商页面给出的是每堆叠峰值带宽，实际系统值取决于控制器和封装。",
-        ),
-        notes="供应商公开的 HBM3E 高速堆叠模板，适合 H200 或 AI 加速器风格的显存系统分析。",
-        sources=(SAMSUNG_HBM3E_SOURCE, MICRON_HBM3E_SOURCE),
-    ),
-    _hbm_preset(
-        "jedec-hbm4-64gb-8_0",
-        "HBM4 64GB 2.048 TB/s Analytical Stack",
-        generation="HBM4",
-        pin_speed_gbps=8.0,
-        io_bits=2048,
-        channels=32,
-        capacity_gb=64.0,
-        bandwidth_gbps=16384.0,
-        evidence_level=A_ANALYTICAL,
-        limitations=(
-            "HBM4 标准接口基准可折算为每堆叠 2.048 TB/s；64 GB 容量是分析模板，不作为 JEDEC 公开容量保证。",
-            "Samsung 等厂商产品可采用不同容量和更高带宽档，使用时必须按目标器件校准。",
-        ),
-        notes="标准接口事实与分析容量组合，因此整体证据等级为 A_ANALYTICAL；HBM4 仍编码为 kind=hbm。",
-        sources=(JEDEC_HBM4_SOURCE, SAMSUNG_HBM4_SOURCE),
-    ),
-    _gpu_preset(
-        "nvidia-h100-sxm-gpu",
-        "NVIDIA H100 SXM Compute-Side GPU",
-        hbm_generation="HBM3",
-        hbm_stack_count=5,
-        device_memory_gb=80.0,
-        device_memory_bandwidth_gbps=26800.0,
-        bf16_dense_tflops=989.5,
-        fp8_dense_tflops=1979.0,
-        fp8_sparse_tflops=3958.0,
-        bf16_sparse_tflops=1979.0,
-        mig_profiles="up to 7 MIGs @ 10GB each",
-        sources=(NVIDIA_H100_SOURCE,),
-    ),
-    _gpu_preset(
-        "nvidia-h200-sxm-gpu",
-        "NVIDIA H200 SXM Compute-Side GPU",
-        hbm_generation="HBM3E",
-        hbm_stack_count=6,
-        device_memory_gb=141.0,
-        device_memory_bandwidth_gbps=38400.0,
-        bf16_dense_tflops=989.5,
-        fp8_dense_tflops=1979.0,
-        fp8_sparse_tflops=3958.0,
-        bf16_sparse_tflops=1979.0,
-        mig_profiles="up to 7 MIGs @ 18GB each",
-        sources=(NVIDIA_H200_SOURCE,),
-    ),
-    _ssd_preset(
-        "samsung-pm1743-15_36tb",
-        "Samsung PM1743 15.36TB PCIe 5.0 NVMe SSD",
-        family="Enterprise NVMe SSD",
-        kind="high_io_ssd",
-        capacity_bytes=_tb(15.36),
-        read_gbps=112.0,
-        write_gbps=56.8,
-        interface_bandwidth_gbps=126.03076923076924,
-        interface="PCIe 5.0 x4, NVMe",
-        protocol_version="5.0",
-        lanes=4,
-        endurance="enterprise server SSD; random write endurance not modeled",
-        limitations=(
-            "使用当前白皮书顺序读写峰值作为组件带宽；随机 IOPS 不直接转换为带宽。",
-            "容量选用 15.36TB 模板；PM1743 系列存在其他容量和形态。",
-        ),
-        notes="PCIe 5.0 高 I/O SSD 模板，适合模型卸载、检查点或数据集暂存分析。",
-        sources=(SAMSUNG_PM1743_WHITE_PAPER_SOURCE, SAMSUNG_PM1743_PRODUCT_SOURCE),
-        evidence_level=S2_VENDOR_DECLARED,
-        conditions=(
-            "128KiB sequential",
-            "FIO",
-            "Ubuntu 18.04.2",
-            "QD256",
-            "1 worker",
-        ),
-    ),
-    _ssd_preset(
-        "solidigm-d7-p5810-800gb",
-        "Solidigm D7-P5810 800GB PCIe 4.0 SLC NVMe SSD",
-        family="Enterprise NVMe SSD",
-        kind="ssd",
-        capacity_bytes=_gb(800.0),
-        read_gbps=51.2,
-        write_gbps=35.2,
-        interface_bandwidth_gbps=63.01538461538462,
-        interface="PCIe 4.0 x4, NVMe",
-        protocol_version="4.0",
-        lanes=4,
-        endurance="up to 50 DWPD random write workload",
-        limitations=(
-            "模板强调高写耐久 SLC/持久缓存型 SSD；不代表所有 D7 系列或 QLC 缓存部署。",
-            "顺序峰值带宽和 4KB 随机 IOPS 属于不同工作负载，仿真时不要混用。",
-        ),
-        notes="写密集持久缓存型 SSD 模板，适合缓存、日志和热卸载层分析。",
-        sources=(SOLIDIGM_D7_P5810_SOURCE,),
-        evidence_level=S2_VENDOR_DECLARED,
-    ),
-    ComponentPresetDefinition(
+_HBF_BASE = ComponentPresetDefinition(
         preset_id="ocp-hbf-2026-512gb",
         name="2026 OCP High Bandwidth Flash 512GB Stack",
         family="High Bandwidth Flash",
@@ -2484,7 +1761,6 @@ _LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
                     ],
                     "derived_formula": "用户指定十进制 GB/s 乘以 8，写入 IR Gb/s 字段",
                     "access_mode": "memory",
-                    "read_only": False,
                     "writable": True,
                     "write_buffer_bytes": 0,
                     "memory_service_owner": "ocp_hbf_2026_512gb.memory",
@@ -2514,8 +1790,9 @@ _LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
         ),
         notes="High Bandwidth Flash 位于 HBM 与 SSD 层之间；拓扑使用 HBF 逻辑链路并记录 UCIe 物理承载。",
         tags=("memory", "hbf", "ucie", "flash"),
-    ),
-    ComponentPresetDefinition(
+    )
+
+_SRAM_CIM_BASE = ComponentPresetDefinition(
         preset_id="digital-sram-cim-analysis",
         name="Digital SRAM-CIM Analytical Tile",
         family="Compute-in-Memory",
@@ -2583,8 +1860,7 @@ _LEGACY_PRESETS: Tuple[ComponentPresetDefinition, ...] = (
         ),
         notes="内置数字 SRAM-CIM 分析模板，与参考场景的容量和互连规模保持一致。",
         tags=("cim", "sram", "analysis"),
-    ),
-)
+    )
 
 
 def _curated_clone(
@@ -2602,7 +1878,7 @@ def _curated_clone(
     technology_updates: Optional[Mapping[str, Any]] = None,
     provenance: Optional[Mapping[str, Any]] = None,
 ) -> ComponentPresetDefinition:
-    """Clone a legacy template while making the curated evidence explicit."""
+    """Clone a component template with explicit curated evidence."""
     source_items = tuple(sources or definition.sources)
     metadata = deepcopy(dict(definition.component.metadata))
     metadata.setdefault("preset", {})["id"] = preset_id
@@ -2634,14 +1910,7 @@ def _curated_clone(
     )
 
 
-def _legacy_component(preset_id: str) -> ComponentPresetDefinition:
-    return next(item for item in _LEGACY_PRESETS if item.preset_id == preset_id)
-
-
-# Public component catalog.  Legacy definitions remain importable through the
-# private compatibility registry below because saved scenarios and old tests
-# may still refer to their stable IDs; they are deliberately absent from the
-# public catalog returned by list_component_presets().
+# Current public component catalog.
 _SAMSUNG_HBM3E = _hbm_preset(
     "samsung-hbm3e-36gb-9_2",
     "Samsung HBM3E 12-High 36GB (9.2Gb/s per pin)",
@@ -2668,31 +1937,6 @@ _SAMSUNG_HBM3E = _curated_clone(
         "write_bandwidth_gbps": {"formula": "same interface peak used as a directional write envelope", "status": "derived_not_separately_published"},
         "source_excerpt": "Samsung HBM3E page: 12-layer stack, up to 1,180 GB/s bandwidth at 9.2 Gbps, 36 GB capacity",
         "vendor_display_bandwidth": {"value": 1180, "unit": "GB/s_decimal", "status": "rounded_vendor_display"},
-    },
-)
-_GENERIC_HBM3E = _hbm_preset(
-    "hbm3e-standard-24gb-8_0",
-    "HBM3E Standard 24GB 1.024TB/s Analytical Stack",
-    generation="HBM3E", pin_speed_gbps=8.0, io_bits=1024, channels=16,
-    capacity_gb=24.0, bandwidth_gbps=8.0 * 1024,
-    evidence_level=A_ANALYTICAL,
-    limitations=(
-        "这是接口速度与常见 24GB 容量组合的分析模板，不对应单一厂商 SKU。",
-        "延迟、效率、队列和可用吞吐属于可编辑仿真参数，不是 JEDEC 端到端保证。",
-    ),
-    notes="仅保留一个通用 HBM3E 分析档，避免把不同厂商产品切片误当成独立标准器件。",
-    sources=(SAMSUNG_HBM3E_OFFICIAL_SOURCE,),
-)
-_GENERIC_HBM3E = _curated_clone(
-    _GENERIC_HBM3E,
-    preset_id="hbm3e-standard-24gb-8_0",
-    name="HBM3E Standard 24GB 1.024TB/s Analytical Stack",
-    provenance={
-        "capacity_bytes": {"value": 24 * 1024 ** 3, "unit": "bytes", "status": "selected_standard_raw_stack", "basis": "JEDEC binary DRAM density; 24 GiB raw stack reference"},
-        "pin_speed_gbps": {"value": 8.0, "unit": "Gb/s_per_pin", "status": "analytical_speed_grade"},
-        "interface_bits": {"value": 1024, "unit": "bit", "status": "HBM interface convention"},
-        "read_bandwidth_gbps": {"formula": "8.0 Gb/s/pin × 1024 bit ÷ 8 = 1024 GB/s = 8192 Gb/s", "unit": "Gb/s_decimal_one_way"},
-        "write_bandwidth_gbps": {"formula": "same interface peak used as directional analytical envelope", "status": "derived_not_vendor_specific"},
     },
 )
 
@@ -2770,7 +2014,6 @@ _RTX5080_GDDR7 = _curated_clone(
     },
 )
 
-_HBF_BASE = _legacy_component("ocp-hbf-2026-512gb")
 _SK_HYNIX_HBF = _curated_clone(
     _HBF_BASE,
     preset_id="sk-hynix-hbf-512gb",
@@ -2831,7 +2074,6 @@ _SK_HYNIX_HBF.component.metadata.update({
     # architecture can be used for KV placement scans.  The profile remains
     # analytical and is remapped per materialized component instance.
     "access_mode": "memory",
-    "read_only": False,
     "writable": True,
     "write_buffer_bytes": 0,
     "memory_service_owner": "sk_hynix_hbf_512gb.memory",
@@ -3048,6 +2290,9 @@ _ACER_LOCAL_DDR5 = replace(
                 "channels": 2,
                 "stacks": 1,
                 "dies_per_stack": 1,
+                "bank_geometry_scope": "per_die",
+                "stack_interface_mode": "shared",
+                "control_mode": "analytical",
                 "subchannels_per_channel": 1,
                 "pseudo_channels_per_channel": 1,
                 "ranks_per_channel": 4,
@@ -3069,6 +2314,7 @@ _ACER_LOCAL_DDR5 = replace(
                 "write_recovery_ns": 15.0,
                 "read_to_write_ns": 0.0,
                 "write_to_read_ns": 0.0,
+                **dict.fromkeys(DRAM_BANK_GROUP_TIMING_FIELDS, 0.0),
                 "capacity_bytes": 128 * 1024 ** 3,
                 "max_outstanding_requests": 32,
                 "metadata": {
@@ -3119,7 +2365,7 @@ _ACER_LOCAL_DDR5 = replace(
 )
 
 _SRAM_CIM = _curated_clone(
-    _legacy_component("digital-sram-cim-analysis"),
+    _SRAM_CIM_BASE,
     preset_id="sram-cim-analytical-tile",
     name="SRAM 存算一体分析 Tile（非量产 SKU）",
     family="SRAM Compute-in-Memory",
@@ -3247,6 +2493,11 @@ _RTX_5080 = _consumer_gpu_preset(
     source=NVIDIA_RTX_5080_SOURCE,
     architecture_source=NVIDIA_BLACKWELL_ARCHITECTURE_PDF_SOURCE,
 )
+_RTX_5080.component.metadata["llama_cpp_cuda_architecture"] = {
+    "compute_capability": 1200,
+    "highest_compiled_arch": 1200,
+    "warp_size": 32,
+}
 
 _PRESETS: Tuple[ComponentPresetDefinition, ...] = (
     _SAMSUNG_HBM3E,
@@ -3263,21 +2514,13 @@ _PRESETS: Tuple[ComponentPresetDefinition, ...] = (
     _RTX_5080,
 )
 
-# Legacy definitions are intentionally not registered.  The curated catalog
-# is the complete hardware component surface; old IDs must fail closed in the
-# public detail/materialize APIs.
-_LEGACY_PRESETS = ()
-
-
 _COMPONENT_BY_ID: Mapping[str, ComponentPresetDefinition] = {
-    **{item.preset_id: item for item in _LEGACY_PRESETS},
-    **{item.preset_id: item for item in _PRESETS},
+    item.preset_id: item for item in _PRESETS
 }
-if len(_COMPONENT_BY_ID) != len({item.preset_id for item in (*_LEGACY_PRESETS, *_PRESETS)}):  # import-time invariant, never user input
+if len(_COMPONENT_BY_ID) != len(_PRESETS):
     raise RuntimeError("组件预设 ID 重复")
 if any(item.component_kind not in COMPONENT_KINDS for item in _PRESETS):
     raise RuntimeError("组件预设使用了不支持的 ComponentSpec.kind")
-
 
 
 _BUNDLES: Tuple[TopologyBundleDefinition, ...] = ()
@@ -3509,16 +2752,8 @@ def _component_definition_detail(definition: Any) -> Dict[str, Any]:
 
 
 _PRESET_MUTATION_FIELDS = frozenset({
-    "id", "preset_id", "name", "family", "component", "component_spec",
+    "id", "name", "family", "component",
     "evidence_level", "limitations", "notes", "tags", "sources",
-})
-_PRESET_MUTATION_IGNORED_FIELDS = frozenset({
-    "preset_type", "component_kind", "root_component_kind", "component_count", "link_count",
-    "capacity_bytes", "peak_ops_per_s", "read_bandwidth_gbps", "write_bandwidth_gbps",
-    "capability_units", "port_count", "evidence_level", "sources", "limitations", "notes",
-    "value_scope", "conditions", "revision", "expires_at", "supersedes", "tags",
-    "catalog_version", "usage_hint", "catalog", "links",
-    "capability_status", "facts",
 })
 _COMPONENT_MUTATION_FIELDS = frozenset({
     "component_id", "kind", "cost_profile_id", "ports", "package_id", "die_id",
@@ -3553,22 +2788,6 @@ def _validate_metadata_keys(value: Any) -> None:
     elif isinstance(value, (list, tuple)):
         for item in value:
             _validate_metadata_keys(item)
-
-
-def _strict_payload_equal(left: Any, right: Any) -> bool:
-    if type(left) is not type(right):
-        return False
-    if isinstance(left, Mapping):
-        return (
-            set(left) == set(right)
-            and all(_strict_payload_equal(left[key], right[key]) for key in left)
-        )
-    if isinstance(left, (list, tuple)):
-        return len(left) == len(right) and all(
-            _strict_payload_equal(item_left, item_right)
-            for item_left, item_right in zip(left, right)
-        )
-    return left == right
 
 
 def _parse_port_payload(value: Any, index: int) -> PortSpec:
@@ -3612,10 +2831,10 @@ def _parse_component_payload(value: Any) -> ComponentSpec:
     if str(payload.get("kind", "")).strip().lower().replace("-", "_") == "gpu":
         # GPU presets own compute capability.  Device-memory capacity and
         # media bandwidth must be represented by explicit HBM/memory nodes.
-        payload["capacity_bytes"] = 0
-        payload["read_bandwidth_gbps"] = 0.0
-        payload["write_bandwidth_gbps"] = 0.0
-        payload["bandwidth_gbps"] = 0.0
+        for field in ("capacity_bytes", "read_bandwidth_gbps", "write_bandwidth_gbps", "bandwidth_gbps"):
+            if payload[field] != 0:
+                raise ComponentPresetMutationError(
+                    "invalid_component", "GPU 组件 {} 必须为 0；显存参数应声明在独立内存组件中".format(field))
     metadata = dict(_mutation_mapping(payload.get("metadata", {}), "component.metadata"))
     for field in ("facts", "capability_status"):
         if field in metadata and not isinstance(metadata[field], Mapping):
@@ -3634,7 +2853,6 @@ def _parse_component_payload(value: Any) -> ComponentSpec:
         to_primitive(metadata)
     except (TypeError, ValueError) as exc:
         raise ComponentPresetMutationError("invalid_component", "组件 metadata 无法序列化：{}".format(exc)) from exc
-    template = metadata.get("cost_profile_template")
     # Profile rates describe a calibrated service model and are bounded by
     # hardware during scenario resolution. Preserve them across catalog edits.
     payload["metadata"] = metadata
@@ -3644,65 +2862,22 @@ def _parse_component_payload(value: Any) -> ComponentSpec:
         raise ComponentPresetMutationError("invalid_component", "组件参数无效：{}".format(exc)) from exc
 
 
-def _validate_ignored_fields(raw: Mapping[str, Any], component: ComponentSpec, *, fields: Optional[Sequence[str]] = None) -> None:
-    metadata = component.metadata
-    expected = {
-        "preset_type": "component",
-        "component_kind": component.kind,
-        "capacity_bytes": component.capacity_bytes,
-        "peak_ops_per_s": component.peak_ops_per_s,
-        "read_bandwidth_gbps": component.read_bandwidth_gbps,
-        "write_bandwidth_gbps": component.write_bandwidth_gbps,
-        "capability_units": dict(CAPABILITY_UNITS),
-        "port_count": len(component.ports),
-        "facts": dict(metadata.get("facts", {})),
-        "capability_status": dict(metadata.get("capability_status", {})),
-        "value_scope": metadata.get("value_scope", ""),
-        "conditions": list(metadata.get("conditions", ())),
-        "revision": metadata.get("revision", ""),
-        "expires_at": metadata.get("expires_at", ""),
-        "supersedes": list(metadata.get("supersedes", ())),
-        "catalog_version": CATALOG_VERSION,
-        "usage_hint": USAGE_HINT,
-        "links": [],
-        "catalog": {"version": CATALOG_VERSION, "cutoff_at": CATALOG_CUTOFF_AT},
-    }
-    fields = set(raw) if fields is None else set(fields)
-    type_conflicts = {
-        field
-        for field in ("capacity_bytes", "port_count", "peak_ops_per_s", "read_bandwidth_gbps", "write_bandwidth_gbps")
-        if field in fields and isinstance(raw.get(field), bool)
-    }
-    conflicts = sorted(
-        field for field, expected_value in expected.items()
-        if field in fields
-        and field not in _PRESET_MUTATION_FIELDS
-        and (field in type_conflicts or not _strict_payload_equal(raw[field], expected_value))
-    )
-    if conflicts:
-        raise ComponentPresetMutationError(
-            "conflicting_fields",
-            "只读派生字段与 component 不一致：{}".format(", ".join(conflicts)),
-        )
-
-
 _SOURCE_FIELDS = frozenset({
     "title", "url", "evidence_level", "publisher", "published_at", "accessed_at",
 })
 
 
-def _parse_sources(value: Any, *, strict: bool = False) -> Tuple[ComponentSource, ...]:
+def _parse_sources(value: Any) -> Tuple[ComponentSource, ...]:
     if value is None:
         return ()
     sources = []
     for index, raw in enumerate(_mutation_list(value, "sources")):
         source = _mutation_mapping(raw, "sources[{}]".format(index))
-        if strict:
-            unknown = sorted(set(source) - _SOURCE_FIELDS)
-            if unknown:
-                raise ComponentPresetMutationError("invalid_source", "来源包含未知字段：{}".format(", ".join(unknown)))
-            if any(not isinstance(source.get(field), str) for field in source):
-                raise ComponentPresetMutationError("invalid_source", "来源字段必须是字符串")
+        unknown = sorted(set(source) - _SOURCE_FIELDS)
+        if unknown:
+            raise ComponentPresetMutationError("invalid_source", "来源包含未知字段：{}".format(", ".join(unknown)))
+        if any(not isinstance(source.get(field), str) for field in source):
+            raise ComponentPresetMutationError("invalid_source", "来源字段必须是字符串")
         title = str(source.get("title", "")).strip()
         url = str(source.get("url", "")).strip()
         publisher = str(source.get("publisher", "")).strip() or "用户录入"
@@ -3715,57 +2890,33 @@ def _parse_sources(value: Any, *, strict: bool = False) -> Tuple[ComponentSource
     return tuple(sources)
 
 
-def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[ComponentPresetDefinition] = None, strict: bool = False) -> ComponentPresetDefinition:
+def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[ComponentPresetDefinition] = None) -> ComponentPresetDefinition:
     raw = _mutation_mapping(payload, "payload")
-    validation_fields = set(raw)
-    wrapper_fields = set()
-    if isinstance(raw.get("preset"), Mapping):
-        preset_fields = dict(raw["preset"])
-        wrapper_fields = set(preset_fields)
-        conflicting = sorted(
-            key for key in set(preset_fields) & (set(raw) - {"preset"})
-            if not _strict_payload_equal(preset_fields[key], raw[key])
-        )
-        if conflicting:
-            raise ComponentPresetMutationError("conflicting_fields", "preset 包装层与外层字段冲突：{}".format(", ".join(conflicting)))
-        raw = {**preset_fields, **{key: value for key, value in raw.items() if key != "preset"}}
-    if "id" in raw and "preset_id" in raw and not _strict_payload_equal(raw["id"], raw["preset_id"]):
-        raise ComponentPresetMutationError("conflicting_fields", "id 和 preset_id 不能指向不同预设")
-    if "component" in raw and "component_spec" in raw and not _strict_payload_equal(raw["component"], raw["component_spec"]):
-        raise ComponentPresetMutationError("conflicting_fields", "component 和 component_spec 不能同时使用不同值")
-    unknown = sorted(set(raw) - _PRESET_MUTATION_FIELDS - _PRESET_MUTATION_IGNORED_FIELDS)
+    unknown = sorted(set(raw) - _PRESET_MUTATION_FIELDS)
     if unknown:
         raise ComponentPresetMutationError("unknown_fields", "预设包含未知字段：{}".format(", ".join(unknown)))
-    if strict:
-        for field in ("id", "preset_id"):
-            if field in raw and not isinstance(raw[field], str):
-                raise ComponentPresetMutationError("invalid_id", "{} 必须是字符串".format(field))
-        for field in ("name", "family", "evidence_level", "notes"):
-            if field in raw and not isinstance(raw[field], str):
-                raise ComponentPresetMutationError("invalid_payload", "预设字段必须是字符串：{}".format(field))
-        for field in ("limitations", "tags"):
-            if field in raw and (
-                not isinstance(raw[field], list)
-                or any(not isinstance(item, str) for item in raw[field])
-            ):
-                raise ComponentPresetMutationError("invalid_payload", "预设字段必须是字符串数组：{}".format(field))
-        if "sources" in raw and raw["sources"] is None:
-            raise ComponentPresetMutationError("invalid_source", "sources 必须是数组")
+    for field in ("id",):
+        if field in raw and not isinstance(raw[field], str):
+            raise ComponentPresetMutationError("invalid_id", "{} 必须是字符串".format(field))
+    for field in ("name", "family", "evidence_level", "notes"):
+        if field in raw and not isinstance(raw[field], str):
+            raise ComponentPresetMutationError("invalid_payload", "预设字段必须是字符串：{}".format(field))
+    for field in ("limitations", "tags"):
+        if field in raw and (
+            not isinstance(raw[field], list)
+            or any(not isinstance(item, str) for item in raw[field])
+        ):
+            raise ComponentPresetMutationError("invalid_payload", "预设字段必须是字符串数组：{}".format(field))
+    if "sources" in raw and raw["sources"] is None:
+        raise ComponentPresetMutationError("invalid_source", "sources 必须是数组")
     base_component = existing.component if existing else None
-    component_payload = raw.get("component", raw.get("component_spec"))
+    component_payload = raw.get("component")
     if component_payload is None and base_component is not None:
         component_payload = to_primitive(base_component)
     if component_payload is None:
         raise ComponentPresetMutationError("missing_component", "缺少必填字段 component")
     component = _parse_component_payload(component_payload)
-    if strict:
-        if wrapper_fields and (
-            existing is None
-            or component_payload == to_primitive(existing.component)
-        ):
-            validation_fields |= wrapper_fields
-        _validate_ignored_fields(raw, component, fields=validation_fields)
-    preset_id = str(raw.get("id", raw.get("preset_id", existing.preset_id if existing else ""))).strip()
+    preset_id = str(raw.get("id", existing.preset_id if existing else "")).strip()
     if not _PRESET_ID_RE.fullmatch(preset_id):
         raise ComponentPresetMutationError("invalid_id", "id 必须是 2-81 个字母、数字、点、下划线或连字符")
     name = str(raw.get("name", existing.name if existing else component.component_id)).strip()
@@ -3779,20 +2930,8 @@ def _definition_from_mutation(payload: Mapping[str, Any], *, existing: Optional[
     notes = str(raw.get("notes", existing.notes if existing else "用户自定义硬件预设")).strip()
     tags = tuple(str(item).strip() for item in raw.get("tags", existing.tags if existing else ()) if str(item).strip())
     inherited_sources = [source.to_metadata() for source in existing.sources] if existing else ()
-    sources = _parse_sources(raw.get("sources", inherited_sources), strict=strict)
+    sources = _parse_sources(raw.get("sources", inherited_sources))
     return ComponentPresetDefinition(preset_id, name, family, component, sources, evidence, limitations, notes, tags)
-
-
-def _definition_from_persisted_record(value: Any) -> ComponentPresetDefinition:
-    raw = _mutation_mapping(value, "presets")
-    if "preset" in raw:
-        raise ValueError("硬件预设目录记录不允许使用 preset 包装层")
-    if "id" in raw and "preset_id" in raw:
-        if not isinstance(raw["id"], str) or not isinstance(raw["preset_id"], str) or not _strict_payload_equal(raw["id"], raw["preset_id"]):
-            raise ValueError("硬件预设目录中的 id 和 preset_id 冲突")
-    if "component" in raw and "component_spec" in raw and not _strict_payload_equal(raw["component"], raw["component_spec"]):
-        raise ValueError("硬件预设目录中的 component 和 component_spec 冲突")
-    return _definition_from_mutation(raw, strict=True)
 
 
 class ComponentPresetCatalog:
@@ -3806,7 +2945,7 @@ class ComponentPresetCatalog:
     def __init__(self, cache_dir=None):
         from .model_catalog import default_catalog_cache_dir
 
-        configured = os.environ.get("HETEROLLM_SIM_HARDWARE_PRESET_CACHE") or os.environ.get("HETEROLLM_SIM_HARDWARE_PRESET_CACHE_DIR")
+        configured = os.environ.get("HETEROLLM_SIM_HARDWARE_PRESET_CACHE")
         directory = Path(cache_dir) if cache_dir is not None else (
             Path(configured).expanduser() if configured else default_catalog_cache_dir().parent / "component-presets"
         )
@@ -3831,7 +2970,7 @@ class ComponentPresetCatalog:
                 if type(raw.get("version")) is not int or raw["version"] != 1:
                     raise ValueError("硬件预设目录版本无效：{}".format(self.path))
                 parsed = [
-                    _definition_from_persisted_record(value)
+                    _definition_from_mutation(value)
                     for value in _mutation_list(raw.get("presets", []), "presets")
                 ]
                 ids = [item.preset_id for item in parsed]
@@ -3906,7 +3045,7 @@ class ComponentPresetCatalog:
         with self._lock:
             with _catalog_file_lock(self.path):
                 self._load_persisted()
-                definition = _definition_from_mutation(payload, strict=True)
+                definition = _definition_from_mutation(payload)
                 if definition.preset_id in _BY_ID or definition.preset_id in self.overrides:
                     raise ComponentPresetMutationError("already_exists", "组件预设 ID 已存在：{}".format(definition.preset_id), status=409)
                 self._save({**self.overrides, definition.preset_id: definition}, self.removed - {definition.preset_id})
@@ -3919,7 +3058,7 @@ class ComponentPresetCatalog:
                 current = self._get(preset_id)
                 if not isinstance(current, ComponentPresetDefinition):
                     raise ComponentPresetMutationError("unsupported_preset", "组合拓扑预设暂不支持编辑")
-                definition = _definition_from_mutation(payload, existing=current, strict=True)
+                definition = _definition_from_mutation(payload, existing=current)
                 if definition.preset_id != preset_id:
                     raise ComponentPresetMutationError("id_change_not_allowed", "编辑时不允许修改预设 ID")
                 self._save({**self.overrides, preset_id: definition}, self.removed - {preset_id})

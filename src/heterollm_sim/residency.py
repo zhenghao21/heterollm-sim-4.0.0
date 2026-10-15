@@ -318,14 +318,6 @@ class Allocation:
     )
 
     @property
-    def owner_id(self) -> str:
-        return self.allocation_id
-
-    @property
-    def home(self) -> Optional[str]:
-        return self.backing
-
-    @property
     def dirty_bytes(self) -> int:
         return _range_bytes(self._dirty_ranges)
 
@@ -373,10 +365,6 @@ class AllocationView:
     @property
     def committed_bytes(self) -> int:
         return 0
-
-    @property
-    def physical_owner(self) -> str:
-        return self.owner_id
 
 
 @dataclass(frozen=True)
@@ -780,7 +768,6 @@ class AllocationResidencyManager:
         *,
         kind: str = "generic",
         backing: Optional[str] = None,
-        home: Optional[str] = None,
         committed_bytes: Optional[int] = None,
         resident_bytes: int = 0,
         dirty: bool = False,
@@ -822,9 +809,7 @@ class AllocationResidencyManager:
                 minimum=1,
             )
         )
-        if backing is not None and home is not None and str(backing) != str(home):
-            raise ResidencyValidationError("backing and home identify different components")
-        resolved_backing = backing if backing is not None else home
+        resolved_backing = backing
         if resolved_backing is not None:
             resolved_backing = str(resolved_backing).strip()
             if not resolved_backing:
@@ -1114,28 +1099,6 @@ class AllocationResidencyManager:
         self._leases[normalized_lease_id] = lease
         self._validate_mutation_boundary()
         return lease
-
-    def lease(
-        self,
-        target_id: str,
-        consumer_task_id: str,
-        *,
-        lease_id: Optional[str] = None,
-        offset_bytes: int = 0,
-        size_bytes: Optional[int] = None,
-    ) -> ResidencyLease:
-        """Convenience spelling for :meth:`acquire_lease`."""
-
-        resolved_lease_id = lease_id or "{}:{}".format(
-            consumer_task_id, len(self._leases)
-        )
-        return self.acquire_lease(
-            resolved_lease_id,
-            target_id,
-            consumer_task_id,
-            offset_bytes=offset_bytes,
-            size_bytes=size_bytes,
-        )
 
     def release_lease(self, lease_id: str) -> ResidencyLease:
         """Release protection while retaining the consumer eviction anchor."""

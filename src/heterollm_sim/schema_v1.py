@@ -151,13 +151,6 @@ def _contract_text(contract: Tuple[str, Tuple[Any, ...], str]) -> str:
     return "{} [{}] / {}".format(contract[0], _shape_text(contract[1]), contract[2])
 
 
-def _attribute_value(attributes: Mapping[str, Any], *names: str) -> Any:
-    for name in names:
-        if name in attributes:
-            return attributes[name]
-    return None
-
-
 def _is_wildcard(value: Any) -> bool:
     return value is None or value == "" or value == "*" or str(value).lower() == "unknown"
 
@@ -409,6 +402,13 @@ class TensorTransform:
         if self.input_tensor_id == self.output_tensor_id:
             raise ValueError("显式变换的输入和输出张量不能相同")
         _mapping(self.attributes, "attributes")
+        retired = {"target_shape", "perm", "to_dtype", "split_sizes"}.intersection(self.attributes)
+        if retired:
+            raise ValueError(
+                "transform attributes contain retired fields: {}; use shape, permutation, dtype, or sizes".format(
+                    ", ".join(sorted(retired))
+                )
+            )
 
 
 @dataclass(frozen=True)
@@ -772,7 +772,7 @@ def _infer_single_tensor_transform_output(
     dtype, shape, layout = input_contract
     attributes = transform.attributes
     if transform.kind == "reshape":
-        raw = _attribute_value(attributes, "shape", "target_shape")
+        raw = attributes.get("shape")
         if raw is None:
             raise ValueError("显式变换 {} 的 reshape 必须声明目标 shape".format(transform.transform_id))
         target = list(_normalized_shape(raw, "显式变换 {} reshape 目标 shape".format(transform.transform_id), allow_inferred=True))
@@ -802,7 +802,7 @@ def _infer_single_tensor_transform_output(
             ))
         return dtype, target_shape, layout
     if transform.kind == "transpose":
-        raw = _attribute_value(attributes, "permutation", "perm")
+        raw = attributes.get("permutation")
         rank = len(shape)
         permutation = tuple(reversed(range(rank))) if raw is None else _integer_sequence(raw, "显式变换 {} transpose permutation".format(transform.transform_id))
         if len(permutation) != rank or len(set(permutation)) != rank or any(item < 0 or item >= rank for item in permutation):
@@ -813,13 +813,13 @@ def _infer_single_tensor_transform_output(
         output_layout = _canonical_layout(attributes.get("layout") or "{}_transposed".format(layout))
         return dtype, tuple(shape[index] for index in permutation), output_layout
     if transform.kind == "cast":
-        raw = _attribute_value(attributes, "dtype", "to_dtype")
+        raw = attributes.get("dtype")
         output_dtype = _canonical_dtype(raw)
         if _is_wildcard(output_dtype):
             raise ValueError("显式变换 {} 的 cast 必须声明目标 dtype".format(transform.transform_id))
         return output_dtype, shape, layout
     if transform.kind == "broadcast":
-        raw = _attribute_value(attributes, "shape", "target_shape")
+        raw = attributes.get("shape")
         if raw is None:
             raise ValueError("显式变换 {} 的 broadcast 必须声明目标 shape".format(transform.transform_id))
         target = _normalized_shape(raw, "显式变换 {} broadcast 目标 shape".format(transform.transform_id))

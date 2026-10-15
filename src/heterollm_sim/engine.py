@@ -17,6 +17,7 @@ from .event_kernel import (
     UnifiedEventKernel,
     validate_task_graph,
 )
+from .memory_types import StageTiming
 
 if TYPE_CHECKING:
     from .execution_control import ExecutionControl
@@ -42,8 +43,8 @@ def _task_resource_intervals(
 ) -> List[ResourceInterval]:
     """Project physical reservations and retained ordinary demands together."""
     metadata = task.metadata
-    physical = metadata.get("physical_execution")
-    if not isinstance(physical, Mapping):
+    physical = metadata.get("physical_execution_by_owner")
+    if physical is None:
         return [
             ResourceInterval(
                 resource_id=demand.resource_id,
@@ -53,17 +54,19 @@ def _task_resource_intervals(
             )
             for demand in demands
         ]
+    if not isinstance(physical, Mapping):
+        raise ValueError("physical_execution_by_owner must map owners to execution records")
 
     intervals: List[ResourceInterval] = []
-    payloads = physical.get("resource_interval_payloads", {})
-    if isinstance(payloads, Mapping):
+    for owner in physical.values():
+        if not isinstance(owner, Mapping) or "resource_interval_payloads" not in owner:
+            raise ValueError("physical execution records require resource_interval_payloads")
+        payloads = owner["resource_interval_payloads"]
         for resource_id, values in payloads.items():
-            for item in values or ():
-                if isinstance(item, (tuple, list)) and len(item) >= 3:
-                    begin, end, moved = item[:3]
-                    intervals.append(ResourceInterval(
-                        resource_id=str(resource_id), start_ns=begin, end_ns=end,
-                        bytes_moved=int(moved)))
+            for begin, end, moved in values:
+                intervals.append(ResourceInterval(
+                    resource_id=str(resource_id), start_ns=begin, end_ns=end,
+                    bytes_moved=int(moved)))
     reservations = metadata.get("physical_resource_intervals", ())
     # Retained stages are exact even when another request in this task
     # exceeded its detail bound. A partial record is not an invalid record.
@@ -72,46 +75,20 @@ def _task_resource_intervals(
     payload_copies = Counter((item.resource_id, item.start_ns, item.end_ns, item.bytes_moved)
                              for item in intervals)
     for item in reservations:
-        if isinstance(item, (tuple, list)) and len(item) >= 3:
-            resource_id, begin, end = item[:3]
-            moved = int(item[3]) if len(item) > 3 else 0
-        else:
-            resource_id = getattr(item, "resource_id", None)
-            begin = getattr(item, "start_ns", None)
-            end = getattr(item, "end_ns", None)
-            moved = int(getattr(item, "bytes", 0))
+        if not isinstance(item, StageTiming):
+            raise ValueError("physical_resource_intervals requires StageTiming records")
+        resource_id, begin, end, moved = item.resource_id, item.start_ns, item.end_ns, item.bytes
         key = (resource_id, begin, end, moved)
         if payload_copies[key]:
             payload_copies[key] -= 1
             continue
-        if resource_id is not None and begin is not None and end is not None:
+        if resource_id is not None:
             intervals.append(ResourceInterval(
                 resource_id=str(resource_id), start_ns=begin, end_ns=end,
                 bytes_moved=moved))
-    if not intervals and not physical.get("details_truncated", False):
-        raw = physical.get("resource_intervals", {})
-        resource_bytes = physical.get("resource_bytes", {})
-        if isinstance(raw, Mapping):
-            for resource_id, values in raw.items():
-                valid = [item for item in values or ()
-                         if isinstance(item, (tuple, list)) and len(item) >= 2]
-                moved = int(resource_bytes.get(resource_id, 0))
-                if len(valid) > 1 and moved:
-                    raise ValueError(
-                        f"physical resource {resource_id!r} requires per-interval byte "
-                        "payloads; aggregate costs cannot be assigned to multiple intervals")
-                for item in valid:
-                    begin, end = item[:2]
-                    intervals.append(ResourceInterval(
-                        resource_id=str(resource_id), start_ns=begin, end_ns=end,
-                        bytes_moved=moved))
-
     # Physical tasks retain ordinary compute/link demands alongside replaced
     # memory previews.  Do not invent intervals when physical detail is absent.
     retained_ids = set(str(item) for item in metadata.get("physical_nonmemory_demand_ids", ()))
-    if not retained_ids:
-        physical_ids = set(str(item) for item in metadata.get("physical_demands_resource_ids", ()))
-        retained_ids = {d.resource_id for d in demands if d.resource_id not in physical_ids}
     for demand in demands:
         if demand.resource_id in retained_ids:
             intervals.append(ResourceInterval(

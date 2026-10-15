@@ -25,8 +25,7 @@ def runtime(*, distance=17, hbm_pages=32, high_output=8, cohort_ns=1000.0):
         requests=(RequestSpec("low", 0.0, 32, 8, priority=0),
                   RequestSpec("high", 1.0, 32, high_output, priority=10)))
     return _OnlineRuntime(compile_serving_plan(scenario),
-                          lambda *_: BatchCost(cohort_ns),
-                          apply_measurement_start_residency=False)
+                          lambda *_: BatchCost(cohort_ns))
 
 
 def offloaded_runtime(**kwargs):
@@ -66,7 +65,7 @@ class AsyncKVPrefetchTests(unittest.TestCase):
         self.assertFalse(runner._resume_swap(low))
         with self.assertRaises(KvPoolError):
             pool.cache_accesses("low", first_token=0, token_count=16)
-        self.assertFalse(pool.resize("low", 0))
+        self.assertFalse(pool.resize_detailed("low", 0).success)
         entry = runner._pending_prefetches["low"]
         page_id, plan = entry["prepared"][0]
         with self.assertRaises(KvPoolError):
@@ -235,7 +234,7 @@ class AsyncKVPrefetchTests(unittest.TestCase):
                          if not getattr(hop, "service_ref", None))
         source_end = entry["completion_ns"]
         kernel = runner._execution_resource_kernel
-        kernel.add_tasks((TaskSpec(task_id="independent-link", request_id="high", name="competing link",
+        kernel.submit((TaskSpec(task_id="independent-link", request_id="high", name="competing link",
             category=TaskCategory.COMMUNICATION, earliest_start_ns=source_end,
             demands=(ResourceDemand(first_hop.resource_id, 123.),)),))
         runner._advance_prefetches_before_kernel_step(kernel)

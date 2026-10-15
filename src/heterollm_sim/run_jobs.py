@@ -257,9 +257,9 @@ class RunJobManager:
             selected_policy = RetentionPolicy(
                 str(estimate["recommended_retention_policy"])
             ).value
-        scheduler = getattr(scenario.workload, "scheduler", None)
+        scheduler = scenario.workload.scheduler
         scheduler_mode = (
-            str(getattr(scheduler, "mode", "static")) if scheduler else "static"
+            str(scheduler.mode) if scheduler else "static"
         )
         if scheduler_mode == "continuous" and selected_policy != "aggregate":
             raise ValueError(

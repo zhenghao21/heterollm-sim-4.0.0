@@ -8,7 +8,7 @@ from typing import Any
 
 def _rows(value: Any) -> tuple[Mapping[str, Any], ...]:
     if isinstance(value, Mapping):
-        value = value.get("schedule_trace", value.get("scheduler_trace", ()))
+        value = value["schedule_trace"]
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise TypeError("scheduler trace must be an ordered sequence or result mapping")
     rows = tuple(row for row in value if isinstance(row, Mapping))

@@ -151,9 +151,9 @@ def validate_hbm_timing_constraints(payload: Mapping):
     The represented values are controller waiting gates, not certified device
     speed-bin minima. Longer minimum waits are safe; maximum deadlines may not
     be increased. Blank AC cells, IDD examples and optional auto-PRE MR encodings
-    do not establish missing analog minima. This model uses the 1x reference
-    refresh-temperature envelope; HBM2's optional cold 2x/4x modes need a separate
-    temperature model and are not inferred from a caller's interval.
+    do not establish missing analog minima. The periodic refresh implementation
+    supports intervals up to 3900 ns. This model limit does not describe every
+    refresh mode allowed by the standards or establish vendor applicability.
     """
     if payload.get("control_mode") != "jedec_hbm":
         return
@@ -224,11 +224,11 @@ def validate_hbm_timing_constraints(payload: Mapping):
                      source=document + {"HBM2": " Table 11, p.17", "HBM3": " Tables 12/13, pp.18–19", "HBM4": " Tables 11/12, pp.21–22"}[gen])
     interval = payload.get("refresh_interval_ns", 0)
     if "refresh_interval_ns" in selected and interval > 3900. * (1 + 1e-12):
-        fail("refresh_interval_ns", "must be <= 3900 ns in the modeled 1x reference-temperature envelope; temperature/vendor conditions remain unknown (HBM2 cold 2x/4x modes are not modeled)",
-             "当前只实现 1×参考温度范围，刷新间隔不能超过 3900 ns。HBM2 的低温 2×/4×模式尚未实现；这不表示那些模式违反标准。",
-             "在当前模型中使用不超过 3900 ns 的间隔；真实温度条件仍须核实，不能仅靠延长间隔模拟低温模式。",
-             "Use an interval no greater than 3900 ns in this model; longer HBM2 cold-temperature modes require explicit support and vendor conditions.",
-             category="model_limit", rule="refresh_temperature_scope", related_values={"maximum_ns": 3900.})
+        fail("refresh_interval_ns", "must be <= 3900 ns within the supported periodic refresh interval range; this is a model limit, not a universal JEDEC limit or vendor guarantee",
+             "当前周期刷新实现支持的间隔不超过 3900 ns；这是模型限制，不代表 JEDEC 所有刷新模式的统一上限或厂商保证。",
+             "在当前模型中使用不超过 3900 ns 的间隔，并保留适用的器件时序要求；更长间隔尚不受支持。",
+             "Use an interval no greater than 3900 ns while retaining applicable device timing requirements; longer intervals are unsupported.",
+             category="model_limit", rule="refresh_interval_scope", related_values={"maximum_ns": 3900.})
     if "maximum_active_ns" in selected:
         maximum = payload.get("maximum_active_ns", 0)
         limit = 9 * (interval or 3900.)
@@ -247,8 +247,8 @@ def validate_hbm_timing_constraints(payload: Mapping):
         if payload["refresh_cycle_ns"] > interval:
             fail("refresh_cycle_ns", "periodic all_bank policy cannot sustain tRFC > tREFI",
                  f"一次刷新耗时 {payload['refresh_cycle_ns']:g} ns，超过刷新间隔 {interval:g} ns，当前周期刷新策略无法持续执行。",
-                 "重新选择可排程的刷新配置，使 tRFC≤tREFI；仍须满足 tRFC 表中下限和当前温度范围，不能任意缩短刷新耗时。",
-                 "Choose a feasible refresh configuration with tRFC <= tREFI, preserving the device-table minimum and modeled temperature limits.",
+                 "重新选择可排程的刷新配置，使 tRFC≤tREFI；仍须满足 tRFC 表中下限和支持的刷新间隔范围，不能任意缩短刷新耗时。",
+                 "Choose a feasible refresh configuration with tRFC <= tREFI, preserving the device-table minimum and supported refresh interval range.",
                  category="model_limit", rule="refresh_schedule", related_values={"refresh_interval_ns": interval, "maximum_ns": interval})
         ca_occupancy = payload.get("pseudo_channels_per_channel", 2) * max(
             payload.get("precharge_command_cycles", 0), payload.get("column_command_cycles", 0)) * clock
@@ -326,8 +326,6 @@ def _authored_timing_fields(payload, previous, explicit, provenance):
     interval_input = provenance.get("maximum_active_ns", {}).get("input_refresh_interval_ns")
     if interval_input is None:
         interval_input = payload.get("refresh_interval_ns") or 3900.
-        if math.isclose(payload.get("maximum_active_ns", 0), 35100., rel_tol=1e-12):
-            interval_input = 3900.  # older default-reference serialization
     if not _positive(interval_input) or interval_input > 3900. * (1 + 1e-12):
         _input_error(payload, "maximum_active_ns", "maximum_active_ns source input_refresh_interval_ns must be finite, positive and within the modeled 3900 ns envelope",
                      f"来源记录中的刷新间隔必须大于 0 且不超过当前模型支持的 3900 ns，当前为 {interval_input!r}。",
@@ -365,7 +363,7 @@ def _authored_timing_fields(payload, previous, explicit, provenance):
 
 def _finish_timing_validation(result, meta, provenance, unknown):
     validate_hbm_timing_constraints(result)
-    unknown.update(VENDOR_TIMING_FIELDS | {"refresh_temperature_conditions", "vendor_speed_bin", "phy_turnaround_parameters"})
+    unknown.update(VENDOR_TIMING_FIELDS | {"vendor_speed_bin", "phy_turnaround_parameters"})
     vendor_unknown = VENDOR_TIMING_FIELDS | ({"refresh_cycle_ns"} if _organization_refresh(result) is None else set())
     for name in vendor_unknown:
         entry = provenance.setdefault(name, {"status": "unknown_with_assumption" if result.get(name) else "unknown_disabled"})
@@ -379,7 +377,7 @@ def _finish_timing_validation(result, meta, provenance, unknown):
                 vendor_verified=False, timing_validation="not_a_vendor_speed_bin",
                 timing_constraint_validation="known_jedec_constraints_checked",
                 timing_constraint_basis=DOCUMENTS[family(result["generation"])][3],
-                refresh_temperature_scope="1x reference envelope; actual temperature/vendor conditions unknown",
+                refresh_interval_scope="supported periodic interval <= 3900 ns; not a universal JEDEC limit or vendor guarantee",
                 data_retention_validation="not_vendor_validated" if result.get("refresh_policy") == "all_bank" else "not_modeled_refresh_disabled")
     result["metadata"] = meta
     return result
@@ -713,11 +711,11 @@ def normalize_hbm_dependencies(payload: Mapping, *, previous: Mapping | None = N
     if automatic("refresh_interval_ns") or provenance.get("refresh_interval_ns", {}).get("status") in {"unknown", "unknown_disabled"}:
         interval = result.get("refresh_interval_ns")
         if _positive(interval) and interval != 3900.0:
-            record("refresh_interval_ns", "explicit_assumption", "authored refresh/temperature operating interval; vendor conditions unknown")
+            record("refresh_interval_ns", "explicit_assumption", "authored periodic refresh interval within the supported range; vendor applicability unverified")
         else:
             result["refresh_interval_ns"] = 3900.0 if result.get("refresh_cycle_ns", 0) > 0 else 0.0
             record("refresh_interval_ns", "standard_reference" if result["refresh_interval_ns"] else "unknown",
-                   "selected normal-temperature 3900ns tREFI; actual temperature/vendor conditions unknown")
+                   "selected 3900ns periodic refresh interval; vendor applicability unverified")
     if "refresh_policy" not in explicit and provenance.get("refresh_policy", {}).get("status") in AUTOMATIC | {"controller_policy", "unknown_disabled"}:
         result["refresh_policy"] = "all_bank" if result.get("refresh_cycle_ns", 0) > 0 and result.get("refresh_interval_ns", 0) > 0 else "disabled"
     if automatic("maximum_active_ns"):

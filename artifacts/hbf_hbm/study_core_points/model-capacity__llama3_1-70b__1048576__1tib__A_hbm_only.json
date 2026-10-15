@@ -1701,13 +1701,8 @@
     },
     "physical_plane_imbalance": null,
     "physical_plane_loads": null,
-    "dynamic_thermal_wear": {
-      "thermal_enabled": null,
+    "dynamic_wear": {
       "wear_enabled": null,
-      "thermal_extra_ns": null,
-      "thermal_throttle_plane_ns": null,
-      "peak_temperature_c": null,
-      "idle_recoveries": null,
       "wear_blocks": null,
       "wear_extra_ns": null
     },
@@ -1746,12 +1741,6 @@
     "premature_consumer_overlap_ns": 0,
     "scope": "intersection with realized GPU operator stages of other requests; host setup and GPU frontend/controller stages excluded; operator envelopes may include memory stalls, not tensor-core busy time"
   },
-  "energy": {
-    "analytical_dynamic_joules": 326600.6725510962,
-    "analytical_dynamic_joules_per_token": 81650.16813777405,
-    "analytical_average_dynamic_watts": 6.8273974433291515,
-    "scope": "sum of configured batch task energies; excludes unpriced components, initialization, idle/board/cooling; not calibrated node energy"
-  },
   "request_metrics": [
     {
       "id": "study-0",
@@ -1787,7 +1776,6 @@
     "rejected_requests": 0,
     "swap_in_bytes": 0,
     "swap_transfer_time_ns": 0.0,
-    "swap_transfer_energy_pj": 0.0,
     "logical_prefill_read_bytes": 0,
     "logical_prefill_write_bytes": 343597383680,
     "logical_decode_read_bytes": 1030793134080,
@@ -1954,1730 +1942,1442 @@
         "cpu0.memory:dram:bank:0:0:0:0:0:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 406.0,
-          "energy_pj": 0.0
+          "service_ns": 406.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:0:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:0:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:0:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:1:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:1:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:1:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:1:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:2:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:2:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:2:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:2:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:3:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:3:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:3:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:0:0:3:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:0:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 406.0,
-          "energy_pj": 0.0
+          "service_ns": 406.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:0:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:0:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:0:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:1:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:1:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:1:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:1:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:2:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:2:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:2:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:2:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:3:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:3:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:3:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:1:0:3:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:0:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 378.0,
-          "energy_pj": 0.0
+          "service_ns": 378.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:0:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:0:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:0:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:1:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:1:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:1:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:1:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:2:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:2:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:2:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:2:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:3:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:3:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:3:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:2:0:3:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:0:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 378.0,
-          "energy_pj": 0.0
+          "service_ns": 378.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:0:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:0:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:0:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:1:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:1:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:1:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:1:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:2:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:2:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:2:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:2:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:3:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:3:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:3:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:3:0:3:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:0:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:0:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:0:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:0:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:1:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:1:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:1:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:1:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:2:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:2:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:2:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:2:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:3:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:3:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:3:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:4:0:3:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:0:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:0:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:0:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:0:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:1:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:1:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:1:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:1:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:2:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:2:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:2:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:2:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:3:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:3:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:3:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:5:0:3:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:0:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:0:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:0:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:0:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:1:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:1:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:1:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:1:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:2:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:2:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:2:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:2:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:3:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:3:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:3:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:6:0:3:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:0:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:0:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:0:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:0:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:1:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:1:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:1:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:1:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:2:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:2:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:2:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:2:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:3:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:3:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:3:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:bank:0:0:7:0:3:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 322.0,
-          "energy_pj": 0.0
+          "service_ns": 322.0
         },
         "cpu0.memory:dram:command:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 30735.0,
-          "energy_pj": 0.0
+          "service_ns": 30735.0
         },
         "cpu0.memory:dram:command:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 30730.0,
-          "energy_pj": 0.0
+          "service_ns": 30730.0
         },
         "cpu0.memory:dram:command:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 30725.0,
-          "energy_pj": 0.0
+          "service_ns": 30725.0
         },
         "cpu0.memory:dram:command:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 30725.0,
-          "energy_pj": 0.0
+          "service_ns": 30725.0
         },
         "cpu0.memory:dram:command:4": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 30720.0,
-          "energy_pj": 0.0
+          "service_ns": 30720.0
         },
         "cpu0.memory:dram:command:5": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 30720.0,
-          "energy_pj": 0.0
+          "service_ns": 30720.0
         },
         "cpu0.memory:dram:command:6": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 30720.0,
-          "energy_pj": 0.0
+          "service_ns": 30720.0
         },
         "cpu0.memory:dram:command:7": {
           "owner": "cpu0.memory",
           "bytes_moved": 0,
-          "service_ns": 30720.0,
-          "energy_pj": 0.0
+          "service_ns": 30720.0
         },
         "cpu0.memory:dram:data:0": {
           "owner": "cpu0.memory",
           "bytes_moved": 1573632,
-          "service_ns": 30735.0,
-          "energy_pj": 18883584.0
+          "service_ns": 30735.0
         },
         "cpu0.memory:dram:data:1": {
           "owner": "cpu0.memory",
           "bytes_moved": 1573376,
-          "service_ns": 30730.0,
-          "energy_pj": 18880512.0
+          "service_ns": 30730.0
         },
         "cpu0.memory:dram:data:2": {
           "owner": "cpu0.memory",
           "bytes_moved": 1573120,
-          "service_ns": 30725.0,
-          "energy_pj": 18877440.0
+          "service_ns": 30725.0
         },
         "cpu0.memory:dram:data:3": {
           "owner": "cpu0.memory",
           "bytes_moved": 1573120,
-          "service_ns": 30725.0,
-          "energy_pj": 18877440.0
+          "service_ns": 30725.0
         },
         "cpu0.memory:dram:data:4": {
           "owner": "cpu0.memory",
           "bytes_moved": 1572864,
-          "service_ns": 30720.0,
-          "energy_pj": 18874368.0
+          "service_ns": 30720.0
         },
         "cpu0.memory:dram:data:5": {
           "owner": "cpu0.memory",
           "bytes_moved": 1572864,
-          "service_ns": 30720.0,
-          "energy_pj": 18874368.0
+          "service_ns": 30720.0
         },
         "cpu0.memory:dram:data:6": {
           "owner": "cpu0.memory",
           "bytes_moved": 1572864,
-          "service_ns": 30720.0,
-          "energy_pj": 18874368.0
+          "service_ns": 30720.0
         },
         "cpu0.memory:dram:data:7": {
           "owner": "cpu0.memory",
           "bytes_moved": 1572864,
-          "service_ns": 30720.0,
-          "energy_pj": 18874368.0
+          "service_ns": 30720.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008558.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008558.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:0:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:10:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:11:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:12:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:13:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:14:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:15:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008558.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008558.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:1:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:2:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:3:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:4:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:5:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:6:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:7:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:8:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008530.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008530.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007970.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007970.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823007942.0,
-          "energy_pj": 0.0
+          "service_ns": 1823007942.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:bank:0:0:9:0:0:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 0,
-          "service_ns": 1823008502.0,
-          "energy_pj": 0.0
+          "service_ns": 1823008502.0
         },
         "hbm0.hbm_fabric:dram:data:0": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542174464,
-          "service_ns": 42665391258.835075,
-          "energy_pj": 17066168697856.0
+          "service_ns": 42665391258.835075
         },
         "hbm0.hbm_fabric:dram:data:1": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542158848,
-          "service_ns": 42665391102.675224,
-          "energy_pj": 17066168635392.0
+          "service_ns": 42665391102.675224
         },
         "hbm0.hbm_fabric:dram:data:10": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542127616,
-          "service_ns": 42665390790.35552,
-          "energy_pj": 17066168510464.0
+          "service_ns": 42665390790.35552
         },
         "hbm0.hbm_fabric:dram:data:11": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542127616,
-          "service_ns": 42665390790.35552,
-          "energy_pj": 17066168510464.0
+          "service_ns": 42665390790.35552
         },
         "hbm0.hbm_fabric:dram:data:12": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542127616,
-          "service_ns": 42665390790.35552,
-          "energy_pj": 17066168510464.0
+          "service_ns": 42665390790.35552
         },
         "hbm0.hbm_fabric:dram:data:13": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542127616,
-          "service_ns": 42665390790.35552,
-          "energy_pj": 17066168510464.0
+          "service_ns": 42665390790.35552
         },
         "hbm0.hbm_fabric:dram:data:14": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542122496,
-          "service_ns": 42665390739.15557,
-          "energy_pj": 17066168489984.0
+          "service_ns": 42665390739.15557
         },
         "hbm0.hbm_fabric:dram:data:15": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542117376,
-          "service_ns": 42665390687.95562,
-          "energy_pj": 17066168469504.0
+          "service_ns": 42665390687.95562
         },
         "hbm0.hbm_fabric:dram:data:2": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542158592,
-          "service_ns": 42665391100.11523,
-          "energy_pj": 17066168634368.0
+          "service_ns": 42665391100.11523
         },
         "hbm0.hbm_fabric:dram:data:3": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542158592,
-          "service_ns": 42665391100.11523,
-          "energy_pj": 17066168634368.0
+          "service_ns": 42665391100.11523
         },
         "hbm0.hbm_fabric:dram:data:4": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542158592,
-          "service_ns": 42665391100.11523,
-          "energy_pj": 17066168634368.0
+          "service_ns": 42665391100.11523
         },
         "hbm0.hbm_fabric:dram:data:5": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542158592,
-          "service_ns": 42665391100.11523,
-          "energy_pj": 17066168634368.0
+          "service_ns": 42665391100.11523
         },
         "hbm0.hbm_fabric:dram:data:6": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542153472,
-          "service_ns": 42665391048.915276,
-          "energy_pj": 17066168613888.0
+          "service_ns": 42665391048.915276
         },
         "hbm0.hbm_fabric:dram:data:7": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542148352,
-          "service_ns": 42665390997.715324,
-          "energy_pj": 17066168593408.0
+          "service_ns": 42665390997.715324
         },
         "hbm0.hbm_fabric:dram:data:8": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542148096,
-          "service_ns": 42665390995.15533,
-          "energy_pj": 17066168592384.0
+          "service_ns": 42665390995.15533
         },
         "hbm0.hbm_fabric:dram:data:9": {
           "owner": "hbm0.hbm_fabric",
           "bytes_moved": 4266542132736,
-          "service_ns": 42665390841.55547,
-          "energy_pj": 17066168530944.0
+          "service_ns": 42665390841.55547
         }
       },
       "owner_ids": [
@@ -4047,9 +3747,7 @@
     "clean_discard_bytes": 0,
     "dirty_writeback_bytes": 0,
     "clean_discard_time_ns": 0.0,
-    "clean_discard_energy_pj": 0.0,
     "transfer_time_ns": 0.0,
-    "transfer_energy_pj": 0.0,
     "initialization_migration_event_count": 0,
     "initialization_page_in_bytes": 0,
     "initialization_page_out_bytes": 0,
@@ -4091,7 +3789,6 @@
   },
   "wall_seconds": 650.7290200000862,
   "unavailable": {
-    "calibrated_node_energy": "no independent energy measurements",
     "lifetime": "not a stateful wear experiment"
   },
   "parameters": {

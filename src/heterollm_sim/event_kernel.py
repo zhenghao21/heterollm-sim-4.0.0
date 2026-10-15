@@ -28,7 +28,7 @@ from typing import (
 )
 
 from .contracts import ResourceDemand, TaskSpec
-from .data_motion import PhysicalRuntimeContext
+from .data_motion import PhysicalRuntimeContext, _memory_accesses, _physical_allocations
 from .kernel_memory import resolve_l2_task, _l2_execution_metadata
 from .runtime_ir import (
     KernelCompletion,
@@ -61,7 +61,7 @@ def _materialize_l2_physical_access(task: TaskSpec, runtime) -> Tuple[TaskSpec, 
     backing = execution.get("backing_accesses") if isinstance(execution, Mapping) else None
     metadata = dict(task.metadata)
     if not backing:
-        for key in ("physical_memory_config", "memory_access", "memory_accesses", "physical_memory_component_id", "physical_owner", "physical_address_scope"):
+        for key in ("physical_memory_config", "memory_accesses", "physical_memory_component_id", "physical_owner", "physical_address_scope"):
             metadata.pop(key, None)
         return replace(task, metadata=metadata), False
     from .data_motion import register_physical_allocations
@@ -76,7 +76,7 @@ def _materialize_l2_physical_access(task: TaskSpec, runtime) -> Tuple[TaskSpec, 
         buffer_id = item.get("buffer_id")
         size = item.get("size_bytes")
         offset = item.get("offset_bytes", 0)
-        generation = int(item.get("allocation_generation", item.get("generation", 0)) or 0)
+        generation = int(item.get("allocation_generation", 0) or 0)
         owner = str(item.get("physical_owner") or owner_default)
         if operation not in {"read", "write"} or not buffer_id or not isinstance(size, int) or size <= 0:
             raise ValueError("invalid L2 backing access descriptor")
@@ -87,8 +87,7 @@ def _materialize_l2_physical_access(task: TaskSpec, runtime) -> Tuple[TaskSpec, 
                    for a in allocator.allocations()):
             raise ValueError("L2 backing buffer has no declared allocation: {}".format(buffer_id))
         address = allocator.address(str(buffer_id), int(offset), size, generation)
-        resolved.append({"operation": operation, "address": address, "byte_count": size, "physical_owner": owner, "resource_id": owner, "buffer_id": str(buffer_id), "offset_bytes": int(offset), "generation": generation})
-    metadata["memory_access"] = resolved[0] if len(resolved) == 1 else tuple(resolved)
+        resolved.append({"operation": operation, "address": address, "byte_count": size, "physical_owner": owner, "resource_id": owner, "buffer_id": str(buffer_id), "offset_bytes": int(offset), "allocation_generation": generation})
     metadata["memory_accesses"] = tuple(resolved)
     return replace(task, metadata=metadata), True
 
@@ -780,7 +779,7 @@ def _validate_acyclic(tasks_by_id: Mapping[str, TaskSpec]) -> None:
 class UnifiedEventKernel:
     """Incremental deterministic multi-resource event scheduler.
 
-    ``add_tasks`` accepts either a complete graph or a bounded chunk whose
+    ``submit`` accepts either a complete graph or a bounded chunk whose
     external dependencies were completed earlier.  This lets static exact,
     static streaming, and online cohort execution share the same scheduler.
     """
@@ -1006,24 +1005,17 @@ class UnifiedEventKernel:
 
         metadata = task.metadata
         rows: List[Mapping[str, object]] = []
-        for field_name in (
-            "physical_allocations",
-            "memory_accesses",
-            "memory_access",
-        ):
-            raw = metadata.get(field_name)
-            if isinstance(raw, Mapping):
-                raw = (raw,)
-            if not isinstance(raw, (tuple, list)):
-                continue
-            rows.extend(item for item in raw if isinstance(item, Mapping))
+        # Allocation declarations and access descriptors are separate typed
+        # contracts. Project their identities explicitly for lifetime indexing.
+        for declaration in _physical_allocations(metadata):
+            rows.append({**declaration, "allocation_generation": declaration.get("generation", 0)})
+        rows.extend(_memory_accesses(metadata) or ())
         contract = metadata.get("stateful_l2")
         if isinstance(contract, Mapping):
             raw = contract.get("accesses", ())
-            if isinstance(raw, Mapping):
-                raw = (raw,)
-            if isinstance(raw, (tuple, list)):
-                rows.extend(item for item in raw if isinstance(item, Mapping))
+            if not isinstance(raw, (tuple, list)):
+                raise ValueError("stateful_l2 accesses must be a sequence")
+            rows.extend(item for item in raw if isinstance(item, Mapping))
         return tuple(rows)
 
     def _index_physical_allocation_uses(
@@ -1068,10 +1060,10 @@ class UnifiedEventKernel:
                     raise ValueError("persistent_request_buffers requires explicit request and buffer ids")
                 identities = set(buffers)
                 for row in rows:
-                    buffer_id = row.get("buffer_id") or row.get("tensor_id")
+                    buffer_id = row.get("buffer_id")
                     owner = row.get("physical_owner") or default_owner
                     if buffer_id in identities and owner:
-                        generation = int(row.get("allocation_generation", row.get("generation", 0)))
+                        generation = int(row.get("allocation_generation", 0))
                         key = (str(owner), str(buffer_id), generation)
                         if key not in self._external_physical_allocation_keys:
                             self._request_physical_buffers.setdefault(request, set()).add(key)
@@ -1084,7 +1076,7 @@ class UnifiedEventKernel:
             )
             for row in self._physical_descriptor_rows(task):
                 if row.get("buffer_id") and row.get("alias_of"):
-                    generation = int(row.get("generation", row.get("allocation_generation", 0)) or 0)
+                    generation = int(row.get("allocation_generation", 0) or 0)
                     owner = str(row.get("physical_owner") or owner_default or "")
                     alias_targets[(owner, str(row["buffer_id"]), generation)] = (
                         owner, str(row["alias_of"]),
@@ -1111,7 +1103,7 @@ class UnifiedEventKernel:
                 )
             keys: Set[Tuple[str, str, int]] = set()
             for row in self._physical_descriptor_rows(task):
-                buffer_id = row.get("buffer_id") or row.get("tensor_id")
+                buffer_id = row.get("buffer_id")
                 if not buffer_id:
                     continue
                 buffer_id = str(buffer_id)
@@ -1119,10 +1111,7 @@ class UnifiedEventKernel:
                     buffer_id = task.task_id + buffer_id[len("@tasklocal") :]
                 try:
                     generation = int(
-                        row.get(
-                            "allocation_generation",
-                            row.get("generation", 0),
-                        )
+                        row.get("allocation_generation", 0)
                         or 0
                     )
                 except (TypeError, ValueError, OverflowError):
@@ -1792,11 +1781,6 @@ class UnifiedEventKernel:
             retained_dependencies=retained,
             active_task_count=len(self._tasks),
         )
-
-    def add_tasks(self, tasks: Iterable[TaskSpec]) -> None:
-        """Backward-compatible wrapper over atomic :meth:`submit`."""
-
-        self.submit(tasks)
 
     def submit_compiled(
         self,
@@ -2634,30 +2618,7 @@ class UnifiedEventKernel:
                             value = 0.0
                         physical_queue_wait_by_owner[str(raw_owner)] = value
             else:
-                raw_execution = task.metadata.get("physical_execution", {})
-                if isinstance(raw_execution, Mapping):
-                    raw_owners = raw_execution.get("resource_owners", {})
-                    if isinstance(raw_owners, Mapping):
-                        physical_resource_owners.update({
-                            str(resource_id): str(owner)
-                            for resource_id, owner in raw_owners.items()
-                        })
-                aggregate_wait = (
-                    float(raw_execution.get("queue_wait_ns", 0.0))
-                    if isinstance(raw_execution, Mapping)
-                    else 0.0
-                )
-                # A legacy single-row physical execution has no owner split.
-                # Attribute the aggregate once, to the deterministic first
-                # physical owner, instead of copying it to every stage.
-                owners = sorted({
-                    physical_resource_owners.get(
-                        str(resource_id), self._physical_owner(str(resource_id))
-                    )
-                    for resource_id in physical_ids
-                })
-                if owners:
-                    physical_queue_wait_by_owner[owners[0]] = aggregate_wait
+                raise ValueError("physical tasks require physical_execution_by_owner")
         for demand in demands:
             if is_physical and str(demand.resource_id) in physical_ids:
                 # The core already reserved the real stages. Charging these

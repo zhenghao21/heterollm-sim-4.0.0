@@ -1,5 +1,6 @@
 """HBM page lifetime and executed migration accounting across runtime layers."""
 from dataclasses import replace
+from heterollm_sim.data_motion import lower_physical_allocations
 
 import pytest
 
@@ -11,12 +12,12 @@ from test_backend_page_capacity_followup import fixture, allocate
 
 def test_public_page_access_export_reuses_core_allocation_after_handoff_and_restore():
     from heterollm_sim.contracts import ResourceDemand, TaskCategory, TaskSpec
-    from heterollm_sim.data_motion import resolve_physical_task
+    from heterollm_sim.data_motion import lower_physical_allocations, resolve_physical_task
     pool, executor, _ledger = fixture()
     (item,) = allocate(pool, executor, 1)
     initial = executor._binding(item).allocation
     pool.register_prefix("shared", (item,))
-    assert pool.resize("reader", 1, prefix_key="shared")
+    assert pool.resize_detailed("reader", 1, prefix_key="shared").success
     executor.sync_pages(pool.pages())
     assert pool.cache_accesses("reader", first_token=0, token_count=16) == pool.cache_accesses(
         "request", first_token=0, token_count=16)
@@ -45,7 +46,7 @@ def test_public_page_access_export_reuses_core_allocation_after_handoff_and_rest
                     "offset_bytes": access.offset_bytes, "byte_count": access.size_bytes,
                     "allocation_generation": access.allocation_generation,
                     "allocation_size_bytes": access.buffer_size_bytes},)})
-        resolved = resolve_physical_task(task, executor.runtime, 0.)
+        resolved = resolve_physical_task(lower_physical_allocations(task), executor.runtime, 0.)
         assert resolved.metadata["memory_accesses"][0]["address"] == binding.allocation.base_address
         assert executor.runtime.allocators[binding.owner].allocations() == before
 
@@ -74,14 +75,14 @@ def test_cache_rollback_restores_lru_and_subsequent_actual_hbm_cost():
         task, _ = native_task(1000., l2=True)
         contract = {**task.metadata["stateful_l2"], "capacity_bytes": 256,
                     "accesses": (asdict(CacheAccess.read("new", 0, 64, buffer_size_bytes=128)),)}
-        task = replace(task, metadata={**task.metadata, "stateful_l2": contract,
-            "memory_access": ({"buffer_id": "new", "operation": "read", "offset_bytes": 0,
+        task = replace(task, metadata={**task.metadata, "physical_allocations": (), "stateful_l2": contract,
+            "memory_accesses": ({"buffer_id": "new", "operation": "read", "offset_bytes": 0,
                                "byte_count": 64, "allocation_size_bytes": 128},)})
-        kernel = UnifiedEventKernel.from_closed_graph((task,))
+        kernel = UnifiedEventKernel.from_closed_graph((lower_physical_allocations(task),))
         kernel._l2_states["gpu.l2"] = ((256, 64, True, True), cache)
         event = kernel.step()
         assert event.task.metadata["l2_execution"]["dirty_eviction_bytes"] == 0
-        physical = event.task.metadata["physical_execution"]
+        physical = next(iter(event.task.metadata["physical_execution_by_owner"].values()))
         assert physical["physical_read_bytes"] == 64
         assert physical["physical_write_bytes"] == 0
         return event.demands, event.end_ns, physical
@@ -125,3 +126,82 @@ def test_migrated_kv_generation_stays_resident_with_live_workspace(asynchronous)
     assert bill["owners"][hbm_owner]["physical_write_bytes"] == 2 * 8192
     executor.release_page(item)
     assert executor.runtime.allocators[hbm_owner].allocations() == (activation,)
+
+
+@pytest.mark.parametrize("details", [False, True])
+def test_hbm_snapshot_isolates_all_mutable_histories_and_repeated_restore(details):
+    from copy import deepcopy
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+    from heterollm_sim.memory_types import AccessRequest
+    from test_hbm_compiled_control import configuration
+
+    config = configuration(refresh_policy="all_bank", refresh_interval_ns=400.,
+        refresh_cycle_ns=40., four_activate_window_ns=20. if details else 0.)
+    runtime = PhysicalRuntimeContext(config, "memory", capture_details=details)
+    core = runtime.runtimes["memory"].core
+    core.submit(AccessRequest("seed-read", "read", 0, 4096))
+    core.submit(AccessRequest("seed-write", "write", 0, 1024, 200.))
+    state = core._hbm_control_state
+    bank_id = next(iter(state["banks"]))
+    # Unknown nested fields must remain isolated too, including their aliases
+    # to another part of the controller state.
+    extension = {"samples": [1., {"times": [2.]}]}
+    state["banks"][bank_id]["extension"] = extension
+    state["extension"] = extension
+    expected = deepcopy(state)
+    saved = runtime.snapshot()
+    saved_state = saved["runtime_state"]["memory"]["core"]["_hbm_control_state"]
+
+    def mutable_ids(value):
+        if isinstance(value, dict):
+            return {id(value)}.union(*(mutable_ids(item) for item in value.values()))
+        if isinstance(value, list):
+            return {id(value)}.union(*(mutable_ids(item) for item in value))
+        return set()
+
+    assert saved_state == expected
+    assert mutable_ids(saved_state).isdisjoint(mutable_ids(state))
+    assert saved_state["extension"] is saved_state["banks"][bank_id]["extension"]
+    assert saved_state["banks"][bank_id]["mapping"] is state["banks"][bank_id]["mapping"]
+    outcomes = []
+    for _ in range(2):
+        result = core.submit(AccessRequest("after-refresh", "read", 8192, 8192, 5000.))
+        core._hbm_control_state["extension"]["samples"][1]["times"].append(99.)
+        assert core._hbm_control_state != expected
+        assert saved_state == expected
+        outcomes.append((result, deepcopy(core._hbm_control_state), deepcopy(core._banks),
+                         deepcopy(runtime.timeline.ready_ns)))
+        runtime.restore(saved)
+        assert core._hbm_control_state == expected
+        assert mutable_ids(saved_state).isdisjoint(mutable_ids(core._hbm_control_state))
+        assert runtime.snapshot() == saved
+    assert outcomes[0] == outcomes[1]
+
+
+@pytest.mark.parametrize("details", [False, True])
+def test_failed_hbm_execution_restores_control_state_before_retry(details, monkeypatch):
+    from heterollm_sim.data_motion import PhysicalRuntimeContext, resolve_physical_task
+    from heterollm_sim.dram_core import DramCore
+    from test_hbm_compiled_control import configuration
+    from test_hbm_protocol_accounting import physical_task
+
+    config = configuration(four_activate_window_ns=20. if details else 0.)
+    runtime = PhysicalRuntimeContext(capture_details=details)
+    seed = physical_task(config, [{"operation": "write", "address": 0, "byte_count": 4096}])
+    resolve_physical_task(seed, runtime, 0.)
+    saved = runtime.snapshot()
+    task = physical_task(config, [{"operation": "read", "address": 8192, "byte_count": 4096}])
+    original = DramCore.submit
+
+    def fail_after_execution(core, request):
+        original(core, request)
+        raise ValueError("injected after HBM controller mutation")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(DramCore, "submit", fail_after_execution)
+        with pytest.raises(ValueError, match="after HBM controller mutation"):
+            resolve_physical_task(task, runtime, 0.)
+    assert runtime.snapshot() == saved
+    expected = resolve_physical_task(task, runtime, 0.)
+    runtime.restore(saved)
+    assert resolve_physical_task(task, runtime, 0.) == expected

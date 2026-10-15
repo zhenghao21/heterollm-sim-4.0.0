@@ -209,7 +209,7 @@ def validate_cuda_graph_scenario_contract(scenario, *, allow_placement_probe=Fal
         return None
     program = scenario.workload.metadata.get(CONFIG_KEY)
     if program is None:
-        if any(profile is not None and getattr(profile, "runtime_calibration", None) is not None
+        if any(profile is not None and profile.runtime_calibration is not None
                for _, profile in _gpu_profiles(scenario)):
             raise ValueError("independent CUDA runtime costs require a structural program in both Graph modes")
         return None

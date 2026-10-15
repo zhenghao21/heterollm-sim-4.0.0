@@ -17,6 +17,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from .data_motion import AccessKind, PhysicalRuntimeContext, PhysicalService, resolve_service
+from .ir import ComponentSpec
 from .memory_allocator import PhysicalAddressAllocator, PhysicalAllocation
 from .memory_types import DramConfig, NandConfig
 from .physical_contract import require_physical_memory_config
@@ -38,9 +39,8 @@ class _PageBinding:
 class PhysicalKVTransferExecutor:
     """Lower KV page movement and ordinary page access into physical events.
 
-    ``hardware`` can be a ``HardwareSpec`` (or an object exposing one through
-    ``.hardware``), a component mapping, or a sequence of ``ComponentSpec``
-    values.  ``topology`` is normally a ``TopologyRouter``.  The optional
+    ``components`` is a sequence of ``ComponentSpec`` values.
+    ``topology`` uses the ``TopologyRouter`` route contract.  The optional
     ``relay_components`` sequence forces transfers through those components;
     each relay is written and then read, so relay memory and its own queue are
     charged explicitly.
@@ -48,7 +48,7 @@ class PhysicalKVTransferExecutor:
 
     def __init__(
         self,
-        hardware: Any,
+        components: Sequence[ComponentSpec],
         *,
         runtime: Optional[PhysicalRuntimeContext] = None,
         topology: Any = None,
@@ -66,7 +66,9 @@ class PhysicalKVTransferExecutor:
         self.cache_owners = {} if cache_owners is None else cache_owners
         if not self.namespace:
             raise ValueError("namespace must be non-empty")
-        self.components = self._component_map(hardware)
+        if not isinstance(components, Sequence) or any(not isinstance(item, ComponentSpec) for item in components):
+            raise ValueError("components must be a sequence of ComponentSpec")
+        self.components = {item.component_id: item for item in components}
         self.relay_components = tuple(str(value) for value in relay_components)
         unknown = [value for value in self.relay_components if value not in self.components]
         if unknown:
@@ -91,28 +93,6 @@ class PhysicalKVTransferExecutor:
                          "service_ns": 0.0, "link_ns": 0.0}
         self._validate_components()
 
-    @staticmethod
-    def _component_map(hardware: Any) -> dict[str, Any]:
-        if hasattr(hardware, "hardware"):
-            hardware = hardware.hardware
-        getter = getattr(hardware, "component_map", None)
-        if callable(getter):
-            return dict(getter())
-        if isinstance(hardware, Mapping):
-            values = hardware.get("components", hardware)
-            if isinstance(values, Mapping):
-                return {str(key): value for key, value in values.items()}
-            return {str(getattr(item, "component_id", getattr(item, "id", ""))): item for item in values}
-        return {str(getattr(item, "component_id", getattr(item, "id", ""))): item for item in hardware}
-
-    @staticmethod
-    def _metadata(component: Any) -> Mapping[str, Any]:
-        return getattr(component, "metadata", {}) or {}
-
-    @staticmethod
-    def _component_id(component: Any) -> str:
-        return str(getattr(component, "component_id", getattr(component, "id", "")))
-
     def _validate_components(self) -> None:
         # Hardware graphs commonly include compute/IO components without a
         # physical memory core. Validate memory descriptors eagerly when they
@@ -121,7 +101,7 @@ class PhysicalKVTransferExecutor:
         for ident, component in self.components.items():
             if not ident:
                 raise ValueError("physical component id must be non-empty")
-            raw = self._metadata(component).get("physical_memory_config")
+            raw = component.metadata.get("physical_memory_config")
             if raw is None:
                 continue
             self._ensure_service(ident)
@@ -133,7 +113,7 @@ class PhysicalKVTransferExecutor:
         component = self.components.get(ident)
         if component is None:
             raise KvPoolError("unknown physical component " + ident)
-        raw = self._metadata(component).get("physical_memory_config")
+        raw = component.metadata.get("physical_memory_config")
         if raw is None:
             raise KvPoolError("component {} requires physical_memory_config".format(ident))
         config = require_physical_memory_config(component)
@@ -144,10 +124,12 @@ class PhysicalKVTransferExecutor:
         return service
 
     def _page_id(self, page: Any) -> int:
-        value = getattr(page, "logical_page_id", page)
-        if isinstance(value, bool):
+        if not hasattr(page, "logical_page_id"):
+            raise KvPoolError("page must provide logical_page_id")
+        value = page.logical_page_id
+        if type(value) is not int or value < 0:
             raise KvPoolError("logical page id must be an integer")
-        return int(value)
+        return value
 
     def _binding(self, page: Any) -> _PageBinding:
         try:
@@ -162,7 +144,7 @@ class PhysicalKVTransferExecutor:
         return allocator
 
     def _buffer_id(self, page: Any) -> str:
-        request = str(getattr(page, "request_id", "request"))
+        request = page.request_id
         return "{}:{}:page:{}".format(self.namespace, request, self._page_id(page))
 
     def allocation_bytes(self, component_id: str, payload_bytes: int) -> int:
@@ -176,18 +158,18 @@ class PhysicalKVTransferExecutor:
     def bind_page(self, page: Any) -> int:
         """Allocate and bind one page at its declared owner component."""
         page_id = self._page_id(page)
-        component_id = str(getattr(page, "owner_component", ""))
+        component_id = page.owner_component
         if component_id not in self.components:
             raise KvPoolError("unknown page owner component " + component_id)
-        size = int(getattr(page, "bytes", 0))
-        generation = int(getattr(page, "allocation_generation", 0))
-        if size <= 0 or generation < 0:
+        size = page.bytes
+        generation = page.allocation_generation
+        if type(size) is not int or size <= 0 or type(generation) is not int or generation < 0:
             raise KvPoolError("page bytes and allocation generation are invalid")
         existing = self._bindings.get(page_id)
         if existing is not None:
             if existing.component_id != component_id or existing.bytes != size or existing.generation != generation:
                 raise KvPoolError("page binding changed without migration commit")
-            if existing.request_id != str(getattr(page, "request_id", "request")):
+            if existing.request_id != page.request_id:
                 # A session handoff changes logical ownership only. Preserve
                 # the existing allocation and its physical address.
                 self._bindings[page_id] = _PageBinding(existing.page_id,
@@ -199,8 +181,8 @@ class PhysicalKVTransferExecutor:
         allocation = allocator.allocate(self._buffer_id(page), self.allocation_bytes(component_id, size), generation,
                                         allocation_arena="resident")
         self._bindings[page_id] = _PageBinding(
-            page_id, str(getattr(page, "request_id", "request")),
-            str(getattr(page, "layer_group", "kv")), component_id,
+            page_id, page.request_id,
+            page.layer_group, component_id,
             service.physical_owner, size, generation, allocation,
         )
         return allocation.base_address
@@ -213,19 +195,25 @@ class PhysicalKVTransferExecutor:
         # allocator capacity and the logical pool stay in lockstep.
         for page_id in tuple(self._bindings):
             if page_id not in current:
-                self.release_page(page_id)
+                self._release_page_id(page_id)
         for page in pages:
             self.bind_page(page)
 
     def address(self, page: Any, offset_bytes: int = 0, size_bytes: Optional[int] = None) -> int:
         binding = self._binding(page)
-        size = binding.bytes - int(offset_bytes) if size_bytes is None else int(size_bytes)
-        if int(offset_bytes) < 0 or size < 0 or int(offset_bytes) + size > binding.bytes:
+        if type(offset_bytes) is not int or offset_bytes < 0:
+            raise ValueError("offset_bytes must be a non-negative integer")
+        if size_bytes is not None and (type(size_bytes) is not int or size_bytes < 0):
+            raise ValueError("size_bytes must be a non-negative integer")
+        size = binding.bytes - offset_bytes if size_bytes is None else size_bytes
+        if size < 0 or offset_bytes + size > binding.bytes:
             raise ValueError("KV access exceeds logical page payload")
-        return binding.allocation.address(int(offset_bytes), size)
+        return binding.allocation.address(offset_bytes, size)
 
     def release_page(self, page: Any) -> None:
-        page_id = self._page_id(page)
+        self._release_page_id(self._page_id(page))
+
+    def _release_page_id(self, page_id: int) -> None:
         binding = self._bindings.get(page_id)
         if binding is None:
             return
@@ -376,11 +364,8 @@ class PhysicalKVTransferExecutor:
     def _submit_link_phase(self, hop, size, arrival_ns):
         """Use the same payload-wire and inflight-credit contract as DAG hops."""
         timeline = self.runtime.timeline
-        demand_factory = getattr(hop, "demands", None)
-        demands = tuple(demand_factory(size)) if callable(demand_factory) else (
-            SimpleNamespace(resource_id=hop.resource_id, service_ns=hop.transfer_ns(size),
-                            bytes_moved=size),)
-        for resource, capacity in getattr(hop, "resource_capacities", {}).items():
+        demands = hop.demands(size)
+        for resource, capacity in hop.resource_capacities.items():
             resource = timeline.canonical_resource_id(resource)
             existing = timeline.lane_available.get(resource)
             if existing is None:
@@ -479,8 +464,8 @@ class PhysicalKVTransferExecutor:
         service = self._ensure_service(component_id)
         price = service._price if caller_managed_transaction else service.price
         config = self._configs[component_id]
-        limit = int(getattr(config, "write_buffer_bytes", 0)) if kind is AccessKind.WRITE else 0
-        granularity = int(getattr(config, "host_granularity_bytes", 0) or getattr(config, "burst_bytes", 0) or 1)
+        limit = config.write_buffer_bytes if isinstance(config, NandConfig) and kind is AccessKind.WRITE else 0
+        granularity = config.host_granularity_bytes if isinstance(config, NandConfig) else config.burst_bytes
         if limit > 0 and limit < granularity:
             raise KvPoolError("write buffer is smaller than one host transaction granularity")
         chunk = min(size, limit) if limit > 0 else size
@@ -528,8 +513,8 @@ class PhysicalKVTransferExecutor:
         # or failed statistics reduction must not publish its successful prefix.
         with self._io_transaction():
             binding = self._binding(page)
-            size = binding.bytes - int(offset_bytes) if size_bytes is None else int(size_bytes)
-            address = self.address(page, int(offset_bytes), size)
+            address = self.address(page, offset_bytes, size_bytes)
+            size = binding.bytes - offset_bytes if size_bytes is None else size_bytes
             total: dict[str, Any] = {"operation": kind.value, "logical_bytes": 0}
             for bill in self._price_chunks(binding.component_id, kind, address, size,
                     arrival_ns=self._arrival(None, arrival_ns), caller_managed_transaction=True):
@@ -545,13 +530,7 @@ class PhysicalKVTransferExecutor:
             return ()
         if self.topology is None:
             return ()
-        route = getattr(self.topology, "route", None)
-        if route is None:
-            raise KvPoolError("topology must expose route(source, target, bytes)")
-        try:
-            return tuple(route(source, target, size))
-        except TypeError:
-            return tuple(route(source, target, size, policy="lowest_latency"))
+        return tuple(self.topology.route(source, target, size))
 
     def _link_segment(self, source: str, target: str, size: int, *, arrival_ns: float) -> tuple[float, list[dict[str, Any]]]:
         current = arrival_ns
@@ -562,7 +541,7 @@ class PhysicalKVTransferExecutor:
             # bills already charge that queue; reserving the view again would
             # double-count the same medium.  Only independent fabric links
             # consume link timeline capacity here.
-            if getattr(hop, "service_ref", None):
+            if hop.service_ref:
                 continue
             phase = self._submit_link_phase(hop, size, current)
             current = phase["completion_ns"]
@@ -570,13 +549,15 @@ class PhysicalKVTransferExecutor:
         return current, phases
 
     def _transfer(self, request: KvPoolTransferRequest) -> KvPoolTransferPlan:
-        page_id = int(request.logical_page_id)
+        page_id = self._page_id(request)
         binding = self._bindings.get(page_id)
         if binding is None:
             raise KvPoolError("KV page {} is not physically bound".format(page_id))
-        if binding.component_id != request.source_component or binding.bytes != int(request.bytes):
+        if (type(request.bytes) is not int or binding.component_id != request.source_component
+                or binding.bytes != request.bytes):
             raise KvPoolError("transfer request does not match the bound source page")
-        if int(request.allocation_generation) != binding.generation:
+        if (type(request.allocation_generation) is not int
+                or request.allocation_generation != binding.generation):
             raise KvPoolError("transfer request generation does not match bound page")
         target_component = str(request.target_component)
         if target_component not in self.components:
@@ -674,11 +655,13 @@ class PhysicalKVTransferExecutor:
         caller advances this plan only when its current phase has completed,
         interleaving those submissions with ordinary live-kernel tasks.
         """
-        page_id = int(request.logical_page_id)
+        page_id = self._page_id(request)
         binding = self._bindings.get(page_id)
-        if (binding is None or binding.component_id != request.source_component
-                or binding.bytes != int(request.bytes)
-                or binding.generation != int(request.allocation_generation)):
+        if (binding is None or type(request.bytes) is not int
+                or type(request.allocation_generation) is not int
+                or binding.component_id != request.source_component
+                or binding.bytes != request.bytes
+                or binding.generation != request.allocation_generation):
             raise KvPoolError("asynchronous transfer does not match the bound source page")
         target_component = str(request.target_component)
         target_service = self._ensure_service(target_component)
@@ -702,7 +685,7 @@ class PhysicalKVTransferExecutor:
             source = binding.component_id
             for component in (*self.relay_components, target_component):
                 for hop in self._route(source, component, binding.bytes):
-                    if not getattr(hop, "service_ref", None):
+                    if not hop.service_ref:
                         downstream.append(("link", hop))
                 if component == target_component:
                     downstream.append(("target_write", component, target_alloc.base_address, AccessKind.WRITE))
@@ -945,12 +928,12 @@ class PhysicalKVTransferExecutor:
 
     def restore(self, snapshot: Mapping[str, Any]) -> None:
         self.runtime.restore(snapshot["runtime"])
-        self._restore_caches(snapshot.get("cache_states", {}))
+        self._restore_caches(snapshot["cache_states"])
         self._bindings = copy.deepcopy(snapshot["bindings"])
         self.events = copy.deepcopy(snapshot["events"])
         self.counters = copy.deepcopy(snapshot["counters"])
-        self._cost_phases = list(snapshot.get("cost_phases", ()))
-        self._async_plan_states = copy.deepcopy(snapshot.get("async_plan_states", {}))
+        self._cost_phases = list(snapshot["cost_phases"])
+        self._async_plan_states = copy.deepcopy(snapshot["async_plan_states"])
         # An absent plan cannot inherit terminal authority from a discarded
         # future. Active phase tokens explicitly contained in the snapshot
         # remain valid, including when the same snapshot is restored again.

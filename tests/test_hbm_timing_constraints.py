@@ -202,6 +202,15 @@ def test_reediting_refresh_interval_recomputes_its_unchanged_derived_maximum(pat
     assert updated.metadata["parameter_provenance"]["maximum_active_ns"]["status"] == "derived_from_input"
 
 
+def test_missing_refresh_formula_input_does_not_restore_an_old_default_interval():
+    payload = asdict(reference("HBM4"))
+    payload["refresh_interval_ns"] = 1000.
+    payload["metadata"]["parameter_provenance"]["maximum_active_ns"].pop(
+        "input_refresh_interval_ns", None)
+    with pytest.raises(ValueError, match="maximum_active_ns"):
+        parse_execution_physical_config(payload)
+
+
 @pytest.mark.parametrize("path", PATHS)
 def test_unmanaged_source_labels_do_not_claim_vendor_verification(path):
     config = replace(reference(), metadata={})
@@ -288,6 +297,7 @@ def test_diagnostic_distinguishes_the_reference_refresh_model_from_a_universal_s
         reconfigure_physical_config(reference(), overrides={"refresh_interval_ns": 3901.})
     details = assert_bilingual_diagnostic(captured.value,
         field="refresh_interval_ns", value=3901., category="model_limit")
+    assert details["rule"] == "refresh_interval_scope"
     assert details["related_values"]["maximum_ns"] == 3900.
     assert "3900" in details["requirement_zh"]
     assert "3900" in details["requirement_en"]

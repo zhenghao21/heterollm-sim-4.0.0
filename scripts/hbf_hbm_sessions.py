@@ -125,7 +125,7 @@ class SessionTrace:
         self._physical_runtime = PhysicalRuntimeContext()
         self._topology = TopologyRouter(hardware)
         self._executor = PhysicalKVTransferExecutor(
-            hardware,
+            hardware.components,
             runtime=self._physical_runtime,
             topology=self._topology,
             arrival_ns=lambda _request: self.clock,
@@ -189,7 +189,7 @@ class SessionTrace:
 
     def _create(self, session_id: str, pages: int) -> None:
         self._emit("create", session_id, pages=pages)
-        if not self.pool.resize(session_id, pages):
+        if not self.pool.resize_detailed(session_id, pages).success:
             raise RuntimeError(self.pool.last_error or "session allocation failed")
         self._sync_physical_pages()
         self._active.add(session_id)
@@ -199,7 +199,7 @@ class SessionTrace:
         before = len(self._pages_for(session_id))
         target = before + int(pages)
         self._emit("append", session_id, pages=pages, target_pages=target)
-        if not self.pool.resize(session_id, target):
+        if not self.pool.resize_detailed(session_id, target).success:
             raise RuntimeError(self.pool.last_error or "session append failed")
         self._sync_physical_pages()
 

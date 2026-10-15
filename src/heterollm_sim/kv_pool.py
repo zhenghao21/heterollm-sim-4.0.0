@@ -1,6 +1,6 @@
 """Experimental paged KV-cache pool.
 
-This module deliberately lives beside the legacy serving ledger.  It provides
+This module deliberately lives beside the static serving ledger.  It provides
 the page ownership and migration primitives needed by the experimental
 ``paged_pool`` layout without changing the llama.cpp-compatible static path.
 The pool owns no scheduler state: callers resize a request atomically and can
@@ -83,58 +83,29 @@ class KvPoolComponent:
             raise KvPoolError("component latency_ns must be non-negative")
         if not self.machine_id:
             raise KvPoolError("machine_id must be non-empty")
+        if not isinstance(self.active, bool) or not isinstance(self.writable, bool):
+            raise KvPoolError("component active and writable must be booleans")
 
     @classmethod
     def from_component(cls, component: Any) -> "KvPoolComponent":
-        """Build a pool descriptor from an IR ``ComponentSpec`` or mapping."""
-
+        """Project an IR component, or keep an explicit logical pool budget."""
+        from .ir import ComponentSpec
         if isinstance(component, cls):
             return component
-        if isinstance(component, Mapping):
-            get = component.get
-            component_id = get("component_id", get("id"))
-            metadata = get("metadata", {}) or {}
-            kind = str(get("kind", "memory"))
-            active = get("active", get("is_active_memory", None))
-            writable = get("writable", get("is_writable", None))
-            if active is None:
-                active = str(kind).lower() not in {"hbf", "ssd", "nvme", "flash", "storage"}
-            if writable is None:
-                writable = metadata.get("writable", metadata.get("read_only") is not True)
-            return cls(
-                component_id=str(component_id),
-                capacity_bytes=int(get("capacity_bytes", 0)),
-                kind=kind,
-                tier=str(get("tier", metadata.get("memory_tier", "active" if active else "offload"))),
-                active=bool(active),
-                writable=bool(writable),
-                machine_id=str(get("machine_id", metadata.get("machine_id", "local"))),
-                read_bandwidth_gbps=float(get("read_bandwidth_gbps", metadata.get("read_bandwidth_gbps", 0.0))),
-                write_bandwidth_gbps=float(get("write_bandwidth_gbps", metadata.get("write_bandwidth_gbps", 0.0))),
-                latency_ns=float(get("latency_ns", metadata.get("latency_ns", 0.0))),
-                metadata=dict(metadata),
-            )
-        metadata = dict(getattr(component, "metadata", {}) or {})
-        component_id = getattr(component, "component_id", getattr(component, "id", None))
-        if component_id is None:
-            raise KvPoolError("pool component must expose component_id")
-        kind = str(getattr(component, "kind", "memory"))
-        active_value = getattr(component, "is_active_memory", None)
-        if active_value is None:
-            active_value = str(kind).lower() not in {"hbf", "ssd", "nvme", "flash", "storage"}
-        writable_value = getattr(component, "is_writable", None)
-        if writable_value is None:
-            writable_value = metadata.get("writable", metadata.get("read_only") is not True)
+        if not isinstance(component, ComponentSpec):
+            raise KvPoolError("pool components must be ComponentSpec or KvPoolComponent values")
+        metadata = dict(component.metadata)
+        active_value = component.is_active_memory
         return cls(
-            component_id=str(component_id),
-            capacity_bytes=int(getattr(component, "capacity_bytes", 0)),
-            kind=kind,
+            component_id=component.component_id,
+            capacity_bytes=component.capacity_bytes,
+            kind=component.kind,
             tier=str(metadata.get("memory_tier", "active" if active_value else "offload")),
-            active=bool(active_value),
-            writable=bool(writable_value),
+            active=active_value,
+            writable=component.is_writable,
             machine_id=str(metadata.get("machine_id", "local")),
-            read_bandwidth_gbps=float(getattr(component, "read_bandwidth_gbps", 0.0)),
-            write_bandwidth_gbps=float(getattr(component, "write_bandwidth_gbps", 0.0)),
+            read_bandwidth_gbps=component.read_bandwidth_gbps,
+            write_bandwidth_gbps=component.write_bandwidth_gbps,
             latency_ns=float(metadata.get("latency_ns", 0.0)),
             metadata=metadata,
         )
@@ -200,8 +171,7 @@ class KvPoolTransferRequest:
 class KvPoolTransferPlan:
     """Prepared physical transfer with an optional commit/rollback pair.
 
-    A numeric executor result is still accepted as a pure timing estimate.  A
-    shared physical event queue should return this plan instead: ``prepare``
+    A shared physical event queue returns this plan: preparation
     reserves the event, ``commit`` publishes it after the capacity ledger
     succeeds, and ``rollback`` cancels it on any failed admission.
     """
@@ -305,19 +275,11 @@ class _LedgerAdapter:
         self,
         limits: Mapping[str, int],
         ledger: Optional[Any] = None,
-        *,
-        can_adjust: Optional[Callable[[str, int], bool]] = None,
-        adjust: Optional[Callable[[str, int], bool]] = None,
-        can_transfer: Optional[Callable[[str, str, int], bool]] = None,
-        transfer: Optional[Callable[[str, str, int], bool]] = None,
     ) -> None:
         self._local = _LocalLedger(limits)
-        self.ledger = ledger or self._local
-        self._can_adjust_callback = can_adjust
-        self._adjust_callback = adjust
-        self._can_transfer_callback = can_transfer
-        self._transfer_callback = transfer
-        self._callback_used: Dict[str, int] = {str(key): 0 for key in limits}
+        self.ledger = self._local if ledger is None else ledger
+        if not callable(getattr(self.ledger, "can_adjust", None)) or not callable(getattr(self.ledger, "adjust", None)):
+            raise KvPoolError("ledger must implement can_adjust and adjust")
 
     @property
     def limits(self) -> Mapping[str, int]:
@@ -325,36 +287,17 @@ class _LedgerAdapter:
 
     @property
     def used_bytes(self) -> Mapping[str, int]:
-        if self.ledger is self._local and (
-            self._can_adjust_callback is not None
-            or self._adjust_callback is not None
-            or self._can_transfer_callback is not None
-            or self._transfer_callback is not None
-        ):
-            return self._callback_used
-        return getattr(self.ledger, "used_bytes", self._local.used_bytes)
+        # Minimal external ledgers need not publish their usage. In that case
+        # the pool uses its own tracked page ownership, not an empty local ledger.
+        return getattr(self.ledger, "used_bytes", {})
 
     def can_adjust(self, component: str, delta: int) -> bool:
-        if self._can_adjust_callback is not None:
-            return bool(self._can_adjust_callback(component, int(delta)))
-        method = getattr(self.ledger, "can_adjust", None)
-        return bool(method(component, int(delta))) if method is not None else True
+        return bool(self.ledger.can_adjust(component, int(delta)))
 
     def adjust(self, component: str, delta: int) -> bool:
-        if self._adjust_callback is not None:
-            result = bool(self._adjust_callback(component, int(delta)))
-            if result:
-                self._callback_used[component] = self._callback_used.get(component, 0) + int(delta)
-            return result
-        method = getattr(self.ledger, "adjust", None)
-        result = bool(method(component, int(delta))) if method is not None else True
-        if result and self.ledger is self._local and self._can_adjust_callback is not None:
-            self._callback_used[component] = self._callback_used.get(component, 0) + int(delta)
-        return result
+        return bool(self.ledger.adjust(component, int(delta)))
 
     def can_transfer(self, source: str, target: str, bytes_: int) -> bool:
-        if self._can_transfer_callback is not None:
-            return bool(self._can_transfer_callback(source, target, int(bytes_)))
         method = getattr(self.ledger, "can_transfer", None)
         if method is not None:
             return bool(method(source, target, int(bytes_)))
@@ -364,10 +307,9 @@ class _LedgerAdapter:
         """Apply distinct physical footprints, reverting rejected callbacks."""
         if not all(self.can_adjust(component, delta) for component, delta in deltas.items()):
             return False
-        if self._adjust_callback is None and self._can_adjust_callback is None:
-            method = getattr(self.ledger, "adjust_many", None)
-            if method is not None:
-                return bool(method(deltas))
+        method = getattr(self.ledger, "adjust_many", None)
+        if method is not None:
+            return bool(method(deltas))
         changed = []
         def undo():
             while changed:
@@ -390,8 +332,6 @@ class _LedgerAdapter:
     def can_transfer_sized(self, source: str, target: str, source_bytes: int, target_bytes: int) -> bool:
         if source_bytes == target_bytes:
             return self.can_transfer(source, target, source_bytes)
-        if self._transfer_callback is not None and self._adjust_callback is None and self.ledger is self._local:
-            raise KvPoolUnsupported("unequal physical footprints require ledger adjust callbacks")
         # The pool already owns this source page. Minimal external ledgers
         # need only expose can_adjust/adjust, not a readable usage mapping.
         return (self.can_adjust(source, -source_bytes)
@@ -405,18 +345,12 @@ class _LedgerAdapter:
         return self.adjust_many({source: -source_bytes, target: target_bytes})
 
     def transfer(self, source: str, target: str, bytes_: int) -> bool:
-        if self._transfer_callback is not None:
-            result = bool(self._transfer_callback(source, target, int(bytes_)))
-            if result and source != target:
-                self._callback_used[source] = self._callback_used.get(source, 0) - int(bytes_)
-                self._callback_used[target] = self._callback_used.get(target, 0) + int(bytes_)
-            return result
         method = getattr(self.ledger, "transfer", None)
         if method is not None:
             return bool(method(source, target, int(bytes_)))
         if not self.can_transfer(source, target, bytes_):
             return False
-        # A callback-only ledger has already been checked for both sides.
+        # A minimal ledger has already been checked for both sides.
         # Release first so an active->backing move does not transiently exceed
         # the shared physical limit.
         if source != target:
@@ -434,7 +368,7 @@ class DynamicKVPool:
 
     def __init__(
         self,
-        components: Mapping[str, Any] | Iterable[Any],
+        components: Iterable[Any],
         *,
         tokens_per_page: int = 16,
         page_bytes: int = 1,
@@ -443,12 +377,8 @@ class DynamicKVPool:
         topology: Optional[Any] = None,
         offload_components: Optional[Sequence[str]] = None,
         allow_cross_machine: bool = False,
-        ledger_can_adjust: Optional[Callable[[str, int], bool]] = None,
-        ledger_adjust: Optional[Callable[[str, int], bool]] = None,
-        ledger_can_transfer: Optional[Callable[[str, str, int], bool]] = None,
-        ledger_transfer: Optional[Callable[[str, str, int], bool]] = None,
         transfer_executor: Optional[
-            Callable[[KvPoolTransferRequest], float | KvPoolTransferPlan]
+            Callable[[KvPoolTransferRequest], KvPoolTransferPlan]
         ] = None,
     ) -> None:
         if isinstance(tokens_per_page, bool) or int(tokens_per_page) <= 0:
@@ -456,9 +386,7 @@ class DynamicKVPool:
         if isinstance(page_bytes, bool) or int(page_bytes) <= 0:
             raise KvPoolError("page_bytes must be positive")
         if isinstance(components, Mapping):
-            raw_components = components.values()
-        else:
-            raw_components = components
+            raise KvPoolError("components must be an iterable of ComponentSpec or KvPoolComponent values")
         from .ir import ComponentSpec
         from .physical_contract import (
             parse_execution_physical_config, require_physical_memory_config,
@@ -466,7 +394,7 @@ class DynamicKVPool:
 
         normalized = []
         physical_configs = {}
-        for component in raw_components:
+        for component in components:
             item = KvPoolComponent.from_component(component)
             raw = item.metadata.get("physical_memory_config")
             if raw is not None:
@@ -502,22 +430,14 @@ class DynamicKVPool:
         self.default_page_bytes = int(page_bytes)
         self.page_bytes_by_layer = {str(key): int(value) for key, value in (page_bytes_by_layer or {}).items()}
         limits = {item.component_id: item.capacity_bytes for item in normalized}
-        self._ledger = _LedgerAdapter(
-            limits,
-            ledger,
-            can_adjust=ledger_can_adjust,
-            adjust=ledger_adjust,
-            can_transfer=ledger_can_transfer,
-            transfer=ledger_transfer,
-        )
+        self._ledger = _LedgerAdapter(limits, ledger)
         if transfer_executor is not None and not callable(transfer_executor):
             raise KvPoolError("transfer_executor must be callable")
         # The pool owns page state and capacity accounting.  A caller that has
         # the physical address map and shared event queue can inject the
         # actual source-read/link/target-write lowering here.  The callback
         # receives an immutable page description so it can resolve a real
-        # physical address.  A shared event queue should return a two-phase
-        # transfer plan; a number is retained only for pure timing estimates.
+        # physical address and return a commit/rollback transfer plan.
         self._transfer_executor = None
         self.topology = topology
         explicit_offload = {str(item) for item in (offload_components or ())}
@@ -560,14 +480,10 @@ class DynamicKVPool:
 
         return self._transfer_executor
 
-    @property
-    def physical_ledger(self) -> Any:
-        return self._ledger.ledger
-
     def set_transfer_executor(
         self,
         transfer_executor: Optional[
-            Callable[[KvPoolTransferRequest], float | KvPoolTransferPlan]
+            Callable[[KvPoolTransferRequest], KvPoolTransferPlan]
         ],
     ) -> None:
         """Attach the shared physical transfer executor after pool creation."""
@@ -630,8 +546,8 @@ class DynamicKVPool:
         """Capture optional external queue state for serving rollback.
 
         A physical executor that owns mutable queue state can expose matching
-        ``snapshot()`` and ``restore(state)`` methods.  Pure numeric executors
-        have no state and return ``None``.
+        ``snapshot()`` and ``restore(state)`` methods. Stateless plan producers
+        have no queue state to capture and return ``None`` here.
         """
 
         executor = self._transfer_executor
@@ -686,10 +602,7 @@ class DynamicKVPool:
         route = getattr(self.topology, "route", None)
         if route is None:
             raise KvPoolUnsupported("topology must expose route(source, target, bytes)")
-        try:
-            return tuple(route(source, target, int(bytes_)))
-        except TypeError:
-            return tuple(route(source, target, int(bytes_), policy="lowest_latency"))
+        return tuple(route(source, target, int(bytes_)))
 
     def _reachable(self, source: Optional[str], target: str, bytes_: int) -> bool:
         if not source or source == target or self.topology is None:
@@ -740,16 +653,7 @@ class DynamicKVPool:
             ) from error
         if isinstance(raw_plan, KvPoolTransferPlan):
             return raw_plan
-        if isinstance(raw_plan, bool):
-            raise KvPoolUnsupported(
-                "paged_pool physical transfer executor must return a transfer plan or duration"
-            )
-        try:
-            return KvPoolTransferPlan(float(raw_plan))
-        except (TypeError, ValueError, KvPoolError) as error:
-            raise KvPoolUnsupported(
-                "paged_pool physical transfer executor must return a finite non-negative duration"
-            ) from error
+        raise KvPoolUnsupported("paged_pool physical transfer executor must return KvPoolTransferPlan")
 
     @staticmethod
     def _run_transfer_hook(plan: KvPoolTransferPlan, name: str) -> None:
@@ -770,9 +674,8 @@ class DynamicKVPool:
         """Reject an unknown service direction for offload media.
 
         A topology link cannot stand in for the medium's own service time.
-        Active HBM/DRAM descriptors may omit a direction and retain the
-        historical latency-only fallback; storage media must declare the
-        direction that the operation actually uses.
+        Active HBM/DRAM service rates come from the physical executor's config;
+        offload media must also declare the direction the operation uses.
         """
 
         normalized_kind = (
@@ -1044,17 +947,6 @@ class DynamicKVPool:
         )
         shadow._ledger = _LedgerAdapter(self._ledger.limits, ledger)
         return shadow.resize_detailed(request_id, target_pages).success
-
-    def resize(self, request_id: str, target_pages: Optional[int] = None, **kwargs: Any) -> bool:
-        """Resize and return only success, matching the legacy ledger API."""
-
-        return self.resize_detailed(request_id, target_pages, **kwargs).success
-
-    def resize_tokens(self, request_id: str, target_tokens: int, **kwargs: Any) -> bool:
-        return self.resize_detailed(request_id, target_tokens=target_tokens, **kwargs).success
-
-    def allocate(self, request_id: str, page_count: int, **kwargs: Any) -> bool:
-        return self.resize(request_id, page_count, **kwargs)
 
     def handoff_request(self, source_request: str, target_request: str) -> Tuple[int, ...]:
         """Move exclusive page references between turns without copying KV."""
@@ -1455,11 +1347,6 @@ class DynamicKVPool:
             raise KvPoolUnsupported("migrate_page target must be active memory; use offload_page for backing tiers")
         return self._move(page, str(target_component), kind="migration")
 
-    def migrate(self, logical_page_id: int, target_component: str) -> bool:
-        """Short alias used by migration/event integrations."""
-
-        return self.migrate_page(logical_page_id, target_component)
-
     def offload_page(self, logical_page_id: int, target_component: Optional[str] = None,
                      *, kind: str = "offload") -> bool:
         page = self.page(logical_page_id)
@@ -1471,9 +1358,6 @@ class DynamicKVPool:
                 return True
         self._last_error = self._last_error or "no writable offload component has capacity"
         return False
-
-    def offload(self, logical_page_id: int, target_component: Optional[str] = None) -> bool:
-        return self.offload_page(logical_page_id, target_component)
 
     def restore_page(
         self,
@@ -1495,9 +1379,6 @@ class DynamicKVPool:
                 return True
         self._last_error = self._last_error or "no active component has capacity for restore"
         return False
-
-    def restore(self, logical_page_id: int, target_component: Optional[str] = None) -> bool:
-        return self.restore_page(logical_page_id, target_component)
 
     def component_stats(self) -> Mapping[str, Mapping[str, int | str]]:
         page_counts: Dict[str, int] = defaultdict(int)
@@ -1533,20 +1414,9 @@ class DynamicKVPool:
         }
 
 
-# Small aliases make the experimental API discoverable without committing to
-# the longer class name in serving/config integration code.
-KvPool = DynamicKVPool
-PagedKVPool = DynamicKVPool
-KVPage = KvPage
-KVPoolComponent = KvPoolComponent
-
-
 __all__ = [
     "DynamicKVPool",
-    "KVPoolComponent",
-    "KVPage",
     "KvPage",
-    "KvPool",
     "KvPoolComponent",
     "KvPoolError",
     "KvPoolResizeResult",
@@ -1554,6 +1424,5 @@ __all__ = [
     "KvPoolTransferPlan",
     "KvPoolTransferRequest",
     "KvPoolUnsupported",
-    "PagedKVPool",
     "PhysicalLedger",
 ]

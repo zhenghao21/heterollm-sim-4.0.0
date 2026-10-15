@@ -54,7 +54,7 @@ def _json_value(value):
 
 
 class HBMConfigError(ValueError):
-    """Keep ValueError compatibility while preserving bilingual diagnostics."""
+    """A validation error carrying bilingual HBM diagnostics."""
 
     def __init__(self, *, field, value, category, generation, clock_ns,
                  rule, requirement_zh, requirement_en, remedy_zh, remedy_en,

@@ -18,7 +18,6 @@ class NativeCalibrationProfile:
     """Measured coefficients; each coefficient has an explicit stage owner."""
     prompt_ns_per_token: float | None = None
     decode_ns_per_token: float | None = None
-    launch_ns_per_call: float | None = None
     prefill_launch_ns_per_call: float | None = None
     decode_launch_ns_per_call: float | None = None
     synchronize_ns_per_call: float | None = None
@@ -63,7 +62,7 @@ class NativeCalibrationProfile:
     calibration_basis: str | None = None
 
     def __post_init__(self) -> None:
-        for name in ("prompt_ns_per_token", "decode_ns_per_token", "launch_ns_per_call", "prefill_launch_ns_per_call", "decode_launch_ns_per_call", "synchronize_ns_per_call", "decode_first_invocation_extra_ns", "d2h_ns_per_byte"):
+        for name in ("prompt_ns_per_token", "decode_ns_per_token", "prefill_launch_ns_per_call", "decode_launch_ns_per_call", "synchronize_ns_per_call", "decode_first_invocation_extra_ns", "d2h_ns_per_byte"):
             value = getattr(self, name)
             if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or float(value) < 0):
                 raise ValueError(f"calibration {name} must be a finite non-negative number or None")
@@ -109,11 +108,13 @@ class NativeCalibrationProfile:
 
 def load_native_calibration(path: str | Path) -> NativeCalibrationProfile:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if isinstance(data, dict) and data.get("schema") in {"native-calibration/v1", "native-semantic-calibration/v1", "native-semantic-calibration/v2"}:
+    if isinstance(data, dict) and "launch_ns_per_call" in data:
+        raise ValueError("launch calibration requires phase-scoped coefficients")
+    if isinstance(data, dict) and data.get("schema") in {"native-calibration/v1", "native-semantic-calibration/v2"}:
         # Semantic holdout artifacts store stage coefficients under ``stages``
         # and deliberately omit global timing fields.  Keep that evidence
         # usable while preserving the strict, stage-scoped application path.
-        if data.get("schema") in {"native-semantic-calibration/v1", "native-semantic-calibration/v2"}:
+        if data.get("schema") in {"native-semantic-calibration/v2"}:
             coverage = data.get("coverage") if isinstance(data.get("coverage"), Mapping) else {}
             train_identity = data.get("train_identity") if isinstance(data.get("train_identity"), Mapping) else {}
             hold_identity = data.get("holdout_identity") if isinstance(data.get("holdout_identity"), Mapping) else {}
@@ -121,7 +122,6 @@ def load_native_calibration(path: str | Path) -> NativeCalibrationProfile:
             if train_identity or hold_identity:
                 identity_mismatch = identity_mismatch or train_identity != hold_identity
             return NativeCalibrationProfile(
-                launch_ns_per_call=_finite_non_negative(data.get("launch_ns_per_call")),
                 prefill_launch_ns_per_call=_finite_non_negative(data.get("prefill_launch_ns_per_call")),
                 decode_launch_ns_per_call=_finite_non_negative(data.get("decode_launch_ns_per_call")),
                 synchronize_ns_per_call=_finite_non_negative(data.get("synchronize_ns_per_call")),
@@ -144,9 +144,7 @@ def load_native_calibration(path: str | Path) -> NativeCalibrationProfile:
             )
         data = dict(data)
         data.pop("schema", None)
-        values = {k: data[k] for k in NativeCalibrationProfile.__dataclass_fields__ if k in data}
-        values.setdefault("source", "")
-        return NativeCalibrationProfile(**values)
+        return NativeCalibrationProfile(**data)
     raise ValueError("unsupported calibration profile schema")
 
 
@@ -156,10 +154,12 @@ def profile_from_mapping(value: Mapping[str, Any] | NativeCalibrationProfile | N
         return value
     if not isinstance(value, Mapping):
         return None
+    if set(value).difference(NativeCalibrationProfile.__dataclass_fields__, {"schema"}):
+        return None
+    if value.get("schema", "native-calibration/v1") != "native-calibration/v1":
+        return None
     try:
         values = {k: value[k] for k in NativeCalibrationProfile.__dataclass_fields__ if k in value}
-        if "kernel_stage_mapping" not in values and isinstance(value.get("stages"), Mapping):
-            values["kernel_stage_mapping"] = value["stages"]
         return NativeCalibrationProfile(**values)
     except (TypeError, ValueError):
         return None
@@ -174,13 +174,11 @@ def _finite_non_negative(value: Any) -> float | None:
 
 
 def _model_gguf_sha256(model: object) -> str | None:
-    metadata = getattr(model, "metadata", None)
+    metadata = model.metadata
     if not isinstance(metadata, Mapping):
         return None
-    value = metadata.get("gguf_sha256")
-    nested = metadata.get("metadata")
-    if value is None and isinstance(nested, Mapping):
-        value = nested.get("gguf_sha256")
+    nested = metadata.get("metadata", {})
+    value = nested.get("gguf_sha256") if isinstance(nested, Mapping) else None
     return str(value) if value is not None else None
 
 
@@ -450,8 +448,6 @@ def resolve_exact_operator_calibration(
     result["requested_key"] = key
     entries = mapping.get("exact_operator_keys")
     if not isinstance(entries, Mapping):
-        entries = mapping.get("_exact_operator_keys")
-    if not isinstance(entries, Mapping):
         result["reason"] = "missing_exact_operator_mapping"
         return result
     entry = entries.get(key)
@@ -485,9 +481,8 @@ def audit_exact_operator_coverage(
     """Count exact-key hits and fail-closed fallbacks for trace records.
 
     ``records`` is an iterable of normalized mappings.  The six required
-    fields may use trace aliases (``semantic_shape``, ``semantic_type``,
-    ``semantic_layout``); missing aliases are intentionally counted as
-    malformed/fallback rather than guessed from a model or kernel name.
+    fields use the canonical names in ``EXACT_OPERATOR_KEY_FIELDS``. Missing
+    dimensions count as malformed rather than being inferred from aliases.
     """
     total = exact_hits = fallback = malformed = 0
     reasons: dict[str, int] = {}
@@ -496,10 +491,10 @@ def audit_exact_operator_coverage(
             continue
         total += 1
         key = canonical_exact_operator_key(
-            stage=record.get("stage"), phase=record.get("phase") or record.get("execution_phase"),
-            token_shape=record.get("shape") or record.get("token_shape") or record.get("semantic_shape"),
-            dtype=record.get("dtype") or record.get("semantic_type"),
-            layout=record.get("layout") or record.get("semantic_layout"),
+            stage=record.get("stage"), phase=record.get("phase"),
+            token_shape=record.get("shape"),
+            dtype=record.get("dtype"),
+            layout=record.get("layout"),
             kernel_family=record.get("kernel_family"),
         )
         if key is None:
@@ -509,10 +504,10 @@ def audit_exact_operator_coverage(
         resolution = resolve_exact_operator_calibration(
             profile,
             stage=record.get("stage"),
-            phase=record.get("phase") or record.get("execution_phase"),
-            token_shape=record.get("shape") or record.get("token_shape") or record.get("semantic_shape"),
-            dtype=record.get("dtype") or record.get("semantic_type"),
-            layout=record.get("layout") or record.get("semantic_layout"),
+            phase=record.get("phase"),
+            token_shape=record.get("shape"),
+            dtype=record.get("dtype"),
+            layout=record.get("layout"),
             kernel_family=record.get("kernel_family"),
         )
         if resolution.get("mode") == "exact":
@@ -573,19 +568,15 @@ def memory_calibration_ns(phase: CostPhase, metadata: Mapping[str, Any],
 
 
 def _invocation_fields(metadata: Mapping[str, Any]) -> tuple[str | None, str | None, str | None]:
-    stage = metadata.get("calibration_stage") or metadata.get("coverage_component")
-    # ``stage`` in planner metadata is commonly an integer PP index; never
-    # reinterpret that number as a semantic calibration stage.
-    if stage is None and isinstance(metadata.get("stage"), str):
-        stage = metadata.get("stage")
-    phase = metadata.get("execution_phase") or metadata.get("phase")
-    if isinstance(phase, str):
-        lowered_phase = phase.lower()
-        if "prefill" in lowered_phase:
-            phase = "prefill"
-        elif "decode" in lowered_phase:
-            phase = "decode"
-    shape = metadata.get("token_shape") or metadata.get("shape")
+    # A calibration stage names a measured operator family. Coverage names a
+    # model layer family and still needs the projection-specific mapping below.
+    stage = metadata.get("calibration_stage")
+    if stage is None:
+        stage = metadata.get("coverage_component")
+    # Pipeline ``stage`` and implementation ``phase`` describe different
+    # dimensions; semantic calibration uses its explicit invocation fields.
+    phase = metadata.get("execution_phase")
+    shape = metadata.get("token_shape")
     projection = str(metadata.get("projection_id", "")).lower()
     event_kind = str(metadata.get("event_kind", "")).lower()
     linear_op = str(metadata.get("linear_op", "")).lower()
@@ -630,16 +621,16 @@ def _invocation_fields(metadata: Mapping[str, Any]) -> tuple[str | None, str | N
             stage = "lm_head"
     # Planner coverage labels describe the layer family; semantic profiles
     # describe the measured operator family.  Bridge only unambiguous ids.
-    if stage in {"full_attention", "attention", "attention_projection"}:
+    if stage == "full_attention":
         # The semantic profile has QKV evidence only.  Do not silently reuse
         # it for attention.output or QK/PV kernels, which have different
         # shapes and launch paths.
         stage = "attention_qkv" if projection == "attention.qkv" else None
     elif stage == "linear_attention":
         stage = "attention_qkv" if projection == "linear_attention.qkv" else None
-    elif stage in {"feed_forward", "ffn_projection", "ffn", "dense_ffn", "routed_expert", "shared_expert"}:
+    elif stage in {"ffn", "dense_ffn", "routed_expert", "shared_expert"}:
         stage = "ffn" if projection in {"mlp.gate", "mlp.up", "mlp.up_gate", "mlp.down"} else None
-    elif stage in {"output", "output_projection", "lm-head", "lm_head"}:
+    elif stage == "lm_head":
         stage = "lm_head" if projection == "lm_head" else None
     elif stage in {"attention_output", "normalization", "quantize"}:
         stage = str(stage)
@@ -696,14 +687,13 @@ def calibrate_cost_phase(
     # bypasses the phase aggregate and interpolation paths below.
     explicit_exact_policy = str(
         metadata.get("native_calibration_operator_key_policy", "")
-    ).strip().lower() in {"exact", "exact_key", "exact_operator_key"}
-    # A profile carrying an exact-key table opts into the strict gate even if
-    # an older caller omitted the metadata switch.  This prevents accidental
-    # fallback to a stage/phase aggregate when sparse exact evidence exists.
+    ).strip().lower() == "exact_operator_key"
+    # Exact-key evidence must always use the strict key gate so sparse
+    # measurements cannot silently become a stage/phase aggregate.
     profile_mapping = profile.kernel_stage_mapping
     profile_has_exact_table = (
         isinstance(profile_mapping, Mapping)
-        and isinstance(profile_mapping.get("exact_operator_keys") or profile_mapping.get("_exact_operator_keys"), Mapping)
+        and isinstance(profile_mapping.get("exact_operator_keys"), Mapping)
     )
     exact_key_policy = explicit_exact_policy or profile_has_exact_table
     if not apply_stage:
@@ -715,10 +705,9 @@ def calibrate_cost_phase(
             stage=stage,
             phase=execution_phase,
             token_shape=token_shape,
-            dtype=(metadata.get("semantic_dtype") or metadata.get("semantic_type")
-                   or metadata.get("dtype") or metadata.get("calibration_dtype")),
-            layout=metadata.get("semantic_layout") or metadata.get("layout") or metadata.get("calibration_layout"),
-            kernel_family=metadata.get("kernel_family") or metadata.get("calibration_kernel_family"),
+            dtype=metadata.get("semantic_dtype"),
+            layout=metadata.get("semantic_layout"),
+            kernel_family=metadata.get("kernel_family"),
         )
         coefficient = (float(resolution["coefficient"])
                        if resolution.get("coefficient") is not None else None)
@@ -924,13 +913,7 @@ def decode_first_invocation_extra_ns(
     return _finite_non_negative(profile.decode_first_invocation_extra_ns)
 
 
-_REQUEST_MARKER_ALIASES = {
-    "request_begin": "request_begin",
-    "request_arrival": "request_begin",
-    "first_token": "first_token",
-    "request_end": "request_end",
-    "request_done": "request_end",
-}
+_REQUEST_MARKERS = frozenset({"request_begin", "first_token", "request_end"})
 
 
 def request_marker_calibration_ns(
@@ -971,8 +954,8 @@ def request_marker_calibration_ns(
         runtime_fingerprint=runtime_fingerprint,
     ):
         return missing("profile identity does not match this scenario")
-    canonical = _REQUEST_MARKER_ALIASES.get(str(marker or "").strip().lower())
-    if canonical is None or not isinstance(profile.request_marker_ns, Mapping):
+    canonical = str(marker or "").strip().lower()
+    if canonical not in _REQUEST_MARKERS or not isinstance(profile.request_marker_ns, Mapping):
         return missing("marker or marker-cost table missing")
     evidence = profile.request_marker_evidence
     evidence_row = evidence.get(canonical) if isinstance(evidence, Mapping) else None
@@ -1008,9 +991,7 @@ def launch_calibration_ns(
     """Return an explicitly phase-scoped CUDA launch rate.
 
     A launch coefficient is only safe when its prefill/decode scope is
-    declared.  The legacy ``launch_ns_per_call`` field is intentionally not
-    used here: applying that global value to every lowered primitive can
-    charge one native graph launch dozens of times.  Callers that have a
+    declared. Callers that have a
     measured phase-specific rate can bind it to the corresponding
     ``kernel_launch`` phase while leaving the other phase analytical.
     """
@@ -1036,7 +1017,7 @@ def apply_native_calibration(
     apply_phase_boundary: bool = False,
     apply_request_boundary: bool = False,
 ) -> ScenarioConfig:
-    """Apply only launch evidence to GPU frontend demand.
+    """Bind phase-scoped calibration to matching lowered tasks.
 
     Prompt/decode coefficients remain metadata until the matching task-level
     markers are available.  This fail-closed behavior prevents a stage total
@@ -1059,56 +1040,19 @@ def apply_native_calibration(
         or apply_phase_boundary or apply_request_boundary
     ):
         raise ValueError("native calibration profile identity does not match this scenario")
-    if apply_launch and _finite_non_negative(profile.launch_ns_per_call) is None:
-        raise ValueError("native launch calibration has no covered launch coefficient")
-    # Stage, memory, phase-boundary and request-boundary calibration are
-    # independent of the optional CUDA launch override.  The previous
-    # implementation returned here whenever ``apply_launch`` was false,
-    # silently discarding an explicit ``apply_stage=True`` request.  Keep the
-    # launch mutation gated, but always retain the other calibration gates so
-    # planner-level stage costs can be applied.
-    if not identity_ok:
-        metadata = dict(scenario.placement.metadata)
-        metadata["native_calibration"] = profile.to_dict()
-        metadata["native_calibration_apply_stage"] = bool(apply_stage)
-        metadata["native_calibration_apply_memory"] = bool(apply_memory)
-        metadata["native_calibration_apply_phase_boundary"] = bool(apply_phase_boundary)
-        metadata["native_calibration_apply_request_boundary"] = bool(apply_request_boundary)
-        metadata["native_calibration_apply_launch"] = False
-        return replace(scenario, placement=replace(scenario.placement, metadata=metadata))
-    profiles = {kind: dict(values) for kind, values in scenario.component_profiles.items()}
-    gpu_registry = profiles.get("gpu", {})
-    gpu_components = [c for c in scenario.hardware.components if c.normalized_kind == "gpu"]
-    target_gpu_id = None
-    if gpu_components:
-        main_gpu = getattr(scenario.llama_cpp_config, "main_gpu", 0) if scenario.llama_cpp_config else 0
-        target_gpu_id = next((c.component_id for c in gpu_components if c.component_id == f"gpu{main_gpu}"), gpu_components[0].component_id)
-    changed = False
-    for key, gpu in tuple(gpu_registry.items()):
-        bound = next((c for c in gpu_components if c.cost_profile_id == key), None)
-        if (apply_launch and profile.launch_ns_per_call is not None
-                and profile.launch_ns_per_call >= 0 and bound is not None
-                and bound.component_id == target_gpu_id):
-            gpu_registry[key] = replace(gpu, kernel_launch_ns=float(profile.launch_ns_per_call))
-            changed = True
-    if not changed:
-        metadata = dict(scenario.placement.metadata)
-        metadata["native_calibration"] = profile.to_dict()
-        metadata["native_calibration_apply_stage"] = bool(apply_stage)
-        metadata["native_calibration_apply_memory"] = bool(apply_memory)
-        metadata["native_calibration_apply_phase_boundary"] = bool(apply_phase_boundary)
-        metadata["native_calibration_apply_request_boundary"] = bool(apply_request_boundary)
-        metadata["native_calibration_apply_launch"] = False
-        return replace(scenario, placement=replace(scenario.placement, metadata=metadata))
+    if apply_launch and all(
+        _finite_non_negative(value) is None
+        for value in (profile.prefill_launch_ns_per_call, profile.decode_launch_ns_per_call)
+    ):
+        raise ValueError("native launch calibration requires a phase-scoped launch coefficient")
     metadata = dict(scenario.placement.metadata)
     metadata["native_calibration"] = profile.to_dict()
     metadata["native_calibration_apply_stage"] = bool(apply_stage)
     metadata["native_calibration_apply_memory"] = bool(apply_memory)
     metadata["native_calibration_apply_phase_boundary"] = bool(apply_phase_boundary)
     metadata["native_calibration_apply_request_boundary"] = bool(apply_request_boundary)
-    assumptions = tuple(dict.fromkeys((*scenario.assumptions,
-        "native calibration: stage/memory/phase gates retained; CUDA launch coefficient applied only when explicitly enabled")))
-    return replace(scenario, component_profiles=profiles, placement=replace(scenario.placement, metadata=metadata), assumptions=assumptions)
+    metadata["native_calibration_apply_launch"] = bool(apply_launch)
+    return replace(scenario, placement=replace(scenario.placement, metadata=metadata))
 
 
 __all__ = [

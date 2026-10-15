@@ -24,31 +24,10 @@ _PROTOCOL_ALIASES = {
     "nvlink": "nvlink",
     "hbm": "hbm",
     # Canonical authoring uses protocol=GDDR and version=<generation>.
-    # Generation-shaped names remain accepted during input normalization.
     "gddr": "gddr",
-    "gddr6": "gddr6",
-    "gddr_6": "gddr6",
-    "gddr6x": "gddr6x",
-    "gddr_6x": "gddr6x",
-    "gddr7": "gddr7",
-    "gddr_7": "gddr7",
     "ddr3": "ddr",
     "ddr4": "ddr",
     "ddr5": "ddr",
-}
-
-_GDDR_PROTOCOLS = frozenset({"gddr", "gddr6", "gddr6x", "gddr7"})
-_DIRECTION_ALIASES = {
-    "in": "input",
-    "input": "input",
-    "rx": "input",
-    "out": "output",
-    "output": "output",
-    "tx": "output",
-    "bi": "bidirectional",
-    "bidir": "bidirectional",
-    "bidirectional": "bidirectional",
-    "inout": "bidirectional",
 }
 
 
@@ -59,10 +38,6 @@ def _key(value: str) -> str:
 def _protocol(value: str) -> str:
     normalized = _key(value)
     return _PROTOCOL_ALIASES.get(normalized, normalized)
-
-
-def _direction(value: str) -> str:
-    return _DIRECTION_ALIASES.get(_key(value), _key(value))
 
 
 def _role(value: str) -> str:
@@ -84,16 +59,13 @@ def _component_kind(component: ComponentSpec) -> str:
     normalized = normalize_component_kind(component.kind)
     if normalized in {"hbm", "hbm_stack"}:
         return "hbm"
-    # Component normalization is intentionally kept in one place in ir.py,
-    # but accept generation-shaped authoring values here as well so topology
-    # validation remains fail-closed while a config is being normalized.
-    if normalized in {"gddr", "gddr_memory", "gddr6", "gddr6x", "gddr7"}:
+    if normalized in {"gddr", "gddr_memory"}:
         return "gddr"
     return normalized
 
 
 def _gddr_generation(value: object) -> Optional[str]:
-    """Extract a canonical GDDR generation from a protocol/version value."""
+    """Extract a canonical GDDR generation from a version value."""
 
     text = re.sub(r"^GDDR[-_ ]+", "GDDR", str(value or "").strip().upper())
     matched = re.match(r"^(GDDR6X|GDDR6|GDDR7)(?:$|[-_ ].*)", text)
@@ -106,11 +78,7 @@ def _metadata_generations(metadata: object) -> Set[str]:
     values = []
     for key in (
         "generation",
-        "memory_generation",
-        "supported_generations",
-        "gddr_generations",
         "supported_gddr_generations",
-        "memory_generations",
     ):
         raw = metadata.get(key)
         if isinstance(raw, str):
@@ -132,28 +100,7 @@ def _component_gddr_generation(component: ComponentSpec) -> Optional[str]:
         if isinstance(physical_config, Mapping)
         else getattr(physical_config, "generation", None)
     )
-    candidates = [
-        metadata.get("generation"),
-        metadata.get("memory_generation"),
-        metadata.get("technology", {}).get("generation")
-        if isinstance(metadata.get("technology"), Mapping)
-        else None,
-        physical_generation,
-        component.kind,
-    ]
-    for value in candidates:
-        generation = _gddr_generation(value)
-        if generation is not None:
-            return generation
-    return None
-
-
-def _protocols_compatible(port_protocol: str, link_protocol: str) -> bool:
-    """Allow a generic GDDR port to negotiate a generation explicitly."""
-
-    if port_protocol == link_protocol:
-        return True
-    return port_protocol in _GDDR_PROTOCOLS and link_protocol in _GDDR_PROTOCOLS
+    return _gddr_generation(physical_generation)
 
 
 def _version_key(version: str) -> Optional[Tuple[int, ...]]:
@@ -202,10 +149,6 @@ class TopologyValidationReport:
     @property
     def is_valid(self) -> bool:
         return not self.errors
-
-    @property
-    def ok(self) -> bool:
-        return self.is_valid
 
     @property
     def error_codes(self) -> Tuple[str, ...]:
@@ -284,7 +227,7 @@ def _validate_protocol_rules(
                 "the HBM controller-side port must have controller role",
             )
 
-    elif protocol in _GDDR_PROTOCOLS:
+    elif protocol == "gddr":
         source_is_gddr = _component_kind(source_component) == "gddr"
         target_is_gddr = _component_kind(target_component) == "gddr"
         if source_is_gddr == target_is_gddr:
@@ -312,9 +255,9 @@ def _validate_protocol_rules(
             )
 
         memory_generation = _component_gddr_generation(memory_component)
-        link_generation = _gddr_generation(link.protocol) or _gddr_generation(link.version)
-        port_generation = _gddr_generation(memory_port.protocol) or _gddr_generation(memory_port.version)
-        controller_generation = _gddr_generation(controller_port.protocol) or _gddr_generation(controller_port.version)
+        link_generation = _gddr_generation(link.version)
+        port_generation = _gddr_generation(memory_port.version)
+        controller_generation = _gddr_generation(controller_port.version)
         controller_supported = (
             _metadata_generations(controller_port.metadata)
             | _metadata_generations(controller_component.metadata)
@@ -355,8 +298,8 @@ def _validate_protocol_rules(
         else:
             add(
                 "gddr_controller_capability_missing",
-                "GDDR 控制器必须声明端口代际或 supported_generations",
-                "GDDR controller must declare a port generation or supported_generations",
+                "GDDR 控制器必须声明端口代际或 supported_gddr_generations",
+                "GDDR controller must declare a port generation or supported_gddr_generations",
             )
 
     elif protocol in {"ucie", "hbf"}:
@@ -554,7 +497,9 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
             ports.setdefault((component.component_id, port.port_id), port)
             if not port.protocol or not port.protocol.strip():
                 add("port_protocol_empty", "端口 protocol 不能为空", "port protocol must not be empty", component.component_id, port.port_id)
-            if _direction(port.direction) not in {"input", "output", "bidirectional"}:
+            elif _gddr_generation(port.protocol) is not None:
+                add("obsolete_gddr_port_protocol", "GDDR 端口必须使用 protocol=GDDR，并在 version 中声明代际", "GDDR ports must use protocol=GDDR and declare the generation in version", component.component_id, port.port_id)
+            if port.direction not in {"input", "output", "bidirectional"}:
                 add("invalid_direction", "端口 direction 无法识别", "unknown port direction", component.component_id, port.port_id)
             if not port.version or not port.version.strip():
                 add("port_version_empty", "端口 version 不能为空", "port version must not be empty", component.component_id, port.port_id)
@@ -577,6 +522,8 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
     for link in hardware.links:
         if not link.protocol or not link.protocol.strip():
             add("link_protocol_empty", "链路 protocol 不能为空", "link protocol must not be empty", link_id=link.link_id)
+        elif _gddr_generation(link.protocol) is not None:
+            add("obsolete_gddr_link_protocol", "GDDR 链路必须使用 protocol=GDDR，并在 version 中声明代际", "GDDR links must use protocol=GDDR and declare the generation in version", link_id=link.link_id)
         if not link.version or not link.version.strip():
             add("link_version_empty", "链路 version 不能为空", "link version must not be empty", link_id=link.link_id)
         if link.lanes <= 0:
@@ -623,7 +570,7 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
         protocol = _protocol(link.protocol)
         for port, endpoint_name in ((source_port, "source"), (target_port, "target")):
             port_protocol = _protocol(port.protocol)
-            if not _protocols_compatible(port_protocol, protocol):
+            if port_protocol != protocol:
                 add(
                     "protocol_mismatch",
                     "{}端口 protocol {} 与链路 protocol {} 不匹配".format(
@@ -642,7 +589,7 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
             # which must not be compared as if it were a JEDEC generation.
             version_supported = (
                 True
-                if protocol in _GDDR_PROTOCOLS and port_protocol in _GDDR_PROTOCOLS
+                if protocol == "gddr" and port_protocol == "gddr"
                 else _version_supported(link.version, port.version)
             )
             if not version_supported:
@@ -677,8 +624,8 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
                     link_id=link.link_id,
                 )
 
-        source_direction = _direction(source_port.direction)
-        target_direction = _direction(target_port.direction)
+        source_direction = source_port.direction
+        target_direction = target_port.direction
         if source_direction not in {"output", "bidirectional"}:
             add("source_direction", "源端口无法发送数据", "source port cannot transmit", link_id=link.link_id)
         if target_direction not in {"input", "bidirectional"}:
@@ -723,7 +670,7 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
                 endpoint[0],
                 endpoint[1],
             )
-        elif (component_kind == "gddr" or port_protocol in _GDDR_PROTOCOLS) and count > 1:
+        elif (component_kind == "gddr" or port_protocol == "gddr") and count > 1:
             add(
                 "gddr_port_not_dedicated",
                 "GDDR 本地显存端口只能由一条链路独占使用",
@@ -750,7 +697,7 @@ def validate_topology(hardware: HardwareSpec) -> TopologyValidationReport:
                     component.component_id,
                     link_id=link.link_id,
                 )
-            elif component_kind == "gddr" and protocol not in _GDDR_PROTOCOLS:
+            elif component_kind == "gddr" and protocol != "gddr":
                 add(
                     "gddr_non_dedicated_protocol",
                     "GDDR 本地显存组件只能使用 GDDR 专用链路",

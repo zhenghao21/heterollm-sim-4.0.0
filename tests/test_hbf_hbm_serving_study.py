@@ -152,7 +152,7 @@ class ServingStudyTests(unittest.TestCase):
         storage=row['resources']['storage_traffic']
         self.assertGreater(storage['logical_read_bytes'],0)
         self.assertEqual(storage['logical_write_bytes'],0)
-        self.assertGreater(row['kv']['logical_decode_write_bytes'],0)
+        self.assertGreater(row['kv']['logical_decode_append_bytes'],0)
         self.assertEqual(set(row['kv']['peak_bytes_by_component']),{'hbm0'})
         self.assertTrue(row['placement_verification']['all_resolved_weights_on_requested_tier'])
         self.assertTrue(row['placement_verification']['all_resolved_model_ops_on_gpu'])

@@ -363,15 +363,9 @@
     };
   }
 
-  function unwrapTraceView(raw) {
-    const source = object(raw);
-    return source.trace_topology_view && typeof source.trace_topology_view === "object" && !Array.isArray(source.trace_topology_view)
-      ? source.trace_topology_view
-      : source;
-  }
-
   function normalizeTraceTopologyView(raw, components, links, options = {}) {
-    const source = unwrapTraceView(raw);
+    const source = object(raw);
+    if (Object.hasOwn(source, "trace_topology_view")) throw new Error("回放视图必须直接传入视图对象。");
     const opts = object(options);
     const componentInput = components == null ? source.components : components;
     const linkInput = links == null ? source.links : links;
@@ -436,7 +430,7 @@
   }
 
   function arrangeTraceTopologyView(view, components, links, options = {}) {
-    const source = unwrapTraceView(view);
+    const source = object(view);
     const nextOptions = object(options);
     const list = components == null ? source.components : components;
     const edges = links == null ? source.links : links;
@@ -550,18 +544,6 @@
     const next = clone(normalizeTraceTopologyView(view));
     next.viewport = normalizeViewport(viewport, next.viewport);
     return next;
-  }
-
-  function applyTraceViewAction(view, action, options = {}) {
-    const value = object(action);
-    const type = String(value.type || value.action || "").toLowerCase();
-    if (type === "arrange" || type === "layout" || type === "auto_layout") return arrangeTraceTopologyView(view, options.components, options.links, options);
-    if (type === "fit" || type === "fit_viewport") return fitTraceViewport(view, value.viewport || options.viewport || value, options);
-    if (type === "drag" || type === "drag_node") return dragTraceNode(view, value.component_id || value.node_id || value.id, value.position || value, { ...options, delta: value.delta === true || value.dx != null || value.dy != null });
-    if (type === "pan") return panTraceViewport(view, value, options);
-    if (type === "zoom") return zoomTraceViewport(view, value, value.anchor || options.anchor, options);
-    if (type === "set_viewport") return setTraceViewport(view, value.viewport || value);
-    return normalizeTraceTopologyView(view);
   }
 
   // -----------------------------------------------------------------------
@@ -749,10 +731,6 @@
       linkIds,
       resourceIds,
       activeEvents,
-      activeNodeIds: nodeIds,
-      activeLinkIds: linkIds,
-      nodes: nodeIds,
-      links: linkIds,
     };
   }
 
@@ -799,9 +777,8 @@
   }
 
   function pointAtProgress(points, progress) {
-    const value = progress && typeof progress === "object" ? progress.progress ?? progress.ratio ?? progress.t : progress;
     const total = polylineTotalLength(points);
-    return pointAtDistance(points, total * clamp(finite(value, 0), 0, 1));
+    return pointAtDistance(points, total * clamp(finite(progress, 0), 0, 1));
   }
 
   function loopProgress(value, phase = 0) {
@@ -815,13 +792,9 @@
   // commonly pass Date.now().  Taking the modulo before dividing keeps both
   // clocks numerically stable and, importantly, wraps instead of being clamped
   // forever at the route endpoint.
-  function particleLoopProgress(timestampMs, periodOrOptions = 1200, phaseArg = 0) {
-    const options = periodOrOptions && typeof periodOrOptions === "object" ? periodOrOptions : {};
-    const periodMs = Math.max(1, finite(
-      periodOrOptions && typeof periodOrOptions === "object" ? options.periodMs ?? options.durationMs : periodOrOptions,
-      1200,
-    ));
-    const phase = finite(options.phase ?? options.offset ?? phaseArg, 0);
+  function particleLoopProgress(timestampMs, options = {}) {
+    const periodMs = Math.max(1, finite(options.periodMs, 1200));
+    const phase = finite(options.phase, 0);
     const timestamp = finite(timestampMs, 0);
     const withinPeriod = ((timestamp % periodMs) + periodMs) % periodMs;
     return loopProgress(withinPeriod / periodMs, phase);
@@ -915,9 +888,7 @@
           particle_index: particleIndex,
           particle_count: count,
           active: options.activeSets
-            ? (options.activeSets.linkIds instanceof Set
-              ? options.activeSets.linkIds.has(String(transfer.link_id || ""))
-              : Boolean(options.activeSets.activeLinkIds?.[String(transfer.link_id || "")]))
+            ? options.activeSets.linkIds.has(String(transfer.link_id || ""))
             : true,
         });
       }
@@ -988,10 +959,9 @@
   // -----------------------------------------------------------------------
 
   function normalizeFullscreenState(raw = {}) {
-    if (typeof raw === "boolean") return { open: raw, mode: "overlay", escapeCloses: true, previousFocusId: null };
     const source = object(raw);
     return {
-      open: source.open === true || source.active === true || source.fullscreen === true,
+      open: source.open === true,
       mode: asId(source.mode || "overlay"),
       escapeCloses: source.escapeCloses !== false,
       previousFocusId: source.previousFocusId == null ? null : asId(source.previousFocusId),
@@ -1024,7 +994,7 @@
 
   function nodePresentation(component) {
     const source = object(component);
-    const componentId = asId(source.component_id || source.id);
+    const componentId = asId(source.component_id);
     const type = componentKind(source);
     const typeText = type && type !== "component" ? type : "组件";
     return {
@@ -1080,10 +1050,10 @@
 
   function filterSemanticTraceEvents(events, filters = {}, timeNs = 0) {
     const source = object(filters);
-    const query = String(source.query || source.keyword || "").trim();
+    const query = String(source.query || "").trim();
     const category = String(source.category || "");
     const phase = String(source.phase || "");
-    const temporal = String(source.temporal || source.status || "");
+    const temporal = String(source.temporal || "");
     return array(events).map((event, index) => ({
       event,
       index,
@@ -1122,8 +1092,8 @@
 
   function buildTraceNodeModels(components, view, activity = {}) {
     const sourceView = normalizeTraceTopologyView(view, components);
-    const nodeIds = activity.nodeIds || activity.activeNodeIds || new Set();
-    const linkIds = activity.linkIds || activity.activeLinkIds || new Set();
+    const nodeIds = activity.nodeIds || new Set();
+    const linkIds = activity.linkIds || new Set();
     return componentList(components).map((component) => {
       const presentation = nodePresentation(component);
       const id = presentation.component_id;
@@ -1152,7 +1122,6 @@
     panTraceViewport,
     zoomTraceViewport,
     setTraceViewport,
-    applyTraceViewAction,
     normalizeMemoryLayout,
     mergeMemorySegments,
     buildMemoryComponentModels,

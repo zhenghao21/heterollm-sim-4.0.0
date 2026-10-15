@@ -1,4 +1,4 @@
-"""Strict import and installation for native standalone MMVQ measurements.
+"""Strict diagnostic import for native standalone MMVQ measurements.
 
 The full LLM trace is useful for ownership and error ranking, but it cannot be
 used as a per-kernel rate.  This module accepts only an isolated native node
@@ -20,9 +20,6 @@ import math
 from pathlib import Path
 import statistics
 from typing import Any, Mapping, Sequence
-
-from .kernel_model import KernelModelProfile
-
 
 STANDALONE_MMVQ_SCHEMA = "heterollm.native-mmvq-standalone/v1"
 CUDA_EVENT_BOUNDARY = "cuda_event_isolated_native_node"
@@ -471,31 +468,8 @@ def load_standalone_mmvq_receipt(path: str | Path, *, expected_sha256: str | Non
     )
 
 
-def install_standalone_mmvq_surfaces(
-    profile: KernelModelProfile,
-    receipt: StandaloneMMVQReceipt,
-    *,
-    analytical_baselines: Mapping[tuple[int, int, int], float] | None = None,
-    expected_gguf_sha256: str | None = None,
-) -> KernelModelProfile:
-    """Reject measurement-derived rate installation.
-
-    Standalone MMVQ measurements are diagnostic evidence for locating a
-    simulator/source mismatch.  They must not be turned into a fitted
-    ``KernelSample`` or correction ratio.  Keep this entry point as a hard
-    fail-closed guard for older callers that might otherwise write
-    ``formal_median_ns`` into the prediction profile.  A source-level fix
-    must be reviewed and implemented in the dispatcher/resource model; it
-    cannot be inferred from these measurements.
-    """
-    raise ValueError(
-        "standalone MMVQ measurements are diagnostic-only; "
-        "refusing measurement-derived rate installation"
-    )
-
-
 __all__ = [
     "CUDA_EVENT_BOUNDARY", "CUPTI_NODE_BOUNDARY", "STANDALONE_MMVQ_SCHEMA",
     "StandaloneMMVQReceipt", "StandaloneMMVQSample",
-    "install_standalone_mmvq_surfaces", "load_standalone_mmvq_receipt",
+    "load_standalone_mmvq_receipt",
 ]

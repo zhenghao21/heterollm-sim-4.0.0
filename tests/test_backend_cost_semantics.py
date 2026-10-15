@@ -102,21 +102,22 @@ def test_cpu_gops_gpu_tops_and_max_service_units():
     assert host.metadata["throughput_compute_service_ns"] == 8192 / 2
 
 
-@pytest.mark.parametrize("m, segmented", [(1, False), (3, False), (3, True)])
-def test_cpu_generic_quantized_transform_matches_scheduled_work(m, segmented):
+@pytest.mark.parametrize("m", [1, 3])
+def test_cpu_generic_quantized_transform_matches_scheduled_work(m):
     cpu = CPUProfile(CPUPipelineProfile(1, 1, 16, 4, 4, 4), cache(),
         )
     work = GemmWorkload(m, 32, 4, activation_bits=16, weight_bits=4,
         packed_weight_formats=("Q4_0",), packed_weight_transform_operations=100,
-        packed_weight_format_segments=(("Q4_0", 4, 100),) if segmented else ())
+        packed_weight_format_segments=(("Q4_0", 4, 100),))
     result = estimate_cpu_gemm(cpu, HostMemoryProfile(1000), work)
-    operations = 100 * m if segmented else 100
+    operations = 100 * m
     schedule = result.metadata["instruction_schedule"]
     assert schedule["packed_weight_transform_instructions"] == operations
 
 
 def test_batch_evaluator_units_overlap_and_stable_ranking():
     result = evaluate_batched_gemm(BatchedGemmInput(
+        memory_bandwidth_model="nominal_bandwidth",
         m=[16, 16], k=16, n=16, activation_bits=16, weight_bits=16,
         peak_tops=8.192, memory_bandwidth_gb_s=1000,
         kernel_launch_ns=5, io_bytes=80, io_bandwidth_gb_s=8, io_latency_ns=3,
@@ -133,6 +134,7 @@ def test_batch_evaluator_units_overlap_and_stable_ranking():
 def test_batch_evaluator_does_not_silently_discard_complex_input():
     with pytest.raises(ValueError, match="实数"):
         evaluate_batched_gemm(BatchedGemmInput(m=16 + 1j, k=16, n=16,
+            memory_bandwidth_model="nominal_bandwidth",
             peak_tops=1, memory_bandwidth_gb_s=1), backend="numpy")
 
 

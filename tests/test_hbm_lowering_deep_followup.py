@@ -4,6 +4,7 @@ from dataclasses import replace
 import pytest
 
 from heterollm_sim.contracts import ResourceDemand, TaskCategory, TaskSpec
+from heterollm_sim.data_motion import lower_physical_allocations
 from heterollm_sim.event_kernel import UnifiedEventKernel
 from heterollm_sim.kernel_model import KernelModelProfile
 from heterollm_sim.planner import (
@@ -36,7 +37,7 @@ def lower_task(scenario, *, name="test", request="cohort-3", metadata=None,
                 "phase": "gpu_gemm", "operator_id": "audit", "cost_model": cost,
                 **(metadata or {})})
         physical = _attach_gddr_physical_task(task, scenario)
-        return _attach_planned_l2(physical)
+        return lower_physical_allocations(_attach_planned_l2(physical))
 
 
 @pytest.mark.parametrize("named", [False, True])
@@ -125,7 +126,7 @@ def test_custom_rank_memory_owners_still_lower_to_dram_core(owners):
             "hbm" + str(task.metadata["rank"])).metadata["physical_memory_config"]
         assert {row["physical_owner"] for row in task.metadata["memory_accesses"]} == {owner}
         event = UnifiedEventKernel.from_closed_graph((replace(task, dependencies=()),)).step()
-        assert event.task.metadata["physical_execution"]["physical_bytes"] > 0
+        assert next(iter(event.task.metadata["physical_execution_by_owner"].values()))["physical_bytes"] > 0
         assert owner not in {d.resource_id for d in event.demands}
         assert event.task.metadata["physical_completion_ns"] > event.start_ns
 

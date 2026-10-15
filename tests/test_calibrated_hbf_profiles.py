@@ -7,6 +7,7 @@ import unittest
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "calibrated_hbf_profiles.py"
+sys.path.insert(0, str(SCRIPT.parent))
 SPEC = importlib.util.spec_from_file_location("calibrated_hbf_profiles", SCRIPT)
 profiles = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = profiles

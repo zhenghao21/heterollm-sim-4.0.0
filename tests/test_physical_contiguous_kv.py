@@ -28,8 +28,7 @@ class PhysicalContiguousKVTests(unittest.TestCase):
 
     def test_custom_lowerer_keeps_explicit_lazy_semantics(self):
         runtime = _OnlineRuntime(compile_serving_plan(self._lazy_scenario()),
-                                 lambda *_: BatchCost(1.0),
-                                 apply_measurement_start_residency=False)
+                                 lambda *_: BatchCost(1.0))
         self.assertEqual(runtime.plan.kv_policy.allocation_policy, "lazy")
         self.assertIsNone(runtime._kv_allocation_policy_reason)
 

@@ -413,7 +413,7 @@ def _gpu_memory_efficiency(
             )
         group_key = (
             (
-                str(getattr(profile, "resource_id", memory.component_id)),
+                profile.resource_id,
                 str(memory.cost_profile_id),
             )
             if aggregate and profile is not None
@@ -1064,6 +1064,7 @@ def _candidate_batch(
     candidates: Sequence[BatchedGemmCandidate],
 ) -> BatchedGemmInput:
     return BatchedGemmInput(
+        memory_bandwidth_model="nominal_bandwidth",
         m=[item.m for item in candidates],
         k=[item.k for item in candidates],
         n=[item.n for item in candidates],

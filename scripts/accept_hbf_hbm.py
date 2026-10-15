@@ -176,7 +176,6 @@ def check_serving_paged_swap() -> dict[str, Any]:
     runtime = _OnlineRuntime(
         plan,
         lambda *_: BatchCost(100.0),
-        apply_measurement_start_residency=False,
     )
     result = runtime.run()
     states = runtime.states
@@ -278,7 +277,6 @@ def check_serving_paged_swap() -> dict[str, Any]:
     rollback_runtime = _OnlineRuntime(
         rollback_plan,
         lambda *_: BatchCost(0.0),
-        apply_measurement_start_residency=False,
     )
     rollback_request = rollback_runtime.states["rollback"]
     pool = rollback_runtime.ledger.paged_pool
@@ -318,7 +316,6 @@ def check_serving_paged_swap() -> dict[str, Any]:
     restore_runtime = _OnlineRuntime(
         restore_plan,
         lambda *_: BatchCost(1.0),
-        apply_measurement_start_residency=False,
     )
     victim = restore_runtime.states["restore-victim"]
     owner = restore_runtime.states["restore-owner"]
@@ -398,7 +395,6 @@ def check_prefetch_distance() -> dict[str, Any]:
         runtime = _OnlineRuntime(
             plan,
             lambda *_: BatchCost(1.0),
-            apply_measurement_start_residency=False,
         )
         return plan, runtime, runtime.run()
 
@@ -472,7 +468,6 @@ def check_hot_cold_session_scan() -> dict[str, Any]:
         plan = compile_serving_plan(scenario)
         runtime = _OnlineRuntime(
             plan, lambda *_: BatchCost(1.0),
-            apply_measurement_start_residency=False,
         )
         result = runtime.run()
         request_metrics = tuple(result.request_metrics.values())
@@ -552,7 +547,6 @@ def check_slo_semantics() -> dict[str, Any]:
         runtime = _OnlineRuntime(
             compile_serving_plan(scenario),
             lambda *_: BatchCost(100.0),
-            apply_measurement_start_residency=False,
         )
         return runtime.run()
 
@@ -672,27 +666,6 @@ def check_directional_bandwidth() -> dict[str, Any]:
     return {"read_gb_s": 488.0, "write_gb_s": [27.2, 13.6], "observations": observations}
 
 
-def check_legacy_configs() -> dict[str, Any]:
-    # Deliberate compatibility-test exception: this check exercises the old
-    # maker API itself. All study/simulation construction uses the catalog.
-    old = make_ssd_config(host_bandwidth_gb_s=112.0)
-    explicit = replace(old, host_read_bandwidth_gb_s=112.0, host_write_bandwidth_gb_s=112.0)
-    for operation in ("read", "write"):
-        require(equal(access(NandCore(old), operation).completion_ns,
-                      access(NandCore(explicit), operation).completion_ns),
-                "legacy shared-bandwidth SSD timing changed")
-    legacy_hbf = make_hbf_config(host_bandwidth_gb_s=80.0)
-    require(legacy_hbf.host_bandwidth_for("read") == legacy_hbf.host_bandwidth_for("write") == 80.0,
-            "explicit legacy HBF shared bandwidth must remain authoritative")
-    hbm = make_hbm_config()
-    require(hbm.kind is MemoryKind.HBM and access(DramCore(hbm), "read").completion_ns > 0,
-            "legacy HBM configuration is not executable")
-    require(NandConfig.from_mapping({"kind": "SSD"}).write_buffer_bytes == 0,
-            "old serialized NAND configs must retain write-through behavior")
-    return {"ssd_shared_bandwidth_gb_s": 112.0, "explicit_hbf_shared_bandwidth_gb_s": 80.0,
-            "hbm_kind": hbm.kind.value, "legacy_write_buffer_bytes": 0}
-
-
 def check_standard_kv_bytes() -> dict[str, Any]:
     """Validate the hand-computable BF16 GQA KV byte baseline."""
 
@@ -761,16 +734,15 @@ def check_write_buffer() -> dict[str, Any]:
     buffered_core = NandCore(
         hbf_config(
             write_buffer_bytes=2 * PAGE,
-            metadata={"buffered_write_mode": True},
         ),
     )
-    first = buffered_core.execute(
+    first = buffered_core.submit(
         AccessRequest("buffered-0", "write", 0, PAGE // 4, 0.0)
     )
-    second = buffered_core.execute(
+    second = buffered_core.submit(
         AccessRequest("buffered-1", "write", PAGE // 4, PAGE // 4, 0.0)
     )
-    staged_read = buffered_core.execute(
+    staged_read = buffered_core.submit(
         AccessRequest("buffered-read", "read", 0, PAGE // 4, 0.0)
     )
     drain = buffered_core.flush_write_buffer()
@@ -810,8 +782,8 @@ def check_capacity_only() -> dict[str, Any]:
              for _capacity in (8 * PAGE, 64 * PAGE)]
     require(equal(*ideal), "ideal fixed-workload bandwidth control changed")
     small = DynamicKVPool([KvPoolComponent("hbm", 2 * PAGE, kind="hbm")], page_bytes=PAGE)
-    require(small.resize("request", 2), "HBM capacity should fit two pages")
-    require(not small.resize("request", 3), "HBM capacity overflow must reject allocation")
+    require(small.resize_detailed("request", 2).success, "HBM capacity should fit two pages")
+    require(not small.resize_detailed("request", 3).success, "HBM capacity overflow must reject allocation")
     require(len(small.pages()) == 2 and small.used_bytes_by_component["hbm"] == 2 * PAGE,
             "failed capacity admission must not leak pages")
     extended = DynamicKVPool([
@@ -819,8 +791,8 @@ def check_capacity_only() -> dict[str, Any]:
         KvPoolComponent("hbf", 8 * PAGE, kind="hbf", active=True,
                         read_bandwidth_gbps=488 * 8, write_bandwidth_gbps=27.2 * 8),
     ], page_bytes=PAGE)
-    require(extended.resize("request", 10), "active-memory HBF must increase admissible resident pages")
-    require(not extended.resize("request", 11), "combined capacity overflow must reject allocation")
+    require(extended.resize_detailed("request", 10).success, "active-memory HBF must increase admissible resident pages")
+    require(not extended.resize_detailed("request", 11).success, "combined capacity overflow must reject allocation")
     extended.release("request")
     require(sum(extended.used_bytes_by_component.values()) == 0, "release must reclaim both tiers")
     return {"fixed_working_set_bytes": 8 * PAGE, "capacities_bytes": [8 * PAGE, 64 * PAGE],
@@ -906,7 +878,7 @@ def _migration_hardware(*, relay: bool, storage: bool = False) -> HardwareSpec:
 def _run_physical_migration(*, relay: bool, storage: bool = False) -> dict[str, Any]:
     hardware = _migration_hardware(relay=relay, storage=storage)
     executor = PhysicalKVTransferExecutor(
-        hardware,
+        hardware.components,
         runtime=PhysicalRuntimeContext(),
         topology=TopologyRouter(hardware),
         relay_components=("relay",) if relay else (),
@@ -923,7 +895,7 @@ def _run_physical_migration(*, relay: bool, storage: bool = False) -> dict[str, 
         page_bytes=PAGE,
     )
     pool.set_transfer_executor(executor)
-    require(pool.resize("migration", 1, compatible_components=("hbm",)),
+    require(pool.resize_detailed("migration", 1, compatible_components=("hbm",)).success,
             "physical migration source allocation failed")
     executor.sync_pages(pool.pages())
     page = pool.pages()[0]
@@ -1312,7 +1284,6 @@ def run_acceptance() -> dict[str, Any]:
     checks = []
     tasks: list[tuple[str, Callable[[], dict[str, Any]]]] = [
         ("directional_bandwidth", check_directional_bandwidth),
-        ("legacy_configs", check_legacy_configs),
         ("standard_kv_bytes", check_standard_kv_bytes),
         ("finite_write_buffer", check_write_buffer),
         ("capacity_only_and_lifecycle", check_capacity_only),
@@ -1409,8 +1380,8 @@ def run_acceptance() -> dict[str, Any]:
         {
             "stage": "1_parameters_and_timing",
             "status": "passed",
-            "scope": "directional bandwidth, legacy configuration compatibility and shared resource timing",
-            "evidence": ["directional_bandwidth", "legacy_configs", "shared_physical_contention"],
+            "scope": "directional bandwidth and shared resource timing",
+            "evidence": ["directional_bandwidth", "shared_physical_contention"],
         },
         {
             "stage": "2_simplified_hardware_execution",
@@ -1481,7 +1452,7 @@ def run_acceptance() -> dict[str, Any]:
             "limitations": ["Serving coverage uses a tiny synthetic scheduler workload; it does not claim calibrated LLM token throughput.",
                             "HBM memory accesses execute DramCore transactions; GPU compute and launch overhead retain the existing analytical operator/resource models, not cycle-accurate GPU execution.",
                             "Prefetch is modeled as fixed token lookahead rounded to pages in paged-pool serving; no predictive policy is included.",
-                            "Page-merge, host-ack and media-drain write-buffer semantics are enabled by the explicit buffered_write_mode metadata switch; legacy write-through remains the default.",
+                            "Positive write_buffer_bytes enables page merging, host acknowledgement and media drain; zero selects write-through.",
                             "The four-slot package sweep is a coupled hypothetical budget, not commercial packaging calibration.",
                             "No FTL/GC, wear, ECC or multi-GPU model."]}
 

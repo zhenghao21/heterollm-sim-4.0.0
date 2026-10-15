@@ -14,7 +14,7 @@ from .control_plane_planner import (
 )
 from .cost_models import CPUProfile, HostMemoryProfile, _dma_setup_service
 from .event_kernel import UnifiedEventKernel
-from .ir import normalize_component_kind
+from .ir import PlacementSpec, normalize_component_kind
 from .runtime import ControlPlaneRuntime, RuntimeRunResult
 from .runtime_ir import RuntimeAction
 from .runtime_state import RuntimeState
@@ -360,26 +360,21 @@ def _runtime_placement_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any
     return normalized
 
 
-def _runtime_placement_equal(left: object, right: object) -> bool:
+def _runtime_placement_equal(left: PlacementSpec, right: PlacementSpec) -> bool:
     """Compare placement state that can affect lowering or execution."""
 
     return bool(
         type(left) is type(right)
-        and getattr(left, "model_name", None) == getattr(right, "model_name", None)
-        and getattr(left, "hardware_name", None)
-        == getattr(right, "hardware_name", None)
-        and getattr(left, "op_to_component", None)
-        == getattr(right, "op_to_component", None)
-        and getattr(left, "tensor_to_component", None)
-        == getattr(right, "tensor_to_component", None)
-        and getattr(left, "tensor_bytes", None)
-        == getattr(right, "tensor_bytes", None)
-        and getattr(left, "parallel", None) == getattr(right, "parallel", None)
-        and getattr(left, "kv_policy", None) == getattr(right, "kv_policy", None)
-        and getattr(left, "schema_version", None)
-        == getattr(right, "schema_version", None)
-        and _runtime_placement_metadata(getattr(left, "metadata", {}))
-        == _runtime_placement_metadata(getattr(right, "metadata", {}))
+        and left.model_name == right.model_name
+        and left.hardware_name == right.hardware_name
+        and left.op_to_component == right.op_to_component
+        and left.tensor_to_component == right.tensor_to_component
+        and left.tensor_bytes == right.tensor_bytes
+        and left.parallel == right.parallel
+        and left.kv_policy == right.kv_policy
+        and left.schema_version == right.schema_version
+        and _runtime_placement_metadata(left.metadata)
+        == _runtime_placement_metadata(right.metadata)
     )
 
 
@@ -883,16 +878,11 @@ def _runtime_profile(
     return profile
 
 
-def _control_plane_evidence_equal(left: object, right: object) -> bool:
+def _control_plane_evidence_equal(left: PlacementSpec, right: PlacementSpec) -> bool:
     """Refresh only when the identity-bound evidence changed."""
 
-    def evidence(placement: object) -> object:
-        metadata = getattr(placement, "metadata", {})
-        control_plane = (
-            metadata.get("control_plane", {})
-            if isinstance(metadata, Mapping)
-            else {}
-        )
+    def evidence(placement: PlacementSpec) -> object:
+        control_plane = placement.metadata.get("control_plane", {})
         evidence = (
             control_plane.get("evidence", {})
             if isinstance(control_plane, Mapping)

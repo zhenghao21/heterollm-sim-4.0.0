@@ -172,12 +172,12 @@ class RuntimeDispatcher:
         if not isinstance(configured, Mapping):
             raise RuntimeDispatchError("profile.service_ns must be a mapping")
         raw = (
-            overrides.get(action.value, overrides.get(action))
+            overrides.get(action.value)
             if isinstance(overrides, Mapping)
             else None
         )
         if raw is None:
-            raw = configured.get(action.value, configured.get(action, 1.0))
+            raw = configured.get(action.value, 1.0)
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
             raise RuntimeDispatchError("service time must be numeric")
         value = float(raw)
@@ -197,12 +197,12 @@ class RuntimeDispatcher:
         if not isinstance(configured, Mapping):
             raise RuntimeDispatchError("profile.resources must be a mapping")
         raw = (
-            overrides.get(action.value, overrides.get(action))
+            overrides.get(action.value)
             if isinstance(overrides, Mapping)
             else None
         )
         if raw is None:
-            raw = configured.get(action.value, configured.get(action))
+            raw = configured.get(action.value)
         if raw is None:
             return _DEFAULT_RESOURCES[action]
         values = (raw,) if isinstance(raw, str) else tuple(raw)
@@ -228,12 +228,12 @@ class RuntimeDispatcher:
                 "transaction_count_by_action must be a mapping"
             )
         raw = (
-            overrides.get(action.value, overrides.get(action))
+            overrides.get(action.value)
             if isinstance(overrides, Mapping)
             else None
         )
         if raw is None:
-            raw = configured.get(action.value, configured.get(action))
+            raw = configured.get(action.value)
         if raw is None:
             raw = payload.get("transaction_count")
         return max(

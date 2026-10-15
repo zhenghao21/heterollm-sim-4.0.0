@@ -520,7 +520,7 @@ class ModelCatalog:
             "repository": _repository_provenance(info),
             "config": config,
         }
-        self._write_record(repo_id, record, resolved_sha=resolved_sha, revision=revision)
+        self._write_record(repo_id, record, resolved_sha=resolved_sha)
         self._reload()
         selected_id = alias_of or definition.preset_id
         detail = self.detail(selected_id)
@@ -535,27 +535,13 @@ class ModelCatalog:
         }
         return detail
 
-    def _record_path(
-        self,
-        repo_id: str,
-        *,
-        resolved_sha: Optional[str] = None,
-        revision: Optional[str] = None,
-    ) -> Path:
-        # A repository can legitimately be imported at multiple revisions.
-        # Prefer the immutable resolved commit; old callers without it retain
-        # the historical repo-only path for backward-compatible reads.
-        # Preserve exact canonical spelling for revision-qualified identities;
-        # legacy repo-only paths remain lower-cased for cache compatibility.
-        identity = repo_id if (resolved_sha or revision) else repo_id.lower()
-        if resolved_sha:
-            identity += "@" + resolved_sha.lower()
-        elif revision:
-            identity += "@" + revision
-        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
-        # Keep the legacy repo-only filename stable for callers that inspect
-        # an old cache directly; revision-qualified records use a longer key.
-        digest = digest[:24] if resolved_sha is None and revision is None else digest[:32]
+    def _record_path(self, repo_id: str, *, resolved_sha: str) -> Path:
+        # Cache identities include the resolved commit so repositories can
+        # retain multiple revisions without sharing a record.
+        if not isinstance(resolved_sha, str) or not _COMMIT.fullmatch(resolved_sha):
+            raise CatalogError("missing_resolved_sha", "a resolved repository commit is required")
+        identity = repo_id + "@" + resolved_sha
+        digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
         return self.cache_dir / "{}.json".format(digest)
 
     def _write_record(
@@ -563,8 +549,7 @@ class ModelCatalog:
         repo_id: str,
         record: Mapping[str, Any],
         *,
-        resolved_sha: Optional[str] = None,
-        revision: Optional[str] = None,
+        resolved_sha: str,
     ) -> None:
         encoded = (json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
         if len(encoded) > MAX_CACHE_RECORD_BYTES:
@@ -585,7 +570,7 @@ class ModelCatalog:
                 os.fsync(handle.fileno())
             os.replace(
                 temp_name,
-                str(self._record_path(repo_id, resolved_sha=resolved_sha, revision=revision)),
+                str(self._record_path(repo_id, resolved_sha=resolved_sha)),
             )
         finally:
             if temp_name and os.path.exists(temp_name):
@@ -605,11 +590,22 @@ class ModelCatalog:
                     if path.stat().st_size > MAX_CACHE_RECORD_BYTES:
                         continue
                     raw = json.loads(path.read_text(encoding="utf-8"))
+                    if not isinstance(raw, dict) or type(raw.get("cache_version")) is not int or raw["cache_version"] != 1:
+                        continue
+                    repo_id = validate_repo_id(raw["repo_id"])
+                    resolved_sha = raw["resolved_sha"]
+                    if path != self._record_path(repo_id, resolved_sha=resolved_sha):
+                        continue
                     definition = _definition_from_json(raw["definition"])
-                    alias_of = raw.get("alias_of")
+                    if (definition.preset_id != _import_preset_id(repo_id, resolved_sha=resolved_sha)
+                            or definition.source_repo != repo_id
+                            or definition.source_sha != resolved_sha
+                            or definition.source != "huggingface_import"):
+                        continue
+                    alias_of = raw["alias_of"]
                     if isinstance(alias_of, str):
-                        aliases.append((alias_of, str(raw.get("repo_id", definition.source_repo))))
-                    elif definition.preset_id not in definitions:
+                        aliases.append((alias_of, repo_id))
+                    elif alias_of is None and definition.preset_id not in definitions:
                         definitions[definition.preset_id] = definition
                 except (OSError, UnicodeError, ValueError, TypeError, KeyError, json.JSONDecodeError):
                     continue
@@ -753,7 +749,6 @@ def definition_from_huggingface(
     return PresetDefinition(
         preset_id=_import_preset_id(
             repo_id,
-            revision=revision,
             resolved_sha=resolved_sha,
         ),
         name=name,
@@ -1141,35 +1136,16 @@ def _import_quantization(
     return "w{}".format(bits), None
 
 
-def _import_preset_id(
-    repo_id: str,
-    revision: Optional[str] = None,
-    resolved_sha: Optional[str] = None,
-) -> str:
-    """Build a readable but collision-resistant imported preset identity.
+def _import_preset_id(repo_id: str, *, resolved_sha: str) -> str:
+    """Build an imported preset identity from its repository and commit."""
 
-    The slug remains useful in URLs, while the immutable commit (or requested
-    revision when no commit is available in a synthetic/imported fixture) is
-    part of the primary key.  This prevents ``model.a`` and ``model-a`` from
-    silently replacing one another and permits multiple revisions of one repo.
-    """
-
+    if not isinstance(resolved_sha, str) or not _COMMIT.fullmatch(resolved_sha):
+        raise CatalogError("missing_resolved_sha", "a resolved repository commit is required")
     value = re.sub(r"[^a-z0-9]+", "-", repo_id.lower()).strip("-")
-    # Always retain a compact digest of the canonical repository spelling so
-    # punctuation variants such as ``model.a`` and ``model-a`` cannot collide.
+    # Keep punctuation and canonical repository spelling in the identity.
     repo_digest = hashlib.sha256(repo_id.strip().encode("utf-8")).hexdigest()[:12]
-    identity = resolved_sha or revision
-    suffix = re.sub(r"[^a-z0-9]+", "-", str(identity).lower()).strip("-") if identity else ""
-    # Bound the human-readable portion, but keep both identity digests after
-    # the truncation so long legal repo IDs cannot erase the revision key.
     prefix = value[:120].rstrip("-")
-    identity_part = suffix[:40] if suffix else "legacy"
-    if revision is not None and resolved_sha is None:
-        # Git refs are case-sensitive; preserve that distinction in the
-        # identity digest even though the readable slug is lower-cased.
-        revision_digest = hashlib.sha256(str(revision).encode("utf-8")).hexdigest()[:12]
-        identity_part = "{}-{}".format(identity_part, revision_digest)
-    return "hf-{}-{}-{}".format(prefix, identity_part, repo_digest)
+    return "hf-{}-{}-{}".format(prefix, resolved_sha, repo_digest)
 
 
 def _family_from_name(name: str) -> str:

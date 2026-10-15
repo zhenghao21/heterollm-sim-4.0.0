@@ -63,7 +63,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -4581,8 +4580,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "effective_bandwidth_targets",
       "target_effective_gb_s": 400.0
@@ -4629,7 +4628,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -9147,8 +9145,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "effective_bandwidth_targets",
       "target_effective_gb_s": 1600.0
@@ -9195,7 +9193,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -13713,8 +13710,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "effective_bandwidth_targets",
       "target_effective_gb_s": 3000.0
@@ -13761,7 +13758,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -18279,8 +18275,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "link_bottleneck_negative_control",
       "target_effective_gb_s": 3000.0
@@ -18327,7 +18323,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -22845,8 +22840,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_page_fixed_payload"
     },
@@ -22892,7 +22887,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -27410,8 +27404,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_page_fixed_payload"
     },
@@ -27457,7 +27451,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -31975,8 +31968,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_page_fixed_payload"
     },
@@ -32022,7 +32015,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -36028,8 +36020,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_page_fixed_payload"
     },
@@ -36075,7 +36067,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -38705,8 +38696,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_page_fixed_payload"
     },
@@ -38752,7 +38743,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -43270,8 +43260,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_read_latency"
     },
@@ -43317,7 +43307,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -47835,8 +47824,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_read_latency"
     },
@@ -47882,7 +47871,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -52400,8 +52388,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_read_latency"
     },
@@ -52447,7 +52435,6 @@
           "block_erase_ns": 3000000.0,
           "front_ns": 0.0,
           "write_buffer_bytes": 0,
-          "dynamic_thermal": null,
           "wear_model": null,
           "detailed_observability": false,
           "partial_page_policy": "read_modify_write",
@@ -56965,8 +56952,8 @@
         }
       ],
       "measurement_scope": "primary rate is total completed logical read bytes divided by time from arrival zero to final actual link completion, including startup, media latency, finite buffer backpressure and link latency. Link-stream rate starts at first link transmission and is a separate denominator.",
-      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins, power or area.",
-      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth or energy is modeled.",
+      "hardware_scope": "Hypothetical 2048 physical array units and 2048 effective slots, explicit 12000 GB/s per internal channel, configured host port and separate transport link. This is sufficient-parallelism sensitivity, not a claim of realizable HBF geometry, pins or area.",
+      "buffer_scope": "Finite transport FIFO slots gate requests until link completion. The FIFO is capacity/backpressure state only; no additional DRAM read/write bandwidth is modeled.",
       "physical_page_scope": "page_bytes controls actual NAND mapping, full-page read latency and read bytes; chunk_bytes is independently the link transport unit. 1.5 MiB physical pages are an attachment-requested hypothetical sensitivity, not vendor NAND specifications.",
       "section": "physical_read_latency"
     }
@@ -57002,11 +56989,11 @@
   },
   "limitations": [
     "Targets use decimal GB/s: 400/1600/3000 GB/s = 0.4/1.6/3.0 TB/s. A configured port value alone is not observed throughput.",
-    "This generously parallel synthetic inventory is not a feasibility, cost, area, energy, packaging or real-silicon assertion.",
+    "This generously parallel synthetic inventory is not a feasibility, cost, area, packaging or real-silicon assertion.",
     "All points execute 384 MiB of sequential reads in 1.5 MiB transport chunks with at most 64 finite FIFO slots. There is no GPU/token serving denominator.",
     "Read-latency and physical-page scans retain the same authored geometry and port/link budget, so their actual parallelism bottlenecks remain visible.",
     "1.5 MiB physical pages are explicitly hypothetical; this variable is separate from the unchanged 1.5 MiB transport chunk.",
     "The link models serialized byte transfer and fixed propagation latency, without packet framing, retries, coherence or protocol calibration.",
-    "Finite FIFO backpressure is modeled; additional staging-memory service and energy are outside this transport benchmark."
+    "Finite FIFO backpressure is modeled; additional staging-memory service is outside this transport benchmark."
   ]
 }

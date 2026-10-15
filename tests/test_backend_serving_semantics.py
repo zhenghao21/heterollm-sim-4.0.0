@@ -33,7 +33,7 @@ def test_cache_flush_rollback_restores_dirty_lines_and_writeback_obligation(buff
 
 def test_released_prefix_allows_exclusive_handoff_only_after_last_prefix():
     pool = DynamicKVPool([KvPoolComponent("hbm", 4096)], page_bytes=1024)
-    assert pool.resize("first", 1)
+    assert pool.resize_detailed("first", 1).success
     page = pool.request_pages("first")[0]
     pool.register_prefix("prefix-a", (page,))
     pool.register_prefix("prefix-b", (page,))
@@ -52,7 +52,7 @@ def test_released_prefix_allows_exclusive_handoff_only_after_last_prefix():
 
 def test_duplicate_prefix_page_rejected_without_reference_or_capacity_change():
     pool = DynamicKVPool([KvPoolComponent("hbm", 4096)], page_bytes=1024)
-    assert pool.resize("request", 1)
+    assert pool.resize_detailed("request", 1).success
     page = pool.request_pages("request")[0]
     with pytest.raises(KvPoolError, match="same physical page"):
         pool.register_prefix("invalid", (page, page))
@@ -64,9 +64,9 @@ def test_duplicate_prefix_page_rejected_without_reference_or_capacity_change():
 
 def test_shared_prefix_cannot_silently_overwrite_another_request_kv():
     pool = DynamicKVPool([KvPoolComponent("hbm", 4096)], page_bytes=1024)
-    assert pool.resize("first", 1)
+    assert pool.resize_detailed("first", 1).success
     pool.register_prefix("prefix", pool.request_pages("first"))
-    assert pool.resize("second", 2, prefix_key="prefix")
+    assert pool.resize_detailed("second", 2, prefix_key="prefix").success
     first = pool.cache_accesses("first", first_token=0, token_count=16)
     second = pool.cache_accesses("second", first_token=0, token_count=16)
     assert first == second
@@ -147,8 +147,8 @@ def test_nand_workspace_bound_covers_real_page_aligned_simultaneous_allocations(
     config = make_hbf_config(capacity_bytes=65536, page_bytes=16384)
     tasks = tuple(TaskSpec(str(i), "request", "write", TaskCategory.COMPUTE,
         metadata={"physical_memory_config": to_primitive(config), "physical_owner": "hbf",
-                  "memory_access": {"buffer_id": str(i), "byte_count": 64,
-                                    "allocation_generation": 1}}) for i in range(2))
+                  "memory_accesses": ({"buffer_id": str(i), "byte_count": 64,
+                                    "allocation_generation": 1},)}) for i in range(2))
     bound = physical_workspace_bound(tasks)["bytes_by_owner"]["hbf"]
     assert bound == 2 * config.page_bytes
     runtime = PhysicalRuntimeContext()

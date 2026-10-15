@@ -8,6 +8,7 @@ remain live.  This is a conservative DAG bound, not a measured peak.
 from __future__ import annotations
 
 from collections import defaultdict, OrderedDict
+from collections.abc import Mapping
 from concurrent.futures import Future
 from copy import deepcopy
 from threading import RLock
@@ -17,9 +18,47 @@ _AUDIT_IN_FLIGHT = {}
 _AUDIT_LOCK = RLock()
 
 
+def _workspace_descriptor_rows(task):
+    """Project the three current descriptor contracts into one capacity view."""
+    from .cache_state import CacheAccess
+    from .data_motion import _memory_accesses, _physical_allocations
+
+    rows = []
+    for declaration in _physical_allocations(task.metadata):
+        rows.append({
+            "buffer_id": declaration["buffer_id"],
+            "allocation_generation": declaration.get("generation", 0),
+            "allocation_size_bytes": declaration["size_bytes"],
+            "byte_count": 0,
+            **{key: declaration[key] for key in (
+                "physical_owner", "allocation_arena", "alias_of", "alias_generation",
+            ) if key in declaration},
+        })
+    rows.extend(_memory_accesses(task.metadata) or ())
+    contract = task.metadata.get("stateful_l2")
+    if contract is not None:
+        raw = contract["accesses"]
+        if not isinstance(raw, (tuple, list)):
+            raise ValueError("stateful_l2 accesses must be a sequence")
+        for item in raw:
+            if not isinstance(item, Mapping):
+                raise ValueError("stateful_l2 accesses must contain CacheAccess mappings")
+            access = CacheAccess(**item)
+            rows.append({
+                "buffer_id": access.buffer_id,
+                "allocation_generation": access.allocation_generation,
+                "offset_bytes": access.offset_bytes,
+                "byte_count": access.size_bytes,
+                "allocation_size_bytes": access.buffer_size_bytes,
+            })
+    return tuple(rows)
+
+
 def physical_workspace_bound(tasks):
     """Return per-owner simultaneous transient bytes across serial DAG cuts."""
-    from .event_kernel import UnifiedEventKernel
+    from .data_motion import _descriptor_non_negative_int, _owner_physical_config
+    from .memory_types import DramConfig
+    from .physical_contract import parse_execution_physical_config
 
     positions = {task.task_id: index for index, task in enumerate(tasks)}
     children = [set() for _ in tasks]
@@ -56,11 +95,12 @@ def physical_workspace_bound(tasks):
     residents = {}
     aliases = {}
     arenas = {}
-    for task in tasks:
+    descriptor_rows = tuple(_workspace_descriptor_rows(task) for task in tasks)
+    for task, rows in zip(tasks, descriptor_rows):
         default_owner = (task.metadata.get("physical_owner")
                          or task.metadata.get("stateful_l2", {}).get("memory_resource"))
-        for row in UnifiedEventKernel._physical_descriptor_rows(task):
-            identity = row.get("buffer_id") or row.get("tensor_id")
+        for row in rows:
+            identity = row.get("buffer_id")
             arena = row.get("allocation_arena")
             if not identity or arena is None:
                 continue
@@ -69,7 +109,7 @@ def physical_workspace_bound(tasks):
             if str(identity).startswith("@tasklocal"):
                 identity = task.task_id + str(identity)[len("@tasklocal"):]
             key = (str(row.get("physical_owner") or default_owner), str(identity),
-                   int(row.get("allocation_generation", row.get("generation", 0))))
+                   _descriptor_non_negative_int(row.get("allocation_generation", 0), "allocation_generation"))
             if key in arenas and arenas[key] != arena:
                 raise ValueError("physical allocation has conflicting arenas")
             arenas[key] = arena
@@ -78,16 +118,17 @@ def physical_workspace_bound(tasks):
             continue
         default_owner = (task.metadata.get("physical_owner")
                          or task.metadata.get("stateful_l2", {}).get("memory_resource"))
-        configurations = task.metadata.get("physical_memory_configs", {})
+        primary_config = parse_execution_physical_config(task.metadata["physical_memory_config"])
+        owner_configs = {}
         external_keys = {tuple(key) for key in task.metadata.get("physical_external_allocations", ())}
-        for row in UnifiedEventKernel._physical_descriptor_rows(task):
-            identity = row.get("buffer_id") or row.get("tensor_id")
+        for row in descriptor_rows[index]:
+            identity = row.get("buffer_id")
             if not identity:
                 continue
             owner = row.get("physical_owner") or default_owner
             if str(identity).startswith("@tasklocal"):
                 identity = task.task_id + str(identity)[len("@tasklocal"):]
-            generation = int(row.get("allocation_generation", row.get("generation", 0)))
+            generation = _descriptor_non_negative_int(row.get("allocation_generation", 0), "allocation_generation")
             key = (str(owner), str(identity), generation)
             if key in external_keys:
                 # Pool-owned KV is already reserved by the serving ledger;
@@ -98,21 +139,24 @@ def physical_workspace_bound(tasks):
                 if target_id.startswith("@tasklocal"):
                     target_id = task.task_id + target_id[len("@tasklocal"):]
                 aliases[key] = (str(owner), target_id,
-                    int(row.get("alias_generation", generation)))
-            offset = int(row.get("offset_bytes", row.get("offset", 0)))
-            accessed_extent = offset + int(row.get("byte_count", row.get("size_bytes", 0)))
-            declared_extent = row.get("allocation_size_bytes", row.get("buffer_size_bytes"))
-            extent = accessed_extent if declared_extent is None else int(declared_extent)
+                    _descriptor_non_negative_int(row.get("alias_generation", generation), "alias_generation"))
+            offset = _descriptor_non_negative_int(row.get("offset_bytes", 0), "offset_bytes")
+            accessed_extent = offset + _descriptor_non_negative_int(row["byte_count"], "byte_count")
+            declared_extent = row.get("allocation_size_bytes")
+            extent = (accessed_extent if declared_extent is None else
+                      _descriptor_non_negative_int(declared_extent, "allocation_size_bytes"))
             if extent < accessed_extent:
                 raise ValueError("physical workspace access exceeds its declared allocation")
             contract = task.metadata.get("stateful_l2")
             if declared_extent is None and contract is not None:
                 line = int(contract["line_bytes"])
                 extent = ((extent + line - 1) // line) * line
-            config = configurations.get(owner, task.metadata["physical_memory_config"])
+            if owner not in owner_configs:
+                owner_configs[owner] = _owner_physical_config(task.metadata, owner, primary_config)
+            config = owner_configs[owner]
             # Match PhysicalRuntimeContext's allocator: DRAM uses bursts,
             # NAND uses full pages even for a subpage-sized declaration.
-            alignment = int(config.get("burst_bytes", config.get("page_bytes", 64)))
+            alignment = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
             extent = ((extent + alignment - 1) // alignment) * alignment
             arena = arenas.get(key, "resident" if generation == 0 else "workspace")
             registry = residents if arena == "resident" else buffers
@@ -222,12 +266,14 @@ def _device_workspace_reservation(scenario):
     examples = [BatchCohort("cohort-workspace-prefill", "prefill", 0.0, (
         BatchItem(largest_prompt.request_id, "prefill", rows, history,
             kv_append_tokens=rows, kv_materialized_tokens=rows, logit_tokens=1,
+            main_tokens=0, draft_tokens=0, verifier_tokens=rows, committed_tokens=0,
             completion_cursor=largest_prompt.prompt_tokens),))]
     if longest_context.output_tokens > 1:
         prior = longest_context.prompt_tokens + longest_context.output_tokens - 2
         examples.append(BatchCohort("cohort-workspace-decode", "decode", 0.0, (
             BatchItem(longest_context.request_id, "decode", 1, prior,
                 kv_append_tokens=1, kv_materialized_tokens=1, logit_tokens=1,
+                main_tokens=1, draft_tokens=0, verifier_tokens=1, committed_tokens=1,
                 completion_cursor=longest_context.output_tokens),)))
         if mtp is not None:
             width = min(1 + mtp.candidate_tokens, longest_context.output_tokens - 1, config.batch)
@@ -261,8 +307,7 @@ def _device_workspace_reservation(scenario):
     for component in scenario.hardware.components:
         memory = component.metadata.get("memory_service", {})
         from .ir import default_memory_resource_id
-        owner = (memory.get("physical_owner") or component.metadata.get("physical_owner")
-                 or default_memory_resource_id(component))
+        owner = memory.get("physical_owner") or default_memory_resource_id(component)
         owner_components[owner] = component.component_id
     unmapped = (set(peaks) | set(residents)) - set(owner_components)
     if unmapped:

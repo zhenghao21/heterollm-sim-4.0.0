@@ -10,6 +10,7 @@
 }(typeof globalThis !== "undefined" ? globalThis : this, function buildModelGraphCore() {
   const GRAPH_VERSION = 1;
   const TRANSFORM_KINDS = Object.freeze(["reshape", "transpose", "concat", "split", "cast", "broadcast"]);
+  const RETIRED_TRANSFORM_ATTRIBUTES = Object.freeze(["target_shape", "perm", "to_dtype", "split_sizes"]);
   const DTYPE_ALIASES = Object.freeze({
     float16: "fp16", half: "fp16", fp16: "fp16",
     bfloat16: "bf16", bf16: "bf16",
@@ -215,25 +216,80 @@
   }
 
   function rawTensorRefs(value) {
-    return array(value).map((item) => {
-      if (item && typeof item === "object") return String(item.tensor_id ?? item.id ?? "").trim();
-      return String(item ?? "").trim();
-    }).filter(Boolean);
+    return array(value).map((item) => item.trim());
+  }
+
+  function modelGraphFieldErrors(value) {
+    const errors = [];
+    const fields = {
+      graph: ["graph_id", "operators", "tensors", "source_operators", "sub_operators", "transforms", "executable", "attributes", "provenance"],
+      operator: ["operator_id", "op_kind", "sequence_index", "layer_id", "input_tensor_ids", "output_tensor_ids", "weight_tensor_ids", "ports", "parameters", "attributes", "provenance"],
+      tensor: ["tensor_id", "role", "logical_bytes", "producer_operator_id", "consumer_operator_ids", "dtype", "shape", "layout", "attributes", "provenance"],
+      port: ["port_id", "direction", "tensor_id", "dtype", "shape", "layout", "attributes"],
+      sub_operator: ["sub_operator_id", "parent_operator_id", "operator_class", "expanded_operator_id", "layer_id", "attributes", "provenance"],
+      transform: ["transform_id", "kind", "input_tensor_id", "output_tensor_id", "attributes"],
+    };
+    const record = (raw, kind, label, names = []) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        errors.push(`${label} 必须是对象。`);
+        return {};
+      }
+      Object.keys(raw).filter((key) => !fields[kind].includes(key)).forEach((key) => {
+        errors.push(`${label} 不支持字段 ${key}。`);
+      });
+      names.forEach((name) => {
+        if (typeof raw[name] !== "string" || !raw[name].trim()) errors.push(`${label} 缺少 ${name}。`);
+      });
+      return raw;
+    };
+    const records = (source, field, label, required = false) => {
+      if (!Object.hasOwn(source, field) && !required) return [];
+      if (!Array.isArray(source[field])) errors.push(`${label}.${field} 必须是数组。`);
+      return array(source[field]);
+    };
+    const refs = (source, field, label) => {
+      const values = records(source, field, label);
+      if (values.some((item) => typeof item !== "string" || !item.trim())) errors.push(`${label}.${field} 必须只包含非空字符串。`);
+    };
+    const graph = record(value, "graph", "model.graph", ["graph_id"]);
+    for (const field of ["operators", "source_operators"]) {
+      records(graph, field, "model.graph", field === "operators").forEach((raw, index) => {
+        const label = `model.graph.${field}[${index}]`;
+        const operator = record(raw, "operator", label, ["operator_id", "op_kind"]);
+        ["input_tensor_ids", "output_tensor_ids", "weight_tensor_ids"].forEach((name) => refs(operator, name, label));
+        records(operator, "ports", label).forEach((port, portIndex) => {
+          record(port, "port", `${label}.ports[${portIndex}]`, ["port_id", "direction", "tensor_id"]);
+        });
+      });
+    }
+    records(graph, "tensors", "model.graph", true).forEach((raw, index) => {
+      const label = `model.graph.tensors[${index}]`;
+      const tensor = record(raw, "tensor", label, ["tensor_id"]);
+      refs(tensor, "consumer_operator_ids", label);
+    });
+    records(graph, "sub_operators", "model.graph").forEach((raw, index) => record(raw, "sub_operator", `model.graph.sub_operators[${index}]`));
+    records(graph, "transforms", "model.graph").forEach((raw, index) => {
+      const label = `model.graph.transforms[${index}]`;
+      const transform = record(raw, "transform", label);
+      RETIRED_TRANSFORM_ATTRIBUTES.filter((key) => Object.hasOwn(object(transform.attributes), key)).forEach((key) => {
+        errors.push(`${label}.attributes 不支持字段 ${key}。`);
+      });
+    });
+    return errors;
   }
 
   function normalizeModelGraph(rawValue, modelValue = {}) {
-    const rootValue = object(rawValue);
+    const errors = modelGraphFieldErrors(rawValue);
+    if (errors.length) throw new Error(errors.join("\n"));
+    const source = rawValue;
     const model = object(modelValue);
-    const nested = object(object(rootValue.model).graph);
-    const source = Object.keys(nested).length ? nested
-      : (Object.keys(object(rootValue.graph)).length ? object(rootValue.graph) : rootValue);
-    const rawOperators = array(source.operators ?? source.nodes);
+    const rawOperators = source.operators;
     const usedOperators = new Set();
     const operatorIdMap = new Map();
     const operatorSeeds = rawOperators.map((raw, index) => {
       const item = object(raw);
-      const oldId = String(item.operator_id ?? item.node_id ?? item.id ?? "").trim();
-      const requested = oldId || stableNodeId(item.op_kind ?? item.kind ?? item.type ?? "operator", index);
+      const oldId = item.operator_id.trim();
+      const requested = oldId;
       const operatorId = uniqueId(requested, usedOperators);
       if (oldId && !operatorIdMap.has(oldId)) operatorIdMap.set(oldId, operatorId);
       return { item, operatorId, index };
@@ -245,7 +301,7 @@
     const tensorById = new Map();
     for (const [index, raw] of array(source.tensors).entries()) {
       const item = object(raw);
-      const oldId = String(item.tensor_id ?? item.id ?? "").trim();
+      const oldId = item.tensor_id.trim();
       const tensorId = uniqueId(oldId || `tensor-${index + 1}`, usedTensors);
       if (oldId && !tensorIdMap.has(oldId)) tensorIdMap.set(oldId, tensorId);
       const tensor = {
@@ -292,9 +348,9 @@
 
     const operators = operatorSeeds.map(({ item, operatorId, index }) => {
       const refs = {
-        input: rawTensorRefs(item.input_tensor_ids ?? item.inputs),
-        output: rawTensorRefs(item.output_tensor_ids ?? item.outputs),
-        weight: rawTensorRefs(item.weight_tensor_ids ?? item.weights),
+        input: rawTensorRefs(item.input_tensor_ids),
+        output: rawTensorRefs(item.output_tensor_ids),
+        weight: rawTensorRefs(item.weight_tensor_ids),
       };
       const usedPorts = new Set();
       let ports = array(item.ports).map((rawPort, portIndex) => {
@@ -302,7 +358,7 @@
         const direction = ["input", "output", "weight"].includes(String(port.direction)) ? String(port.direction) : "input";
         const directionIndex = array(item.ports).slice(0, portIndex).filter((entry) => String(object(entry).direction || "input") === direction).length;
         const fallbackRef = refs[direction][directionIndex];
-        const portId = uniqueId(port.port_id ?? port.id ?? stablePortId(direction, directionIndex), usedPorts);
+        const portId = uniqueId(port.port_id, usedPorts);
         const tensorId = resolvedTensorId(port.tensor_id ?? fallbackRef, stableTensorId(operatorId, portId));
         const tensor = ensureTensor(tensorId, direction, port);
         const explicit = normalizedContract(port, tensor);
@@ -329,7 +385,7 @@
       if (parent) attributes.parent_group_id = operatorIdMap.get(parent) || parent;
       return {
         ...clone(item), operator_id: operatorId,
-        op_kind: String(item.op_kind ?? item.kind ?? item.type ?? "operator"),
+        op_kind: item.op_kind,
         sequence_index: Number.isFinite(Number(item.sequence_index)) ? Number(item.sequence_index) : index,
         layer_id: item.layer_id == null ? null : String(item.layer_id),
         input_tensor_ids: byDirection("input"), output_tensor_ids: byDirection("output"), weight_tensor_ids: byDirection("weight"),
@@ -384,21 +440,35 @@
 
     const attributes = clone(object(source.attributes));
     attributes.ui = clone(object(attributes.ui));
-    const positions = object(attributes.ui.positions);
-    attributes.ui.positions = Object.fromEntries(Object.entries(positions).map(([id, point]) => [operatorIdMap.get(id) || id, {
+    const positions = (value) => Object.fromEntries(Object.entries(object(value)).map(([id, point]) => [operatorIdMap.get(id) || id, {
       x: finite(object(point).x), y: finite(object(point).y),
     }]));
-    if (attributes.ui.viewport) attributes.ui.viewport = {
-      x: finite(attributes.ui.viewport.x), y: finite(attributes.ui.viewport.y),
-      scale: Math.min(4, Math.max(0.25, finite(attributes.ui.viewport.scale, 1))),
-    };
-    attributes.ui.collapsed_groups = array(attributes.ui.collapsed_groups).map((id) => operatorIdMap.get(String(id)) || String(id));
+    for (const key of ["detail", "overview"]) {
+      const view = attributes.ui[key] = clone(object(attributes.ui[key]));
+      view.positions = positions(view.positions);
+      const viewport = object(view.viewport);
+      view.viewport = {
+        x: finite(viewport.x), y: finite(viewport.y),
+        scale: Math.min(2.5, Math.max(0.25, finite(viewport.scale, 1))),
+      };
+      if (view.collapsed_groups) view.collapsed_groups = array(view.collapsed_groups).map((id) => operatorIdMap.get(String(id)) || String(id));
+      if (view.inline_positions) view.inline_positions = Object.fromEntries(Object.entries(object(view.inline_positions))
+        .map(([scope, members]) => [operatorIdMap.get(scope) || scope, positions(members)]));
+      for (const field of ["focus_group_id", "focus_operator_id"]) {
+        if (view[field]) view[field] = operatorIdMap.get(String(view[field])) || String(view[field]);
+      }
+    }
+    delete attributes.ui.positions;
+    delete attributes.ui.viewport;
+    delete attributes.ui.collapsed_groups;
 
     operators.sort((a, b) => a.sequence_index - b.sequence_index || a.operator_id.localeCompare(b.operator_id));
     tensors.sort((a, b) => a.tensor_id.localeCompare(b.tensor_id));
     return {
       graph_id: String(source.graph_id || model.name || "model"),
       operators, tensors, transforms,
+      source_operators: clone(array(source.source_operators)),
+      sub_operators: clone(array(source.sub_operators)),
       executable: source.executable !== false && operators.length > 0,
       attributes, provenance: clone(array(source.provenance)),
     };
@@ -412,16 +482,14 @@
     const root = object(value);
     const preset = object(root.preset);
     const model = object(root.model);
-    const evidence = object(root.evidence);
-    const geometry = object(evidence.geometry);
-    const architecture = String(model.architecture || preset.architecture || geometry.architecture || "gguf").trim() || "gguf";
-    const name = String(preset.name || preset.id || root.name || "GGUF model").trim() || "GGUF model";
-    const layers = Math.max(0, Math.trunc(finite(model.n_layer ?? model.layer_count ?? geometry.n_layer)));
-    const hidden = Math.max(0, Math.trunc(finite(model.n_embd ?? model.hidden_size ?? geometry.n_embd)));
-    const heads = Math.max(0, Math.trunc(finite(model.n_head ?? model.attention_heads ?? geometry.n_head)));
-    const kvHeads = Math.max(0, Math.trunc(finite(model.n_head_kv ?? model.kv_heads ?? geometry.n_head_kv)));
-    const vocabulary = Math.max(0, Math.trunc(finite(model.vocab ?? model.vocabulary_size ?? geometry.vocab_size)));
-    const context = Math.max(0, Math.trunc(finite(model.context_length ?? model.max_sequence_length ?? geometry.context_length)));
+    const architecture = String(model.architecture || "gguf").trim() || "gguf";
+    const name = String(preset.name || preset.id || "GGUF model").trim() || "GGUF model";
+    const layers = Math.max(0, Math.trunc(finite(model.n_layer)));
+    const hidden = Math.max(0, Math.trunc(finite(model.n_embd)));
+    const heads = Math.max(0, Math.trunc(finite(model.n_head)));
+    const kvHeads = Math.max(0, Math.trunc(finite(model.n_head_kv)));
+    const vocabulary = Math.max(0, Math.trunc(finite(model.vocab_size)));
+    const context = Math.max(0, Math.trunc(finite(model.context_length)));
     const dtype = "unknown";
     const inputId = "input.hidden";
     const hiddenId = "backbone.output";
@@ -437,7 +505,7 @@
         symbols: { B: "batch", T: "sequence", H: hidden || "hidden", V: vocabulary },
         max_sequence_length: context,
         gguf_preset: clone(root),
-        ui: { collapsed_groups: ["gguf-backbone"], positions: {} },
+        ui: { detail: { positions: {} }, overview: { collapsed_groups: ["gguf-backbone"], positions: {} } },
       }, provenance: [{ source: "gguf", architecture, layer_count: layers, tensor_count: Number(object(root.weights).tensor_count) || 0 }],
     });
   }
@@ -547,11 +615,6 @@
       embedding_weight_bytes: embeddingWeightBytes,
       tie_word_embeddings: tieWordEmbeddings,
       output_weight_bytes: outputWeightBytes,
-      output_weight_storage_bytes: outputWeightStorageBytes,
-      output_weight_storage_id: outputStorageId,
-      output_weight_dtype: canonicalDtype(outputWeightTensor.dtype),
-      output_weight_shape: clone(outputWeightTensor.shape),
-      output_weight_layout: canonicalLayout(outputWeightTensor.layout),
       output_head_dtype: canonicalDtype(outputTensor.dtype),
       output_weight_storage: Object.freeze({
         tensor_id: outputWeightTensor.tensor_id,
@@ -650,8 +713,8 @@
         ports.push({ port_id: stablePortId("output", index), direction: "output", tensor_id: tensorId, dtype: tensor.dtype, shape: clone(tensor.shape), layout: tensor.layout, attributes: {} });
       });
       weights.forEach((entry, index) => {
-        const [tensorId, dtype, shape, logicalBytes = null] = entry;
-        const tensor = ensureTensor(tensorId, "weight", dtype, shape, { consumer: operatorId, logical_bytes: logicalBytes });
+        const [tensorId, dtype, shape, logicalBytes = null, layout = "logical"] = entry;
+        const tensor = ensureTensor(tensorId, "weight", dtype, shape, { consumer: operatorId, logical_bytes: logicalBytes, layout });
         ports.push({ port_id: stablePortId("weight", index), direction: "weight", tensor_id: tensorId, dtype: tensor.dtype, shape: clone(tensor.shape), layout: tensor.layout, attributes: {} });
       });
       operators.push({
@@ -672,17 +735,14 @@
     // real embedding/LM-head declaration.
     const embeddingWeightBytes = model.embedding_weight_bytes == null || Number(model.embedding_weight_bytes) === 0
       ? null : Math.max(0, Math.trunc(finite(model.embedding_weight_bytes)));
-    const outputWeightStorage = object(model.output_weight_storage || model.output_weight_contract);
-    const outputWeightStorageId = outputWeightStorage.storage_id ?? model.output_weight_storage_id ?? null;
-    const outputWeightStorageDtype = outputWeightStorage.dtype ?? model.output_weight_dtype ?? dtype;
-    const outputWeightStorageShape = outputWeightStorage.shape ?? model.output_weight_shape ?? [first.hidden_size, "V"];
+    const outputWeightStorage = object(model.output_weight_storage);
+    const outputWeightStorageId = outputWeightStorage.storage_id ?? null;
+    const outputWeightStorageDtype = outputWeightStorage.dtype ?? dtype;
+    const outputWeightStorageShape = outputWeightStorage.shape ?? [first.hidden_size, "V"];
     const outputWeightStorageBytes = outputWeightStorage.logical_bytes == null
-      ? (model.output_weight_storage_bytes == null || Number(model.output_weight_storage_bytes) < 0
-        ? null : Math.max(0, Math.trunc(finite(model.output_weight_storage_bytes))))
-      : Math.max(0, Math.trunc(finite(outputWeightStorage.logical_bytes)));
-    // output_weight_bytes is the new resident contribution (zero for a tied
-    // head), while output_weight_storage_bytes preserves the physical/logical
-    // tensor contract needed to rebuild a quantized or aliased weight.
+      ? null : Math.max(0, Math.trunc(finite(outputWeightStorage.logical_bytes)));
+    // Resident contribution is zero for a tied head; the storage contract
+    // keeps the tensor bytes, shape, dtype, and alias needed to rebuild it.
     const outputWeightBytes = model.output_weight_bytes == null || Number(model.output_weight_bytes) === 0
       ? null : Math.max(0, Math.trunc(finite(model.output_weight_bytes)));
     const outputWeightTensorBytes = outputWeightStorageBytes ?? outputWeightBytes;
@@ -706,7 +766,7 @@
       grouped.layers.forEach((layer, offset) => {
         overrides[layerIds[offset]] = {
           metadata: clone(object(layer.metadata)),
-          schema_version: String(layer.schema_version || model.schema_version || "1.0"),
+          schema_version: String(layer.schema_version || model.schema_version || "4.0.0"),
         };
       });
       addOperator(groupId, "layer_group", {
@@ -782,7 +842,7 @@
     addOperator("lm_head", "lm_head", {
       inputs: ["final_norm.output"], outputs: [["logits", outputDtype, ["B", "T", "V"]]],
       weights: [["lm_head_weights", canonicalDtype(outputWeightStorageDtype),
-        clone(outputWeightStorageShape), outputWeightTensorBytes]],
+        clone(outputWeightStorageShape), outputWeightTensorBytes, outputWeightStorage.layout]],
       parameters: { vocabulary_size: Math.max(0, Math.trunc(finite(model.vocabulary_size))) },
     });
     const outputWeights = tensors.get("lm_head_weights");
@@ -835,7 +895,7 @@
         max_sequence_length: Math.max(0, Math.trunc(finite(model.max_sequence_length))),
         tie_word_embeddings: tieWordEmbeddings,
         metadata: clone(object(model.metadata)),
-        ui: { collapsed_groups: operators.filter((item) => item.op_kind === "layer_group").map((item) => item.operator_id), positions: {} },
+        ui: { detail: { positions: {} }, overview: { collapsed_groups: operators.filter((item) => item.op_kind === "layer_group").map((item) => item.operator_id), positions: {} } },
       }, provenance: [],
     });
   }
@@ -849,30 +909,26 @@
     const result = [];
     for (const group of groups) {
       const params = object(group.parameters);
-      const previous = result.length;
-      let layerIds = array(params.layer_ids ?? group.attributes.layer_ids).map(String).filter(Boolean);
+      const layerIds = array(params.layer_ids).map(String).filter(Boolean);
       const requestedRepeat = Math.trunc(finite(params.repeat, layerIds.length));
       const repeat = Math.max(1, requestedRepeat);
-      if (!layerIds.length && object(params.layer_template).layer_id) {
-        layerIds = Array.from({ length: repeat }, (_, index) => `${safeId(params.layer_template.layer_id)}-${index + 1}`);
-      } else if (!layerIds.length && Object.keys(object(params.layer_template)).length) {
-        layerIds = Array.from({ length: repeat }, (_, index) => `layer-${String(previous + index).padStart(3, "0")}`);
-      }
       if (!layerIds.length) return { ok: false, code: "missing_layer_ids", reason: `组件组 ${group.operator_id} 缺少 layer_ids。`, layer_specs: [] };
       if (repeat !== layerIds.length) return { ok: false, code: "repeat_mismatch", reason: `组件组 ${group.operator_id} 的 repeat 与 layer_ids 数量不一致。`, layer_specs: [] };
       const children = graph.operators.filter((item) => String(item.attributes.parent_group_id || "") === group.operator_id);
-      const mixer = children.find((item) => ["attention", "self_attention", "linear_attention"].includes(item.op_kind));
-      const ff = children.find((item) => ["dense_mlp", "moe_router", "moe_experts", "experts"].includes(item.op_kind));
-      const layerTemplateValue = object(params.layer_template);
-      if ((!mixer || !ff) && !Object.keys(layerTemplateValue).length) {
+      const mixer = children.find((item) => ["attention", "linear_attention"].includes(item.op_kind));
+      const ff = children.find((item) => ["dense_mlp", "moe_router", "moe_experts"].includes(item.op_kind));
+      if (!mixer || !ff) {
         return { ok: false, code: "missing_components", reason: `组件组 ${group.operator_id} 缺少注意力或前馈组件，无法生成执行 layer specs。`, layer_specs: [] };
       }
       const mixerParams = object(mixer?.parameters);
       const ffParams = object(ff?.parameters);
       const overrides = object(params.overrides);
+      if (Object.keys(overrides).length !== layerIds.length || !layerIds.every((id) => Object.hasOwn(overrides, id))) {
+        return { ok: false, code: "invalid_overrides", reason: `组件组 ${group.operator_id} 的 overrides 必须与 layer_ids 一一对应。`, layer_specs: [] };
+      }
       layerIds.forEach((layerId, index) => {
-        const override = object(overrides[layerId] ?? overrides[String(index)]);
-        const base = Object.keys(layerTemplateValue).length ? clone(layerTemplateValue) : {
+        const override = object(overrides[layerId]);
+        const base = {
           kind: String(ffParams.kind || (ff?.op_kind === "dense_mlp" ? "dense" : "moe")),
           hidden_size: Math.trunc(finite(params.hidden_size)),
           intermediate_size: Math.trunc(finite(ffParams.intermediate_size)),
@@ -893,7 +949,7 @@
         result.push({
           ...base, ...clone(override), layer_id: layerId,
           metadata: clone(object(override.metadata ?? base.metadata)),
-          schema_version: String(override.schema_version || base.schema_version || options.schema_version || "1.0"),
+          schema_version: String(override.schema_version || options.schema_version || "4.0.0"),
         });
       });
     }
@@ -904,7 +960,7 @@
     const graph = normalizeModelGraph(graphValue);
     const group = graph.operators.find((item) => item.operator_id === groupId && item.op_kind === "layer_group");
     if (!group) throw new Error(`找不到重复层组件组：${groupId}`);
-    const layerIds = array(group.parameters.layer_ids ?? group.attributes.layer_ids).map(String);
+    const layerIds = array(group.parameters.layer_ids).map(String);
     const layerId = typeof layerRef === "number" ? layerIds[layerRef] : String(layerRef);
     if (!layerId || !layerIds.includes(layerId)) throw new Error(`组件组 ${groupId} 中找不到层实例：${layerRef}`);
     const next = clone(graph);
@@ -935,12 +991,14 @@
     const kind = String(kindValue || "").toLowerCase();
     const inputs = array(inputsValue).map((item) => normalizedContract(item));
     const attributes = object(attributesValue);
+    const retired = RETIRED_TRANSFORM_ATTRIBUTES.filter((key) => Object.hasOwn(attributes, key));
+    if (retired.length) return transformFailure("retired_transform_attributes", `变换参数不支持字段 ${retired.join("、")}。`, inputs);
     if (!TRANSFORM_KINDS.includes(kind)) return transformFailure("unknown_transform", `不支持的显式变换：${kindValue}`, inputs);
     if (!inputs.length) return transformFailure("missing_input", `${kind} 变换至少需要一个输入张量。`, inputs);
     const first = inputs[0];
     try {
       if (kind === "reshape") {
-        const target = normalizeShape(attributes.shape ?? attributes.target_shape);
+        const target = normalizeShape(attributes.shape);
         if (!target.length) return transformFailure("missing_target_shape", "reshape 必须声明目标 shape。", inputs);
         const inferIndexes = target.map((item, index) => item === -1 ? index : -1).filter((index) => index >= 0);
         if (inferIndexes.length > 1) return transformFailure("multiple_inferred_dimensions", "reshape 最多只能包含一个 -1 推导维度。", inputs);
@@ -959,7 +1017,7 @@
       }
       if (kind === "transpose") {
         const rank = first.shape.length;
-        const permutation = array(attributes.permutation ?? attributes.perm).map((item) => Math.trunc(finite(item)));
+        const permutation = array(attributes.permutation).map((item) => Math.trunc(finite(item)));
         const perm = permutation.length ? permutation : Array.from({ length: rank }, (_, index) => rank - index - 1);
         if (perm.length !== rank || new Set(perm).size !== rank || perm.some((item) => item < 0 || item >= rank)) {
           return transformFailure("invalid_permutation", `transpose 的 permutation 必须是 0..${Math.max(0, rank - 1)} 的完整排列。`, inputs);
@@ -992,7 +1050,7 @@
       if (kind === "split") {
         const rank = first.shape.length;
         const axis = normalizeAxis(attributes.axis, rank);
-        let sizes = array(attributes.sizes ?? attributes.split_sizes).map(normalizedDimension);
+        let sizes = array(attributes.sizes).map(normalizedDimension);
         const sections = Math.max(0, Math.trunc(finite(attributes.sections)));
         if (!sizes.length && sections > 0) {
           const dimension = first.shape[axis];
@@ -1007,11 +1065,11 @@
         return { ok: true, code: "", message: "split 维度规则有效。", inputs, outputs: sizes.map((size) => ({ ...first, shape: first.shape.map((item, index) => index === axis ? size : item) })) };
       }
       if (kind === "cast") {
-        const dtype = canonicalDtype(attributes.dtype ?? attributes.to_dtype);
+        const dtype = canonicalDtype(attributes.dtype);
         if (isWildcard(dtype)) return transformFailure("missing_dtype", "cast 必须声明目标 dtype。", inputs);
         return { ok: true, code: "", message: "cast 类型规则有效。", inputs, outputs: [{ ...first, dtype }] };
       }
-      const target = normalizeShape(attributes.shape ?? attributes.target_shape);
+      const target = normalizeShape(attributes.shape);
       if (!target.length || target.length < first.shape.length) return transformFailure("invalid_broadcast_shape", `broadcast 目标维度必须不少于输入：期望至少 ${first.shape.length} 维，实际 ${target.length} 维。`, inputs);
       const padded = Array(target.length - first.shape.length).fill(1).concat(first.shape);
       const bindings = {};
@@ -1525,44 +1583,19 @@
   }
 
   function modelGraphOccupiedSegments(value) {
-    const result = [];
-    const append = (startValue, endValue, metadataValue = {}) => {
-      const start = { x: svgCoordinate(object(startValue).x), y: svgCoordinate(object(startValue).y) };
-      const end = { x: svgCoordinate(object(endValue).x), y: svgCoordinate(object(endValue).y) };
-      if (start.x === end.x && start.y === end.y) return;
-      const metadata = object(metadataValue);
-      result.push({
+    return array(value).flatMap((rawValue) => {
+      const raw = object(rawValue);
+      if (![raw.x1, raw.y1, raw.x2, raw.y2].every((item) => item != null && item !== "" && Number.isFinite(Number(item)))) return [];
+      const start = { x: svgCoordinate(raw.x1), y: svgCoordinate(raw.y1) };
+      const end = { x: svgCoordinate(raw.x2), y: svgCoordinate(raw.y2) };
+      if (start.x === end.x && start.y === end.y) return [];
+      return [{
         start,
         end,
-        padding: Math.max(0, finite(metadata.padding ?? metadata.channel_padding)),
-        weight: Math.max(0, finite(metadata.weight, 1)),
-      });
-    };
-    const appendEntry = (rawValue) => {
-      if (Array.isArray(rawValue)) {
-        for (let index = 1; index < rawValue.length; index += 1) append(rawValue[index - 1], rawValue[index]);
-        return;
-      }
-      const raw = object(rawValue);
-      if (array(raw.points).length > 1) {
-        for (let index = 1; index < raw.points.length; index += 1) append(raw.points[index - 1], raw.points[index], raw);
-        return;
-      }
-      const start = raw.start ?? raw.from;
-      const end = raw.end ?? raw.to;
-      if (start && end) {
-        append(start, end, raw);
-        return;
-      }
-      if ([raw.x1, raw.y1, raw.x2, raw.y2].every((item) => item != null && item !== "" && Number.isFinite(Number(item)))) {
-        append({ x: raw.x1, y: raw.y1 }, { x: raw.x2, y: raw.y2 }, raw);
-      }
-    };
-    const values = array(value);
-    const isPoint = (item) => Number.isFinite(Number(object(item).x)) && Number.isFinite(Number(object(item).y));
-    if (values.length > 1 && values.every(isPoint)) appendEntry(values);
-    else values.forEach(appendEntry);
-    return result;
+        padding: Math.max(0, finite(raw.padding)),
+        weight: Math.max(0, finite(raw.weight, 1)),
+      }];
+    });
   }
 
   function modelGraphRoutingContext(optionsValue = {}) {
@@ -2589,8 +2622,8 @@
 
   function endpoint(graph, value) {
     const item = object(value);
-    const operatorId = String(item.operator_id ?? item.node_id ?? item.operatorId ?? "");
-    const portId = String(item.port_id ?? item.portId ?? "");
+    const operatorId = String(item.operator_id ?? "");
+    const portId = String(item.port_id ?? "");
     const operator = graph.operators.find((candidate) => candidate.operator_id === operatorId);
     const port = operator?.ports.find((candidate) => candidate.port_id === portId);
     return { operatorId, portId, operator, port };
@@ -2615,18 +2648,18 @@
     const graph = normalizeModelGraph(graphValue);
     const source = endpoint(graph, sourceValue);
     const target = endpoint(graph, targetValue);
-    if (!source.operator || !source.port) return { compatible: false, ok: false, code: "missing_source", message: `找不到源组件端口：${source.operatorId}.${source.portId}` };
-    if (!target.operator || !target.port) return { compatible: false, ok: false, code: "missing_target", message: `找不到目标组件端口：${target.operatorId}.${target.portId}` };
-    if (source.port.direction !== "output" || target.port.direction !== "input") return { compatible: false, ok: false, code: "direction_mismatch", message: `端口方向不匹配：期望 output → input，实际 ${source.port.direction} → ${target.port.direction}。` };
-    if (source.operatorId === target.operatorId || pathExists(graph, target.operatorId, source.operatorId)) return { compatible: false, ok: false, code: "cycle", message: `连接 ${source.operatorId} → ${target.operatorId} 会形成有向环，已拒绝。` };
+    if (!source.operator || !source.port) return { ok: false, code: "missing_source", message: `找不到源组件端口：${source.operatorId}.${source.portId}` };
+    if (!target.operator || !target.port) return { ok: false, code: "missing_target", message: `找不到目标组件端口：${target.operatorId}.${target.portId}` };
+    if (source.port.direction !== "output" || target.port.direction !== "input") return { ok: false, code: "direction_mismatch", message: `端口方向不匹配：期望 output → input，实际 ${source.port.direction} → ${target.port.direction}。` };
+    if (source.operatorId === target.operatorId || pathExists(graph, target.operatorId, source.operatorId)) return { ok: false, code: "cycle", message: `连接 ${source.operatorId} → ${target.operatorId} 会形成有向环，已拒绝。` };
     const unified = unifyTensorContracts(target.port, source.port);
-    return { ...unified, compatible: unified.ok, source: { operator_id: source.operatorId, port_id: source.portId }, target: { operator_id: target.operatorId, port_id: target.portId } };
+    return { ...unified, source: { operator_id: source.operatorId, port_id: source.portId }, target: { operator_id: target.operatorId, port_id: target.portId } };
   }
 
   function previewEndpoint(value) {
     const item = object(value);
-    const operatorId = String(item.operator_id ?? item.node_id ?? item.operatorId ?? "");
-    const portId = String(item.port_id ?? item.portId ?? "");
+    const operatorId = String(item.operator_id ?? "");
+    const portId = String(item.port_id ?? "");
     return operatorId && portId ? { operator_id: operatorId, port_id: portId } : null;
   }
 
@@ -2652,14 +2685,14 @@
     const source = endpoint(graph, requested || {});
     if (!source.operator || !source.port) {
       const diagnostic = {
-        compatible: false, ok: false, code: "missing_source",
+        ok: false, code: "missing_source",
         message: `找不到源组件端口：${source.operatorId}.${source.portId}`,
       };
       return inactiveConnectionPreview("invalid", diagnostic);
     }
     if (source.port.direction !== "output") {
       const diagnostic = {
-        compatible: false, ok: false, code: "direction_mismatch",
+        ok: false, code: "direction_mismatch",
         message: `端口方向不匹配：连接必须从 output 端口开始，实际为 ${source.port.direction}。`,
       };
       return inactiveConnectionPreview("invalid", diagnostic);
@@ -2676,9 +2709,9 @@
 
   function connectionPreviewCompatibility(graphValue, previewValue, targetValue) {
     const preview = object(previewValue);
-    const source = previewEndpoint(preview.source || previewValue);
+    const source = previewEndpoint(preview.source);
     if (preview.active === false || !source) return {
-      compatible: false, ok: false, code: "preview_inactive",
+      ok: false, code: "preview_inactive",
       message: "连接预览未激活；请先选择一个输出端口。",
     };
     return validateConnection(graphValue, source, targetValue);
@@ -2686,13 +2719,8 @@
 
   function updateConnectionPreview(graphValue, previewValue, pointerValue = null, targetValue = undefined) {
     const current = object(previewValue);
-    let pointer = pointerValue;
-    let target = targetValue;
-    if (targetValue === undefined && pointerValue && typeof pointerValue === "object"
-      && (Object.hasOwn(pointerValue, "pointer") || Object.hasOwn(pointerValue, "target"))) {
-      pointer = pointerValue.pointer;
-      target = pointerValue.target;
-    }
+    const pointer = pointerValue;
+    const target = targetValue;
     if (!current.active) return clone(current);
     const restarted = createConnectionPreview(graphValue, current.source, pointer ?? current.pointer);
     if (!restarted.active || target == null) return restarted;
@@ -2709,7 +2737,7 @@
     const reason = String(reasonValue || "cancelled");
     const label = reason === "escape" || reason === "esc" ? "已按 Esc 取消端口连接预览。" : "已取消端口连接预览。";
     return inactiveConnectionPreview("cancelled", {
-      compatible: false, ok: false, code: "cancelled", reason, message: label,
+      ok: false, code: "cancelled", reason, message: label,
     });
   }
 
@@ -2718,7 +2746,7 @@
     const target = targetValue === undefined ? preview.target : targetValue;
     if (!preview.active) {
       const diagnostic = {
-        compatible: false, ok: false, code: "preview_inactive",
+        ok: false, code: "preview_inactive",
         message: "连接预览未激活；graph 未改变。",
       };
       return { connected: false, graph: graphValue, preview: clone(previewValue), diagnostic };
@@ -2794,18 +2822,48 @@
     return pruneOrphanTensors(normalizeModelGraph(next));
   }
 
+  function overviewPositionState(graph) {
+    const view = graph.attributes.ui.overview;
+    if (!Object.keys(view.positions).length) return null;
+    return {
+      nodes: buildOverviewProjection(graph, { collapsed_groups: view.collapsed_groups }).nodes,
+      positions: clone(view.positions),
+    };
+  }
+
+  function reconcileOverviewPositions(graph, before, { renamed = new Map(), removed = new Set(), duplicates = new Map() } = {}) {
+    if (!before) return;
+    const members = (node) => array(node.group_ids).length ? node.group_ids : array(node.operator_ids);
+    const signature = (node, remap, deleted = new Set()) => {
+      const ids = [...new Set(members(node).filter((id) => !deleted.has(id)).map((id) => remap.get(id) || id))].sort();
+      return ids.length ? JSON.stringify([node.kind, array(node.group_ids).length ? "groups" : "operators", ids]) : null;
+    };
+    const previous = new Map();
+    before.nodes.forEach((node) => {
+      const key = signature(node, renamed, removed);
+      if (key) previous.set(key, previous.has(key) ? null : before.positions[node.display_id]);
+    });
+    const view = graph.attributes.ui.overview;
+    const nodes = buildOverviewProjection(graph, { collapsed_groups: view.collapsed_groups }).nodes;
+    view.positions = {};
+    nodes.forEach((node) => {
+      const position = previous.get(signature(node, duplicates));
+      if (!position) return;
+      const offset = members(node).some((id) => duplicates.has(id)) ? 48 : 0;
+      view.positions[node.display_id] = { x: position.x + offset, y: position.y + offset };
+    });
+  }
+
   function addNode(graphValue, nodeValue, options = {}) {
     const graph = normalizeModelGraph(graphValue);
     const used = new Set(graph.operators.map((item) => item.operator_id));
     const node = clone(object(nodeValue));
-    node.operator_id = uniqueId(node.operator_id || node.id || node.op_kind || "operator", used);
+    node.operator_id = uniqueId(node.operator_id || node.op_kind || "operator", used);
     node.sequence_index = Number.isFinite(Number(node.sequence_index)) ? Number(node.sequence_index) : graph.operators.reduce((maximum, item) => Math.max(maximum, item.sequence_index), -1) + 1;
     graph.operators.push(node);
     const next = normalizeModelGraph(graph);
     if (options.position) {
-      next.attributes.ui ??= {};
-      next.attributes.ui.positions ??= {};
-      next.attributes.ui.positions[node.operator_id] = { x: finite(options.position.x), y: finite(options.position.y) };
+      next.attributes.ui.detail.positions[node.operator_id] = { x: finite(options.position.x), y: finite(options.position.y) };
     }
     return next;
   }
@@ -2818,6 +2876,7 @@
     if (patch.operator_id && patch.operator_id !== operatorId && graph.operators.some((item) => item.operator_id === patch.operator_id)) throw new Error(`模型组件 ID 已存在：${patch.operator_id}`);
     const oldId = node.operator_id;
     const nextId = patch.operator_id ? safeId(patch.operator_id) : oldId;
+    const overviewBefore = nextId !== oldId ? overviewPositionState(graph) : null;
     Object.assign(node, patch);
     node.operator_id = nextId;
     if (patch.parameters) node.parameters = { ...object(node.parameters), ...object(patch.parameters) };
@@ -2828,8 +2887,28 @@
         tensor.consumer_operator_ids = tensor.consumer_operator_ids.map((id) => id === oldId ? nextId : id);
       });
       graph.operators.forEach((item) => { if (item.attributes.parent_group_id === oldId) item.attributes.parent_group_id = nextId; });
-      const positions = object(graph.attributes.ui?.positions);
-      if (Object.hasOwn(positions, oldId)) { positions[nextId] = positions[oldId]; delete positions[oldId]; }
+      for (const view of [graph.attributes.ui.detail, graph.attributes.ui.overview]) {
+        const renamePosition = (positions) => {
+          if (Object.hasOwn(positions, oldId)) { positions[nextId] = positions[oldId]; delete positions[oldId]; }
+        };
+        if (view === graph.attributes.ui.detail) renamePosition(view.positions);
+        if (view.collapsed_groups) view.collapsed_groups = array(view.collapsed_groups).map((id) => id === oldId ? nextId : id);
+        for (const field of ["focus_group_id", "focus_operator_id"]) {
+          if (view[field] === oldId) view[field] = nextId;
+        }
+        if (view.inline_positions) {
+          const scopes = Object.fromEntries(Object.entries(view.inline_positions).map(([scope, members]) => [
+            scope === oldId ? nextId : scope.startsWith(`${oldId}.`) ? nextId + scope.slice(oldId.length) : scope,
+            members,
+          ]));
+          Object.values(scopes).forEach(renamePosition);
+          view.inline_positions = scopes;
+        }
+        if (view.collapsed_compounds) view.collapsed_compounds = array(view.collapsed_compounds).map((id) => (
+          id === oldId ? nextId : id.startsWith(`${oldId}.`) ? nextId + id.slice(oldId.length) : id
+        ));
+      }
+      reconcileOverviewPositions(graph, overviewBefore, { renamed: new Map([[oldId, nextId]]) });
     }
     return normalizeModelGraph(graph);
   }
@@ -2838,6 +2917,7 @@
     const graph = normalizeModelGraph(graphValue);
     const existing = graph.operators.find((item) => item.operator_id === operatorId);
     if (!existing) return graph;
+    const overviewBefore = overviewPositionState(graph);
     const deleted = new Set([operatorId]);
     if (options.cascade !== false && existing.op_kind === "layer_group") graph.operators.forEach((item) => {
       if (item.attributes.parent_group_id === operatorId) deleted.add(item.operator_id);
@@ -2848,9 +2928,20 @@
       tensor.consumer_operator_ids = tensor.consumer_operator_ids.filter((id) => !deleted.has(id));
     });
     graph.transforms = graph.transforms.filter((item) => graph.tensors.some((tensor) => tensor.tensor_id === item.input_tensor_id) && graph.tensors.some((tensor) => tensor.tensor_id === item.output_tensor_id));
-    const positions = object(graph.attributes.ui?.positions);
-    deleted.forEach((id) => delete positions[id]);
-    graph.attributes.ui.collapsed_groups = array(graph.attributes.ui?.collapsed_groups).filter((id) => !deleted.has(id));
+    for (const view of [graph.attributes.ui.detail, graph.attributes.ui.overview]) {
+      if (view === graph.attributes.ui.detail) deleted.forEach((id) => delete view.positions[id]);
+      if (view.collapsed_groups) view.collapsed_groups = array(view.collapsed_groups).filter((id) => !deleted.has(id));
+      for (const field of ["focus_group_id", "focus_operator_id"]) {
+        if (deleted.has(view[field])) view[field] = "";
+      }
+      const includesDeleted = (key) => [...deleted].some((id) => key === id || key.startsWith(`${id}.`));
+      if (view.inline_positions) {
+        view.inline_positions = Object.fromEntries(Object.entries(view.inline_positions).filter(([scope]) => !includesDeleted(scope)));
+        Object.values(view.inline_positions).forEach((positions) => deleted.forEach((id) => delete positions[id]));
+      }
+      if (view.collapsed_compounds) view.collapsed_compounds = array(view.collapsed_compounds).filter((id) => !includesDeleted(id));
+    }
+    reconcileOverviewPositions(graph, overviewBefore, { removed: deleted });
     return pruneOrphanTensors(normalizeModelGraph(graph));
   }
 
@@ -2858,6 +2949,7 @@
     const graph = normalizeModelGraph(graphValue);
     const source = graph.operators.find((item) => item.operator_id === operatorId);
     if (!source) throw new Error(`找不到要复制的模型组件：${operatorId}`);
+    const overviewBefore = overviewPositionState(graph);
     const usedNodes = new Set(graph.operators.map((item) => item.operator_id));
     const duplicate = clone(source);
     duplicate.operator_id = options.operator_id ? uniqueId(options.operator_id, usedNodes) : uniqueId(operatorId, usedNodes, true);
@@ -2877,8 +2969,10 @@
     duplicate.output_tensor_ids = duplicate.ports.filter((item) => item.direction === "output").map((item) => item.tensor_id);
     duplicate.weight_tensor_ids = duplicate.ports.filter((item) => item.direction === "weight").map((item) => item.tensor_id);
     graph.operators.push(duplicate);
-    const position = object(graph.attributes.ui?.positions)[operatorId];
-    if (position) graph.attributes.ui.positions[duplicate.operator_id] = { x: finite(position.x) + 48, y: finite(position.y) + 48 };
+    const positions = graph.attributes.ui.detail.positions;
+    const position = positions[operatorId];
+    if (position) positions[duplicate.operator_id] = { x: finite(position.x) + 48, y: finite(position.y) + 48 };
+    reconcileOverviewPositions(graph, overviewBefore, { duplicates: new Map([[duplicate.operator_id, operatorId]]) });
     return normalizeModelGraph(graph);
   }
 
@@ -2988,18 +3082,17 @@
     // normalizer intentionally rebuilds port/index metadata from tensors, so
     // validating only its output would erase a dtype/shape/layout conflict
     // that the user needs to see.
-    const rawRoot = object(graphValue);
-    const rawNested = object(object(rawRoot.model).graph);
-    const rawSource = Object.keys(rawNested).length ? rawNested
-      : (Object.keys(object(rawRoot.graph)).length ? object(rawRoot.graph) : rawRoot);
-    const rawOperators = array(rawSource.operators ?? rawSource.nodes);
+    const fieldErrors = modelGraphFieldErrors(graphValue);
+    if (fieldErrors.length) return { valid: false, errors: fieldErrors };
+    const rawSource = graphValue;
+    const rawOperators = rawSource.operators;
     const rawTensorRecords = array(rawSource.tensors);
     const rawTensors = new Map();
     const preflightErrors = [];
     const rawOperatorIds = new Set();
     rawOperators.forEach((rawOperator, operatorIndex) => {
       const operator = object(rawOperator);
-      const operatorId = String(operator.operator_id ?? operator.node_id ?? operator.id ?? `operator-${operatorIndex + 1}`);
+      const operatorId = operator.operator_id;
       if (!operatorId.trim()) preflightErrors.push(`组件 ${operatorIndex + 1} 缺少 operator_id。`);
       else if (rawOperatorIds.has(operatorId)) preflightErrors.push(`组件 ID 重复：${operatorId}。`);
       rawOperatorIds.add(operatorId);
@@ -3007,7 +3100,7 @@
     const rawTensorIds = new Set();
     rawTensorRecords.forEach((rawTensor, tensorIndex) => {
       const tensor = object(rawTensor);
-      const tensorId = String(tensor.tensor_id ?? tensor.id ?? "").trim();
+      const tensorId = tensor.tensor_id.trim();
       if (!tensorId) preflightErrors.push(`张量 ${tensorIndex + 1} 缺少 tensor_id。`);
       else if (rawTensorIds.has(tensorId)) preflightErrors.push(`张量 ID 重复：${tensorId}。`);
       else rawTensors.set(tensorId, tensor);
@@ -3019,21 +3112,19 @@
     const adjacency = new Map([...rawOperatorIds].map((id) => [id, new Set()]));
     const rawRefs = (operator, direction) => {
       const fields = { input: "input_tensor_ids", output: "output_tensor_ids", weight: "weight_tensor_ids" };
-      const aliases = { input: "inputs", output: "outputs", weight: "weights" };
       const field = fields[direction];
       if (Object.hasOwn(operator, field)) return rawTensorRefs(operator[field]);
-      if (Object.hasOwn(operator, aliases[direction])) return rawTensorRefs(operator[aliases[direction]]);
       return null;
     };
     const portRefs = (operator, direction) => array(operator.ports).filter((rawPort) => String(object(rawPort).direction || "input") === direction)
-      .map((rawPort) => String(object(rawPort).tensor_id ?? object(rawPort).id ?? "").trim());
+      .map((rawPort) => object(rawPort).tensor_id.trim());
     // Collect ownership and dependencies in a separate pass.  A consumer may
     // appear before its producer in the serialized operator order; building
     // edges while scanning one operator at a time would then miss that edge
     // and could let a raw cycle pass preflight.
     rawOperators.forEach((rawOperator, operatorIndex) => {
       const operator = object(rawOperator);
-      const operatorId = String(operator.operator_id ?? operator.node_id ?? operator.id ?? `operator-${operatorIndex + 1}`).trim();
+      const operatorId = operator.operator_id.trim();
       const outputRefs = new Set([...(rawRefs(operator, "output") || []), ...portRefs(operator, "output")]);
       outputRefs.forEach((tensorId) => {
         if (!tensorId) return;
@@ -3055,18 +3146,18 @@
     });
     rawOperators.forEach((rawOperator, operatorIndex) => {
       const operator = object(rawOperator);
-      const operatorId = String(operator.operator_id ?? operator.node_id ?? operator.id ?? `operator-${operatorIndex + 1}`).trim();
+      const operatorId = operator.operator_id.trim();
       const usedPortIds = new Set();
       array(operator.ports).forEach((rawPort, portIndex) => {
         const port = object(rawPort);
-        const portId = String(port.port_id ?? port.id ?? `port-${portIndex + 1}`).trim();
+        const portId = port.port_id.trim();
         if (usedPortIds.has(portId)) preflightErrors.push(`组件 ${operatorId} 的端口 ID 重复：${portId}。`);
         usedPortIds.add(portId);
         const direction = String(port.direction || "input");
         if (!["input", "output", "weight"].includes(direction)) {
           preflightErrors.push(`组件 ${operatorId} 的端口 ${portId} 使用了不支持的方向 ${direction}。`);
         }
-        const tensorId = String(port.tensor_id ?? port.id ?? "");
+        const tensorId = port.tensor_id;
         if (!tensorId.trim()) preflightErrors.push(`组件 ${operatorId} 的端口 ${portId} 缺少 tensor_id。`);
         const tensor = rawTensors.get(tensorId);
         if (!tensor || !tensorId) {
@@ -3130,7 +3221,7 @@
     });
     rawTensorRecords.forEach((rawTensor, tensorIndex) => {
       const tensor = object(rawTensor);
-      const tensorId = String(tensor.tensor_id ?? tensor.id ?? "").trim();
+      const tensorId = tensor.tensor_id.trim();
       if (!tensorId || !rawTensorIds.has(tensorId)) return;
       const declaredProducer = tensor.producer_operator_id == null ? null : String(tensor.producer_operator_id).trim();
       if (declaredProducer && !rawOperatorIds.has(declaredProducer)) {
@@ -3188,19 +3279,6 @@
     return { valid: errors.length === 0, errors };
   }
 
-  function connectPorts(graph, sourceOperatorId, sourcePortId, targetOperatorId, targetPortId) {
-    return connect(graph, { operator_id: sourceOperatorId, port_id: sourcePortId }, { operator_id: targetOperatorId, port_id: targetPortId });
-  }
-
-  function disconnectPort(graph, targetOperatorId, targetPortId) {
-    return disconnect(graph, { operator_id: targetOperatorId, port_id: targetPortId });
-  }
-
-  function modelPortCompatibility(outputPort, inputPort) {
-    const result = unifyTensorContracts(inputPort, outputPort);
-    return { ...result, compatible: result.ok };
-  }
-
   function updatePortContract(graphValue, operatorIdValue, portIdValue, patchValue = {}) {
     const graph = normalizeModelGraph(graphValue);
     const operatorId = String(operatorIdValue || "");
@@ -3247,7 +3325,6 @@
     shapeText,
     contractText,
     unifyTensorContracts,
-    modelPortCompatibility,
     updatePortContract,
     normalizeModelGraph,
     buildGraphFromGGUFPreset,
@@ -3288,9 +3365,7 @@
     cancelConnectionPreview,
     commitConnectionPreview,
     connect,
-    connectPorts,
     disconnect,
-    disconnectPort,
     addNode,
     updateNode,
     deleteNode,

@@ -73,7 +73,7 @@
 <article id="g14" class="card">
 <div class="card-head"><label class="select-all"><input type="checkbox" data-group="14" value="14"> 选整组</label><span class="number">14</span><h3>磨损反馈与物理队列</h3></div>
 <div class="meta"><span>完整服务＋NAND轨迹</span><span>4 服务点＋2物理轨迹</span><span>硬件：N / research_hbf_wear_trace</span></div>
-<details ><summary>参数配置与输出</summary><ul><li>服务：A/B × 磨损关/开；128输入/8输出、2请求、间隔50 μs。开时初始P/E=3000，program最多2倍。</li><li>物理轨迹：关/开；32轮，每轮4擦除＋4编程＋32读，读偏斜29:1:1:1，轮间空闲32 ms。</li><li>4 KiB页、4物理plane/2有效槽，host/internal100 GB/s；读4 μs、program75 μs、erase3 ms；初始P/E2968→3000，rated3000、增长系数1、上限2倍。</li><li>没有热/功耗或完整FTL，不是器件寿命预测。</li></ul><p class="metrics"><b>输出：</b>TPS/TTFT反馈、擦写/P-E、队列深度与等待、plane失衡；物理轨迹无模型TPS</p><p class="source">入口：scripts/hbf_hbm_wear_study.py</p></details></article>
+<details ><summary>参数配置与输出</summary><ul><li>服务：A/B × 磨损关/开；128输入/8输出、2请求、间隔50 μs。开时初始P/E=3000，program最多2倍。</li><li>物理轨迹：关/开；32轮，每轮4擦除＋4编程＋32读，读偏斜29:1:1:1，轮间空闲32 ms。</li><li>4 KiB页、4物理plane/2有效槽，host/internal100 GB/s；读4 μs、program75 μs、erase3 ms；初始P/E2968→3000，rated3000、增长系数1、上限2倍。</li><li>没有完整FTL，不是器件寿命预测。</li></ul><p class="metrics"><b>输出：</b>TPS/TTFT反馈、擦写/P-E、队列深度与等待、plane失衡；物理轨迹无模型TPS</p><p class="source">入口：scripts/hbf_hbm_wear_study.py</p></details></article>
 <article id="g15" class="card">
 <div class="card-head"><label class="select-all"><input type="checkbox" data-group="15" value="15"> 选整组</label><span class="number">15</span><h3>多GPU与共享池</h3></div>
 <div class="meta"><span>完整服务</span><span>20 点</span><span>硬件：N的1/2/4 GPU扩展</span></div>

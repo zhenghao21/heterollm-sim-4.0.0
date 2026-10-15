@@ -31,7 +31,7 @@
   const CANONICAL_PARENTHETICALS = new Set([
     "BF16", "FP16", "FP8", "INT8", "GPU", "HBM", "GDDR", "HBF", "SSD", "CIM", "CXL", "PCIe", "UCIe",
     "KV", "MoE", "MTP", "TP", "PP", "EP", "GQA", "MQA", "RMS", "MLP", "Q/K/V", "I/O",
-    "dtype", "shape", "layout", "repeat", "layer_template", "overrides", "experts", "top-k", "auto",
+    "dtype", "shape", "layout", "repeat", "overrides", "experts", "top-k", "auto",
   ]);
 
   const DEFAULT_TEXT_PAIRS = Object.freeze({

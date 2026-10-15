@@ -149,24 +149,6 @@ def compact_execution_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any]
         # Stage refinement only checks presence; retaining the full
         # kernel model per task needlessly repeats a large mapping.
         record_metadata["cost_model"] = True
-    physical_execution = metadata.get("physical_execution")
-    if isinstance(physical_execution, Mapping):
-        # Preserve scalar traffic accounting for aggregate reports,
-        # while dropping the expanded interval/payload tuples that
-        # the details-disabled physical runtime never needs.
-        heavy_physical_keys = {
-            "resource_intervals",
-            "resource_interval_payloads",
-            "resource_last_intervals",
-            "physical_resource_intervals",
-            "physical_resource_last_intervals",
-            "physical_resource_lane_completions",
-        }
-        record_metadata["physical_execution"] = {
-            key: value
-            for key, value in physical_execution.items()
-            if key not in heavy_physical_keys
-        }
     by_owner = metadata.get("physical_execution_by_owner")
     if isinstance(by_owner, Mapping):
         excluded = {"resource_intervals", "resource_interval_payloads", "resource_last_intervals",
@@ -183,12 +165,12 @@ def _unresolved_physical_task(task: TaskSpec) -> TaskSpec:
     if task.metadata.get("physical_execution_role") != "construction_preview":
         return task
     owner_resource = task.metadata.get("physical_resource_id")
-    if (not owner_resource or task.metadata.get("memory_access") is None
+    if (not owner_resource or task.metadata.get("memory_accesses") is None
             or not any(d.resource_id == owner_resource for d in task.demands)
             or "physical_demands_resource_ids" in task.metadata):
         raise ValueError("endpoint construction preview lacks its original physical access contract")
     metadata = {key: value for key, value in task.metadata.items()
-                if key not in {"physical_execution", "physical_execution_role"}}
+                if key not in {"physical_execution_by_owner", "physical_execution_role"}}
     return replace(task, metadata=metadata, demands=tuple(
         replace(demand, service_ns=0.0, bytes_moved=0)
         if demand.resource_id == owner_resource else demand for demand in task.demands))
@@ -216,7 +198,7 @@ def execute_cost_schedule(
     # defeats aggregate retention.  Let the normal kernel consume those events
     # one at a time so completed physical payloads can be reclaimed promptly.
     has_physical_or_stateful = bool(
-        getattr(schedule, "resource_owners", {})
+        schedule.resource_owners
         or any(
             task.metadata.get("stateful_l2") is not None
             or task.metadata.get("physical_memory_config") is not None
@@ -228,8 +210,8 @@ def execute_cost_schedule(
             schedule.tasks
         )
         kernel = UnifiedEventKernel(
-            resource_capacities=getattr(schedule, "resource_capacities", {}),
-            resource_owners=getattr(schedule, "resource_owners", {}),
+            resource_capacities=schedule.resource_capacities,
+            resource_owners=schedule.resource_owners,
             capture_physical_details=retain_task_metadata,
         )
         bulk_events = kernel._drain_prevalidated_compiled(
@@ -240,8 +222,8 @@ def execute_cost_schedule(
     else:
         kernel = UnifiedEventKernel.from_closed_graph(
             schedule.tasks,
-            resource_capacities=getattr(schedule, "resource_capacities", {}),
-            resource_owners=getattr(schedule, "resource_owners", {}),
+            resource_capacities=schedule.resource_capacities,
+            resource_owners=schedule.resource_owners,
             capture_physical_details=retain_task_metadata,
         )
     original_physical_tasks = {task.task_id: _unresolved_physical_task(task) for task in schedule.tasks
@@ -293,13 +275,15 @@ def execute_cost_schedule(
 
         sorted_demands = event.demands
         for demand in sorted_demands:
-            info = event.resource_predecessors.get(demand.resource_id, {})
-            if info.get("end_ns", start_ns) > start_ns:
+            info = event.resource_predecessors.get(demand.resource_id)
+            if info is None:
+                continue
+            if info["end_ns"] > start_ns:
                 continue  # Internal Core wait is already in this task's span.
             lane = int(info.get("lane", event.resource_lanes.get(demand.resource_id, 0)))
-            predecessor_resource = str(info.get("resource_id", demand.resource_id))
+            predecessor_resource = str(info["resource_id"])
             predecessor = resource_last_path.get((predecessor_resource, lane))
-            if predecessor is not None and demand.resource_id in event.resource_predecessors:
+            if predecessor is not None:
                 start_path = _better_path(predecessor[1], start_path)
 
         raw_task_duration = max(

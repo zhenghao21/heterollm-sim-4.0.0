@@ -16,10 +16,9 @@
 | 08 权重轨迹 | A 的权重/KV 直接 DramCore；D 的权重 NandCore、KV DramCore。仅内存访问轨迹。 |
 | 09 完整服务研究 | 公共 HBM 仍聚合；B/D 的 HBF 直接 NandCore；C 的 HBF 迁移端及 F 的 SSD 迁移端走 NandCore，HBM 端仍聚合；E/G 的远端 KV 是主机 DDR DramCore。 |
 | 10 热度/读写比 | 7 个冷热/容量可运行点使用两种 Core；0% HBM 策略拒绝；4 个读写比点只使用 NandCore。 |
-| 11 预算配置 | 4 个完整服务点仍混合后端，5 个拒绝点没有服务时间线；成本、面积、功率、TCO 是条件公式。 |
+| 11 预算配置 | 4 个完整服务点仍混合后端，5 个拒绝点没有服务时间线；购置成本和面积是条件公式。 |
 | 12 服务消融/路径 | 专用理想 `hbm_kv` 确实用 DramCore，但公共 `hbm0` 仍聚合。HBF 用 NandCore；有迁移的 relay/dual 中继用 DramCore。FIFO 无迁移点不访问中继。 |
 | 13 Agent 生命周期 | 活跃 HBM 及 HBM 迁移端仍聚合；实际下沉/恢复/取消已提交的 HBF 阶段用 NandCore。写预算阻止下沉的点没有 HBF 访问。 |
-| 14 热/磨损 | 4 个受控长轨迹用 NandCore。B 服务点的 NAND 热/磨损状态真正改变后续延迟；共同 HBM 仍聚合。A 不访问 HBF，是阴性对照。 |
 | 15 多 GPU/共享池 | GPU rank 和通信真实调度；各 rank 的 HBM 复制了旧聚合标记。HBF 为 NandCore，CXL 远端介质为 DDR DramCore。 |
 | 16 持续 SLO | 77 个服务点仍是混合后端；观察窗口和边界分类是结果统计，不会改变 HBM 执行路径。 |
 | 17 扩展模型 | 12 个完整服务点继承旧 HBM 聚合。24 个结构探针则直接提交 HBM DramCore/HBF NandCore；计算时间用 FLOPs 公式，TPS 为 null。 |
@@ -27,7 +26,7 @@
 
 旧 18 组共有 **258 个完整服务结果行**。其算子 `dram_traffic` 中，只有组 12 的专用 `hbm_kv.memory` 一行出现 HBM Core owner；**没有一行出现公共 `hbm0` 的 DramCore owner**。多数记录出现的 `cpu0.memory` 属于主机 DDR。组 12 的迁移原始记录还明确保存了 `source_read: aggregate_service_v1`，因此不能仅凭 `PhysicalKVTransferExecutor` 的名字断定搬移两端都走 Core。
 
-另附的 `economics.json` 是条件成本、均匀磨损寿命和独立 RC 温度公式。即使输入来自已有服务流量，它本身也不提交 Core 请求；该 RC 后算与组 14 的在线反馈不同。
+另附的 `economics.json` 保留购置成本与均匀磨损寿命的条件公式。它使用历史服务流量，不提交 Core 请求，也不代表本轮重新执行了服务实验。
 
 **当前代码已作强制修正：HBM 聚合执行开关和运行时旁路已移除，新 HBM 仿真必须使用 DramCore。** `serving_row` 新增 `core_execution_audit`，按实际介质种类和 owner 记录持久在线服务中的 `submit/submit_many`；预览、孤立重放及服务前初始化不计入这份审计。旧检查点版本已更新，避免作为新物理结果复用。
 

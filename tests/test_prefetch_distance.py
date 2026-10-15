@@ -52,7 +52,7 @@ def _run(distance: int):
     scenario = _scenario(distance)
     plan = compile_serving_plan(scenario)
     runtime = _OnlineRuntime(
-        plan, lambda *_: BatchCost(1.0), apply_measurement_start_residency=False
+        plan, lambda *_: BatchCost(1.0)
     )
     return plan, runtime, runtime.run()
 
@@ -148,7 +148,7 @@ class PrefetchDistanceAcceptanceTests(unittest.TestCase):
         )
         plan = compile_serving_plan(scenario)
         runtime = _OnlineRuntime(
-            plan, lambda *_: BatchCost(1.0), apply_measurement_start_residency=False
+            plan, lambda *_: BatchCost(1.0)
         )
         victim = runtime.states["prefetch-victim"]
         owner = runtime.states["prefetch-owner"]

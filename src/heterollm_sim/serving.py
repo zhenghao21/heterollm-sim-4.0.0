@@ -15,7 +15,6 @@ from collections.abc import Mapping as _ABCMapping, Sequence as _ABCSequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 import heapq
-import inspect
 import math
 import copy
 from typing import (
@@ -95,6 +94,7 @@ from .physical_contract import require_physical_memory_config
 from .kv_pool import DynamicKVPool, KvPoolComponent
 from .residency import (
     AccessOperation,
+    AccessResult,
     AllocationLifecycle,
     AllocationResidencyManager,
     MemoryAccess,
@@ -187,9 +187,7 @@ class _PromptCachePolicy:
 class _ServingResourcePolicy:
     """Optional physical residency model for online serving.
 
-    Existing scenarios keep their historical numbers unless a workload opts
-    in through ``workload.metadata`` (or ``placement.metadata``) under the
-    ``serving_runtime`` key.  Once enabled, the runtime only uses declared
+    A workload opts in through ``workload.metadata.serving_runtime``.  Once enabled, the runtime only uses declared
     hardware rates, the unified resident working set, and explicit transfer
     controls.  There are deliberately no fitted concurrency multipliers.
     """
@@ -213,10 +211,10 @@ class _ServingResourcePolicy:
     # may override this value.
     residency_granule_bytes: Optional[int] = None
     # Consecutive make-resident requests in one cohort may be coalesced by the
-    # driver.  ``None`` preserves the legacy one-latency-per-granule behavior;
+    # driver.  ``None`` charges one latency per physical granule;
     # a positive value charges one latency for each batch of this many bytes.
     fault_batch_bytes: Optional[int] = None
-    # ``granule`` is the compatibility default.  ``make_resident_batch``
+    # ``granule`` charges per physical granule. ``make_resident_batch``
     # charges once for each coalesced direction/route group in a cohort.
     fault_latency_scope: str = "granule"
     timing_completeness: str = "complete"
@@ -244,7 +242,7 @@ class KVCachePolicy:
     offload_capacity_bytes: int
     component_bytes_per_page: Mapping[str, int] = field(default_factory=dict)
     # Read-only placement/capacity projection.  The aggregate fields above
-    # remain the compatibility path for legacy single-component scenarios.
+    # describe total capacity for the single-component residency model.
     layout_mode: str = "legacy_single"
     kv_unified: bool = True
     pool_components: Tuple[str, ...] = ()
@@ -416,19 +414,12 @@ class BatchItem:
     # verification materializes every proposal, while only the accepted prefix
     # in ``kv_append_tokens`` survives as persistent cache state.
     kv_materialized_tokens: Optional[int] = None
-    # Explicit MTP accounting.  These are optional for compatibility with
-    # third-party/custom BatchItem construction; runtime-created MTP items
-    # always populate all four values.
-    main_tokens: Optional[int] = None
-    draft_tokens: Optional[int] = None
-    verifier_tokens: Optional[int] = None
-    committed_tokens: Optional[int] = None
-    # Number of positions whose logits are requested from the output head.
-    # Runtime-created prompt chunks set this to zero except for the final
-    # prompt position. MTP verification requests logits for every verifier
-    # position. ``None`` retains the historical all-positions behavior for
-    # third-party/custom BatchItem construction.
-    logit_tokens: Optional[int] = None
+    # Every lowerer receives explicit MTP accounting and output-head work.
+    main_tokens: int = field(kw_only=True)
+    draft_tokens: int = field(kw_only=True)
+    verifier_tokens: int = field(kw_only=True)
+    committed_tokens: int = field(kw_only=True)
+    logit_tokens: int = field(kw_only=True)
     # Cursor visible when this item's terminal DAG task completes.  Planner
     # metadata uses it to distinguish multiple chunks/rounds of one phase.
     completion_cursor: Optional[int] = None
@@ -1485,12 +1476,6 @@ class _ExecutionStageMetadataCache:
         }
 
     @property
-    def final_layout_stats(self) -> Mapping[str, int]:
-        """Compatibility alias for callers that use the shorter name."""
-
-        return self.final_layout_cache_stats
-
-    @property
     def stats(self) -> Mapping[str, int]:
         """Expose the layout counters using the event-kernel cache idiom."""
 
@@ -1606,12 +1591,10 @@ class KVCacheMetrics:
     logical_prefill_read_bytes: int = 0
     logical_prefill_write_bytes: int = 0
     logical_decode_read_bytes: int = 0
-    logical_decode_write_bytes: int = 0
     logical_decode_append_bytes: int = 0
     physical_prefill_read_bytes: int = 0
     physical_prefill_write_bytes: int = 0
     physical_decode_read_bytes: int = 0
-    physical_decode_write_bytes: int = 0
     physical_decode_append_bytes: int = 0
     prefetch_events: int = 0
     prefetch_bytes: int = 0
@@ -1827,22 +1810,13 @@ class ServingResult:
     # logical-to-physical work selected at that boundary.
     schedule_trace: Tuple[Mapping[str, Any], ...] = ()
 
-    @property
-    def scheduler_trace(self) -> Tuple[Mapping[str, Any], ...]:
-        """Compatibility alias for callers that call the trace scheduler trace."""
-        return self.schedule_trace
     runtime_kernel_metrics: Mapping[str, object] = field(default_factory=dict)
     # Event timestamps remain on the shared absolute simulation clock, while
     # reports need the elapsed serving window after any control-plane prefix.
     # Keep the origin explicit so an online result cannot use an absolute end
-    # timestamp as a duration.  This field stays last to preserve legacy
-    # positional construction of ServingResult.
+    # timestamp as a duration.
     runtime_origin_ns: float = 0.0
     agent_lifecycle_metrics: Mapping[str, Any] = field(default_factory=dict)
-
-    @property
-    def trace(self) -> Tuple[ServingEvent, ...]:
-        return self.events
 
     @property
     def prompt_cache_save_timing(self) -> Mapping[str, object]:
@@ -1856,9 +1830,8 @@ class ServingResult:
             "known_service_ns": sum(float(event.details["service_ns"]) for event in saves),
             "total_service_ns": None,
             "unmodeled_timing_terms": tuple(sorted({
-                str(term) for event in saves for term in event.details.get(
-                    "unmodeled_timing_terms", ("legacy_prompt_save_proxy_incomplete",)
-                )
+                str(term) for event in saves
+                for term in event.details["unmodeled_timing_terms"]
             })),
             "request_latency_semantics": "modeled_components_only_not_complete_latency",
         }
@@ -1984,7 +1957,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     logical_bytes_per_token = _logical_kv_bytes_per_token(scenario, kv_dtype)
     bytes_per_page = physical_bytes_per_token * page_tokens
     # Resolve UI aliases and the native adapter's authoritative layer map.
-    # Old scenarios have neither and stay on the legacy single-component path.
+    # An unpartitioned layout uses the explicitly selected single component.
     native_layer_map = scenario.placement.metadata.get(
         "llama_cpp_kv_layer_components", {}
     )
@@ -1998,7 +1971,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     )
     if not isinstance(tier_layer_map, _ABCMapping):
         tier_layer_map = {}
-    requested_layout = str(getattr(kv_spec, "layout_mode", "legacy_single")).lower()
+    requested_layout = kv_spec.layout_mode.lower()
     if requested_layout == "auto":
         layout_mode = (
             "llama_static_layer"
@@ -2080,7 +2053,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
                     + shard_bytes * page_tokens
                 )
         layer_map = {str(key): str(value) for key, value in layer_map.items()}
-    kv_unified = bool(getattr(kv_spec, "kv_unified", True))
+    kv_unified = bool(kv_spec.kv_unified)
     logical_context_tokens = 0
     n_seq_max = max_num_seqs
     capacity_contract = scenario.workload.metadata.get(
@@ -2163,8 +2136,8 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     state_capacity = state_capacity_requests * linear_state_bytes
     capacity_bytes = _kv_capacity_bytes(scenario, cache_component)
     if layout_mode == "paged_pool":
-        pool_components = tuple(getattr(kv_spec, "pool_components", ()))
-        relay_components = tuple(getattr(kv_spec, "relay_components", ()))
+        pool_components = tuple(kv_spec.pool_components)
+        relay_components = tuple(kv_spec.relay_components)
         if not pool_components:
             raise ValueError("paged_pool requires pool_components")
         active_pool_component = False
@@ -2470,7 +2443,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
                     scenario, str(component), ("kv_cache",)
                 ),
             )
-            for component in getattr(kv_spec, "pool_components", ())
+            for component in kv_spec.pool_components
         }
     elif cache_component:
         component_capacity_bytes = {str(cache_component): max(0, int(capacity_bytes))}
@@ -2511,8 +2484,8 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         component_bytes_per_page=kv_component_bytes,
         layout_mode=layout_mode,
         kv_unified=kv_unified,
-        pool_components=tuple(getattr(kv_spec, "pool_components", ())),
-        relay_components=tuple(getattr(kv_spec, "relay_components", ())),
+        pool_components=tuple(kv_spec.pool_components),
+        relay_components=tuple(kv_spec.relay_components),
         logical_context_tokens=logical_context_tokens,
         n_seq_max=n_seq_max,
         kv_layer_components=layer_map,
@@ -2584,8 +2557,8 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         requests = []
         for request in materialize_requests(scenario):
             metadata = request.metadata if isinstance(request.metadata, _ABCMapping) else {}
-            priority = int(getattr(request, "priority", metadata.get("priority", 0)))
-            deadline = getattr(request, "deadline_ns", metadata.get("deadline_ns"))
+            priority = int(request.priority)
+            deadline = request.deadline_ns
             requests.append(
                 ServingRequest(
                     request_id=request.request_id,
@@ -2750,7 +2723,6 @@ def simulate_online(
     *,
     execution_control: Optional[ExecutionControl] = None,
     residency_manager: Optional[AllocationResidencyManager] = None,
-    apply_measurement_start_residency: bool = False,
     execution_kernel: Optional[UnifiedEventKernel] = None,
     runtime_origin_ns: float = 0.0,
 ) -> ServingResult:
@@ -2762,8 +2734,7 @@ def simulate_online(
     have already happened in the owning session.  A fresh manager is built
     only when the argument is omitted.
 
-    The legacy ``measurement_start_residency`` contract is opt-in here.  The
-    normal path begins at the constructor-clear endpoint so callers can run a
+    The runtime begins at the constructor-clear endpoint so callers can run a
     real untimed warmup and carry its physical resident/dirty/LRU state into
     measured replays.
     """
@@ -2784,7 +2755,6 @@ def simulate_online(
             lowerer,
             execution_control=execution_control,
             residency_manager=residency_manager,
-            apply_measurement_start_residency=apply_measurement_start_residency,
             execution_kernel=execution_kernel,
             runtime_origin_ns=runtime_origin_ns,
         )
@@ -3217,7 +3187,7 @@ class _KVLedger:
         if self.paged_pool is not None:
             snapshot = self._snapshot_paged_pool_state()
             try:
-                if not self.paged_pool.resize(request.spec.request_id, request.kv_pages):
+                if not self.paged_pool.resize_detailed(request.spec.request_id, request.kv_pages).success:
                     raise RuntimeError("failed to release temporary KV pages")
                 self._sync_paged_pool_physical_pages()
             except Exception:
@@ -3536,11 +3506,11 @@ class _KVLedger:
                             page.logical_page_id, target_component
                         ):
                             raise RuntimeError(self.paged_pool.last_error or "paged KV restore failed")
-                if extra_pages > 0 and not self.paged_pool.resize(
+                if extra_pages > 0 and not self.paged_pool.resize_detailed(
                     request.spec.request_id,
                     target,
                     compatible_components=(target_component,),
-                ):
+                ).success:
                     raise RuntimeError(self.paged_pool.last_error or "paged KV growth failed")
                 self._sync_paged_pool_physical_pages()
             except Exception:
@@ -4599,165 +4569,8 @@ def _make_resident_scope_physical_bytes(
     return max(0, end - start)
 
 
-def _settle_measurement_start_residency(
-    manager: AllocationResidencyManager,
-    runtime_contract: Mapping[object, object],
-) -> None:
-    """Apply an adapter-declared untimed warmup residency snapshot.
-
-    Backend-buffer construction and zero-fill happen before a server benchmark
-    warmup.  The constructor endpoint is therefore not necessarily the
-    residency state from which timed requests start.  This contract reshapes
-    only physical owner ranges; it does not change commitment or allocate a
-    second copy of any live pool.
-    """
-
-    raw_snapshot = runtime_contract.get("measurement_start_residency")
-    if raw_snapshot is None:
-        return
-    if not isinstance(raw_snapshot, _ABCMapping):
-        raise ValueError(
-            "measurement_start_residency must be a mapping"
-        )
-    enabled = raw_snapshot.get("enabled", False)
-    if enabled is False or enabled is None:
-        return
-    if enabled is not True:
-        raise ValueError(
-            "measurement_start_residency.enabled must be boolean"
-        )
-
-    raw_targets = raw_snapshot.get("owner_resident_bytes")
-    if not isinstance(raw_targets, _ABCMapping) or not raw_targets:
-        raise ValueError(
-            "measurement-start residency requires owner_resident_bytes"
-        )
-    targets: Dict[str, int] = {}
-    for raw_owner_id, raw_target in raw_targets.items():
-        owner_id = str(raw_owner_id).strip()
-        if not owner_id:
-            raise ValueError(
-                "measurement-start residency owner id must not be empty"
-            )
-        if owner_id in targets:
-            raise ValueError(
-                "duplicate measurement-start residency owner: {}".format(
-                    owner_id
-                )
-            )
-        if owner_id not in manager.allocations:
-            raise ValueError(
-                "measurement-start residency references unknown owner: {}"
-                .format(owner_id)
-            )
-        if isinstance(raw_target, bool) or not isinstance(raw_target, int):
-            raise ValueError(
-                "measurement-start resident bytes must be an integer"
-            )
-        target = raw_target
-        if target < 0:
-            raise ValueError(
-                "measurement-start resident bytes must be an integer >= 0"
-            )
-        committed = manager.allocations[owner_id].committed_bytes
-        if target > committed:
-            raise ValueError(
-                "measurement-start resident bytes exceed committed bytes for {}"
-                .format(owner_id)
-            )
-        granule = manager.allocations[owner_id].residency_granule_bytes
-        if target != committed and target % granule != 0:
-            raise ValueError(
-                "measurement-start resident bytes must end on a backing-granule "
-                "boundary for {} (granule {} bytes)".format(
-                    owner_id, granule
-                )
-            )
-        targets[owner_id] = target
-
-    raw_priority = raw_snapshot.get("resident_priority")
-    if (
-        isinstance(raw_priority, (str, bytes, _ABCMapping))
-        or not isinstance(raw_priority, _ABCSequence)
-    ):
-        raise ValueError(
-            "measurement-start resident_priority must be an ordered sequence"
-        )
-    priority: List[str] = []
-    for raw_owner_id in raw_priority:
-        owner_id = str(raw_owner_id).strip()
-        if owner_id not in targets:
-            raise ValueError(
-                "measurement-start resident_priority references an owner not "
-                "declared in owner_resident_bytes: {}".format(owner_id)
-            )
-        if owner_id in priority:
-            raise ValueError(
-                "measurement-start resident_priority contains duplicate owner: {}"
-                .format(owner_id)
-            )
-        priority.append(owner_id)
-    missing_priority = set(targets).difference(priority)
-    if missing_priority:
-        raise ValueError(
-            "measurement-start resident_priority omits declared owners: {}"
-            .format(", ".join(sorted(missing_priority)))
-        )
-
-    target_total = sum(targets.values())
-    if target_total > manager.pool.capacity_bytes:
-        raise ValueError(
-            "measurement-start residency targets exceed physical capacity"
-        )
-    non_target_resident = sum(
-        owner.resident_bytes
-        for owner_id, owner in manager.allocations.items()
-        if owner_id not in targets
-    )
-    if target_total + non_target_resident > manager.pool.capacity_bytes:
-        raise ValueError(
-            "measurement-start residency targets plus undeclared resident "
-            "owners exceed physical capacity"
-        )
-
-    # Full constructor clears leave runtime owners resident and can displace
-    # weights.  First trim every declared owner to its steady-state budget so
-    # later restores have enough capacity without relying on incidental LRU
-    # order.  Explicit eviction selects high addresses, preserving a target
-    # prefix for range-based request accesses.
-    for owner_id in reversed(priority):
-        owner = manager.allocations[owner_id]
-        excess = owner.resident_bytes - targets[owner_id]
-        if excess > 0:
-            manager.evict(owner_id, excess)
-
-    # Restore only owners that are actually short.  Snapshot targets were
-    # validated above as complete backing-unit prefixes (or full allocations),
-    # so this cannot manufacture a half-granule steady state.
-    for owner_id in priority:
-        target = targets[owner_id]
-        owner = manager.allocations[owner_id]
-        if owner.resident_bytes >= target:
-            continue
-        manager.read(owner_id, offset_bytes=0, size_bytes=target)
-        excess = owner.resident_bytes - target
-        if excess > 0:
-            manager.evict(owner_id, excess)
-
-    for owner_id, target in targets.items():
-        actual = manager.allocations[owner_id].resident_bytes
-        if actual != target:
-            raise ValueError(
-                "measurement-start residency did not converge for {}: "
-                "expected {}, got {}".format(owner_id, target, actual)
-            )
-    manager.assert_consistent()
-
-
 def _build_allocation_residency_manager(
     plan: ServingPlan,
-    *,
-    apply_measurement_start_residency: bool = True,
 ) -> Optional[AllocationResidencyManager]:
     """Materialize one authoritative owner-aware device residency pool.
 
@@ -5517,8 +5330,6 @@ def _build_allocation_residency_manager(
         # complete backend buffer resident, dirties it, and may evict older
         # clean weight granules.  These migrations predate request timing.
         manager.write(allocation_id)
-    if apply_measurement_start_residency and not initialization_rows:
-        _settle_measurement_start_residency(manager, runtime_contract)
     manager.assert_consistent()
     return manager
 
@@ -5531,8 +5342,7 @@ class _OnlineRuntime:
         *,
         execution_control: Optional[ExecutionControl] = None,
         residency_manager: Optional[AllocationResidencyManager] = None,
-        apply_measurement_start_residency: bool = True,
-        execution_kernel: Optional[UnifiedEventKernel] = None,
+            execution_kernel: Optional[UnifiedEventKernel] = None,
         runtime_origin_ns: float = 0.0,
     ) -> None:
         if not isinstance(runtime_origin_ns, (int, float)) or isinstance(
@@ -5708,14 +5518,11 @@ class _OnlineRuntime:
         if manager_created_here:
             self.residency_manager = _build_allocation_residency_manager(
                 plan,
-                apply_measurement_start_residency=(
-                    apply_measurement_start_residency
-                ),
             )
         else:
             # A shared session manager is deliberately treated as persistent
             # physical state.  Do not rebuild allocations, clear backend
-            # buffers, or apply the declarative measurement-start snapshot on
+            # buffers on
             # every fresh logical runtime.
             self.residency_manager = residency_manager
         if self.residency_manager is None:
@@ -5813,38 +5620,23 @@ class _OnlineRuntime:
         self._paged_pool_transfer_executor = None
         paged_pool = self.ledger.paged_pool
         if paged_pool is not None:
-            # Attach the real physical lowerer only when every pool component
-            # declares a physical memory contract.  Older analytical
-            # paged-pool scenarios remain usable and continue to fail closed
-            # on migration instead of silently inventing a transfer cost.
-            pool_components = tuple(
-                plan.scenario.hardware.get_component(component_id)
-                for component_id in paged_pool.components
+            from .communication import TopologyRouter
+            from .kv_transfer import PhysicalKVTransferExecutor
+            from .physical_contract import require_physical_memory_config
+
+            for component_id in (*paged_pool.components, *self.plan.kv_policy.relay_components):
+                require_physical_memory_config(plan.scenario.hardware.get_component(component_id))
+            self._paged_pool_transfer_executor = PhysicalKVTransferExecutor(
+                plan.scenario.hardware.components,
+                runtime=self._execution_resource_kernel.physical_runtime,
+                topology=TopologyRouter(plan.scenario.hardware),
+                relay_components=self.plan.kv_policy.relay_components,
+                arrival_ns=lambda _request: self.now,
+                namespace="serving:" + str(id(self)),
+                cache_states=self._execution_resource_kernel._l2_states,
+                cache_owners=self._execution_resource_kernel._physical_allocation_cache_owners,
             )
-            relay_components = tuple(
-                plan.scenario.hardware.get_component(component_id)
-                for component_id in self.plan.kv_policy.relay_components
-            )
-            if all(
-                isinstance(component.metadata, Mapping)
-                and component.metadata.get("physical_memory_config") is not None
-                for component in (*pool_components, *relay_components)
-            ):
-                from .communication import TopologyRouter
-                from .kv_transfer import PhysicalKVTransferExecutor
-                self._paged_pool_transfer_executor = PhysicalKVTransferExecutor(
-                    plan.scenario.hardware,
-                    runtime=self._execution_resource_kernel.physical_runtime,
-                    topology=TopologyRouter(plan.scenario.hardware),
-                    relay_components=self.plan.kv_policy.relay_components,
-                    arrival_ns=lambda _request: self.now,
-                    namespace="serving:" + str(id(self)),
-                    cache_states=self._execution_resource_kernel._l2_states,
-                    cache_owners=self._execution_resource_kernel._physical_allocation_cache_owners,
-                )
-                paged_pool.set_transfer_executor(
-                    self._paged_pool_transfer_executor
-                )
+            paged_pool.set_transfer_executor(self._paged_pool_transfer_executor)
         if self._agent_config and self._paged_pool_transfer_executor is None:
             raise ValueError("agent_lifecycle requires physical KV transfer profiles for every pool/relay component")
         self._execution_task_sequence = 0
@@ -5895,11 +5687,11 @@ class _OnlineRuntime:
         self.logical_prefill_read_bytes = 0
         self.logical_prefill_write_bytes = 0
         self.logical_decode_read_bytes = 0
-        self.logical_decode_write_bytes = 0
+        self.logical_decode_append_bytes = 0
         self.physical_prefill_read_bytes = 0
         self.physical_prefill_write_bytes = 0
         self.physical_decode_read_bytes = 0
-        self.physical_decode_write_bytes = 0
+        self.physical_decode_append_bytes = 0
         self.mtp_materialized_tokens = 0
         self.mtp_temporary_tokens = 0
         self.logical_mtp_materialized_write_bytes = 0
@@ -6024,8 +5816,8 @@ class _OnlineRuntime:
         transfers = pool.events
         pages_by_id = {page.logical_page_id: page for page in pool.pages()}
         for transfer in transfers[self._paged_pool_event_cursor:]:
-            declared_start = getattr(transfer, "start_ns", None)
-            declared_completion = getattr(transfer, "completion_ns", None)
+            declared_start = transfer.start_ns
+            declared_completion = transfer.completion_ns
             start = self.now if declared_start is None else float(declared_start)
             duration = max(0.0, float(transfer.duration_ns))
             # The physical executor has already scheduled shared resources.
@@ -6083,7 +5875,7 @@ class _OnlineRuntime:
 
     def _lease_residency_result(
         self,
-        result: object,
+        result: AccessResult,
         consumer_task_ids: Sequence[str],
     ) -> None:
         """Protect the accessed backing range until its DAG consumer anchor."""
@@ -6091,14 +5883,14 @@ class _OnlineRuntime:
         manager = self.residency_manager
         if manager is None:
             return
-        size_bytes = max(0, int(getattr(result, "size_bytes", 0)))
+        size_bytes = max(0, int(result.size_bytes))
         if size_bytes <= 0:
             return
-        owner_id = str(getattr(result, "owner_id"))
+        owner_id = str(result.owner_id)
         owner = manager.allocations.get(owner_id)
         if owner is not None and owner.lifecycle is AllocationLifecycle.TEMPORARY:
             return
-        offset_bytes = max(0, int(getattr(result, "offset_bytes", 0)))
+        offset_bytes = max(0, int(result.offset_bytes))
         for consumer_task_id in tuple(dict.fromkeys(consumer_task_ids)):
             if not consumer_task_id:
                 continue
@@ -7517,6 +7309,11 @@ class _OnlineRuntime:
                 raise ValueError(
                     "residency_accesses[{}] must be a mapping".format(index)
                 )
+            obsolete = {"tensor_id", "requested_tensor", "requested_view", "canonical_owner",
+                        "owner_id", "target_id", "invocation_id", "weight_target_component",
+                        "component_id"}.intersection(raw_access)
+            if obsolete:
+                raise ValueError("unsupported residency access fields: " + ", ".join(sorted(obsolete)))
             trace.append(raw_access)
         return tuple(trace)
 
@@ -7527,14 +7324,8 @@ class _OnlineRuntime:
         manager = self.residency_manager
         if manager is None:
             return None
-        requested = access.get(
-            "requested_tensor_id",
-            access.get("tensor_id", access.get("requested_tensor")),
-        )
-        canonical = access.get(
-            "canonical_owner_id",
-            access.get("canonical_owner", access.get("owner_id")),
-        )
+        requested = access.get("requested_tensor_id")
+        canonical = access.get("canonical_owner_id")
         explicit_target = access.get("allocation_id")
         candidates = tuple(
             str(value)
@@ -7545,13 +7336,7 @@ class _OnlineRuntime:
             if target_id in manager.allocations or target_id in manager.views:
                 return target_id
 
-        raw_component = access.get(
-            "weight_target_component",
-            access.get(
-                "target_component_id",
-                access.get("component_id"),
-            ),
-        )
+        raw_component = access.get("target_component_id")
         target_component = str(raw_component) if raw_component else None
         if target_component and target_component != manager.pool.component_id:
             return None
@@ -7573,29 +7358,26 @@ class _OnlineRuntime:
                     candidates[0] if candidates else "<missing id>"
                 )
             )
-        # A weight owned by host/CIM may have no component annotation in an
-        # older trace.  Skipping it is backward compatible and does not invent
-        # device residency.
-        return None
+        raise ValueError("residency trace requires an explicit component owner")
 
     @staticmethod
     def _owner_residency_access_size(
         access: Mapping[str, Any],
     ) -> Optional[int]:
-        raw_size = access.get("size_bytes", access.get("byte_count"))
+        raw_size = access.get("size_bytes")
         if raw_size is None:
             return None
         if isinstance(raw_size, bool):
-            raise ValueError("residency access byte_count must be an integer")
+            raise ValueError("residency access size_bytes must be an integer")
         try:
             size = int(raw_size)
         except (TypeError, ValueError, OverflowError) as exc:
             raise ValueError(
-                "residency access byte_count must be an integer"
+                "residency access size_bytes must be an integer"
             ) from exc
         if size < 0 or size != raw_size:
             raise ValueError(
-                "residency access byte_count must be a non-negative integer"
+                "residency access size_bytes must be a non-negative integer"
             )
         return size
 
@@ -7637,10 +7419,7 @@ class _OnlineRuntime:
                     "workspace",
                 }
                 if is_staged_weight:
-                    raw_id = access.get(
-                        "allocation_id",
-                        access.get("requested_tensor_id"),
-                    )
+                    raw_id = access.get("allocation_id")
                     target_id = str(raw_id or "").strip()
                     if not target_id:
                         raise ValueError(
@@ -7668,10 +7447,7 @@ class _OnlineRuntime:
                                 "staged weight allocation already registered: "
                                 "{}".format(target_id)
                             )
-                        raw_backing = access.get(
-                            "backing_component_id",
-                            access.get("weight_owner_component_id"),
-                        )
+                        raw_backing = access.get("backing_component_id")
                         backing = (
                             str(raw_backing).strip() if raw_backing else None
                         )
@@ -7715,10 +7491,7 @@ class _OnlineRuntime:
                                 "operator_invocation_group_id": access.get(
                                     "operator_invocation_group_id"
                                 ),
-                                "weight_read_invocation_id": access.get(
-                                    "weight_read_invocation_id",
-                                    access.get("invocation_id"),
-                                ),
+                                "weight_read_invocation_id": access.get("weight_read_invocation_id"),
                             }
                         )
                         continue
@@ -7753,10 +7526,7 @@ class _OnlineRuntime:
                                 "operator_invocation_group_id": access.get(
                                     "operator_invocation_group_id"
                                 ),
-                                "weight_read_invocation_id": access.get(
-                                    "weight_read_invocation_id",
-                                    access.get("invocation_id"),
-                                ),
+                                "weight_read_invocation_id": access.get("weight_read_invocation_id"),
                             }
                         )
                         continue
@@ -7772,16 +7542,10 @@ class _OnlineRuntime:
                         )
                     target = target_id
                 elif is_temporary:
-                    raw_id = access.get(
-                        "allocation_id",
-                        access.get(
-                            "requested_tensor_id",
-                            "runtime.temporary.{}.{:04d}".format(
-                                cohort_id, index
-                            ),
-                        ),
-                    )
-                    target_id = str(raw_id)
+                    raw_id = access.get("allocation_id")
+                    if not isinstance(raw_id, str) or not raw_id:
+                        raise ValueError("temporary residency access requires allocation_id")
+                    target_id = raw_id
                     size = self._owner_residency_access_size(access)
                     if size is None or size <= 0:
                         raise ValueError(
@@ -7897,10 +7661,7 @@ class _OnlineRuntime:
                         "operator_invocation_group_id": access.get(
                             "operator_invocation_group_id"
                         ),
-                        "weight_read_invocation_id": access.get(
-                            "weight_read_invocation_id",
-                            access.get("invocation_id"),
-                        ),
+                        "weight_read_invocation_id": access.get("weight_read_invocation_id"),
                     }
                 )
         except Exception:
@@ -9262,24 +9023,6 @@ class _OnlineRuntime:
             tuple(service_batches),
         )
 
-    def _owner_migration_cost(
-        self,
-        migrations: Sequence[Migration],
-    ) -> Tuple[
-        float,
-        float,
-        float,
-        Tuple[str, ...],
-        int,
-        int,
-    ]:
-        """Return the legacy conserved migration-cost aggregate."""
-
-        totals, _service_batches = self._owner_migration_cost_details(
-            migrations
-        )
-        return totals
-
     def _apply_owner_residency(
         self,
         cohort: BatchCohort,
@@ -9655,27 +9398,8 @@ class _OnlineRuntime:
                         )
                 apply_trace_chunk(pending_ungrouped)
             else:
-                # Backward-compatible minimum ordering for lowerers that do
-                # not yet expose backend invocation groups.
-                audit.extend(
-                    self._apply_slot_owner_accesses(
-                        cohort,
-                        include_kv=not explicit_kv,
-                        include_state=not explicit_state,
-                        access_phase="read",
-                    )
-                )
-                self._capture_residency_interval_peak()
-                apply_trace_chunk(trace)
-                audit.extend(
-                    self._apply_slot_owner_accesses(
-                        cohort,
-                        include_kv=not explicit_kv,
-                        include_state=not explicit_state,
-                        access_phase="write",
-                    )
-                )
-                self._capture_residency_interval_peak()
+                raise ValueError("owner residency requires explicit operator invocation groups")
+
         finally:
             try:
                 self._release_residency_group_leases()
@@ -11479,7 +11203,9 @@ class _OnlineRuntime:
             extra_ranges = max(0, range_count - 1)
             extra_tensor_gets = 2 * gpu_attention_layers * extra_ranges
             service_ns = extra_tensor_gets * submission_ns
-            refinement_details: Dict[str, object] = {}
+            refinement_details: Dict[str, object] = {
+                "unmodeled_timing_terms": ("prompt_save_proxy_incomplete",),
+            }
             no_gpu_reads = False
             if combined:
                 base_tensor_gets = 2 * gpu_attention_layers if range_count > 0 else 0
@@ -12136,10 +11862,10 @@ class _OnlineRuntime:
                 proposed = min(remaining, 1, budget)
                 accepted = proposed
                 expected = float(accepted)
-                main_tokens = None
-                draft_tokens = None
-                verifier_tokens = None
-                committed_tokens = None
+                main_tokens = proposed
+                draft_tokens = 0
+                verifier_tokens = proposed
+                committed_tokens = accepted
             if proposed <= 0:
                 continue
             target_live_tokens = _max_live_kv_tokens(
@@ -12296,6 +12022,7 @@ class _OnlineRuntime:
                     chunk,
                     current_cached,
                     kv_append_tokens=chunk,
+                    main_tokens=0, draft_tokens=0, verifier_tokens=chunk, committed_tokens=0,
                     logit_tokens=(
                         1
                         if current_cached + chunk
@@ -12674,6 +12401,7 @@ class _OnlineRuntime:
             phase=kind,
             token_count=0,
             context_tokens=state.cached_tokens,
+            main_tokens=0, draft_tokens=0, verifier_tokens=0, committed_tokens=0, logit_tokens=0,
         )
         return BatchCohort(
             cohort_id="cohort-{:06d}".format(len(self.batches)),
@@ -12826,9 +12554,9 @@ class _OnlineRuntime:
             self.physical_prefill_write_bytes += append_tokens * physical_per_token
         else:
             self.logical_decode_read_bytes += read_tokens * logical_per_token
-            self.logical_decode_write_bytes += append_tokens * logical_per_token
+            self.logical_decode_append_bytes += append_tokens * logical_per_token
             self.physical_decode_read_bytes += read_tokens * physical_per_token
-            self.physical_decode_write_bytes += append_tokens * physical_per_token
+            self.physical_decode_append_bytes += append_tokens * physical_per_token
             if item.phase == "mtp":
                 temporary_tokens = max(
                     0, materialized_tokens - append_tokens
@@ -12913,8 +12641,7 @@ class _OnlineRuntime:
         This is the causal placement policy selected for owner residency.  It
         changes only where already-accounted transfer service sits in the
         execution DAG; transfer bytes and service remain untouched.
-        A batch is left for the legacy cohort-tail extension unless every
-        covered invocation group has a concrete planner stage.
+        Every covered invocation group must have a concrete planner stage.
         """
 
         if (
@@ -12935,21 +12662,8 @@ class _OnlineRuntime:
         if not raw_batches:
             return tuple(stages), 0.0, 0
 
-        trusted_planner_stages = (
-            metadata.get("execution_stage_source")
-            == "executed_task_dag_kernel_timeline"
-            and _trusted_execution_stages(
-                metadata.get("execution_stages")
-            )
-            is not None
-        )
-
-        def fail_trusted_page_in_placement(reason: str) -> None:
-            if trusted_planner_stages:
-                raise ValueError(
-                    "trusted owner-residency PAGE_IN cannot be causally "
-                    "placed: {}".format(reason)
-                )
+        def fail_page_in_placement(reason: str) -> None:
+            raise ValueError("owner-residency transfer cannot be causally placed: {}".format(reason))
 
         if not stages:
             for raw_batch in raw_batches:
@@ -12958,11 +12672,9 @@ class _OnlineRuntime:
                         "owner residency transfer batch must be a mapping"
                     )
                 if (
-                    str(raw_batch.get("kind", ""))
-                    == MigrationKind.PAGE_IN.value
-                    and float(raw_batch.get("transfer_ns", 0.0)) > 0.0
+                    float(raw_batch.get("transfer_ns", 0.0)) > 0.0
                 ):
-                    fail_trusted_page_in_placement(
+                    fail_page_in_placement(
                         "execution stage graph is empty"
                     )
             return tuple(stages), 0.0, 0
@@ -12982,11 +12694,9 @@ class _OnlineRuntime:
                         "owner residency transfer batch must be a mapping"
                     )
                 if (
-                    str(raw_batch.get("kind", ""))
-                    == MigrationKind.PAGE_IN.value
-                    and float(raw_batch.get("transfer_ns", 0.0)) > 0.0
+                    float(raw_batch.get("transfer_ns", 0.0)) > 0.0
                 ):
-                    fail_trusted_page_in_placement(
+                    fail_page_in_placement(
                         "execution stage graph has no invocation groups"
                     )
             return tuple(stages), 0.0, 0
@@ -13045,7 +12755,7 @@ class _OnlineRuntime:
                 continue
             if placement_blocked:
                 if str(raw_batch.get("kind", "")) == MigrationKind.PAGE_IN.value:
-                    fail_trusted_page_in_placement(
+                    fail_page_in_placement(
                         "a preceding positive-service migration has no safe "
                         "DAG position"
                     )
@@ -13069,19 +12779,9 @@ class _OnlineRuntime:
                 for group_id in group_ids
                 if group_id not in first_position_by_group
             )
-            # Unknown/trace-only groups cannot be blocked exactly.  Custom
-            # lowerers retain the explicit degraded tail path.  A trusted V4
-            # PAGE_IN must fail closed because executing it after the
-            # consumer would violate residency causality.
             if not group_ids or missing_group_ids:
-                if str(raw_batch.get("kind", "")) == MigrationKind.PAGE_IN.value:
-                    fail_trusted_page_in_placement(
-                        "missing group ids {}".format(
-                            missing_group_ids or ("<unattributed>",)
-                        )
-                    )
-                placement_blocked = True
-                continue
+                raise ValueError("owner-residency transfer requires concrete invocation group ids: {}".format(
+                    missing_group_ids or ("<unattributed>",)))
 
             earliest_position = min(
                 first_position_by_group[group_id]
@@ -13102,7 +12802,7 @@ class _OnlineRuntime:
                 # are routinely interleaved by round, while residency events
                 # are emitted request-by-request.
                 if str(raw_batch.get("kind", "")) == MigrationKind.PAGE_IN.value:
-                    fail_trusted_page_in_placement(
+                    fail_page_in_placement(
                         "consumer order regresses behind an earlier migration "
                         "dependency"
                     )
@@ -13358,44 +13058,7 @@ class _OnlineRuntime:
                         "owner residency transfer phases do not conserve service"
                     )
             if not transfer_tasks:
-                transfer_tasks.append(
-                    _ExecutionTask(
-                        task_id=stage_id + ".task0000",
-                        dependencies=(),
-                        request_ids=request_ids,
-                        demands=(
-                            ResourceDemand(
-                                earliest_stage.component_id,
-                                service_ns,
-                            ),
-                        ),
-                        opaque_device_fence=True,
-                        category=TaskCategory.COMMUNICATION,
-                        metadata={
-                            "event_kind": "owner_residency_transfer_phase",
-                            "runtime_phase": "owner_residency_transfer",
-                            "movement_id": raw_batch.get(
-                                "movement_id",
-                                "owner-residency-migration-batch{:04d}".format(
-                                    row_position
-                                ),
-                            ),
-                            "migration_kind": raw_batch.get("kind"),
-                            "consumer_task_ids": consumer_task_ids,
-                            "current_consumer_task_ids": (
-                                current_consumer_task_ids
-                            ),
-                            "already_satisfied_consumer_task_ids": (
-                                missing_consumer_task_ids
-                            ),
-                            "same_stage_consumer_task_ids": (
-                                same_stage_consumer_task_ids
-                            ),
-                            "service_domains": (),
-                            "service_ownership": "legacy_unclassified",
-                        },
-                    )
-                )
+                raise ValueError("owner residency transfer requires explicit resource phases")
             transfer_stage = _ExecutionStage(
                 stage_id,
                 next_stage_index + placed_batch_count,
@@ -13529,7 +13192,7 @@ class _OnlineRuntime:
         )
         if isolated_shadow is not None:
             isolated_shadow.bind(specs)
-        kernel.add_tasks(specs)
+        kernel.submit(specs)
         if live_metrics is not None:
             kernel._index_physical_allocation_uses(specs)
         min_start_by_stage: Dict[str, float] = {}
@@ -13605,7 +13268,7 @@ class _OnlineRuntime:
         if (kernel.has_active_tasks or kernel.resource_owners
                 or any(
                     "stateful_l2" in task.metadata
-                    or "memory_access" in task.metadata
+                    or "memory_accesses" in task.metadata
                     or "physical_memory_config" in task.metadata
                     for stage in stages
                     for task in stage.execution_tasks
@@ -14304,10 +13967,8 @@ class _OnlineRuntime:
                         or task.metadata.get("stateful_l2") is not None)
 
             def physical_bytes(task):
-                rows = task.metadata.get("memory_accesses", task.metadata.get("memory_access", ()))
-                if isinstance(rows, Mapping):
-                    rows = (rows,)
-                return sum(int(row.get("byte_count", row.get("size_bytes", 0))) for row in rows)
+                rows = task.metadata.get("memory_accesses", ())
+                return sum(int(row["byte_count"]) for row in rows)
 
             def task_translation_bytes(task):
                 l2 = sum(d.bytes_moved for d in task.demands if d.resource_id == l2_resource_id)
@@ -14430,7 +14091,7 @@ class _OnlineRuntime:
             specs, _source_by_id = cls._stage_task_specs(
                 stages, ready_by_stage, namespace
             )
-            kernel.add_tasks(specs)
+            kernel.submit(specs)
         else:
             specs = replay_layout.instantiate(stages, ready_by_stage)
             kernel = UnifiedEventKernel._from_compiled_layout(
@@ -15166,28 +14827,28 @@ class _OnlineRuntime:
     ) -> Mapping[str, Any]:
         """Project the actual lowerer input into an auditable execution plan."""
         raw_groups = metadata.get("operator_invocation_groups", ())
-        groups = raw_groups if isinstance(raw_groups, _ABCSequence) and not isinstance(
+        if not isinstance(raw_groups, _ABCSequence) or isinstance(
             raw_groups, (str, bytes, _ABCMapping)
-        ) else ()
+        ):
+            raise ValueError("operator_invocation_groups must be an ordered sequence")
+        groups = raw_groups
         physical = []
         for index, raw in enumerate(groups):
             if not isinstance(raw, _ABCMapping):
-                continue
-            lanes = raw.get("lanes", ())
-            lanes = lanes if isinstance(lanes, _ABCSequence) and not isinstance(
+                raise ValueError("operator_invocation_groups entries must be mappings")
+            lanes = raw["lanes"]
+            if not isinstance(lanes, _ABCSequence) or isinstance(
                 lanes, (str, bytes, _ABCMapping)
-            ) else ()
+            ) or any(not isinstance(lane, _ABCMapping) for lane in lanes):
+                raise ValueError("operator invocation lanes must be an ordered sequence of mappings")
             physical.append({
-                "group_id": str(raw.get("group_id", "ubatch-{:04d}".format(index))),
+                "group_id": raw["group_id"],
                 "index": index,
-                "rows": int(raw.get("physical_ubatch_rows", raw.get("token_batch", len(lanes))) or 0),
-                "token_batch": int(raw.get("token_batch", len(lanes)) or 0),
-                "logit_rows": int(raw.get("logit_token_batch", sum(
-                    1 for lane in lanes
-                    if isinstance(lane, _ABCMapping) and lane.get("requires_logits") is True
-                )) or 0),
-                "batching_semantics": raw.get("batching_semantics"),
-                "lanes": tuple(dict(lane) for lane in lanes if isinstance(lane, _ABCMapping)),
+                "rows": raw["physical_ubatch_rows"],
+                "token_batch": raw["token_batch"],
+                "logit_rows": raw["logit_token_batch"],
+                "batching_semantics": raw["batching_semantics"],
+                "lanes": tuple(dict(lane) for lane in lanes),
             })
         raw_stages = metadata.get("execution_stages", ())
         stages = raw_stages if isinstance(raw_stages, _ABCSequence) and not isinstance(
@@ -15218,10 +14879,10 @@ class _OnlineRuntime:
             "operator_invocation_group_count": len(physical),
             "kv_ranges": tuple({
                 "group_id": group["group_id"],
-                "read_tokens": group.get("kv_read_tokens", 0),
-                "append_tokens": group.get("kv_append_tokens", 0),
-                "materialized_tokens": group.get("kv_materialized_tokens", 0),
-            } for group in groups if isinstance(group, _ABCMapping)),
+                "read_tokens": group["kv_read_tokens"],
+                "append_tokens": group["kv_append_tokens"],
+                "materialized_tokens": group["kv_materialized_tokens"],
+            } for group in groups),
             "operator_work": {
                 "physical_batch_rows": metadata.get("physical_batch_rows"),
                 "logit_rows": metadata.get("target_logit_rows"),
@@ -15293,11 +14954,11 @@ class _OnlineRuntime:
                 "logical_prefill_read_bytes",
                 "logical_prefill_write_bytes",
                 "logical_decode_read_bytes",
-                "logical_decode_write_bytes",
+                "logical_decode_append_bytes",
                 "physical_prefill_read_bytes",
                 "physical_prefill_write_bytes",
                 "physical_decode_read_bytes",
-                "physical_decode_write_bytes",
+                "physical_decode_append_bytes",
                 "mtp_materialized_tokens",
                 "mtp_temporary_tokens",
                 "logical_mtp_materialized_write_bytes",
@@ -16207,13 +15868,11 @@ class _OnlineRuntime:
             logical_prefill_read_bytes=self.logical_prefill_read_bytes,
             logical_prefill_write_bytes=self.logical_prefill_write_bytes,
             logical_decode_read_bytes=self.logical_decode_read_bytes,
-            logical_decode_write_bytes=self.logical_decode_write_bytes,
-            logical_decode_append_bytes=self.logical_decode_write_bytes,
+            logical_decode_append_bytes=self.logical_decode_append_bytes,
             physical_prefill_read_bytes=self.physical_prefill_read_bytes,
             physical_prefill_write_bytes=self.physical_prefill_write_bytes,
             physical_decode_read_bytes=self.physical_decode_read_bytes,
-            physical_decode_write_bytes=self.physical_decode_write_bytes,
-            physical_decode_append_bytes=self.physical_decode_write_bytes,
+            physical_decode_append_bytes=self.physical_decode_append_bytes,
             prefetch_events=self.prefetch_events,
             prefetch_bytes=self.prefetch_bytes,
             prefetch_transfer_time_ns=self.prefetch_transfer_time_ns,
@@ -16540,13 +16199,7 @@ def _lower_cost(lowerer: BatchLowerer, scenario: ScenarioConfig, cohort: BatchCo
     if callable(estimator):
         raw = estimator(scenario, cohort)
     elif callable(lowerer):
-        signature = inspect.signature(lowerer)
-        positional = [
-            parameter for parameter in signature.parameters.values()
-            if parameter.kind in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
-            and parameter.default is parameter.empty
-        ]
-        raw = lowerer(cohort) if len(positional) <= 1 else lowerer(scenario, cohort)
+        raw = lowerer(scenario, cohort)
     else:
         raise TypeError("batch_lowerer must be callable or define estimate(scenario, cohort)")
     if isinstance(raw, BatchCost):
@@ -16984,64 +16637,27 @@ def _metadata_byte_sequence(value: Any, key: str) -> Tuple[int, ...]:
 
 
 def _serving_resource_policy(scenario: ScenarioConfig) -> _ServingResourcePolicy:
-    """Read optional serving resource controls from scenario metadata.
+    """Read the workload's current serving-runtime configuration."""
 
-    ``workload.metadata.serving_runtime`` is the canonical per-workload
-    location.  ``placement.metadata.serving_runtime`` is accepted as a
-    scenario-wide fallback, which is useful when a mapper owns the runtime
-    contract.  Workload values override placement values.  A nested
-    ``resource_contention`` mapping is accepted for readability, while flat
-    keys remain the documented form.
-    """
-
-    values: Dict[str, Any] = {}
-    prompt_values: Dict[str, Any] = {}
-    placement_metadata = getattr(scenario.placement, "metadata", {})
-    workload_metadata = getattr(scenario.workload, "metadata", {})
-    for metadata in (placement_metadata, workload_metadata):
-        if not isinstance(metadata, _ABCMapping):
-            continue
-        section = metadata.get(_SERVING_RUNTIME_METADATA_KEY)
-        if not isinstance(section, _ABCMapping):
-            continue
-        values.update(
-            {
-                str(key): value
-                for key, value in section.items()
-                if key != "resource_contention"
-            }
-        )
-        nested = section.get("resource_contention")
-        if isinstance(nested, _ABCMapping):
-            values.update({str(key): value for key, value in nested.items()})
-        raw_prompt = section.get("prompt_cache")
-        if isinstance(raw_prompt, _ABCMapping):
-            prompt_values.update(
-                {str(key): value for key, value in raw_prompt.items()}
-            )
-        elif raw_prompt is not None:
-            prompt_values["enabled"] = raw_prompt
-        for key in (
-            "prompt_cache_enabled",
-            "prompt_cache_context_checkpoints",
-            "prompt_cache_component",
-            "prompt_cache_offload_component",
-            "prompt_cache_slot_allocation_bytes",
-            "prompt_cache_entry_bytes",
-            "prompt_cache_resident_entry_bytes",
-            "prompt_cache_graph_residency_mode",
-            "prompt_cache_retain_completed",
-            "prompt_cache_observed_entry_sizes_bytes",
-            "prompt_cache_observed_entry_sizes_mib",
-            "prompt_cache_save_implementation",
-            "prompt_cache_unified_kv",
-            "prompt_cache_apply_tensor_get_submission_service",
-            "prompt_cache_apply_tensor_get_controller_phases",
-        ):
-            if key in section:
-                prompt_values[key] = section[key]
-
-    enabled = values.get("contention_enabled", values.get("enabled", False))
+    if _SERVING_RUNTIME_METADATA_KEY in scenario.placement.metadata:
+        raise ValueError("serving_runtime must be declared in workload.metadata")
+    values = scenario.workload.metadata.get(_SERVING_RUNTIME_METADATA_KEY, {})
+    if not isinstance(values, _ABCMapping):
+        raise ValueError("workload.metadata.serving_runtime must be a mapping")
+    obsolete = {"enabled", "resource_contention"}.intersection(values)
+    obsolete.update(key for key in values if str(key).startswith("prompt_cache_"))
+    if obsolete:
+        raise ValueError("unsupported serving_runtime fields: " + ", ".join(sorted(obsolete)))
+    prompt_values = values.get("prompt_cache", {})
+    if not isinstance(prompt_values, _ABCMapping):
+        raise ValueError("serving_runtime.prompt_cache must be a mapping")
+    obsolete_prompt = {"full_slot_bytes", "logical_entry_bytes", "graph_resident_bytes",
+                       "residency_mode", "retain_completed_entries"}.intersection(prompt_values)
+    obsolete_prompt.update(key for key in prompt_values if str(key).startswith("prompt_cache_"))
+    if obsolete_prompt:
+        raise ValueError("unsupported serving_runtime.prompt_cache fields: "
+                         + ", ".join(sorted(obsolete_prompt)))
+    enabled = values.get("contention_enabled", False)
     raw_bandwidth = values.get("page_transfer_bandwidth_gb_s")
     raw_fault_latency = values.get("page_fault_latency_ns")
     fault_latency_known = _metadata_bool(
@@ -17072,47 +16688,18 @@ def _serving_resource_policy(scenario: ScenarioConfig) -> _ServingResourcePolicy
     fault_latency_scope = str(
         values.get("fault_latency_scope", "granule")
     ).strip().lower()
-    if fault_latency_scope in {"batch", "migration", "cohort"}:
-        fault_latency_scope = "make_resident_batch"
     if fault_latency_scope not in {"granule", "make_resident_batch"}:
         raise ValueError(
             "unsupported serving_runtime.fault_latency_scope"
         )
     raw_slot_context = values.get("kv_slot_context_tokens")
-    prompt_enabled = prompt_values.get(
-        "enabled", prompt_values.get("prompt_cache_enabled", False)
-    )
-    prompt_context_checkpoints = prompt_values.get(
-        "context_checkpoints",
-        prompt_values.get("prompt_cache_context_checkpoints", 1),
-    )
-    prompt_component = prompt_values.get(
-        "component", prompt_values.get("prompt_cache_component")
-    )
-    prompt_offload_component = prompt_values.get(
-        "offload_component",
-        prompt_values.get("prompt_cache_offload_component"),
-    )
-    raw_slot_allocation = prompt_values.get(
-        "slot_allocation_bytes",
-        prompt_values.get(
-            "full_slot_bytes",
-            prompt_values.get(
-                "logical_entry_bytes",
-                prompt_values.get("prompt_cache_slot_allocation_bytes"),
-            ),
-        ),
-    )
-    raw_entry_bytes = prompt_values.get(
-        "entry_bytes", prompt_values.get("prompt_cache_entry_bytes")
-    )
-    raw_resident_entry_bytes = prompt_values.get(
-        "resident_entry_bytes",
-        prompt_values.get(
-            "graph_resident_bytes",
-            prompt_values.get("prompt_cache_resident_entry_bytes"),
-        ),
-    )
+    prompt_enabled = prompt_values.get('enabled', False)
+    prompt_context_checkpoints = prompt_values.get('context_checkpoints', 1)
+    prompt_component = prompt_values.get('component')
+    prompt_offload_component = prompt_values.get('offload_component')
+    raw_slot_allocation = prompt_values.get('slot_allocation_bytes')
+    raw_entry_bytes = prompt_values.get('entry_bytes')
+    raw_resident_entry_bytes = prompt_values.get('resident_entry_bytes')
     raw_kv_slot_allocation = prompt_values.get(
         "kv_slot_allocation_bytes"
     )
@@ -17120,10 +16707,7 @@ def _serving_resource_policy(scenario: ScenarioConfig) -> _ServingResourcePolicy
         "state_slot_allocation_bytes"
     )
     save_implementation = str(
-        prompt_values.get(
-            "save_implementation",
-            prompt_values.get("prompt_cache_save_implementation", "unmodeled"),
-        )
+        prompt_values.get('save_implementation', "unmodeled")
     ).strip().lower()
     if save_implementation not in {
         "unmodeled", "llama_cpp_host_tensor_get", "llama_cpp_host_tensor_get_combined"
@@ -17139,13 +16723,11 @@ def _serving_resource_policy(scenario: ScenarioConfig) -> _ServingResourcePolicy
             "combined saving derives known work from hardware profiles and reports unknown service"
         )
     submission_enabled = _metadata_bool(
-        prompt_values.get("apply_tensor_get_submission_service",
-                          prompt_values.get("prompt_cache_apply_tensor_get_submission_service", False)),
+        prompt_values.get('apply_tensor_get_submission_service', False),
         "serving_runtime.prompt_cache.apply_tensor_get_submission_service",
     )
     controllers_enabled = _metadata_bool(
-        prompt_values.get("apply_tensor_get_controller_phases",
-                          prompt_values.get("prompt_cache_apply_tensor_get_controller_phases", False)),
+        prompt_values.get('apply_tensor_get_controller_phases', False),
         "serving_runtime.prompt_cache.apply_tensor_get_controller_phases",
     )
     if submission_enabled and controllers_enabled:
@@ -17178,22 +16760,14 @@ def _serving_resource_policy(scenario: ScenarioConfig) -> _ServingResourcePolicy
     ):
         raise ValueError("host_pointer_bytes requires the declared state layout and integer 4 or 8")
     unified_kv = _metadata_bool(
-        prompt_values.get(
-            "unified_kv", prompt_values.get("prompt_cache_unified_kv", False)
-        ),
+        prompt_values.get('unified_kv', False),
         "serving_runtime.prompt_cache.unified_kv",
     )
-    raw_observed = prompt_values.get(
-        "observed_entry_sizes_bytes",
-        prompt_values.get("prompt_cache_observed_entry_sizes_bytes"),
-    )
+    raw_observed = prompt_values.get('observed_entry_sizes_bytes')
     observed_entry_sizes = _metadata_byte_sequence(
         raw_observed, "serving_runtime.prompt_cache.observed_entry_sizes_bytes"
     )
-    observed_mib = prompt_values.get(
-        "observed_entry_sizes_mib",
-        prompt_values.get("prompt_cache_observed_entry_sizes_mib"),
-    )
+    observed_mib = prompt_values.get('observed_entry_sizes_mib')
     if observed_mib is not None:
         if isinstance(observed_mib, (str, bytes)):
             raw_mib_values = [
@@ -17234,29 +16808,14 @@ def _serving_resource_policy(scenario: ScenarioConfig) -> _ServingResourcePolicy
                 "serving_runtime.prompt_cache.context_checkpoints must be positive"
             )
         graph_mode = str(
-            prompt_values.get(
-                "graph_residency_mode",
-                prompt_values.get(
-                    "residency_mode",
-                    prompt_values.get(
-                        "prompt_cache_graph_residency_mode", "actual_tokens"
-                    ),
-                ),
-            )
+            prompt_values.get('graph_residency_mode', "actual_tokens")
         ).strip().lower()
-        if graph_mode in {"full", "full_slot", "slot", "allocation"}:
-            graph_mode = "slot_allocation"
-        elif graph_mode in {"actual", "tokens", "actual_token", "token"}:
-            graph_mode = "actual_tokens"
-        elif graph_mode not in {"actual_tokens", "slot_allocation", "explicit"}:
+        if graph_mode not in {"actual_tokens", "slot_allocation", "explicit"}:
             raise ValueError(
                 "unsupported serving_runtime.prompt_cache.graph_residency_mode"
             )
         retain_completed = _metadata_bool(
-            prompt_values.get(
-                "retain_completed",
-                prompt_values.get("retain_completed_entries", True),
-            ),
+            prompt_values.get('retain_completed', True),
             "serving_runtime.prompt_cache.retain_completed",
         )
         prompt_policy = _PromptCachePolicy(
@@ -17386,7 +16945,7 @@ def _declared_serving_kv_quantum(plan: ServingPlan) -> Tuple[int, int]:
     ledger; consume those when sizing checkpoints and eager commitments.
     """
 
-    placement_metadata = getattr(plan.scenario.placement, "metadata", {})
+    placement_metadata = plan.scenario.placement.metadata
     capacity_ledger = (
         placement_metadata.get("capacity_ledger", {})
         if isinstance(placement_metadata, _ABCMapping)
@@ -17395,10 +16954,9 @@ def _declared_serving_kv_quantum(plan: ServingPlan) -> Tuple[int, int]:
     if not isinstance(capacity_ledger, _ABCMapping):
         return (0, 0)
     raw_per_token = capacity_ledger.get("kv_bytes_per_token", 0)
-    raw_per_slot = capacity_ledger.get(
-        "kv_bytes_per_slot",
-        capacity_ledger.get("kv_per_slot_requested_bytes", 0),
-    )
+    if "kv_per_slot_requested_bytes" in capacity_ledger:
+        raise ValueError("capacity_ledger.kv_per_slot_requested_bytes was removed; use kv_bytes_per_slot")
+    raw_per_slot = capacity_ledger.get("kv_bytes_per_slot", 0)
     try:
         per_token = max(0, int(raw_per_token))
         per_slot = max(0, int(raw_per_slot))
@@ -17553,36 +17111,19 @@ def _batch_item_kv_materialized_tokens(item: BatchItem) -> int:
 
 
 def _batch_item_verifier_tokens(item: BatchItem) -> int:
-    if item.verifier_tokens is not None:
-        return max(0, int(item.verifier_tokens))
-    return max(
-        0,
-        int(item.proposed_tokens or item.token_count),
-    )
+    return max(0, int(item.verifier_tokens))
 
 
 def _batch_item_main_tokens(item: BatchItem) -> int:
-    if item.main_tokens is not None:
-        return max(0, int(item.main_tokens))
-    if item.phase == "decode":
-        return _batch_item_verifier_tokens(item)
-    return 1 if item.phase == "mtp" and _batch_item_verifier_tokens(item) else 0
+    return max(0, int(item.main_tokens))
 
 
 def _batch_item_draft_tokens(item: BatchItem) -> int:
-    if item.draft_tokens is not None:
-        return max(0, int(item.draft_tokens))
-    return max(
-        0,
-        _batch_item_verifier_tokens(item) - _batch_item_main_tokens(item),
-    )
+    return max(0, int(item.draft_tokens))
 
 
 def _batch_item_committed_tokens(item: BatchItem) -> int:
-    if item.committed_tokens is not None:
-        return max(0, int(item.committed_tokens))
-    proposed = _batch_item_verifier_tokens(item)
-    return round_accepted_prefix(proposed, item.expected_accepted_tokens)
+    return max(0, int(item.committed_tokens))
 
 
 def _kv_bytes_for_layer(

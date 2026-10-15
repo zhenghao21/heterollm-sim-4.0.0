@@ -587,7 +587,7 @@ def main():
     if 4 in active:
         import hbf_hbm_session_experiments as sessions
         session_report=sessions.run_session_experiments()
-        groups.extend(session_report.get('groups',[session_report]))
+        groups.append(session_report)
     if active & {5,6,7}:
         import hbf_hbm_media_experiments as media
         groups.extend(g for g in media.run_media_experiments()['groups'] if int(g['id'][:2]) in active)

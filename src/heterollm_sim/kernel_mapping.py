@@ -28,16 +28,18 @@ def _num(row, keys, default=0.0):
 def classify_kernel(name: str, row: Mapping[str, Any] | None = None) -> KernelClassification:
     low = str(name or "").lower()
     if row:
-        for key in ("stage", "graph_stage", "node_stage", "op_stage"):
-            hint = str(row.get(key, "")).strip().lower()
-            # An explicit ``unknown`` value is an absence of evidence.  Keep
-            # looking for a semantic owner attached by the trace extractor.
-            if hint in STAGES and hint != "unknown": return KernelClassification(hint, 1.0, f"explicit {key} annotation")
+        obsolete = {"graph_stage", "node_stage", "op_stage", "semantic_operator", "operator_id"}.intersection(row)
+        if obsolete:
+            raise ValueError("unsupported kernel annotation fields: " + ", ".join(sorted(obsolete)))
+        hint = str(row.get("stage", "")).strip().lower()
+        # An explicit ``unknown`` value is an absence of evidence.  Keep
+        # looking for a semantic owner attached by the trace extractor.
+        if hint in STAGES and hint != "unknown": return KernelClassification(hint, 1.0, "explicit stage annotation")
         # Semantic NVTX scopes carry the graph invocation identity even when
         # CUDA's demangled kernel name is the generic ``mul_mat_q`` family.
         # This mapping is deliberately conservative: only stable owner names
         # emitted by llama.cpp are accepted; arbitrary node_N ids stay unknown.
-        owner = str(row.get("semantic_operator_id") or row.get("semantic_operator") or row.get("operator_id") or "").strip().lower()
+        owner = str(row.get("semantic_operator_id", "")).strip().lower()
         if owner:
             owner = owner.split("|", 1)[0]
             owner_name = owner.split(":", 1)[-1]

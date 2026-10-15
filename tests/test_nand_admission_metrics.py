@@ -17,7 +17,7 @@ def config(**kwargs):
     values = dict(channels=1, targets_per_channel=1, dies_per_target=1,
                   luns_per_die=1, planes_per_lun=1, blocks_per_plane=2,
                   pages_per_block=256, page_bytes=PAGE, host_granularity_bytes=1,
-                  host_bandwidth_gb_s=10.0, internal_bandwidth_gb_s=10.0,
+                  host_bandwidth_gb_s=10.0, host_read_bandwidth_gb_s=10.0, host_write_bandwidth_gb_s=10.0, internal_bandwidth_gb_s=10.0,
                   page_read_ns=100.0, page_program_ns=200.0,
                   max_outstanding_requests=3)
     values.update(kwargs)
@@ -69,9 +69,9 @@ class NandAdmissionMetricsTests(unittest.TestCase):
         self.assertFalse(accelerated.mapping)
 
     def test_buffered_host_write_leaves_population_at_ack_before_media_drain(self):
-        core = NandCore(config(write_buffer_bytes=2 * PAGE, metadata={"buffered_write_mode": True}))
+        core = NandCore(config(write_buffer_bytes=2 * PAGE, metadata={}))
         write = core.submit(AccessRequest("write", Operation.WRITE, 0, PAGE))
-        self.assertEqual(write.physical_programs, 0)
+        self.assertEqual(write.pages_programmed, 0)
         read = core.submit(AccessRequest("read", Operation.READ, 0, PAGE, write.completion_ns))
         self.assertEqual(read.counters["host_write_outstanding_at_admission_peak"], 0)
         self.assertEqual(read.counters["host_outstanding_at_admission_peak"], 1)
@@ -85,7 +85,7 @@ class NandAdmissionMetricsTests(unittest.TestCase):
             for i in range(2)]
         batches = [SimpleNamespace(cost=SimpleNamespace(metadata={"storage_traffic": row}))
                    for row in ledgers]
-        result = SimpleNamespace(serving=SimpleNamespace(batches=batches))
+        result = SimpleNamespace(serving=SimpleNamespace(runtime_kernel_metrics={}, batches=batches))
         summary = _sum_batch_storage_traffic(result)
         self.assertEqual(summary["host_outstanding_at_admission_peak"], 2)
         self.assertEqual(summary["page_access_payload_utilization"], 0.75)

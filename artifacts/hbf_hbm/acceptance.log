@@ -534,7 +534,7 @@
         "can_infer_optimal_hbm_hbf_ratio": false,
         "limitations": [
           "Toy slot capacities intentionally invert the real HBF density advantage; these results verify accounting only.",
-          "No GPU compute, cost, area or thermal model; slots are assumed interchangeable and cannot establish a real package optimum.",
+          "No GPU compute, cost or area model; slots are assumed interchangeable and cannot establish a real package optimum.",
           "The 3-HBM/1-HBF point fits the entire trace in HBM, leaving its HBF slot idle."
         ],
         "rows": [
@@ -1334,7 +1334,7 @@
       "evidence": [
         "hbm_hbf_ratio"
       ],
-      "scope": "fixed 12-page traffic; capacity ratio only, no packaging/power budget"
+      "scope": "fixed 12-page traffic; capacity ratio only, no packaging budget"
     },
     {
       "question": "How does the same fixed KV traffic change from short to long contexts when placed in HBM or HBF?",
@@ -1374,7 +1374,7 @@
       "evidence": [
         "package_budget_sweep"
       ],
-      "scope": "hypothetical four-slot budget; no commercial packaging or power calibration"
+      "scope": "hypothetical four-slot budget; no commercial packaging calibration"
     },
     {
       "question": "Can serving automatically preempt, swap a multi-page KV working set to HBF, resume it, and release it?",
@@ -1455,7 +1455,7 @@
       "evidence": [
         "hbm_hbf_ratio"
       ],
-      "scope": "fixed 12-page traffic; capacity ratio only, no packaging/power budget"
+      "scope": "fixed 12-page traffic; capacity ratio only, no packaging budget"
     },
     {
       "question": "How does the same fixed KV traffic change from short to long contexts when placed in HBM or HBF?",
@@ -1495,7 +1495,7 @@
       "evidence": [
         "package_budget_sweep"
       ],
-      "scope": "hypothetical four-slot budget; no commercial packaging or power calibration"
+      "scope": "hypothetical four-slot budget; no commercial packaging calibration"
     },
     {
       "question": "Can serving automatically preempt, swap a multi-page KV working set to HBF, resume it, and release it?",
@@ -1633,6 +1633,6 @@
     "Prefetch is modeled as fixed token lookahead rounded to pages in paged-pool serving; no predictive policy is included.",
     "Page-merge, host-ack and media-drain write-buffer semantics are enabled by the explicit buffered_write_mode metadata switch; legacy write-through remains the default.",
     "The four-slot package sweep is a coupled hypothetical budget, not commercial packaging calibration.",
-    "No FTL/GC, wear, ECC, energy or multi-GPU model."
+    "No FTL/GC, wear, ECC or multi-GPU model."
   ]
 }

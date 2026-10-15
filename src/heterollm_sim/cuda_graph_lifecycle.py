@@ -302,9 +302,7 @@ def _is_direct_device_memory_task(task: TaskSpec, device: str,
                  (device, storage) if direction == "WRITE" else None)
     if endpoints != (meta.get("source_component"), meta.get("target_component")):
         return False
-    accesses = meta.get("memory_access")
-    if isinstance(accesses, Mapping):
-        accesses = (accesses,)
+    accesses = meta.get("memory_accesses")
     owner = meta.get("physical_owner")
     return bool(owner and any(demand.resource_id == owner for demand in task.demands)
                 and isinstance(accesses, (tuple, list)) and accesses

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import math
 import copy
-import contextvars
 from bisect import bisect_left
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -99,6 +98,44 @@ class _PhysicalRuntime:
     clock_ns: float = 0.0
 
 
+def _copy_hbm_control_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Copy mutable controller state without reconstructing bank mappings.
+
+    Every visited HBM bank holds scalar clocks and a frozen AddressMapping.
+    Rebuilding those mappings via deepcopy dominates per-task snapshots on
+    large stacks. Copy bank dictionaries directly, sharing only immutable
+    values; retain deepcopy for nested histories and any extension fields.
+    The memo also preserves aliases within the saved state without sharing
+    mutable objects with the live controller.
+    """
+    from .memory_types import AddressMapping
+
+    banks = state.get("banks")
+    if type(banks) is not dict:
+        return copy.deepcopy(state)
+    result = {}
+    bank_copies = {name: row.copy() for name, row in banks.items() if type(row) is dict}
+    memo = {id(state): result, id(banks): bank_copies}
+    # Register all rows first so extension fields referring to another bank
+    # retain that relationship in the independent copy.
+    for name, row in banks.items():
+        if type(row) is dict:
+            bank_copies[name] = memo.setdefault(id(row), bank_copies[name])
+    immutable_types = (int, float, str, bool, type(None), AddressMapping)
+    for name, row in banks.items():
+        if type(row) is not dict:
+            bank_copies[name] = copy.deepcopy(row, memo)
+            continue
+        for field_name, value in row.items():
+            if type(value) in immutable_types:
+                if type(value) is AddressMapping:
+                    memo[id(value)] = value
+            else:
+                bank_copies[name][field_name] = copy.deepcopy(value, memo)
+    result.update({name: copy.deepcopy(value, memo) for name, value in state.items()})
+    return result
+
+
 @dataclass
 class PhysicalRuntimeContext:
     """State for one simulation run's physical devices.
@@ -176,7 +213,7 @@ class PhysicalRuntimeContext:
             if isinstance(config, DramConfig)
             else NandCore(config, self.timeline, capture_details=self.capture_details)
         )
-        capacity = int(getattr(config, "effective_capacity_bytes", getattr(config, "capacity_bytes", 0)) or 0)
+        capacity = config.effective_capacity_bytes
         if capacity > 0:
             # The direct-backing planner uses burst alignment for DRAM and
             # page alignment for NAND.  Keep automatically materialized
@@ -260,7 +297,9 @@ class PhysicalRuntimeContext:
                     # NAND readiness values are scalars, so a shallow dict
                     # copy is sufficient and avoids copying timeline history.
                     core_state[key] = dict(value)
-                elif key in {"_bank_group_state", "_hbm_control_state"}:
+                elif key == "_hbm_control_state":
+                    core_state[key] = _copy_hbm_control_state(value)
+                elif key == "_bank_group_state":
                     # Group command/activation histories contain mutable
                     # per-group clocks and activation windows. They are live
                     # execution state, so a failed task must not modify its
@@ -288,7 +327,7 @@ class PhysicalRuntimeContext:
                 "core": core_state,
             }
         allocator_state = {
-            owner: dict(getattr(allocator, "_allocations", {}))
+            owner: dict(allocator._allocations)
             for owner, allocator in self.allocators.items()
         }
         timeline = self.timeline
@@ -327,25 +366,24 @@ class PhysicalRuntimeContext:
         self.runtimes.update(snapshot["runtimes"])
         self.allocators.clear()
         self.allocators.update(snapshot["allocators"])
-        for owner, state in snapshot.get("runtime_state", {}).items():
-            active = self.runtimes.get(owner)
-            if active is None:
-                continue
+        for owner, state in snapshot["runtime_state"].items():
+            active = self.runtimes[owner]
             active.clock_ns = state["clock_ns"]
             active.core.__dict__.clear()
             # Restored live state must not become the rollback point itself.
             # Otherwise another submission mutates the saved bank rows,
             # staged pages or wear state and a second restore is partial.
             active.core.__dict__.update({
-                key: value if key == "config" else copy.deepcopy(value)
+                key: (value if key == "config" else
+                      _copy_hbm_control_state(value) if key == "_hbm_control_state" else
+                      copy.deepcopy(value))
                 for key, value in state["core"].items()
             })
             active.core.timeline = self.timeline
-        for owner, allocations in snapshot.get("allocator_state", {}).items():
-            allocator = self.allocators.get(owner)
-            if allocator is not None and hasattr(allocator, "_allocations"):
-                allocator._allocations.clear()
-                allocator._allocations.update(allocations)
+        for owner, allocations in snapshot["allocator_state"].items():
+            allocator = self.allocators[owner]
+            allocator._allocations.clear()
+            allocator._allocations.update(allocations)
         timeline_state = snapshot["timeline"]
         timeline = self.timeline
         for name in ("ready_ns", "directions", "busy_ns", "bytes_moved", "last_intervals"):
@@ -366,39 +404,20 @@ class PhysicalRuntimeContext:
         timeline.lane_directions.clear()
         timeline.lane_directions.update({
             resource: list(directions)
-            for resource, directions in timeline_state.get("lane_directions", {}).items()
+            for resource, directions in timeline_state["lane_directions"].items()
         })
         self._committed_owners.clear()
-        self._committed_owners.update(snapshot.get("committed_owners", ()))
-
-
-_CURRENT_PHYSICAL_CONTEXT: contextvars.ContextVar[PhysicalRuntimeContext | None] = contextvars.ContextVar(
-    "heterollm_sim_physical_context", default=None
-)
-
-
-def current_physical_runtime_context() -> PhysicalRuntimeContext:
-    context = _CURRENT_PHYSICAL_CONTEXT.get()
-    if context is None:
-        context = PhysicalRuntimeContext()
-        _CURRENT_PHYSICAL_CONTEXT.set(context)
-    return context
-
-
-def reset_physical_runtimes() -> None:
-    """Start a fresh context-local physical simulation timeline."""
-    _CURRENT_PHYSICAL_CONTEXT.set(PhysicalRuntimeContext())
+        self._committed_owners.update(snapshot["committed_owners"])
 
 
 def _physical_runtime(
     config: Any,
     owner: str,
-    context: Optional[PhysicalRuntimeContext] = None,
+    context: PhysicalRuntimeContext,
     *,
     preview: bool = False,
     capture_details: Optional[bool] = None,
 ) -> _PhysicalRuntime:
-    context = context or current_physical_runtime_context()
     return (
         context.preview_runtime(
             config, owner, capture_details=capture_details
@@ -423,152 +442,180 @@ def _owner_physical_config(metadata: Mapping[str, Any], owner: str, primary: Any
     return parse_execution_physical_config(raw)
 
 
+def _memory_accesses(metadata):
+    if "memory_access" in metadata:
+        raise ValueError("memory_access is no longer supported; use a memory_accesses sequence")
+    accesses = metadata.get("memory_accesses")
+    if accesses is not None and not isinstance(accesses, (tuple, list)):
+        raise ValueError("memory_accesses must be a sequence of access mappings")
+    for access in accesses or ():
+        if not isinstance(access, Mapping):
+            raise ValueError("physical memory_accesses entries must be mappings")
+        obsolete = {"generation", "size_bytes", "offset", "tensor_id", "buffer_size_bytes", "physical_resource_id"}.intersection(access)
+        if obsolete:
+            raise ValueError("memory_accesses uses byte_count, offset_bytes, buffer_id, allocation_generation and allocation_size_bytes; unsupported fields: " + ", ".join(sorted(obsolete)))
+    return accesses
+
+
+def _physical_allocations(metadata):
+    declarations = metadata.get("physical_allocations", ())
+    if not isinstance(declarations, (tuple, list)):
+        raise ValueError("physical_allocations must be a sequence")
+    for declaration in declarations:
+        if not isinstance(declaration, Mapping):
+            raise ValueError("physical allocation entries must be mappings")
+        obsolete = {"allocation_generation", "buffer_size_bytes", "allocation_size_bytes", "base_address"}.intersection(declaration)
+        if obsolete:
+            raise ValueError("physical_allocations uses size_bytes, generation and address; unsupported fields: " + ", ".join(sorted(obsolete)))
+    return declarations
+
+
+def lower_physical_allocations(task: TaskSpec) -> TaskSpec:
+    """Compile access and cache descriptors into explicit allocation declarations."""
+    metadata = task.metadata
+    declarations = _physical_allocations(metadata)
+    raw_accesses = _memory_accesses(metadata)
+    if declarations:
+        return task  # Authored declarations already define the complete allocation boundary.
+    derived_declarations = ()
+    contract = metadata.get("stateful_l2")
+    default_owner = str(metadata.get("physical_owner") or
+                        (contract.get("memory_resource") if isinstance(contract, Mapping) else "") or "")
+    if isinstance(contract, Mapping):
+        # The physical preview may already be cache-trimmed. Allocate the
+        # logical working set before the cache uses it, using the same
+        # buffer identities and preserving explicit address/alias facts.
+        previews, explicit_bases = {}, {}
+        for row in raw_accesses or ():
+            if not isinstance(row, Mapping) or not row.get("buffer_id"):
+                continue
+            key = (str(row.get("physical_owner") or default_owner), str(row["buffer_id"]),
+                   row.get("allocation_generation", 0))
+            previous = previews.get(key, {})
+            merged = {**previous, **row}
+            for fact in ("allocation_arena", "alias_of", "alias_generation", "alias_offset_bytes"):
+                if fact in previous and fact in row and previous[fact] != row[fact]:
+                    raise ValueError("conflicting physical allocation " + fact)
+            source = str(row.get("address_source", ""))
+            if row.get("address") is not None and (not source or source.startswith("explicit")):
+                offset = _descriptor_non_negative_int(row.get("offset_bytes", 0), "offset_bytes")
+                address = _descriptor_non_negative_int(row["address"], "address")
+                base = address - offset
+                if base < 0:
+                    raise ValueError("explicit physical address is before buffer offset")
+                if key in explicit_bases and explicit_bases[key] != base:
+                    raise ValueError("conflicting physical allocation address")
+                explicit_bases[key] = base
+            previews[key] = merged
+        cache_accesses = []
+        for row in contract.get("accesses", ()):
+            buffer_id = row["buffer_id"]
+            if buffer_id.startswith("@tasklocal"):
+                buffer_id = task.task_id + buffer_id[10:]
+            key = (str(row.get("physical_owner") or default_owner), buffer_id,
+                   row.get("allocation_generation", 0))
+            preview = previews.get(key, {})
+            cache_access = {**preview,
+                            **{key: value for key, value in row.items()
+                               if key not in {"size_bytes", "buffer_size_bytes"}},
+                            "buffer_id": buffer_id, "byte_count": row["size_bytes"]}
+            if cache_access.get("allocation_size_bytes") is None:
+                cache_access["allocation_size_bytes"] = row.get("buffer_size_bytes")
+            if key in explicit_bases:
+                # A cache line has its own offset. Carry the allocation
+                # base, never the last preview range's absolute address.
+                offset = _descriptor_non_negative_int(row.get("offset_bytes", 0), "offset_bytes")
+                cache_access.update(address=explicit_bases[key] + offset,
+                                    address_source="explicit_physical_address")
+            cache_accesses.append(cache_access)
+        raw_accesses = tuple(cache_accesses)
+    if isinstance(raw_accesses, (tuple, list)):
+        derived = {}
+        for access in raw_accesses:
+            if not isinstance(access, Mapping):
+                continue
+            buffer_id = access.get("buffer_id")
+            if not buffer_id:
+                continue
+            # Descriptor fields are part of the physical-address
+            # contract.  Do not coerce floats/strings with ``int`` here:
+            # ``64.9`` silently becoming ``64`` would register and later
+            # access a different extent than the caller declared.
+            offset = _descriptor_non_negative_int(
+                access.get("offset_bytes", 0),
+                "offset_bytes",
+            )
+            size = _descriptor_non_negative_int(
+                access["byte_count"],
+                "byte_count",
+            )
+            declared_extent = access.get("allocation_size_bytes")
+            extent = (
+                _descriptor_non_negative_int(declared_extent, "allocation_size_bytes")
+                if declared_extent is not None
+                else offset + size
+            )
+            if declared_extent is None and isinstance(contract, Mapping):
+                line_bytes = _positive_descriptor_int(
+                    contract["line_bytes"], "line_bytes"
+                )
+                extent = ((extent + line_bytes - 1) // line_bytes) * line_bytes
+            generation = _descriptor_non_negative_int(
+                access.get("allocation_generation", 0),
+                "generation",
+            )
+            owner = str(access.get("physical_owner") or default_owner)
+            key = (owner, str(buffer_id), generation)
+            previous = derived.get(key)
+            declaration = {"buffer_id": str(buffer_id), "size_bytes": extent,
+                           "generation": generation, "physical_owner": owner,
+                           "inferred": declared_extent is None}
+            if access.get("allocation_arena") is not None:
+                declaration["allocation_arena"] = access["allocation_arena"]
+            if access.get("alias_of") is not None:
+                declaration.update({
+                    "alias_of": str(access["alias_of"]),
+                    "alias_generation": _descriptor_non_negative_int(
+                        access.get("alias_generation", generation),
+                        "alias_generation",
+                    ),
+                    "alias_offset_bytes": _descriptor_non_negative_int(
+                        access.get("alias_offset_bytes", 0),
+                        "alias_offset_bytes",
+                    ),
+                })
+            address_source = str(access.get("address_source", ""))
+            if access.get("address") is not None and (not address_source or address_source.startswith("explicit")):
+                explicit_address = access.get("address")
+                if type(explicit_address) is not int or explicit_address < offset:
+                    raise ValueError("explicit physical address is before buffer offset")
+                declaration["address"] = explicit_address - offset
+            if previous is not None:
+                # Every range can supply facts about one allocation. A
+                # later equal/smaller range must not lose its arena, alias
+                # or explicit base, and a larger one cannot overwrite a
+                # conflicting identity supplied by an earlier range.
+                for field in ("allocation_arena", "address", "alias_of",
+                              "alias_generation", "alias_offset_bytes"):
+                    if field in previous:
+                        if field in declaration and declaration[field] != previous[field]:
+                            raise ValueError("conflicting physical allocation " + field)
+                        declaration[field] = previous[field]
+                declaration["size_bytes"] = max(previous["size_bytes"], extent)
+                declaration["inferred"] = previous["inferred"] and declaration["inferred"]
+            derived[key] = declaration
+        derived_declarations = tuple(derived.values())
+
+    return replace(task, metadata={**metadata, "physical_allocations": derived_declarations})
+
+
 def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContext, *, config=None) -> None:
     """Materialize declared buffers into the owner-scoped run allocator."""
     metadata = task.metadata
     raw_config = config if config is not None else metadata.get("physical_memory_config")
     from .physical_contract import parse_execution_physical_config
     raw_config = parse_execution_physical_config(raw_config)
-    declarations = metadata.get("physical_allocations", ())
-    if isinstance(declarations, Mapping):
-        declarations = (declarations,)
-    if declarations is None:
-        declarations = ()
-    if not isinstance(declarations, (tuple, list)):
-        raise ValueError("physical_allocations must be a mapping or sequence")
-    # Planner-created descriptors carry a stable buffer identity and an
-    # allocation extent, but older task metadata did not promote a separate
-    # declaration table. Derive declarations from those descriptors once;
-    # this is registration, never an address guess.
-    if not declarations:
-        contract = metadata.get("stateful_l2")
-        default_owner = str(metadata.get("physical_owner") or
-                            (contract.get("memory_resource") if isinstance(contract, Mapping) else "") or "")
-        raw_accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
-        if isinstance(raw_accesses, Mapping):
-            raw_accesses = (raw_accesses,)
-        if isinstance(contract, Mapping):
-            # The physical preview may already be cache-trimmed. Allocate the
-            # logical working set before the cache uses it, using the same
-            # buffer identities and preserving explicit address/alias facts.
-            previews, explicit_bases = {}, {}
-            for row in raw_accesses or ():
-                if not isinstance(row, Mapping) or not row.get("buffer_id"):
-                    continue
-                key = (str(row.get("physical_owner") or default_owner), str(row["buffer_id"]),
-                       row.get("allocation_generation", row.get("generation", 0)))
-                previous = previews.get(key, {})
-                merged = {**previous, **row}
-                for fact in ("allocation_arena", "alias_of", "alias_generation", "alias_offset_bytes"):
-                    if fact in previous and fact in row and previous[fact] != row[fact]:
-                        raise ValueError("conflicting physical allocation " + fact)
-                source = str(row.get("address_source", ""))
-                if row.get("address") is not None and (not source or source.startswith("explicit")):
-                    offset = _descriptor_non_negative_int(row.get("offset_bytes", row.get("offset", 0)), "offset_bytes")
-                    address = _descriptor_non_negative_int(row["address"], "address")
-                    base = address - offset
-                    if base < 0:
-                        raise ValueError("explicit physical address is before buffer offset")
-                    if key in explicit_bases and explicit_bases[key] != base:
-                        raise ValueError("conflicting physical allocation address")
-                    explicit_bases[key] = base
-                previews[key] = merged
-            cache_accesses = []
-            for row in contract.get("accesses", ()):
-                buffer_id = row["buffer_id"]
-                if buffer_id.startswith("@tasklocal"):
-                    buffer_id = task.task_id + buffer_id[10:]
-                key = (str(row.get("physical_owner") or default_owner), buffer_id,
-                       row.get("allocation_generation", 0))
-                preview = previews.get(key, {})
-                cache_access = {**preview, **row, "buffer_id": buffer_id,
-                                "byte_count": row["size_bytes"]}
-                if key in explicit_bases:
-                    # A cache line has its own offset. Carry the allocation
-                    # base, never the last preview range's absolute address.
-                    offset = _descriptor_non_negative_int(row.get("offset_bytes", 0), "offset_bytes")
-                    cache_access.update(address=explicit_bases[key] + offset,
-                                        address_source="explicit_physical_address")
-                cache_accesses.append(cache_access)
-            raw_accesses = tuple(cache_accesses)
-        if isinstance(raw_accesses, (tuple, list)):
-            derived = {}
-            for access in raw_accesses:
-                if not isinstance(access, Mapping):
-                    continue
-                buffer_id = access.get("buffer_id") or access.get("tensor_id")
-                if not buffer_id:
-                    continue
-                # Descriptor fields are part of the physical-address
-                # contract.  Do not coerce floats/strings with ``int`` here:
-                # ``64.9`` silently becoming ``64`` would register and later
-                # access a different extent than the caller declared.
-                offset = _descriptor_non_negative_int(
-                    access.get("offset_bytes", access.get("offset", 0)),
-                    "offset_bytes",
-                )
-                size = _descriptor_non_negative_int(
-                    access.get("byte_count", access.get("size_bytes", 0)),
-                    "byte_count",
-                )
-                declared_extent = access.get("allocation_size_bytes")
-                if declared_extent is None:
-                    declared_extent = access.get("buffer_size_bytes")
-                extent = (
-                    _descriptor_non_negative_int(declared_extent, "allocation_size_bytes")
-                    if declared_extent is not None
-                    else offset + size
-                )
-                if declared_extent is None and isinstance(contract, Mapping):
-                    line_bytes = _positive_descriptor_int(
-                        contract["line_bytes"], "line_bytes"
-                    )
-                    extent = ((extent + line_bytes - 1) // line_bytes) * line_bytes
-                generation = _descriptor_non_negative_int(
-                    access.get("generation", access.get("allocation_generation", 0)),
-                    "generation",
-                )
-                owner = str(access.get("physical_owner") or default_owner)
-                key = (owner, str(buffer_id), generation)
-                previous = derived.get(key)
-                declaration = {"buffer_id": str(buffer_id), "size_bytes": extent,
-                               "generation": generation, "physical_owner": owner,
-                               "inferred": declared_extent is None}
-                if access.get("allocation_arena") is not None:
-                    declaration["allocation_arena"] = access["allocation_arena"]
-                if access.get("alias_of") is not None:
-                    declaration.update({
-                        "alias_of": str(access["alias_of"]),
-                        "alias_generation": _descriptor_non_negative_int(
-                            access.get("alias_generation", generation),
-                            "alias_generation",
-                        ),
-                        "alias_offset_bytes": _descriptor_non_negative_int(
-                            access.get("alias_offset_bytes", 0),
-                            "alias_offset_bytes",
-                        ),
-                    })
-                address_source = str(access.get("address_source", ""))
-                if access.get("address") is not None and (not address_source or address_source.startswith("explicit")):
-                    explicit_address = access.get("address")
-                    if type(explicit_address) is not int or explicit_address < offset:
-                        raise ValueError("explicit physical address is before buffer offset")
-                    declaration["address"] = explicit_address - offset
-                if previous is not None:
-                    # Every range can supply facts about one allocation. A
-                    # later equal/smaller range must not lose its arena, alias
-                    # or explicit base, and a larger one cannot overwrite a
-                    # conflicting identity supplied by an earlier range.
-                    for field in ("allocation_arena", "address", "alias_of",
-                                  "alias_generation", "alias_offset_bytes"):
-                        if field in previous:
-                            if field in declaration and declaration[field] != previous[field]:
-                                raise ValueError("conflicting physical allocation " + field)
-                            declaration[field] = previous[field]
-                    declaration["size_bytes"] = max(previous["size_bytes"], extent)
-                    declaration["inferred"] = previous["inferred"] and declaration["inferred"]
-                derived[key] = declaration
-            declarations = tuple(derived.values())
+    declarations = _physical_allocations(metadata)
     pending = sorted(
         declarations,
         key=lambda item: 1 if isinstance(item, Mapping) and item.get("alias_of") else 0,
@@ -582,7 +629,7 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
             alias_of = declaration.get("alias_of")
             owner = str(declaration.get("physical_owner") or metadata.get("physical_owner") or "")
             generation = _descriptor_non_negative_int(
-                declaration.get("generation", declaration.get("allocation_generation", 0)),
+                declaration.get("generation", 0),
                 "generation",
             )
             alias_generation = declaration.get("alias_generation")
@@ -622,7 +669,7 @@ def _register_physical_allocation(declaration, metadata, runtime, raw_config):
     owner = str(declaration.get("physical_owner") or metadata.get("physical_owner") or "")
     if not owner:
         raise ValueError("physical allocation requires physical_owner")
-    size_bytes = declaration.get("size_bytes", declaration.get("buffer_size_bytes"))
+    size_bytes = declaration.get("size_bytes")
     if isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes <= 0:
         raise ValueError("physical allocation requires positive size_bytes")
     runtime.runtime(raw_config, owner)
@@ -630,7 +677,7 @@ def _register_physical_allocation(declaration, metadata, runtime, raw_config):
     if allocator is None:
         raise ValueError("physical owner has no address allocator: {}".format(owner))
     generation = _descriptor_non_negative_int(
-        declaration.get("generation", declaration.get("allocation_generation", 0)), "generation")
+        declaration.get("generation", 0), "generation")
     external = (owner, str(buffer_id), generation) in {
         tuple(key) for key in metadata.get("physical_external_allocations", ())}
     allocation_arena = declaration.get("allocation_arena")
@@ -641,7 +688,7 @@ def _register_physical_allocation(declaration, metadata, runtime, raw_config):
     allocator.allocate(
         str(buffer_id), size_bytes, generation,
         alias_of=declaration.get("alias_of"),
-        address=declaration.get("address", declaration.get("base_address")),
+        address=declaration.get("address"),
         alias_generation=declaration.get("alias_generation"),
         alias_offset_bytes=_descriptor_non_negative_int(
             declaration.get("alias_offset_bytes", 0), "alias_offset_bytes"
@@ -690,21 +737,18 @@ def _resolve_physical_task(
     """
     metadata = dict(task.metadata)
     raw_config = metadata.get("physical_memory_config")
-    access = metadata.get("memory_access")
-    accesses = metadata.get("memory_accesses", access)
-    if raw_config is None or not isinstance(accesses, (Mapping, tuple, list)) or not accesses:
-        raise ValueError("physical task requires physical_memory_config and memory_access")
+    accesses = _memory_accesses(metadata)
+    if raw_config is None or not isinstance(accesses, (tuple, list)) or not accesses:
+        raise ValueError("physical task requires physical_memory_config and memory_accesses")
     from .memory_types import AccessRequest, DramConfig, Operation
     from .physical_contract import parse_execution_physical_config
     config = parse_execution_physical_config(raw_config)
     if isinstance(arrival_ns, bool) or not isinstance(arrival_ns, (int, float)) or arrival_ns < 0:
         raise ValueError("physical task arrival_ns must be non-negative")
-    if isinstance(accesses, Mapping):
-        accesses = (accesses,)
     owners = set()
     for item in accesses:
         if not isinstance(item, Mapping):
-            raise ValueError("physical memory_access entries must be mappings")
+            raise ValueError("physical memory_accesses entries must be mappings")
         owner = str(item.get("physical_owner") or metadata.get("physical_owner") or "")
         if not owner:
             raise ValueError("physical access requires physical_owner")
@@ -716,17 +760,10 @@ def _resolve_physical_task(
     # Validate every descriptor before creating a core or reserving a resource.
     # A physical address may be omitted only when the buffer has an explicit
     # allocation; this keeps L2 victims and partial line fills tied to it.
-    declarations = metadata.get("physical_allocations", ())
-    if isinstance(declarations, Mapping):
-        declarations = (declarations,)
-    if declarations is None:
-        declarations = ()
-    if not isinstance(declarations, (tuple, list)):
-        raise ValueError("physical_allocations must be a mapping or sequence")
     validated = []
     for access in accesses:
         if not isinstance(access, Mapping):
-            raise ValueError("physical memory_access entries must be mappings")
+            raise ValueError("physical memory_accesses entries must be mappings")
         operation = Operation(str(access.get("operation", "")).lower())
         address, byte_count = access.get("address"), access.get("byte_count")
         if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count <= 0:
@@ -734,18 +771,18 @@ def _resolve_physical_task(
         owner = str(access.get("physical_owner") or metadata.get("physical_owner") or "")
         if not owner:
             raise ValueError("physical access requires physical_owner")
-        buffer_id = access.get("buffer_id") or access.get("tensor_id")
+        buffer_id = access.get("buffer_id")
         address_source = str(access.get("address_source", ""))
         if buffer_id:
             allocator = runtime.allocators.get(owner)
             if allocator is None:
                 raise ValueError("physical owner has no address allocator: {}".format(owner))
             generation = _descriptor_non_negative_int(
-                access.get("generation", access.get("allocation_generation", 0)),
+                access.get("allocation_generation", 0),
                 "generation",
             )
             offset = _descriptor_non_negative_int(
-                access.get("offset_bytes", access.get("offset", 0)),
+                access.get("offset_bytes", 0),
                 "offset_bytes",
             )
             registered_address = allocator.address(str(buffer_id), offset, byte_count, generation)
@@ -784,7 +821,7 @@ def _resolve_physical_task(
 
     placeholder_ids = set()
     for access, _op, _address, _bytes, _owner, _config in validated:
-        for key in ("resource_id", "physical_resource_id", "physical_owner"):
+        for key in ("resource_id", "physical_owner"):
             value = access.get(key)
             if value:
                 placeholder_ids.add(str(value))
@@ -796,7 +833,7 @@ def _resolve_physical_task(
         active = runtime.runtime(access_config, owner)
         stop = index + 1
         if (_USE_COMPILED_DRAM_BATCH and not runtime.capture_details
-                and hasattr(active.core, "submit_many")
+                and isinstance(active.core.config, DramConfig)
                 and operation in (Operation.READ, Operation.WRITE)
                 and (address + byte_count - 1) // active.core.config.burst_bytes
                     - address // active.core.config.burst_bytes + 1 < 64):
@@ -825,8 +862,7 @@ def _resolve_physical_task(
         if len(requests) >= 16:
             group_results = active.core.submit_many(requests)
         else:
-            submit = getattr(active.core, "submit", active.core.execute)
-            group_results = tuple(submit(request) for request in requests)
+            group_results = tuple(active.core.submit(request) for request in requests)
         for position, result in zip(range(index, stop), group_results):
             access, op, addr, count, _owner, _config = validated[position]
             active.clock_ns = max(active.clock_ns, result.completion_ns)
@@ -837,44 +873,15 @@ def _resolve_physical_task(
             resolved_accesses.append({**dict(access), "address": addr})
         index = stop
     completion_ns = max(item.completion_ns for item in results)
-    result = max(results, key=lambda item: item.completion_ns)
-    counters = dict(result.counters)
     resource_busy = {}
     resource_bytes = {}
-    resource_owner_sets = {}
-    resource_intervals = {}
-    resource_interval_payloads = {}
     resource_last = {}
     for (access, _operation, _address, _byte_count, owner, _config), item in zip(validated, results):
         for resource_id, value in item.counters.get("resource_busy_ns", {}).items():
             resource_busy[resource_id] = resource_busy.get(resource_id, 0.0) + value
-            resource_owner_sets.setdefault(resource_id, set()).add(owner)
         for resource_id, value in item.counters.get("resource_bytes", {}).items():
             resource_bytes[resource_id] = resource_bytes.get(resource_id, 0) + value
-        for resource_id, value in item.counters.get("resource_intervals", {}).items():
-            resource_intervals.setdefault(resource_id, []).extend(value)
-        for resource_id, value in item.counters.get("resource_interval_payloads", {}).items():
-            resource_interval_payloads.setdefault(resource_id, []).extend(value)
         resource_last.update(item.counters.get("resource_last_intervals", {}))
-    resource_owners = {
-        resource: next(iter(owners)) if len(owners) == 1 else resource
-        for resource, owners in resource_owner_sets.items()
-    }
-    counters.update({"resource_busy_ns": resource_busy, "resource_bytes": resource_bytes,
-                     "resource_owners": resource_owners,
-                     "resource_owner_sets": {resource: tuple(sorted(owners))
-                                             for resource, owners in resource_owner_sets.items()},
-                     "resource_intervals": resource_intervals, "resource_last_intervals": resource_last,
-                     "resource_interval_payloads": resource_interval_payloads,
-                     "operation_count": len(results)})
-    # These describe the whole task, not whichever request finished last.
-    for key in ("details_truncated", "intervals_truncated"):
-        counters[key] = any(item.counters.get(key, False) for item in results)
-    observations = [item.counters["nand_observations"] for item in results
-                    if item.counters.get("nand_observations") is not None]
-    if observations:
-        from .nand_core import summarize_nand_observations
-        counters["nand_observations"] = summarize_nand_observations(observations)
     execution_by_owner = {}
     operations_by_owner = {}
     optional_observed_by_owner = {}
@@ -893,6 +900,10 @@ def _resolve_physical_task(
                 "resource_busy_ns": {},
                 "resource_bytes": {},
                 "resource_owners": {},
+                "resource_intervals": {}, "resource_interval_payloads": {},
+                "resource_last_intervals": {},
+                "details_truncated": False, "intervals_truncated": False,
+                "arrival_ns": float(arrival_ns),
                 "completion_ns": float(arrival_ns),
             }
             execution_by_owner[owner] = row
@@ -906,6 +917,12 @@ def _resolve_physical_task(
         row["physical_read_bytes"] += int(item.counters.get("physical_read_bytes", 0))
         row["physical_write_bytes"] += int(item.counters.get("physical_write_bytes", 0))
         row["completion_ns"] = max(row["completion_ns"], item.completion_ns)
+        for key in ("details_truncated", "intervals_truncated"):
+            row[key] = row[key] or bool(item.counters.get(key, False))
+        for key in ("resource_intervals", "resource_interval_payloads"):
+            for resource_id, intervals in item.counters.get(key, {}).items():
+                row[key].setdefault(resource_id, []).extend(intervals)
+        row["resource_last_intervals"].update(item.counters.get("resource_last_intervals", {}))
         if item.counters.get("nand_observations") is not None:
             row.setdefault("_nand_observations", []).append(item.counters["nand_observations"])
         for resource_id, value in item.counters.get("resource_bytes", {}).items():
@@ -947,56 +964,13 @@ def _resolve_physical_task(
         row["service_ns"] = row["completion_ns"] - float(arrival_ns)
         operations = operations_by_owner[owner]
         row["operation"] = next(iter(operations)) if len(operations) == 1 else "read_write"
-    for key in (
-        "logical_bytes", "physical_bytes", "physical_read_bytes", "physical_write_bytes",
-        "host_transfer_bytes", "internal_transfer_bytes", "pages_read", "pages_programmed",
-        "pages_touched", "media_waves", "erase_operations", "burst_count",
-        "read_operations", "program_operations", "rmw_read_operations",
-        "page_access_payload_bytes", "page_access_capacity_bytes", "host_admission_samples",
-        "row_hits", "row_misses", "row_conflicts", "read_write_switches",
-        "queue_wait_ns", "refresh_wait_ns", "turnaround_wait_ns",
-        "write_buffer_wait_ns", "write_buffer_bytes", "merge_bytes",
-        "staging_read_hits", "staging_read_merges", "staging_write_pages",
-        "merged_pages", "auto_drain_physical_programs",
-    ) + DRAM_CONTROL_COUNT_FIELDS + DRAM_CONTROL_TIME_FIELDS:
-        if key == "physical_bytes":
-            counters[key] = sum(item.transfer_bytes for item in results)
-        elif key == "logical_bytes":
-            counters[key] = sum(item.logical_bytes for item in results)
-        else:
-            values = [item.counters[key] for item in results
-                      if isinstance(item.counters.get(key), (int, float))
-                      and not isinstance(item.counters[key], bool)]
-            if key in DRAM_OPTIONAL_COUNTER_FIELDS and len(values) != len(results):
-                counters[key] = None
-            elif values:
-                # Preserve integer counters in the combined compatibility
-                # view as well as each owner ledger. Timing remains float.
-                counters[key] = sum(values)
-    for key in ("write_buffer_peak_bytes", "host_outstanding_at_admission_peak", "host_read_outstanding_at_admission_peak",
-                "host_write_outstanding_at_admission_peak"):
-        values = [item.counters[key] for item in results if key in item.counters]
-        if values:
-            counters[key] = max(values)
     demands = tuple(ResourceDemand(str(resource_id), float(duration),
                     bytes_moved=int(resource_bytes.get(resource_id, 0)))
                     for resource_id, duration in sorted(resource_busy.items()) if float(duration) > 0)
     if not demands and not all(item.operation is Operation.ERASE for item in results):
         raise ValueError("physical memory core returned no resource timing for a positive-byte access")
     metadata.update({
-        "memory_access": resolved_accesses[0] if len(resolved_accesses) == 1 else tuple(resolved_accesses),
         "memory_accesses": tuple(resolved_accesses),
-        "physical_execution": {
-            **counters,
-            "logical_bytes": sum(item.logical_bytes for item in results),
-            "logical_read_bytes": sum(item.logical_bytes for item in results if item.operation is Operation.READ),
-            "logical_write_bytes": sum(item.logical_bytes for item in results if item.operation is Operation.WRITE),
-            "physical_bytes": sum(item.transfer_bytes for item in results),
-            "service_ns": completion_ns - float(arrival_ns),
-            "arrival_ns": float(arrival_ns),
-            "completion_ns": completion_ns,
-            "operation": results[-1].operation.value if len(results) == 1 else "read_write",
-        },
         "physical_execution_by_owner": execution_by_owner,
         "physical_arrival_ns": float(arrival_ns),
         "physical_completion_ns": completion_ns,
@@ -1079,17 +1053,17 @@ def _recost_physical_kernel_envelope(task: TaskSpec) -> TaskSpec:
 def is_physical_task(task: TaskSpec) -> bool:
     metadata = task.metadata
     config = metadata.get("physical_memory_config")
-    accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
+    accesses = _memory_accesses(metadata)
     # Endpoint metadata always carries these optional keys.  It becomes a
     # formal physical transaction only when both values are present and the
     # descriptor is non-empty; an explicitly supplied malformed descriptor is
     # rejected instead of silently falling back to analytical pricing.
     if config is None:
         if accesses not in (None, (), []):
-            raise ValueError("physical task requires physical_memory_config and memory_access")
+            raise ValueError("physical task requires physical_memory_config and memory_accesses")
         return False
-    if not isinstance(accesses, Mapping) and not isinstance(accesses, (tuple, list)):
-        raise ValueError("physical task requires physical_memory_config and memory_access")
+    if not isinstance(accesses, (tuple, list)):
+        raise ValueError("physical task requires physical_memory_config and memory_accesses")
     if not accesses:
         raise ValueError("physical task requires a non-empty memory access descriptor")
     return True
@@ -1100,15 +1074,12 @@ def physical_task_demands(task: TaskSpec) -> Tuple[ResourceDemand, ...]:
     metadata = task.metadata
     physical_ids = set(str(item) for item in metadata.get("physical_demands_resource_ids", ()))
     physical_ids.update(str(item) for item in metadata.get("physical_placeholder_resource_ids", ()))
-    accesses = metadata.get("memory_accesses", metadata.get("memory_access"))
-    if isinstance(accesses, Mapping):
-        accesses = (accesses,)
+    accesses = _memory_accesses(metadata)
     for access in accesses or ():
         if isinstance(access, Mapping):
-            for key in ("resource_id", "physical_resource_id"):
-                value = access.get(key)
-                if value:
-                    physical_ids.add(str(value))
+            value = access.get("resource_id")
+            if value:
+                physical_ids.add(str(value))
     return tuple(demand for demand in task.demands if str(demand.resource_id) not in physical_ids)
 
 
@@ -1117,13 +1088,6 @@ class AccessKind(str, Enum):
     WRITE = "WRITE"
     COPY = "COPY"
     ERASE = "ERASE"
-
-
-# Short names are convenient for planners and preserve the wording in the
-# design document.
-READ = AccessKind.READ
-WRITE = AccessKind.WRITE
-COPY = AccessKind.COPY
 
 
 def _positive(value: Any, name: str) -> float:
@@ -1150,17 +1114,7 @@ def _non_negative_int(value: Any, name: str) -> int:
 
 
 def _descriptor_non_negative_int(value: Any, name: str) -> int:
-    """Validate an optional integer field from physical descriptors.
-
-    Descriptor producers may omit optional offsets/generations (represented
-    as ``None``), but an explicitly supplied value must already be an integer.
-    In particular, avoid ``int(value)`` because it silently truncates a
-    malformed float or accepts a numeric string and changes the declared
-    physical range.
-    """
-
-    if value is None:
-        return 0
+    """Validate explicit descriptor values; producers supply omitted defaults."""
     return _non_negative_int(value, name)
 
 
@@ -1183,15 +1137,12 @@ def _positive_int(value: Any, name: str) -> int:
     return value
 
 
-def _value(source: Any, *names: str, default: Any = None) -> Any:
+def _value(source: Any, name: str, *, default: Any = None) -> Any:
     """Read a field from a mapping or a profile object."""
 
-    for name in names:
-        if isinstance(source, Mapping) and name in source:
-            return source[name]
-        if source is not None and hasattr(source, name):
-            return getattr(source, name)
-    return default
+    if isinstance(source, Mapping):
+        return source.get(name, default)
+    return getattr(source, name, default)
 
 
 def memory_service(
@@ -1247,7 +1198,7 @@ def memory_service(
     effective_outstanding = min(request_window, transaction_count)
     read_bandwidth_service_ns = read_bytes / read_bw if read_bytes else 0.0
     write_bandwidth_service_ns = write_bytes / write_bw if write_bytes else 0.0
-    # One shared controller: directions add; preserve exact legacy rounding
+    # One shared controller: directional durations add before rounding
     # when their rates coincide (rather than adding two rounded divisions).
     bandwidth_service_ns = (
         physical_bytes / read_bw if read_bw == write_bw else
@@ -1267,7 +1218,7 @@ def memory_service(
     )
     latency_service_ns = max(single_request_latency_ns, concurrency_service_ns)
     if service_model not in {"analytical", "serialized", "overlapped"}:
-        raise ValueError("memory_service_model must be analytical, serialized or overlapped")
+        raise ValueError("memory service_model must be analytical, serialized or overlapped")
     if service_model != "analytical":
         latency_service_ns = (
             math.ceil(read_transactions / request_window) * read_latency_ns
@@ -1394,7 +1345,6 @@ class PhysicalService:
 
     def price(
         self, kind: AccessKind, byte_count: int, *,
-        transaction_bytes: Optional[int] = None, service_model: Optional[str] = None,
         page_offset_bytes: Optional[int] = None,
         runtime: Optional[PhysicalRuntimeContext] = None,
         arrival_ns: Optional[float] = None, preview: bool = False,
@@ -1403,8 +1353,7 @@ class PhysicalService:
         """Price one access; a failed explicit submission leaves no state."""
         saved = runtime.snapshot() if runtime is not None and not preview else None
         try:
-            return self._price(kind, byte_count, transaction_bytes=transaction_bytes,
-                               service_model=service_model, page_offset_bytes=page_offset_bytes,
+            return self._price(kind, byte_count, page_offset_bytes=page_offset_bytes,
                                runtime=runtime, arrival_ns=arrival_ns, preview=preview,
                                summary_only=summary_only)
         except Exception:
@@ -1417,8 +1366,6 @@ class PhysicalService:
         kind: AccessKind,
         byte_count: int,
         *,
-        transaction_bytes: Optional[int] = None,
-        service_model: Optional[str] = None,
         page_offset_bytes: Optional[int] = None,
         runtime: Optional[PhysicalRuntimeContext] = None,
         arrival_ns: Optional[float] = None,
@@ -1461,7 +1408,7 @@ class PhysicalService:
         operation = Operation.READ if kind is AccessKind.READ else Operation.WRITE if kind is AccessKind.WRITE else Operation.ERASE
         if arrival_ns is not None:
             _non_negative(arrival_ns, "arrival_ns")
-        context = runtime if runtime is not None else current_physical_runtime_context()
+        context = PhysicalRuntimeContext() if runtime is None else runtime
         active_runtime = _physical_runtime(
             config,
             self.physical_owner,
@@ -1477,8 +1424,7 @@ class PhysicalService:
             max(1, byte_count),
             arrival_ns=request_arrival_ns,
         )
-        submit = getattr(active_runtime.core, "submit", active_runtime.core.execute)
-        result = submit(request)
+        result = active_runtime.core.submit(request)
         if not preview and runtime is not None:
             active_runtime.clock_ns = max(active_runtime.clock_ns, result.completion_ns)
         counters = dict(result.counters)
@@ -1504,18 +1450,15 @@ class PhysicalService:
         })
         return counters
 
-    def bill(self, kind: AccessKind, byte_count: int) -> float:
-        return float(self.price(kind, byte_count)["service_ns"])
-
     def price_batch(
-        self, requests, *, start_ns=0.0, state=None,
+        self, requests, *, start_ns=0.0,
         runtime: Optional[PhysicalRuntimeContext] = None,
     ):
         """Price a batch atomically when an explicit runtime is supplied."""
-        context = runtime if runtime is not None else state if isinstance(state, PhysicalRuntimeContext) else None
+        context = runtime
         saved = context.snapshot() if context is not None else None
         try:
-            return self._price_batch(requests, start_ns=start_ns, state=state, runtime=runtime)
+            return self._price_batch(requests, start_ns=start_ns, runtime=runtime)
         except Exception:
             if saved is not None:
                 context.restore(saved)
@@ -1526,7 +1469,6 @@ class PhysicalService:
         requests,
         *,
         start_ns=0.0,
-        state=None,
         runtime: Optional[PhysicalRuntimeContext] = None,
     ):
         """Price an explicit DRAM/NAND request batch."""
@@ -1535,63 +1477,62 @@ class PhysicalService:
             raise ValueError("price_batch requires a physical memory component")
         from .physical_contract import require_physical_memory_config
         config = require_physical_memory_config(self.component)
-        if self.component is not None and self.component.metadata.get("physical_memory_config") is not None:
-            from .memory_types import AccessRequest, Operation
-            explicit_context = runtime or (state if isinstance(state, PhysicalRuntimeContext) else None)
-            context = explicit_context or current_physical_runtime_context()
-            active_runtime = _physical_runtime(
-                config,
-                self.physical_owner,
-                context,
-                preview=explicit_context is None,
-            )
-            parsed = []
-            for index, item in enumerate(requests):
-                op = str(item.get("operation", "")).lower()
-                if "address" in item:
-                    address = item["address"]
-                elif "page_offset_bytes" in item:
-                    address = item["page_offset_bytes"]
-                else:
-                    raise ValueError("physical batch request requires an explicit address")
-                if isinstance(address, bool) or not isinstance(address, int) or address < 0:
-                    raise ValueError("physical batch request address must be a non-negative integer")
-                if isinstance(item.get("byte_count"), bool) or not isinstance(item.get("byte_count"), int):
-                    raise ValueError("physical batch request byte_count must be an integer")
-                parsed.append(AccessRequest(
-                    str(item.get("request_id", f"request-{index}")),
-                    Operation(op), int(address), int(item["byte_count"]),
-                    item.get("arrival_ns", max(start_ns, active_runtime.clock_ns)),
-                ))
-            batch = active_runtime.core.run(parsed)
-            if explicit_context is not None:
-                active_runtime.clock_ns = max(active_runtime.clock_ns, batch.last_completion_ns)
-            return {
-                "model": "physical_transaction_queue_v1",
-                "requests": tuple(batch.requests),
-                "request_count": len(batch.requests),
-                "logical_bytes": batch.logical_bytes,
-                "physical_bytes": batch.transfer_bytes,
-                "host_transfer_bytes": batch.host_transfer_bytes,
-                "internal_transfer_bytes": batch.internal_transfer_bytes,
-                "physical_read_bytes": batch.physical_read_bytes,
-                "physical_write_bytes": batch.physical_write_bytes,
-                "pages_read": batch.pages_read,
-                "pages_programmed": batch.pages_programmed,
-                "erase_operations": batch.erase_operations,
-                "queue_wait_ns": batch.queue_wait_ns,
-                "write_buffer_wait_ns": batch.write_buffer_wait_ns,
-                "write_buffer_bytes": batch.write_buffer_bytes,
-                "write_buffer_peak_bytes": batch.write_buffer_peak_bytes,
-                "service_ns": batch.duration_ns,
-                "end_ns": batch.last_completion_ns,
-                "actual_bandwidth_gb_s": batch.actual_bandwidth_gb_s,
-                "bandwidth_ceiling_gb_s": batch.bandwidth_ceiling_gb_s,
-                **{key:batch.counters.get(key) for key in DRAM_OPTIONAL_COUNTER_FIELDS},
-            }
-        if self.component is None or self.component.metadata.get("physical_memory_config") is None:
-            raise ValueError("price_batch requires physical_memory_config")
-        raise RuntimeError("unreachable physical batch branch")
+        from .memory_types import AccessRequest, Operation
+        explicit_context = runtime
+        context = PhysicalRuntimeContext() if explicit_context is None else explicit_context
+        active_runtime = _physical_runtime(
+            config,
+            self.physical_owner,
+            context,
+            preview=explicit_context is None,
+        )
+        parsed = []
+        for index, item in enumerate(requests):
+            if not isinstance(item, Mapping):
+                raise ValueError("physical batch requests must be mappings")
+            obsolete = {"page_offset_bytes", "offset_bytes", "offset", "size_bytes", "bytes"}.intersection(item)
+            if obsolete:
+                raise ValueError("physical batch requests use address and byte_count; unsupported fields: " + ", ".join(sorted(obsolete)))
+            op = str(item.get("operation", "")).lower()
+            if "address" in item:
+                address = item["address"]
+            else:
+                raise ValueError("physical batch request requires an explicit address")
+            if isinstance(address, bool) or not isinstance(address, int) or address < 0:
+                raise ValueError("physical batch request address must be a non-negative integer")
+            if isinstance(item.get("byte_count"), bool) or not isinstance(item.get("byte_count"), int):
+                raise ValueError("physical batch request byte_count must be an integer")
+            parsed.append(AccessRequest(
+                str(item.get("request_id", f"request-{index}")),
+                Operation(op), int(address), int(item["byte_count"]),
+                item.get("arrival_ns", max(start_ns, active_runtime.clock_ns)),
+            ))
+        batch = active_runtime.core.run(parsed)
+        if explicit_context is not None:
+            active_runtime.clock_ns = max(active_runtime.clock_ns, batch.last_completion_ns)
+        return {
+            "model": "physical_transaction_queue_v1",
+            "requests": tuple(batch.requests),
+            "request_count": len(batch.requests),
+            "logical_bytes": batch.logical_bytes,
+            "physical_bytes": batch.transfer_bytes,
+            "host_transfer_bytes": batch.host_transfer_bytes,
+            "internal_transfer_bytes": batch.internal_transfer_bytes,
+            "physical_read_bytes": batch.physical_read_bytes,
+            "physical_write_bytes": batch.physical_write_bytes,
+            "pages_read": batch.pages_read,
+            "pages_programmed": batch.pages_programmed,
+            "erase_operations": batch.erase_operations,
+            "queue_wait_ns": batch.queue_wait_ns,
+            "write_buffer_wait_ns": batch.write_buffer_wait_ns,
+            "write_buffer_bytes": batch.write_buffer_bytes,
+            "write_buffer_peak_bytes": batch.write_buffer_peak_bytes,
+            "service_ns": batch.duration_ns,
+            "end_ns": batch.last_completion_ns,
+            "actual_bandwidth_gb_s": batch.actual_bandwidth_gb_s,
+            "bandwidth_ceiling_gb_s": batch.bandwidth_ceiling_gb_s,
+            **{key:batch.counters.get(key) for key in DRAM_OPTIONAL_COUNTER_FIELDS},
+        }
 
 
 @dataclass(frozen=True)
@@ -1728,22 +1669,27 @@ class ExpandedMotion:
 def resolve_service(
     component: ComponentSpec,
     profile: Any = None,
-    *,
-    service_id: Optional[str] = None,
 ) -> PhysicalService:
     """Resolve one component service; calibration never replaces its physical cap.
 
-    ScenarioConfig supplies ``memory_service`` after migrating legacy profiles.
+    ScenarioConfig supplies ``memory_service`` from explicit component bindings.
     Direct ComponentSpec callers use the same component fields and explicit
     effective overrides. A directional zero remains unknown, including HBF writes.
     """
     metadata = component.metadata
+    obsolete = {"service_id", "resource_id", "memory_resource_id", "physical_owner"}.intersection(metadata)
+    if obsolete:
+        raise ValueError("component memory service identity uses memory_service_owner; unsupported fields: " + ", ".join(sorted(obsolete)))
     from .physical_contract import physical_memory_bandwidth_caps_gbps
     core_caps = tuple(value / 8.0 for value in physical_memory_bandwidth_caps_gbps(component))
     resolved = metadata.get("memory_service", {})
     if not isinstance(resolved, Mapping):
         raise ValueError("memory_service must be a mapping")
-    profile = profile if profile is not None else metadata.get("profile", metadata.get("memory_profile"))
+    if "resource_id" in resolved:
+        raise ValueError("memory_service uses physical_owner, not resource_id")
+    service_id = component.component_id + ".access"
+    if resolved.get("service_id", service_id) != service_id:
+        raise ValueError("memory_service.service_id must equal " + service_id)
     # Derived service metadata is a view, never a second physical contract.
     physical = core_caps[0]
     shared_limit = min(physical, component.shared_bandwidth_gbps / 8.0) if component.shared_bandwidth_gbps > 0 else physical
@@ -1780,26 +1726,25 @@ def resolve_service(
             raise ValueError(f"effective {direction} bandwidth cannot exceed component physical bandwidth")
         return value
 
-    def parameter(name: str, *aliases: str, default: Any) -> Any:
-        return _value(resolved, name, *aliases, default=_value(metadata, name, *aliases, default=_value(profile, name, *aliases, default=default)))
+    def parameter(name: str, *, default: Any) -> Any:
+        return _value(resolved, name, default=_value(metadata, name, default=_value(profile, name, default=default)))
 
-    owner = str(resolved.get("physical_owner") or metadata.get("physical_owner") or default_memory_resource_id(component))
-    model = str(parameter("service_model", "memory_service_model", default="analytical" if component.is_active_memory else "serialized"))
+    owner = str(resolved.get("physical_owner") or default_memory_resource_id(component))
+    model = str(parameter("service_model", default="analytical" if component.is_active_memory else "serialized"))
     if model not in {"analytical", "serialized", "overlapped"}:
         raise ValueError("memory_service_model must be analytical, serialized or overlapped")
-    granularity = parameter("transaction_bytes", "transfer_granularity_bytes", default=256)
-    # Legacy endpoint granularity=0 means no padding, not a zero transaction.
-    _non_negative_int(granularity, "transaction_bytes")
+    granularity = parameter("transaction_bytes", default=256)
+    _positive_int(granularity, "transaction_bytes")
     return PhysicalService(
-        service_id=service_id or str(resolved.get("service_id") or metadata.get("service_id") or component.component_id),
+        service_id=service_id,
         physical_owner=owner,
-        resource_id=str(resolved.get("resource_id") or metadata.get("memory_resource_id") or metadata.get("resource_id") or owner),
+        resource_id=owner,
         read_bandwidth_gb_s=direction_bandwidth("read"),
         write_bandwidth_gb_s=direction_bandwidth("write"),
         read_latency_ns=_non_negative(parameter("read_latency_ns", default=0.0), "read_latency_ns"),
         write_latency_ns=_non_negative(parameter("write_latency_ns", default=0.0), "write_latency_ns"),
-        transaction_granularity=granularity or 256,
-        queue_depth=parameter("max_outstanding_requests", "queue_depth", default=32 if component.is_active_memory else 1),
+        transaction_granularity=granularity,
+        queue_depth=parameter("max_outstanding_requests", default=32 if component.is_active_memory else 1),
         parallel_lanes=parameter("parallel_lanes", default=1),
         efficiency=efficiency,
         service_model=model,
@@ -1820,14 +1765,11 @@ def resolve_link_service(
         in {"component", "memory_component", "shared_component"}
     )
     if link.metadata.get("service_ref") or local_view:
-        memories = [component for component in (source, target) if component.is_storage]
         reference = link.metadata.get("service_ref")
-        if reference:
-            memories = [component for component in memories if reference in {
-                component.component_id, component.component_id + ".access",
-                component.metadata.get("service_id"),
-                component.metadata.get("memory_service", {}).get("service_id"),
-            }]
+        if not reference:
+            raise ValueError(f"link {link.link_id} local memory view requires an explicit service_ref")
+        memories = [component for component in (source, target)
+                    if component.is_storage and reference == component.component_id + ".access"]
         if len(memories) != 1:
             raise ValueError(f"link {link.link_id} service_ref must identify one connected storage service")
         memory = memories[0]
@@ -1852,7 +1794,7 @@ def expand_access(
     access: DataAccess,
     services: Mapping[str, PhysicalService],
     *,
-    links: Mapping[Tuple[str, str], LinkService] = (),
+    links: Optional[Mapping[Tuple[str, str], LinkService]] = None,
 ) -> ExpandedMotion:
     """Expand READ/WRITE/COPY into physical phases and explicit dependencies."""
 
@@ -1887,17 +1829,17 @@ def expand_access(
         if raw_config is not None:
             metadata.update({
                 "physical_memory_config": raw_config,
-                "memory_access": {
+                "memory_accesses": ({
                     "operation": kind.value.lower(),
                     "address": position.offset_bytes,
                     "byte_count": access.byte_count,
                     "physical_owner": service.physical_owner,
                     "resource_id": service.resource_id,
-                },
+                },),
             })
         return MotionPhase(access.operation_id, kind, service.service_id, service.physical_owner,
                            service.resource_id, access.byte_count, float(bill["service_ns"]), deps,
-                           physical_bytes=int(bill.get("physical_bytes", access.byte_count)),
+                           physical_bytes=int(bill["physical_bytes"]),
                            metadata=metadata)
 
     if access.kind is AccessKind.READ:
@@ -1911,7 +1853,7 @@ def expand_access(
         deps = access.dependencies + (read.operation_id + ".read",)
         read = MotionPhase(read.operation_id + ".read", read.kind, read.service_id, read.physical_owner, read.resource_id, read.byte_count, read.service_ns, read.dependencies, physical_bytes=read.physical_bytes, metadata=read.metadata)
         phases_list = [read]
-        link = links.get((access.source.service_id, access.target.service_id)) if hasattr(links, "get") else None
+        link = links.get((access.source.service_id, access.target.service_id)) if links is not None else None
         if link is not None:
             link_demands = link.demands(access.byte_count)
             phases_list.append(MotionPhase(
@@ -1947,7 +1889,7 @@ def expand_accesses(
     accesses: Iterable[DataAccess],
     services: Mapping[str, PhysicalService],
     *,
-    links: Mapping[Tuple[str, str], LinkService] = (),
+    links: Optional[Mapping[Tuple[str, str], LinkService]] = None,
 ) -> Tuple[ExpandedMotion, ...]:
     """Expand a batch once per operation id.
 
@@ -1969,12 +1911,6 @@ def expand_accesses(
     return tuple(result)
 
 
-# Friendly names for callers that prefer nouns over verbs.
-price_access = expand_access
-resolve_memory_service = resolve_service
-
-
-
 @dataclass(frozen=True)
 class EndpointService:
     name: str
@@ -1989,7 +1925,6 @@ def endpoint_service(
     read: bool,
     name: str,
     page_offset_bytes: Optional[int] = None,
-    dram_address_bytes: Optional[int] = None,
     operation: Optional[str] = None,
     runtime: Optional[PhysicalRuntimeContext] = None,
     arrival_ns: Optional[float] = None,
@@ -2007,11 +1942,11 @@ def endpoint_service(
     # and local SRAM are accounted by the compute models.
     if not component.is_storage:
         return None
-    address = page_offset_bytes if page_offset_bytes is not None else dram_address_bytes
+    address = page_offset_bytes
     if address is None:
         address = component.metadata.get("memory_access_offset_bytes")
     from .physical_contract import require_physical_memory_config
-    require_physical_memory_config(component)
+    physical_config = require_physical_memory_config(component)
     if address is None:
         raise ValueError("physical_memory_config requires an explicit memory address")
     if address is not None:
@@ -2065,7 +2000,7 @@ def endpoint_service(
             "bytes": byte_count,
             "address": address,
             "physical_bytes": physical,
-            "transferred_bytes": int(billed.get("host_transfer_bytes", billed.get("logical_bytes", byte_count))),
+            "transferred_bytes": int(billed["host_transfer_bytes"]),
             "physical_kind": component.normalized_kind,
             "physical_service_id": service.service_id,
             "physical_owner": service.physical_owner,
@@ -2075,23 +2010,19 @@ def endpoint_service(
         }
     endpoint_metadata.update({
         "physical_memory_config": component.metadata.get("physical_memory_config"),
-        "physical_execution": dict(billed),
+        "physical_execution_by_owner": {service.physical_owner: {**billed, "kind": physical_config.kind.value}},
         "physical_execution_role": "construction_preview" if runtime is None else "runtime_dispatch",
     })
     if component.metadata.get("physical_memory_config") is not None:
-        endpoint_metadata["memory_access"] = {
+        endpoint_metadata["memory_accesses"] = ({
             "operation": op_name,
             "address": address,
             "byte_count": byte_count,
             "physical_owner": service.physical_owner,
             "resource_id": service.resource_id,
-        }
+        },)
     return EndpointService(
         name=f"{name}.{component.component_id}.{op_name}",
         demands=(demand,),
         metadata=endpoint_metadata,
     )
-
-
-# Public spelling used by communication and cost model callers.
-shared_memory_service = memory_service

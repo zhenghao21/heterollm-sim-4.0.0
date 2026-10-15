@@ -11297,7 +11297,7 @@
     "unsupported": [
       "GPU TPS/TTFT/TPOT或生产服务尾延迟",
       "预测器命中率或最优动态冷热placement",
-      "真实硅片参数、功耗和封装校准"
+      "真实硅片参数和封装校准"
     ]
   },
   "limitations": [

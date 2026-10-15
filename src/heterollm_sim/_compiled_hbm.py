@@ -8,13 +8,19 @@ from .memory_types import Operation, TransactionResult
 from .memory_mapping import map_dram_address
 
 
-def execute_hbm_numeric(core, request):
-    """Return None, without mutation, for unsupported acceleration cases.
+# Cover the 4 TiB, 64-stack HBM reference without raising the analytical
+# controller's separate limit. The three bank arrays occupy 9 MiB here;
+# batch checkpoints and Python bank mappings require additional memory.
+MAX_HBM_NUMERIC_BANKS = 131_072
 
-The detail controller remains the reference for tracing, aliased resources,
-and nonzero tFAW. A decline never selects the legacy DRAM timing model.
-"""
-    from .dram_core import DramCore, _BankState, MAX_ACCELERATED_BANKS
+
+def _pack_hbm_numeric(core, request):
+    """Return packed state, or None for unsupported acceleration cases.
+
+    The detail controller remains the reference for tracing, aliased resources,
+    and nonzero tFAW. A decline never selects the analytical DRAM timing model.
+    """
+    from .dram_core import DramCore
     from .memory_transfer import ResourceTimeline
 
     c, timeline = core.config, core.timeline
@@ -37,7 +43,7 @@ and nonzero tFAW. A decline never selects the legacy DRAM timing model.
     first = request.address // c.burst_bytes
     stop = (request.address + request.byte_count - 1) // c.burst_bytes + 1
     physical = (stop - first) * c.burst_bytes
-    if (total_banks > MAX_ACCELERATED_BANKS or request.address < 0
+    if (total_banks > MAX_HBM_NUMERIC_BANKS or request.address < 0
             or request.address + request.byte_count > c.effective_capacity_bytes
             or c.effective_capacity_bytes > (1 << 63) - 1 or physical > (1 << 63) - 1
             or stop - first > 2 ** 53 or not math.isfinite(request.arrival_ns)):
@@ -147,69 +153,169 @@ and nonzero tFAW. A decline never selects the legacy DRAM timing model.
         c.maximum_active_ns], dtype=np.float64)
     if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t)):
         return None
-    read = request.operation is Operation.READ
-    completion, hits, misses, conflicts, counts = run_hbm_numeric(
-        first, stop, float(request.arrival_ns), read, g, t, rows, bf, addresses,
-        pc, history, pc_seen, channel, channel_int, resources, moved, directions, touched)
-    if not math.isfinite(completion) or not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources)):
+    return _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t,
+        run_hbm_numeric, (rows, bf, addresses, pc, history, pc_seen, channel,
+                          channel_int, resources, moved, directions, touched))
+
+
+class _HBMNumericState:
+    """One packed controller; requests still execute in submission order."""
+
+    def __init__(self, core, bank_ids, pc_keys, channel_keys, ids, g, t, run_numeric, arrays):
+        self.core = core
+        self.bank_ids, self.pc_keys, self.channel_keys, self.ids = bank_ids, pc_keys, channel_keys, ids
+        self.g, self.t, self.run_numeric, self.arrays = g, t, run_numeric, arrays
+
+    def execute(self, request):
+        c = self.core.config
+        first = request.address // c.burst_bytes
+        stop = (request.address + request.byte_count - 1) // c.burst_bytes + 1
+        physical = (stop - first) * c.burst_bytes
+        (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
+         resources, moved, directions, touched) = self.arrays
+        if (request.operation not in (Operation.READ, Operation.WRITE)
+                or request.address < 0 or request.address + request.byte_count > c.effective_capacity_bytes
+                or physical > (1 << 63) - 1 or stop - first > 2 ** 53
+                or not math.isfinite(request.arrival_ns)
+                or any(int(value) > (1 << 63) - 1 - physical for value in moved)):
+            return None
+        touched.fill(False)
+        g, t, run_hbm_numeric = self.g, self.t, self.run_numeric
+        read = request.operation is Operation.READ
+        completion, hits, misses, conflicts, counts = run_hbm_numeric(
+            first, stop, float(request.arrival_ns), read, g, t, rows, bf, addresses,
+            pc, history, pc_seen, channel, channel_int, resources, moved, directions, touched)
+        if not math.isfinite(completion) or not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources)):
+            return None
+        counters = dict(activate_commands=int(counts[0]), precharge_commands=int(counts[1]),
+                        read_commands=int(counts[2]), write_commands=int(counts[3]),
+                        row_command_bus_busy_ns=float(counts[5]), column_command_bus_busy_ns=float(counts[6]),
+                        control_mode="jedec_hbm", row_hits=int(hits), row_misses=int(misses),
+                        row_conflicts=int(conflicts), burst_count=stop - first,
+                        details_truncated=stop - first > c.max_expanded_segments,
+                        compiled_hbm_float64=True,
+                        physical_read_bytes=physical if read else 0, physical_write_bytes=0 if read else physical,
+                        queue_wait_ns=0., bandwidth_ceiling_gb_s=c.directional_bandwidth_gb_s(request.operation),
+                        host_transfer_bytes=0, internal_transfer_bytes=0,
+                        pages_read=0, pages_programmed=0, erase_operations=0)
+        if c.refresh_policy == "all_bank":
+            counters["refresh_commands"] = int(counts[4])
+        return TransactionResult(request.request_id, request.operation, request.arrival_ns,
+                                 float(completion), request.byte_count, physical, counters=counters)
+
+    def commit_controller(self):
+        from .dram_core import _BankState
+
+        core, c = self.core, self.core.config
+        state = core._hbm_control_state
+        bank_ids, pc_keys, channel_keys = self.bank_ids, self.pc_keys, self.channel_keys
+        history_stride = int(self.g[-1])
+        (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
+         resources, moved, directions, touched) = self.arrays
+        saved_banks = state.setdefault("banks", {})
+        saved_pcs = state.setdefault("pcs", {})
+        saved_channels = state.setdefault("channels", {})
+        for index in np.flatnonzero(addresses >= 0):
+            rid = bank_ids[index]
+            old = core._banks.setdefault(rid, _BankState())
+            old.open_row = int(rows[index]) if rows[index] >= 0 else None
+            old.ready_ns, old.activation_ready_ns = float(bf[index, 5]), float(bf[index, 6])
+            if rid not in saved_banks:
+                saved_banks[rid] = {"mapping": map_dram_address(c, int(addresses[index]))}
+            previous = saved_banks[rid]
+            previous.update(last_activate=float(bf[index, 0]) if bf[index, 0] >= 0 else None,
+                            activate_ready=float(bf[index, 1]), precharge_ready=float(bf[index, 2]),
+                            read_ready=float(bf[index, 3]), write_ready=float(bf[index, 4]))
+        for lane in np.flatnonzero(pc_seen):
+            previous = saved_pcs.setdefault(pc_keys[lane], {"activate_window": []})
+            previous.update(activate={int(group): float(history[lane, group, 0])
+                                      for group in np.flatnonzero(history[lane, :, 0] >= 0)},
+                            column={op: {(int(entry) * history_stride // 16, int(entry) * history_stride // c.banks_per_group): float(history[lane, entry, index])
+                                         for entry in np.flatnonzero(history[lane, :, index] >= 0)}
+                                    for op, index in (("read", 1), ("write", 2))},
+                            write_end={(int(entry) * history_stride // 16, int(entry) * history_stride // c.banks_per_group): float(history[lane, entry, 3])
+                                       for entry in np.flatnonzero(history[lane, :, 3] >= 0)},
+                            last_precharge=float(pc[lane, 0]) if pc[lane, 0] >= 0 else None,
+                            blocked_until=float(pc[lane, 1]),
+                            next_data_start={"read": float(pc[lane, 2]), "write": float(pc[lane, 3])})
+        for ch, key in enumerate(channel_keys):
+            if channel[ch, 0] >= 0 or channel[ch, 1] >= 0:
+                previous = saved_channels.setdefault(key, {})
+                if channel[ch, 0] >= 0:
+                    previous["last_activate_start"] = float(channel[ch, 0])
+                    previous["last_activate_bank"] = bank_ids[channel_int[ch, 0]]
+                    previous["last_activate_pc"] = pc_keys[channel_int[ch, 1]]
+                if channel[ch, 1] >= 0:
+                    previous["next_refresh"] = float(channel[ch, 1])
+
+    def commit_timeline(self, request):
+        timeline, ids = self.core.timeline, self.ids
+        channels = len(self.channel_keys)
+        (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
+         resources, moved, directions, touched) = self.arrays
+        for index in np.flatnonzero(touched):
+            rid = ids[index]
+            timeline.lane_available.setdefault(rid, [0.])[0] = float(resources[index, 0])
+            timeline.ready_ns[rid] = float(resources[index, 0])
+            timeline.busy_ns[rid] = float(resources[index, 1])
+            timeline.last_intervals[rid] = (float(resources[index, 2]), float(resources[index, 3]))
+            timeline.lane_directions.pop(rid, None)
+            timeline._touched.add(rid)
+            if index >= 2 * channels:
+                timeline.bytes_moved[rid] = int(moved[index])
+                timeline.directions[rid] = request.operation.value
+        timeline._intervals_truncated = True
+
+
+def execute_hbm_numeric(core, request):
+    """Execute one accepted request, or decline without changing live state."""
+    packed = _pack_hbm_numeric(core, request)
+    if packed is None:
         return None
-    saved_banks = state.setdefault("banks", {})
-    saved_pcs = state.setdefault("pcs", {})
-    saved_channels = state.setdefault("channels", {})
-    for index in np.flatnonzero(addresses >= 0):
-        rid = bank_ids[index]
-        old = core._banks.setdefault(rid, _BankState())
-        old.open_row = int(rows[index]) if rows[index] >= 0 else None
-        old.ready_ns, old.activation_ready_ns = float(bf[index, 5]), float(bf[index, 6])
-        previous = saved_banks.setdefault(rid, {"mapping": map_dram_address(c, int(addresses[index]))})
-        previous.update(last_activate=float(bf[index, 0]) if bf[index, 0] >= 0 else None,
-                        activate_ready=float(bf[index, 1]), precharge_ready=float(bf[index, 2]),
-                        read_ready=float(bf[index, 3]), write_ready=float(bf[index, 4]))
-    for lane in np.flatnonzero(pc_seen):
-        previous = saved_pcs.setdefault(pc_keys[lane], {"activate_window": []})
-        previous.update(activate={int(group): float(history[lane, group, 0])
-                                  for group in np.flatnonzero(history[lane, :, 0] >= 0)},
-                        column={op: {(int(entry) * history_stride // 16, int(entry) * history_stride // c.banks_per_group): float(history[lane, entry, index])
-                                     for entry in np.flatnonzero(history[lane, :, index] >= 0)}
-                                for op, index in (("read", 1), ("write", 2))},
-                        write_end={(int(entry) * history_stride // 16, int(entry) * history_stride // c.banks_per_group): float(history[lane, entry, 3])
-                                   for entry in np.flatnonzero(history[lane, :, 3] >= 0)},
-                        last_precharge=float(pc[lane, 0]) if pc[lane, 0] >= 0 else None,
-                        blocked_until=float(pc[lane, 1]),
-                        next_data_start={"read": float(pc[lane, 2]), "write": float(pc[lane, 3])})
-    for ch, key in enumerate(channel_keys):
-        if channel[ch, 0] >= 0 or channel[ch, 1] >= 0:
-            previous = saved_channels.setdefault(key, {})
-            if channel[ch, 0] >= 0:
-                previous["last_activate_start"] = float(channel[ch, 0])
-                previous["last_activate_bank"] = bank_ids[channel_int[ch, 0]]
-                previous["last_activate_pc"] = pc_keys[channel_int[ch, 1]]
-            if channel[ch, 1] >= 0:
-                previous["next_refresh"] = float(channel[ch, 1])
-    for index in np.flatnonzero(touched):
-        rid = ids[index]
-        timeline.lane_available.setdefault(rid, [0.])[0] = float(resources[index, 0])
-        timeline.ready_ns[rid] = float(resources[index, 0])
-        timeline.busy_ns[rid] = float(resources[index, 1])
-        timeline.last_intervals[rid] = (float(resources[index, 2]), float(resources[index, 3]))
-        timeline.lane_directions.pop(rid, None)
-        timeline._touched.add(rid)
-        if index >= 2 * channels:
-            timeline.bytes_moved[rid] = int(moved[index])
-            timeline.directions[rid] = request.operation.value
-    timeline._intervals_truncated = True
-    counters = dict(activate_commands=int(counts[0]), precharge_commands=int(counts[1]),
-                    read_commands=int(counts[2]), write_commands=int(counts[3]),
-                    row_command_bus_busy_ns=float(counts[5]), column_command_bus_busy_ns=float(counts[6]),
-                    control_mode="jedec_hbm", row_hits=int(hits), row_misses=int(misses),
-                    row_conflicts=int(conflicts), burst_count=stop - first,
-                    details_truncated=stop - first > c.max_expanded_segments,
-                    compiled_hbm_float64=True,
-                    physical_read_bytes=physical if read else 0, physical_write_bytes=0 if read else physical,
-                    queue_wait_ns=0., bandwidth_ceiling_gb_s=c.directional_bandwidth_gb_s(request.operation),
-                    host_transfer_bytes=0, internal_transfer_bytes=0,
-                    pages_read=0, pages_programmed=0, erase_operations=0)
-    if c.refresh_policy == "all_bank":
-        counters["refresh_commands"] = int(counts[4])
-    return TransactionResult(request.request_id, request.operation, request.arrival_ns,
-                             float(completion), request.byte_count, physical, counters=counters)
+    result = packed.execute(request)
+    if result is not None:
+        packed.commit_controller()
+        packed.commit_timeline(request)
+    return result
+
+
+class _NumericDeclined(Exception):
+    pass
+
+
+def execute_hbm_numeric_many(core, requests):
+    """Amortize packing while retaining each request's admission and metrics."""
+    if not requests:
+        return ()
+    packed = _pack_hbm_numeric(core, requests[0])
+    if packed is None:
+        return None
+
+    def execute(request):
+        result = packed.execute(request)
+        if result is None:
+            raise _NumericDeclined
+        packed.commit_timeline(request)
+        return result
+
+    results = []
+    for index, request in enumerate(requests):
+        # Numeric buffers are contiguous and cheap to copy. Keep the last
+        # successful state so an exception or decline cannot commit half of
+        # the current request or discard requests already accepted in order.
+        before = tuple(array.copy() for array in packed.arrays)
+        try:
+            result = core._submit_validated(request, execute=execute)
+        except _NumericDeclined:
+            packed.arrays = before
+            if results:
+                packed.commit_controller()
+            return tuple(results) + tuple(core.submit(item) for item in requests[index:])
+        except BaseException:
+            packed.arrays = before
+            if results:
+                packed.commit_controller()
+            raise
+        results.append(result)
+    packed.commit_controller()
+    return tuple(results)

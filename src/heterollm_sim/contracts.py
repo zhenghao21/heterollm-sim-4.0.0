@@ -356,9 +356,7 @@ class RunManifest:
     model_name: str
     hardware_name: str
     workload_name: str
-    # Compatibility field retained in the V4 report schema.  Its value names
-    # the analytical lowering model, not a silicon-calibration claim.
-    calibration_version: str = ANALYTICAL_MODEL_VERSION
+    analytical_model_version: str = ANALYTICAL_MODEL_VERSION
     evidence: EvidenceStatus = EvidenceStatus.ANALYTICAL
     assumptions: Tuple[str, ...] = ()
     assumptions_zh: Tuple[str, ...] = ()

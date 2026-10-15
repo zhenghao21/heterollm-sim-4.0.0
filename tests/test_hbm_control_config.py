@@ -34,6 +34,7 @@ def test_generational_command_clock_latency_and_refresh(generation, density, rf,
     assert config.maximum_active_ns == 35100
     assert config.refresh_policy == "all_bank"
     assert (config.refresh_interval_ns, config.refresh_cycle_ns) == (3900, rf)
+    assert config.metadata["refresh_interval_scope"]
     p = config.metadata["parameter_provenance"]
     assert p["minimum_active_ns"]["status"] == "jedec_idd_example"
     assert p["activate_to_read_ns"]["status"] == "unknown_with_assumption"
@@ -68,7 +69,7 @@ def test_missing_control_contract_does_not_silently_use_legacy_or_default_fields
     with pytest.raises(ValueError, match="missing explicit fields"):
         parse_execution_physical_config(payload)
     payload = asdict(config)
-    payload.update(control_mode="legacy", refresh_policy="disabled")
+    payload.update(control_mode="analytical", refresh_policy="disabled")
     with pytest.raises(ValueError, match="JEDEC control status"):
         parse_execution_physical_config(payload)
 
@@ -97,7 +98,7 @@ def test_raw_unchanged_derived_fields_follow_inputs_and_edited_timings_remain_ex
 def test_overrides_record_assumptions_and_keep_command_anchored_fields_effective():
     old = reference()
     config = reconfigure_physical_config(old, overrides={
-        "open_ns": 17., "close_ns": 20., "write_recovery_ns": 21.,
+        "activate_to_read_ns": 17., "precharge_to_activate_ns": 20., "write_to_precharge_ns": 21.,
         "activate_to_write_ns": 18., "read_to_precharge_ns": 8.})
     assert (config.activate_to_read_ns, config.activate_to_write_ns) == (17, 18)
     assert config.precharge_to_activate_ns == 20

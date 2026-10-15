@@ -319,7 +319,7 @@ const CONCEPT_HELP_ZH = Object.freeze({
   typed_port: "带类型端口（Typed Port）声明输入、输出或权重方向，以及 dtype、shape 与 layout。只有维度逐项兼容的端口才能直接连接。",
   tensor_shape: "张量形状使用符号维度：B 为批次，T 为序列长度，H 为隐藏维度，I 为中间维度，V 为词表大小；整数表示固定维度。",
   explicit_transform: "显式变换（Transform）用于 reshape、transpose、cast 等真实语义变化。界面不会为修复维度不匹配而静默插入变换。",
-  layer_group: "重复 Block 组保存 repeat、layer_template 和逐层 overrides。折叠只改变视图；组参数修改会使映射过期。",
+  layer_group: "重复 Block 组保存当前层 ID、结构参数和逐层 overrides。折叠只改变视图；组参数修改会使映射过期。",
   dense: "Dense 前馈层的每个 Token 都经过同一组 MLP 权重；其 experts=1、top-k=1。",
   moe: "MoE（Mixture of Experts）由 Router 为每个 Token 选择部分专家；专家总数、Top-K、共享专家及路由策略共同影响容量和通信。",
   attention: "Attention 根据 Query、Key、Value 建模 Token 间依赖。Attention Heads 与 KV Heads 共同决定 GQA/MQA 分组和张量维度。",
@@ -571,7 +571,7 @@ const CONCEPT_HELP_EN = Object.freeze({
   typed_port: "A Typed Port declares input, output, or weight direction together with dtype, shape, and layout. Direct connections require compatible dimensions.",
   tensor_shape: "Tensor shapes use symbolic dimensions such as B, T, H, I, and V; integers represent fixed dimensions.",
   explicit_transform: "An explicit Transform records a real reshape, transpose, or cast. The editor never inserts one silently to hide an incompatible connection.",
-  layer_group: "A repeated Block group stores repeat count, a layer template, and per-layer overrides. Collapsing changes only the view.",
+  layer_group: "A repeated Block group stores layer IDs, structural parameters, and per-layer overrides. Collapsing changes only the view.",
   dense: "A Dense feed-forward layer applies the same MLP weights to every Token; its execution projection uses experts=1 and top-k=1.",
   moe: "Mixture of Experts routes each Token to selected experts. Expert count, Top-K, shared experts, and routing policy affect capacity and communication.",
   attention: "Attention models dependencies through Query, Key, and Value. Attention Heads and KV Heads determine GQA/MQA grouping and tensor dimensions.",
@@ -976,7 +976,7 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
     "Source: placement.parallel.ep_degree, optionally mirrored by the report.|Enter an integer of at least 1.|Unit: Expert Parallel Ranks.|Increasing it redistributes MoE experts and may add All-to-All traffic.|Dense layers are not automatically sharded by a larger EP degree.",
   ),
   parallel_strategy: conceptHelp220Detail(
-    "来源是 placement.parallel 及其兼容镜像。｜配置 TP/PP/EP、集合通信算法与同址开关。｜Degree 均为大于等于 1 的整数。｜任何结构性修改都会清理不兼容 Rank 映射。｜策略不自动增加 GPU、HBM 或互连。",
+    "来源是 placement.parallel。｜配置 TP/PP/EP、集合通信算法与同址开关。｜Degree 均为大于等于 1 的整数。｜任何结构性修改都会清理不兼容 Rank 映射。｜策略不自动增加 GPU、HBM 或互连。",
     "Source: placement.parallel.|Configures TP/PP/EP, collective algorithm, and colocation.|Every degree is an integer of at least 1.|Structural edits clear incompatible Rank mappings.|The strategy never adds GPUs, HBM, or links automatically.",
   ),
   collective_algorithm: conceptHelp220Detail(
@@ -1060,8 +1060,8 @@ const CONCEPT_HELP_220_DETAIL_OVERRIDES = Object.freeze({
     "Source: migration, recomputation, swap-time, and prefetch-modeling fields in report.kv_cache.|Read-only summary of six KV movement and constraint statistics.|Members use events, bytes, Tokens, ns, or Boolean state as appropriate.|It exposes capacity-pressure mitigation and cost.|This group does not repeat logical/physical Prefill or Decode traffic.",
   ),
   runtime_execution_mode: conceptHelp220Detail(
-    "来源是 report.execution_mode 或调度器模式回退。｜只读显示 Static 或 Continuous Batching。｜值是枚举，无数值单位。｜模式决定是否形成连续调度统计。｜它不表示 TP/PP/EP Degree。",
-    "Source: report.execution_mode with scheduler-mode fallback.|Read-only Static or Continuous Batching display.|Enumerated value with no numeric unit.|The mode determines whether continuous-scheduling statistics exist.|It does not represent TP, PP, or EP Degree.",
+    "来源是 report.execution_mode。｜只读显示 Static 或 Continuous Batching。｜值是枚举，无数值单位。｜模式决定是否形成连续调度统计。｜它不表示 TP/PP/EP Degree。",
+    "Source: report.execution_mode.|Read-only Static or Continuous Batching display.|Enumerated value with no numeric unit.|The mode determines whether continuous-scheduling statistics exist.|It does not represent TP, PP, or EP Degree.",
   ),
   total_batches: conceptHelp220Detail(
     "来源是 report.scheduler.total_batches。｜只读统计整次运行形成的批次总数。｜单位是 batches，取非负整数或 NA。｜它反映调度步数量并影响摊销解释。｜它不是 Peak Batch 的序列数或 Token 数。",
@@ -1851,12 +1851,9 @@ function mappingFingerprintFrom(value) {
   const nestedValidation = asObject(root.validation);
   return String(
     root.input_fingerprint
-    || root.mapping_input_fingerprint
-    || root.mapping_fingerprint
     || nestedResult.input_fingerprint
     || nestedValidation.input_fingerprint
     || controlPlane.input_fingerprint
-    || controlPlane.mapping_fingerprint
     || "",
   );
 }
@@ -1867,7 +1864,6 @@ function currentMappingFingerprintFrom(value) {
   const nestedValidation = asObject(root.validation);
   return String(
     root.current_input_fingerprint
-    || root.current_mapping_fingerprint
     || nestedResult.current_input_fingerprint
     || nestedValidation.current_input_fingerprint
     || "",
@@ -2418,11 +2414,42 @@ function hardwareInputForScenario(scenario = state.scenario) {
     runtime: deepClone(source.runtime),
   };
   return {
-    schema_version: "4.0",
+    schema_version: AUTHORING_SCHEMA_VERSION,
     kind: "hardware_input",
     contract_version: "2",
     hardware,
   };
+}
+
+function validateHardwareInputForImport(value) {
+  requireScenarioSchemaV4(value, "hardware_input");
+  if (value.kind !== "hardware_input" || value.contract_version !== "2") {
+    throw new Error("硬件文件必须使用 hardware_input 类型及 contract_version=2。");
+  }
+  const rejectUnknown = (object, allowed, label) => {
+    const unknown = Object.keys(object).filter((key) => !allowed.includes(key));
+    if (unknown.length) throw new Error(`${label} 包含不支持的字段：${unknown.join("、")}`);
+  };
+  rejectUnknown(value, ["schema_version", "kind", "contract_version", "hardware", "metadata"], "hardware_input");
+  rejectUnknown(asObject(value.hardware?.parameters), ["host_orchestration", "fusion", "cim_interconnect", "runtime"], "hardware.parameters");
+  for (const component of asArray(value.hardware?.components)) {
+    if (Object.hasOwn(component, "cost_profile_id")) {
+      throw new Error("硬件文件组件只接受 execution_profile，不接受 cost_profile_id。");
+    }
+    const expected = costProfileKeyForComponentKind(component);
+    const profile = component.execution_profile;
+    if (!expected) {
+      if (profile != null) throw new Error(`组件 ${component.component_id} 不支持 execution_profile。`);
+      continue;
+    }
+    if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+      throw new Error(`组件 ${component.component_id} 缺少 execution_profile。`);
+    }
+    rejectUnknown(profile, ["profile_id", "profile_kind", "parameters"], "execution_profile");
+    if (profile.profile_kind !== expected) {
+      throw new Error(`组件 ${component.component_id} 的 execution_profile.profile_kind 不匹配。`);
+    }
+  }
 }
 
 function scenarioPayloadForTransport(scenario = state.scenario) {
@@ -2508,42 +2535,21 @@ function setConnection(status, label, labelEn = "") {
 
 function runtimeHealthView(payload) {
   const health = asObject(payload);
-  const runtime = asObject(health.runtime || health.python);
+  const runtime = asObject(health.runtime);
   const ortools = asObject(health.ortools);
-  const solverPayload = asObject(health.solvers);
-  const availableSolvers = asArray(health.available_solvers || solverPayload.available)
-    .map((item) => String(item || "").trim())
-    .filter(Boolean);
-  let ortoolsAvailable = ortools.available;
-  if (typeof ortoolsAvailable !== "boolean") ortoolsAvailable = ortools.cp_sat_available;
-  if (typeof ortoolsAvailable !== "boolean") ortoolsAvailable = availableSolvers.includes("ortools");
-  const rawError = ortools.error_zh || ortools.import_error_zh || ortools.detail_zh
-    || ortools.error || ortools.import_error || ortools.detail || "";
-  const ortoolsError = ortoolsAvailable === true
-    ? ""
-    : chineseMessage(
-      {
-        message_zh: ortools.error_zh || ortools.import_error_zh,
-        detail_zh: ortools.detail_zh,
-        message: rawError,
-      },
-      "OR-Tools CP-SAT 无法导入；请运行离线包中的安装诊断脚本。",
-    );
   return {
     ok: health.ok === true,
     serviceVersion: String(health.version || "—"),
-    pythonVersion: String(runtime.python_version || health.python_version || "—"),
-    pythonExecutable: String(runtime.executable || health.python_executable || "—"),
-    architectureBits: Number(runtime.architecture_bits || health.architecture_bits || runtime.bits || 0),
-    platform: String(runtime.platform || health.platform || "—"),
-    ortoolsAvailable: ortoolsAvailable === true,
+    pythonVersion: String(runtime.python_version || "—"),
+    pythonExecutable: String(runtime.executable || "—"),
+    architectureBits: Number(runtime.architecture_bits || 0),
+    platform: String(runtime.platform || "—"),
+    ortoolsAvailable: ortools.available === true,
     ortoolsVersion: String(ortools.version || "—"),
-    ortoolsProbeOk: ortools.probe_ok !== false && ortools.cp_sat_available !== false,
-    ortoolsError,
-    availableSolvers: availableSolvers.length ? availableSolvers : ["auto", "builtin"],
-    diagnosticLogPath: String(
-      health.diagnostic_log_path || asObject(health.diagnostics).log_path || "",
-    ),
+    ortoolsProbeOk: ortools.probe_ok === true,
+    ortoolsError: ortools.available === true ? "" : String(ortools.error || "OR-Tools CP-SAT 不可用"),
+    availableSolvers: asArray(health.available_solvers),
+    diagnosticLogPath: String(health.diagnostic_log_path || ""),
   };
 }
 
@@ -3283,11 +3289,6 @@ function saveTopologyView() {
   persistCurrentScenario();
 }
 
-function savePositions() {
-  if (!state.scenario) return;
-  saveTopologyView();
-}
-
 async function apiRequest(path, options = {}) {
   let response;
   try {
@@ -3320,19 +3321,19 @@ async function apiRequest(path, options = {}) {
   }
 
   if (!response.ok) {
-    const envelope = asObject(payload).error;
+    const envelope = asObject(asObject(payload).error);
     const serverMessage = backendChineseMessage(
-      envelope && typeof envelope === "object" ? envelope : asObject(payload),
+      envelope,
       `请求失败（HTTP ${response.status}）。请根据错误代码检查输入。`,
     );
     const error = new Error(
       serverMessage,
     );
-    error.code = envelope?.code || asObject(payload).code || `http_${response.status}`;
-    error.message_zh = envelope?.message_zh || asObject(payload).message_zh || "";
-    error.details = envelope?.details || asObject(payload).details || null;
-    error.diagnosticId = envelope?.diagnostic_id || asObject(payload).diagnostic_id || asObject(error.details).diagnostic_id || "";
-    error.errorType = envelope?.exception_type || envelope?.error_type || asObject(payload).exception_type || asObject(payload).error_type || "";
+    error.code = envelope.code || `http_${response.status}`;
+    error.message_zh = envelope.message_zh || "";
+    error.details = envelope.details || null;
+    error.diagnostic_id = envelope.diagnostic_id || "";
+    error.exception_type = envelope.exception_type || "";
     error.status = response.status;
     const connection = runtimeConnectionLabel();
     setConnection("online", {
@@ -3391,12 +3392,12 @@ function runtimePlacementForView(placement = state.scenario?.placement) {
 
 function controlPlaneDecision(placement) {
   const runtime = asObject(runtimePlacementForView(placement).control_plane);
-  return asObject(runtime.decision || placementControlPlaneMetadata(placement).decision);
+  return asObject(runtime.decision);
 }
 
 function controlPlaneEvidence(placement) {
   const runtime = asObject(runtimePlacementForView(placement).control_plane);
-  return asObject(runtime.evidence || placementControlPlaneMetadata(placement).evidence);
+  return asObject(runtime.evidence);
 }
 
 function acceptRuntimePlacement(report) {
@@ -3655,7 +3656,7 @@ async function loadReference({ quiet = false } = {}) {
   setBusy(true, "正在载入参考场景", "GET /api/reference");
   try {
     const payload = await apiRequest("/reference", { method: "GET", headers: {} });
-    const scenario = asObject(payload).scenario || asObject(payload).reference || payload;
+    const scenario = payload;
     setScenario(scenario, { dirty: false, message: quiet ? "" : "参考场景已载入" });
   } catch (error) {
     showOperationError("参考场景载入失败", error);
@@ -3735,18 +3736,15 @@ function normalizeIssue(issue, source, severity) {
   ].filter(Boolean).join(" "))).forEach(([key, value]) => {
     if (!Object.hasOwn(normalized, key)) normalized[key] = value;
   });
-  // Keep machine-readable targets so the UI can take the user to the exact
-  // editor control after a run gate failure. Backends may use JSON pointers,
-  // dotted paths, or explicit IDs; accepting all three keeps this compatible
-  // with older validation responses.
+  // Preserve current diagnostic paths, physical fields, and explicit IDs
+  // so a run gate failure can focus the matching editor control.
   for (const key of [
-    "field_path", "field_path_zh", "field_path_en", "path", "path_zh", "path_en",
-    "json_pointer", "pointer", "field", "field_name", "component_id", "link_id", "port_id",
+    "field_path", "field", "component_id", "link_id", "port_id",
     "operator_id", "sub_operator_id", "request_id", "rank_id", "tensor_id",
   ]) {
     if (Object.hasOwn(structured, key)) normalized[key] = structured[key];
   }
-  if ((structured.field_path || structured.path || structured.json_pointer) && !structured.field && !structured.field_name) delete normalized.field;
+  if (structured.field_path && !structured.field) delete normalized.field;
   for (const key of [
     "stage",
     "operator_id",
@@ -3816,45 +3814,38 @@ function localizedIssueMessage(issue) {
 }
 
 function normalizeValidation(payload) {
-  const root = asObject(payload).validation || asObject(payload);
+  const root = asObject(payload);
   const errorsRoot = root.errors;
   const warningsRoot = root.warnings;
-  const informationRoot = Object.hasOwn(root, "information") ? root.information : root.infos;
+  const informationRoot = root.information;
   const errors = [];
   const warnings = [];
   const information = [];
 
-  const collect = (target, value, severity, source = "scenario") => {
+  const collect = (target, value, severity) => {
+    // ScenarioValidationError carries a direct scenario-error list; the
+    // validation endpoint groups issues by scenario and topology.
     if (Array.isArray(value)) {
-      value.forEach((item) => target.push(normalizeIssue(item, source, severity)));
-    } else if (value && typeof value === "object") {
-      Object.entries(value).forEach(([key, items]) => collect(target, items, severity, key));
-    } else if (value) {
-      target.push(normalizeIssue(value, source, severity));
+      value.forEach((item) => target.push(normalizeIssue(item, "scenario", severity)));
+      return;
     }
+    Object.entries(asObject(value)).forEach(([source, items]) => {
+      asArray(items).forEach((item) => target.push(normalizeIssue(item, source, severity)));
+    });
   };
 
   collect(errors, errorsRoot, "error");
   collect(warnings, warningsRoot, "warning");
   collect(information, informationRoot, "information");
 
-  if (!errors.length && Array.isArray(root.validation_errors)) collect(errors, root.validation_errors, "error");
-  if (!warnings.length && Array.isArray(root.validation_warnings)) collect(warnings, root.validation_warnings, "warning");
-  if (!information.length && Array.isArray(root.validation_information)) collect(information, root.validation_information, "information");
-
-  const valid = typeof root.valid === "boolean"
-    ? root.valid
-    : typeof root.is_valid === "boolean"
-      ? root.is_valid
-      : errors.length === 0;
+  const valid = root.valid === true;
   return { valid, errors, warnings, information };
 }
 
 function validationIssueTarget(issue) {
   const item = asObject(issue);
   const path = [
-    item.field_path, item.path, item.json_pointer, item.pointer, item.field, item.field_name,
-    item.field_path_zh, item.field_path_en,
+    item.field_path, item.field,
   ].find((value) => value !== undefined && value !== null && String(value).trim());
   const normalizedPath = String(path || item.location || "").trim();
   const parts = normalizedPath
@@ -3866,7 +3857,7 @@ function validationIssueTarget(issue) {
   const profileField = parts[0] === "profiles" && parts[1] === "components" && parts.length > 4
     ? parts.slice(4).join(".")
     : "";
-  const field = String(item.field || item.field_name || profileField || parts.at(-1) || "").trim();
+  const field = String(item.field || profileField || parts.at(-1) || "").trim();
   const partAfter = (name) => {
     const index = parts.indexOf(name);
     return index >= 0 ? parts[index + 1] || "" : "";
@@ -3912,7 +3903,7 @@ function validationControlFieldMatches(control, field, path = "") {
     data.costProfileField, data.costProfileBinding, data.hbfMediaField, data.inspectorPortField,
     data.controlPlaneField, data.placementField, data.placementMetadataField,
     data.workloadField, data.schedulerField, data.mtpField, data.requestField,
-    data.modelParam, data.modelTemplateParam, data.modelPortField, data.scenarioField,
+    data.modelParam, data.modelPortField, data.scenarioField,
   ].filter(Boolean).map((value) => String(value).toLowerCase());
   const aliases = {
     cache_component: ["kv_cache_target", "kv_cache_component", "linear_state_target", "linear_state_cache"],
@@ -4388,7 +4379,7 @@ function finishRunJob(snapshot) {
   state.runJobSubmitting = false;
   renderRunJobDialog();
   if (snapshot.status === "completed") {
-    const report = asObject(snapshot.report).report || snapshot.report;
+    const report = snapshot.report;
     const reportFingerprint = mappingFingerprintFrom(report);
     const scenarioChanged = state.runJobScenarioGeneration !== state.scenarioGeneration
       || state.runJobMappingGeneration !== state.mappingGeneration
@@ -4748,11 +4739,11 @@ function showOperationError(title, error) {
     { ...asObject(error), message: error?.message, details },
     "操作失败，未提供中文说明；请根据错误代码检查输入。",
   );
-  const diagnosticId = String(error?.diagnosticId || details.diagnostic_id || "").trim();
+  const diagnosticId = String(error?.diagnostic_id || "").trim();
   const diagnosticSuffix = uiText(`（诊断编号：${diagnosticId}）`, ` (Diagnostic ID: ${diagnosticId})`);
   const message = diagnosticId ? `${baseMessage}${diagnosticSuffix}` : baseMessage;
   reconcileMappingFingerprint(details);
-  if (error.code === "mapping_stale" || error.code === "stale_mapping" || details.mapping_stale === true) {
+  if (error.code === "mapping_stale" || details.mapping_stale === true) {
     markMappingStale(localizedBackendValue(
       { code: "mapping_stale", message_zh: details.message_zh, message_en: details.message_en, message: details.message },
       "服务端拒绝了过期映射；请刷新运行时放置。",
@@ -4760,7 +4751,7 @@ function showOperationError(title, error) {
     ));
     if (dom.controlPlaneStatus) renderControlPlaneStatus();
   }
-  const validationDetails = details.validation || (details.errors || details.warnings || details.information || details.infos ? details : null);
+  const validationDetails = details.errors || details.warnings || details.information ? details : null;
   if (validationDetails) {
     const validation = normalizeValidation(validationDetails);
     state.validation = { errors: validation.errors, warnings: validation.warnings, information: validation.information };
@@ -4998,7 +4989,7 @@ function componentKindClass(kind) {
 
 function normalizedComponentKind(kind) {
   const normalized = String(kind || "").toLowerCase().replaceAll("-", "_");
-  return ["gddr6", "gddr6x", "gddr7"].includes(normalized) ? "gddr" : normalized;
+  return normalized;
 }
 
 function isDedicatedHbm(kind) {
@@ -5008,18 +4999,13 @@ function isDedicatedHbm(kind) {
 function gddrGeneration(component) {
   const metadata = asObject(component?.metadata);
   const physical = asObject(metadata.physical_memory_config);
-  const technology = asObject(metadata.technology);
-  return String(physical.generation || metadata.generation || technology.generation || metadata.memory_type || "").toUpperCase();
+  return String(physical.generation || "").toUpperCase();
 }
 
 function sharedMemoryLinkComponent(link, scenario = state.scenario) {
   const components = asArray(scenario?.hardware?.components);
   const source = components.find((item) => String(item.component_id) === String(link?.source_component));
   const target = components.find((item) => String(item.component_id) === String(link?.target_component));
-  const explicit = String(link?.metadata?.bandwidth_source || "").trim().toLowerCase();
-  if (["component", "memory_component", "shared_component"].includes(explicit)) {
-    return [source, target].find((item) => item && isActiveMemoryComponent(item)) || source || target || null;
-  }
   const serviceRef = String(link?.metadata?.service_ref || "").trim();
   if (!serviceRef) return null;
   const serviceComponentId = serviceRef.endsWith(".access") ? serviceRef.slice(0, -7) : "";
@@ -5044,7 +5030,6 @@ function isActiveMemoryComponent(componentOrKind) {
 function isWritableActiveRankMemory(component) {
   const metadata = asObject(component?.metadata);
   return isActiveMemoryComponent(component)
-    && metadata.read_only !== true
     && metadata.writable !== false;
 }
 
@@ -5063,6 +5048,7 @@ const PHYSICAL_MEMORY_COMPONENT_KINDS = new Set([
 ]);
 const PHYSICAL_MEMORY_KINDS = new Set(["DDR", "LPDDR", "HBM", "GDDR", "SSD", "HBF"]);
 const DRAM_PHYSICAL_REQUIRED_FIELDS = [
+  "control_mode", "bank_geometry_scope", "stack_interface_mode",
   "channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack",
   "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes",
   "open_ns", "close_ns", "read_latency_ns", "write_latency_ns", "burst_interval_ns",
@@ -5080,7 +5066,7 @@ const DRAM_BANK_GROUP_TIMING_FIELDS = [
 const NAND_PHYSICAL_REQUIRED_FIELDS = [
   "channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun",
   "blocks_per_plane", "pages_per_block", "page_bytes", "host_granularity_bytes",
-  "host_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns",
+  "host_bandwidth_gb_s", "host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns",
   "block_erase_ns", "front_ns", "planes_independent", "partial_page_policy", "max_outstanding_requests",
 ];
 
@@ -5120,7 +5106,7 @@ function validatePhysicalMemoryConfig(value, component) {
     throw new Error("physical_memory_config.generation 必须是 GDDR6、GDDR6X 或 GDDR7。");
   }
   const nand = kind === "SSD" || kind === "HBF";
-  const requiredFields = nand ? NAND_PHYSICAL_REQUIRED_FIELDS : DRAM_PHYSICAL_REQUIRED_FIELDS;
+  const requiredFields = nand ? NAND_PHYSICAL_REQUIRED_FIELDS : [...DRAM_PHYSICAL_REQUIRED_FIELDS, ...DRAM_BANK_GROUP_TIMING_FIELDS.map(([field]) => field)];
   requiredFields.forEach((field) => {
     if (!Object.hasOwn(value, field) || value[field] == null) {
       throw new Error(`physical_memory_config.${field} 是必填字段。`);
@@ -5135,7 +5121,7 @@ function validatePhysicalMemoryConfig(value, component) {
     }
   });
   const numericFields = nand
-    ? ["host_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns", "block_erase_ns", "front_ns"]
+    ? ["host_bandwidth_gb_s", "host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns", "block_erase_ns", "front_ns"]
     : ["open_ns", "close_ns", "read_latency_ns", "write_latency_ns", "burst_interval_ns", "read_recovery_ns", "write_recovery_ns", "read_to_write_ns", "write_to_read_ns"];
   numericFields.forEach((field) => {
     if (!Number.isFinite(Number(value[field])) || Number(value[field]) < 0) {
@@ -5143,9 +5129,7 @@ function validatePhysicalMemoryConfig(value, component) {
     }
   });
   if (!nand) DRAM_BANK_GROUP_TIMING_FIELDS.forEach(([field]) => {
-    if (Object.hasOwn(value, field) && (
-      typeof value[field] !== "number" || !Number.isFinite(value[field]) || value[field] < 0
-    )) {
+    if (typeof value[field] !== "number" || !Number.isFinite(value[field]) || value[field] < 0) {
       throw new Error(`physical_memory_config.${field} 必须是非负有限数，并满足当前配置的协议下限。`);
     }
   });
@@ -5217,13 +5201,13 @@ function dramBankGroupTimingMarkup(config) {
   if (!config || !["DDR", "LPDDR", "HBM", "GDDR"].includes(String(config.kind || "").toUpperCase())) return "";
   const enabled = DRAM_BANK_GROUP_TIMING_FIELDS.some(([field]) => Number(config[field] || 0) > 0);
   return `<details class="inspector-section dram-bank-group-timing">
-    <summary><span>${uiText("Bank group 时序约束（可选）", "Bank-group timing constraints (optional)")}</span><span class="section-summary-state ${enabled ? "is-active" : ""}">${uiText(enabled ? "已启用" : "全零关闭", enabled ? "Enabled" : "All zero: disabled")}</span></summary>
+    <summary><span>${uiText("Bank group 时序约束", "Bank-group timing constraints")}</span><span class="section-summary-state ${enabled ? "is-active" : ""}">${uiText(enabled ? "已启用" : "全零关闭", enabled ? "Enabled" : "All zero: disabled")}</span></summary>
     <div class="inspector-section-body">
       <p class="muted">${uiText("作用域是同一 stack / die / lane / rank。同方向列命令只约束 READ→READ 和 WRITE→WRITE 的命令起点；ACT 是打开行的命令，窗口内最多允许四次 ACT。写转读约束从最后写数据结束算到读命令起点，与数据总线的方向切换时间分别生效。", "Scope is one stack / die / lane / rank. Column intervals constrain READ→READ and WRITE→WRITE command starts. ACT opens a row; its window allows at most four ACTs. Write-to-read intervals run from the last write-data end to the read-command start, separately from data-bus turnaround.")}</p>
-      <div class="field-grid-2">${DRAM_BANK_GROUP_TIMING_FIELDS.map(([field, zh, en]) => `<label class="field"><span>${escapeHtml(uiText(zh, en))}（ns）</span><input type="number" min="0" step="any" data-inspector-bank-group-timing="${field}" aria-label="${field}" value="${escapeHtml(config[field] ?? 0)}"></label>`).join("")}</div>
+      <div class="field-grid-2">${DRAM_BANK_GROUP_TIMING_FIELDS.map(([field, zh, en]) => `<label class="field"><span>${escapeHtml(uiText(zh, en))}（ns）</span><input type="number" min="0" step="any" data-inspector-bank-group-timing="${field}" aria-label="${field}" value="${escapeHtml(config[field])}"></label>`).join("")}</div>
       <p class="muted">${config.control_mode === "jedec_hbm"
         ? uiText("标准可确定的间隔会随几何与接口频率更新。手动值也必须满足已知 JEDEC 下限和耦合约束，否则无法保存。未查明的器件时序仍标为未知；只有这些未知项的 0 表示暂未建模，不代表器件允许零间隔。", "Known standard intervals follow geometry and interface frequency. Manual values must also satisfy known JEDEC minima and coupled constraints or saving fails. Undetermined device timings remain unknown; zero only means an unknown constraint is not modeled, never a zero-delay device guarantee.")
-        : uiText("每项 0 表示关闭该项约束，旧配置省略时仍为 0。这里不填入任何厂商默认时序；数值需由用户提供。启用这些约束仍不代表完整 JEDEC 模型，刷新等机制未包括在内。", "Zero disables each constraint; omitted legacy fields remain zero. No vendor timing defaults are supplied; provide values explicitly. These constraints do not make the model a complete JEDEC implementation; refresh and other mechanisms remain outside its scope.")}</p>
+        : uiText("每项必须明确填写；0 表示关闭该项约束。这里不填入任何厂商默认时序；数值需由用户提供。启用这些约束仍不代表完整 JEDEC 模型，刷新等机制未包括在内。", "Each field must be explicit; zero disables the constraint. No vendor timing defaults are supplied; provide values explicitly. These constraints do not make the model a complete JEDEC implementation; refresh and other mechanisms remain outside its scope.")}</p>
     </div>
   </details>`;
 }
@@ -5571,29 +5555,22 @@ function kvAnalysisComponentCandidates(scenario) {
 function kvAnalysisReportMetrics(report) {
   const summary = asObject(report?.summary);
   const kv = asObject(report?.kv_cache);
-  const p50 = (key) => asObject(summary[key]).p50 ?? asObject(summary[key.replace("engine_", "")]).p50 ?? null;
-  const sum = (keys) => keys.reduce((total, key) => {
-    const value = Number(kv[key] ?? report?.[key] ?? summary[key]);
-    return Number.isFinite(value) ? total + value : total;
-  }, 0);
-  const traffic = sum([
+  const p50 = (key) => asObject(summary[key]).p50 ?? null;
+  const traffic = [
     "physical_prefill_read_bytes", "physical_prefill_write_bytes",
     "physical_decode_read_bytes", "physical_decode_append_bytes",
-  ]);
-  const migration = Number(kv.migration_bytes ?? kv.migration_total_bytes ?? 0);
-  const offload = Number(kv.offload_bytes ?? 0);
-  const peak = Number(kv.peak_used_bytes ?? report?.kv_peak_occupancy ?? summary.kv_peak_occupancy);
-  const capacity = Number(kv.effective_physical_capacity ?? kv.capacity_bytes ?? report?.effective_physical_capacity);
+  ].reduce((total, key) => total + Number(kv[key] || 0), 0);
+  const optionalNumber = value => value == null || !Number.isFinite(Number(value)) ? null : Number(value);
   return {
-    ttft_ns: p50("engine_ttft_ns") ?? p50("ttft_ns"),
-    tpot_ns: p50("engine_tpot_ns") ?? p50("tpot_ns"),
-    e2e_ns: p50("engine_e2e_ns") ?? p50("e2e_ns") ?? Number(summary.makespan_ns),
-    peak_bytes: Number.isFinite(peak) ? peak : null,
-    capacity_bytes: Number.isFinite(capacity) ? capacity : null,
-    traffic_bytes: traffic || null,
-    migration_bytes: Number.isFinite(migration) ? migration : null,
-    offload_bytes: Number.isFinite(offload) ? offload : null,
-    swap_transfer_ns: Number(kv.swap_transfer_time_ns) || 0,
+    ttft_ns: p50("ttft_ns"),
+    tpot_ns: p50("tpot_ns"),
+    e2e_ns: p50("e2e_ns"),
+    peak_bytes: optionalNumber(kv.peak_used_bytes),
+    capacity_bytes: optionalNumber(kv.effective_physical_capacity_bytes),
+    traffic_bytes: Number.isFinite(traffic) ? traffic : null,
+    migration_bytes: optionalNumber(kv.migration_bytes),
+    offload_bytes: optionalNumber(kv.offload_bytes),
+    swap_transfer_ns: optionalNumber(kv.swap_transfer_time_ns),
   };
 }
 
@@ -5693,7 +5670,7 @@ async function runKvAnalysis() {
         body: JSON.stringify(scenarioPayloadForTransport(kvAnalysisCandidateScenario(scenarioReference, candidate))),
       });
       result.status = "completed";
-      result.metrics = kvAnalysisReportMetrics(asObject(payload).report || payload);
+      result.metrics = kvAnalysisReportMetrics(payload);
     } catch (error) {
       result.status = "error";
       result.error = chineseMessage(error, "后端拒绝了该候选；请查看校验信息。");
@@ -5844,7 +5821,7 @@ function ensureNodePositions(force) {
   state.groupBounds = layout.groupBounds;
   state.topologyView.layout.positions = state.nodePositions;
   state.topologyView.layout.bounds = layout.bounds;
-  savePositions();
+  saveTopologyView();
 }
 
 function createTopologyNode() {
@@ -6588,7 +6565,7 @@ function endNodeDrag(event) {
       renderGroups();
       updateWorldBounds();
       renderLinks();
-      savePositions();
+      saveTopologyView();
     } else {
       renderGroups();
       renderLinks();
@@ -7215,17 +7192,13 @@ function createProtocolLink(sourceId, targetId, protocol) {
     const memoryGeneration = gddrGeneration(target);
     const selectedGeneration = String(defaults.version).toUpperCase();
     if (!["GDDR6", "GDDR6X", "GDDR7"].includes(selectedGeneration)) throw new Error("GDDR 版本必须是 GDDR6、GDDR6X 或 GDDR7");
-    if (memoryGeneration && memoryGeneration !== selectedGeneration) throw new Error(`显存 ${target.component_id} 的代际 ${memoryGeneration} 与链路 ${selectedGeneration} 不一致`);
+    if (memoryGeneration !== selectedGeneration) throw new Error(`显存 ${target.component_id} 的代际 ${memoryGeneration} 与链路 ${selectedGeneration} 不一致`);
     const supported = asArray(source.metadata?.supported_gddr_generations);
     const controllerGenerations = supported.length ? supported.map((value) => String(value).toUpperCase())
       : asArray(source.ports).filter((port) => /^GDDR/i.test(String(port.protocol))).map((port) => String(port.version || port.protocol).match(/GDDR(?:6X|6|7)/i)?.[0]?.toUpperCase()).filter(Boolean);
     if (!controllerGenerations.includes(selectedGeneration)) throw new Error(`GPU ${source.component_id} 未声明支持 ${selectedGeneration} 控制器，请在 GPU 元数据或端口中声明 supported_gddr_generations`);
   }
   const historyBefore = topologyHistorySnapshot();
-  if (protocol === "GDDR") {
-    target.metadata ??= {};
-    target.metadata.generation = String(defaults.version).toUpperCase();
-  }
   const localMemoryComponent = ["HBM", "GDDR"].includes(protocol)
     ? [source, target].find((item) => isActiveMemoryComponent(item)) || null
     : null;
@@ -7314,13 +7287,13 @@ function addComponent(kind) {
   const gddrDefaultCapacityBytes = 16 * 1000 ** 3;
   const gddrDefaultCapacityUnit = "GB";
   const defaults = {
-    gpu: { capacity_bytes: 64 * 1024 * 1024, peak_ops_per_s: 120e12, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", supported_gddr_generations: ["GDDR6", "GDDR6X", "GDDR7"], read_latency_ns: 0, write_latency_ns: 0, transfer_granularity_bytes: 0, dma_latency_ns: 0 } },
+    gpu: { capacity_bytes: 0, peak_ops_per_s: 120e12, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", supported_gddr_generations: ["GDDR6", "GDDR6X", "GDDR7"], read_latency_ns: 0, write_latency_ns: 0, transfer_granularity_bytes: 0, dma_latency_ns: 0 } },
     cpu: { capacity_bytes: 0, peak_ops_per_s: 100e9, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "editable-reference-default" } },
     hbm: { capacity_bytes: 16 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 4096, write_bandwidth_gbps: 4096, metadata: { evidence_status: "analytical", read_latency_ns: 40, write_latency_ns: 40, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
-    gddr: { capacity_bytes: gddrDefaultCapacityBytes, peak_ops_per_s: 0, read_bandwidth_gbps: 5120, write_bandwidth_gbps: 5120, metadata: { evidence_status: "analytical", generation: "GDDR6", node_scope: "equivalent_gpu_memory_subsystem", capacity_unit: gddrDefaultCapacityUnit, read_latency_ns: 35, write_latency_ns: 35, transfer_granularity_bytes: 256, max_outstanding_requests: 64, dma_latency_ns: 0, physical_memory_config: { kind: "GDDR", generation: "GDDR6", channels: 1, data_lanes: 8, data_width_bits: 32, effective_pin_data_rate_gbps: 20, bandwidth_input_mode: "data_rate", stacks: 1, dies_per_stack: 1, ranks_per_channel: 1, bank_groups_per_rank: 4, banks_per_group: 4, rows_per_bank: 131072, row_bytes: 8192, burst_bytes: 64, interleave_bytes: 64, open_ns: 14, close_ns: 14, read_latency_ns: 35, write_latency_ns: 35, burst_interval_ns: 0.8, max_outstanding_requests: 64, capacity_bytes: gddrDefaultCapacityBytes, metadata: { capacity_unit: gddrDefaultCapacityUnit, command_interval_model: "per_lane_burst_payload_budget" } } } },
+    gddr: { capacity_bytes: gddrDefaultCapacityBytes, peak_ops_per_s: 0, read_bandwidth_gbps: 5120, write_bandwidth_gbps: 5120, metadata: { evidence_status: "analytical", node_scope: "equivalent_gpu_memory_subsystem", capacity_unit: gddrDefaultCapacityUnit, read_latency_ns: 35, write_latency_ns: 35, transfer_granularity_bytes: 256, max_outstanding_requests: 64, dma_latency_ns: 0, physical_memory_config: { kind: "GDDR", generation: "GDDR6", control_mode: "analytical", bank_geometry_scope: "per_die", stack_interface_mode: "shared", subchannels_per_channel: 1, pseudo_channels_per_channel: 1, read_recovery_ns: 0, write_recovery_ns: 15, read_to_write_ns: 0, write_to_read_ns: 0, column_same_group_ns: 0, column_different_group_ns: 0, activate_same_group_ns: 0, activate_different_group_ns: 0, four_activate_window_ns: 0, write_to_read_same_group_ns: 0, write_to_read_different_group_ns: 0, channels: 1, data_lanes: 8, data_width_bits: 32, effective_pin_data_rate_gbps: 20, bandwidth_input_mode: "data_rate", stacks: 1, dies_per_stack: 1, ranks_per_channel: 1, bank_groups_per_rank: 4, banks_per_group: 4, rows_per_bank: 131072, row_bytes: 8192, burst_bytes: 64, interleave_bytes: 64, open_ns: 14, close_ns: 14, read_latency_ns: 35, write_latency_ns: 35, burst_interval_ns: 0.8, max_outstanding_requests: 64, capacity_bytes: gddrDefaultCapacityBytes, metadata: { capacity_unit: gddrDefaultCapacityUnit, command_interval_model: "per_lane_burst_payload_budget" } } } },
     dram: { capacity_bytes: 32 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 2048, write_bandwidth_gbps: 2048, metadata: { evidence_status: "analytical", read_latency_ns: 60, write_latency_ns: 60, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
     host_memory: { capacity_bytes: 128 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 1600, write_bandwidth_gbps: 1600, metadata: { evidence_status: "analytical", source: "editable-reference-default", read_latency_ns: 100, write_latency_ns: 100, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
-    hbf: { capacity_bytes: 512 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 3904, write_bandwidth_gbps: 217.6, metadata: { evidence_status: "analytical_user_configured", source: "user-configured-hbf-coordinates", dma_parameter_basis: "editable analytical assumption bounded by the HBF logical path", reference_capacity: "512 GB", reference_read_bandwidth: "488 GB/s", reference_write_bandwidth: "27.2 GB/s", read_only: false, writable: true, access_mode: "memory", write_buffer_bytes: 0, read_latency_ns: 4000, write_latency_ns: 75000, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 3904, dma_latency_ns: 800 } },
+    hbf: { capacity_bytes: 512 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 3904, write_bandwidth_gbps: 217.6, metadata: { evidence_status: "analytical_user_configured", source: "user-configured-hbf-coordinates", dma_parameter_basis: "editable analytical assumption bounded by the HBF logical path", reference_capacity: "512 GB", reference_read_bandwidth: "488 GB/s", reference_write_bandwidth: "27.2 GB/s", writable: true, access_mode: "memory", write_buffer_bytes: 0, read_latency_ns: 4000, write_latency_ns: 75000, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 3904, dma_latency_ns: 800 } },
     ssd: { capacity_bytes: 4 * 1024 ** 4, peak_ops_per_s: 0, read_bandwidth_gbps: 64, write_bandwidth_gbps: 48, metadata: { evidence_status: "analytical", source: "reference-default", dma_parameter_basis: "editable analytical storage-controller assumption", read_latency_ns: 80000, write_latency_ns: 100000, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 64, dma_latency_ns: 2000 } },
     high_io_ssd: { capacity_bytes: 8 * 1024 ** 4, peak_ops_per_s: 0, read_bandwidth_gbps: 448, write_bandwidth_gbps: 224, metadata: { evidence_status: "analytical", source: "reference-default", dma_parameter_basis: "editable analytical high-I/O controller assumption", read_latency_ns: 25000, write_latency_ns: 40000, transfer_granularity_bytes: 4096, max_outstanding_requests: 64, dma_bandwidth_gbps: 448, dma_latency_ns: 1200 } },
     digital_sram_cim: { capacity_bytes: 512 * 1024 * 1024, peak_ops_per_s: 0, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", read_latency_ns: 5, write_latency_ns: 5, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
@@ -7358,7 +7331,7 @@ function addComponent(kind) {
   state.selectedComponents = new Set([id]);
   state.selected = { type: "component", id };
   refreshColocatedRankMapping();
-  savePositions();
+  saveTopologyView();
   commitTopologyHistory(historyBefore, "新增组件", { mappingImpact: true });
   markScenarioChanged("", { mappingImpact: true, mappingReason: "硬件组件已新增，映射需要重新生成。" });
   toast("组件已添加", `${id} 尚未连接${placement.adjusted ? "；已自动放置到最近空位" : ""}，校验会提示拓扑连通性`, "success");
@@ -7440,7 +7413,7 @@ function deleteComponent(componentId, { deferRender = false, quiet = false, hist
   }).filter((group) => group.members.length);
   state.selectedComponents.delete(componentId);
   refreshColocatedRankMapping();
-  savePositions();
+  saveTopologyView();
   state.selected = null;
   if (!deferRender) {
     commitTopologyHistory(historyBefore, "删除组件", { mappingImpact: true });
@@ -9015,8 +8988,8 @@ function bindCostProfileFields(component) {
         .filter((item) => item.cost_profile_id === profileId && costProfileKeyForComponentKind(item) === profileKey)
         .forEach((item) => {
           item.metadata = asObject(item.metadata);
-          // This control edits the one physical service, including legacy
-          // authoring copies that would otherwise conflict on normalization.
+          // Shared profile parameters must match every component's explicit
+          // physical service metadata, as required by scenario validation.
           item.metadata[physicalField] = value;
         });
     }
@@ -9723,7 +9696,7 @@ function renameComponent(component, nextId) {
   if (state.nodePositions[previousId]) {
     state.nodePositions[nextId] = state.nodePositions[previousId];
     delete state.nodePositions[previousId];
-    savePositions();
+    saveTopologyView();
   }
   if (state.nodeSizes[previousId]) {
     state.nodeSizes[nextId] = state.nodeSizes[previousId];
@@ -9742,14 +9715,12 @@ function renameComponent(component, nextId) {
 }
 
 function presetId(preset) {
-  return String(preset.id ?? preset.preset_id ?? preset.slug ?? "");
+  return String(preset.id ?? "");
 }
 
 function presetSupportLevel(preset) {
-  const raw = String(preset.support_level ?? preset.support ?? preset.evidence_status ?? "out_of_domain").toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
-  if (["exact", "verified", "calibrated"].includes(raw)) return "exact";
-  if (["analytical", "approximation", "analytical_approximation", "approx"].includes(raw)) return "analytical_approximation";
-  return "out_of_domain";
+  return ["exact", "analytical_approximation", "out_of_domain"].includes(preset.support_level)
+    ? preset.support_level : "out_of_domain";
 }
 
 function presetSupportCopy(level) {
@@ -9771,21 +9742,17 @@ function architectureEvidenceCopy(status) {
   }[String(status || "")] || "架构证据状态未知";
 }
 
-function presetText(preset, keys, fallback = "—") {
-  for (const key of keys) {
-    const value = preset[key];
-    if (value !== undefined && value !== null && value !== "") return String(value);
-  }
-  return fallback;
+function presetText(preset, key, fallback = "—") {
+  const value = preset[key];
+  return value !== undefined && value !== null && value !== "" ? String(value) : fallback;
 }
 
 function componentPresetId(preset) {
-  return String(preset?.preset_id ?? preset?.id ?? preset?.slug ?? preset?.name ?? "").trim();
+  return String(preset?.id ?? "").trim();
 }
 
 function componentPresetEnvelopeItems(payload) {
-  if (Array.isArray(payload)) return payload;
-  return asArray(payload?.items ?? payload?.presets ?? payload?.component_presets ?? payload?.results);
+  return asArray(payload?.items);
 }
 
 function componentPresetDetailItem(payload) {
@@ -9802,11 +9769,11 @@ function componentPresetDetailItem(payload) {
   if (Object.keys(asObject(payload?.preset)).length && Object.keys(asObject(payload?.component)).length) {
     return { ...asObject(payload.preset), component: asObject(payload.component), catalog: asObject(payload.catalog), usage_hint: payload.usage_hint };
   }
-  return asObject(payload?.item ?? payload?.preset ?? payload?.component_preset ?? payload);
+  throw new Error("组件预设响应缺少 preset 和组件数据。");
 }
 
 function componentPresetType(preset) {
-  return String(preset?.preset_type ?? (asArray(preset?.components).length ? "topology_bundle" : "component"));
+  return String(preset?.preset_type ?? "");
 }
 
 function isTopologyBundlePreset(preset) {
@@ -9814,15 +9781,12 @@ function isTopologyBundlePreset(preset) {
 }
 
 function componentPresetVendor(preset) {
-  const metadata = asObject(preset?.metadata);
   const sources = asArray(preset?.sources);
-  return String(asObject(sources[0]).publisher ?? preset?.vendor ?? preset?.manufacturer ?? preset?.vendor_name ?? metadata.vendor ?? preset?.family ?? "未注明厂商");
+  return String(asObject(sources[0]).publisher || "未注明厂商");
 }
 
 function componentPresetEvidence(preset) {
-  const metadata = asObject(preset?.metadata);
-  const provenance = asObject(preset?.provenance);
-  return String(preset?.evidence_level ?? preset?.evidence_status ?? preset?.evidence ?? provenance.evidence_level ?? provenance.evidence_status ?? metadata.evidence_level ?? metadata.evidence_status ?? "unspecified");
+  return String(preset?.evidence_level ?? "unspecified");
 }
 
 function componentPresetEvidenceLabel(value) {
@@ -9838,29 +9802,30 @@ function componentPresetEvidenceLabel(value) {
 }
 
 function componentPresetSpec(preset) {
-  const candidate = preset?.component ?? preset?.component_spec ?? preset?.spec ?? preset?.hardware_component;
-  const source = Object.keys(asObject(candidate)).length ? asObject(candidate) : asObject(preset);
-  return deepClone(source);
+  if (preset?.component) return deepClone(asObject(preset.component));
+  if (!preset?.component_kind) return {};
+  // Catalog rows carry summary capabilities; only detail responses carry the
+  // complete component used by the editor and topology loader.
+  return {
+    kind: preset.component_kind,
+    capacity_bytes: preset.capacity_bytes,
+    peak_ops_per_s: preset.peak_ops_per_s,
+    read_bandwidth_gbps: preset.read_bandwidth_gbps,
+    write_bandwidth_gbps: preset.write_bandwidth_gbps,
+    metadata: { capability_status: deepClone(asObject(preset.capability_status)) },
+  };
 }
 
 function componentPresetKind(preset) {
-  const spec = componentPresetSpec(preset);
-  return normalizedComponentKind(spec.kind ?? preset?.kind ?? preset?.component_kind ?? "unknown");
+  return normalizedComponentKind(preset?.component_kind ?? "unknown");
 }
 
 function componentPresetDisplayName(preset) {
-  const spec = componentPresetSpec(preset);
-  const value = preset?.display_name ?? preset?.name ?? preset?.model ?? spec.display_name ?? spec.component_id ?? componentPresetId(preset);
-  return String(value || "未命名组件预设");
+  return String(preset?.name || "未命名组件预设");
 }
 
 function componentPresetSources(preset) {
-  const provenance = asObject(preset?.provenance);
-  const metadata = asObject(preset?.metadata);
-  const sources = asArray(preset?.sources ?? metadata.sources);
-  if (sources.length) return sources.map((source) => asObject(source));
-  const fallback = preset?.source ?? provenance.source ?? metadata.source;
-  return fallback ? [{ title: String(fallback) }] : [];
+  return asArray(preset?.sources).map((source) => asObject(source));
 }
 
 function componentPresetSource(preset) {
@@ -10019,10 +9984,10 @@ function componentPresetFacts(preset) {
     };
   }
   const spec = componentPresetSpec(preset);
-  const facts = asObject(preset?.facts ?? preset?.specifications ?? preset?.specs);
+  const facts = asObject(preset?.facts);
   const unknown = (field) => unknownComponentField(spec, field);
   const capability = (field, formatter) => unknown(field) ? "未公开（not published）" : formatter(spec[field]);
-  const canonical = { "组件类型": kindLabel(spec.kind ?? preset?.kind) };
+  const canonical = { "组件类型": kindLabel(preset?.component_kind) };
   if (Number(spec.capacity_bytes) > 0 || unknown("capacity_bytes")) canonical["容量（Capacity, B/KB…PB）"] = capability("capacity_bytes", formatBytes);
   if (Number(spec.peak_ops_per_s) > 0 || unknown("peak_ops_per_s")) canonical["峰值运算率（Peak OPS/s）"] = capability("peak_ops_per_s", formatOps);
   if (Number(spec.read_bandwidth_gbps) > 0 || unknown("read_bandwidth_gbps")) canonical["读取带宽（Read Bandwidth, MB/s–TB/s）"] = capability("read_bandwidth_gbps", formatBandwidthGbps);
@@ -10030,14 +9995,8 @@ function componentPresetFacts(preset) {
   return Object.fromEntries([...Object.entries(canonical), ...Object.entries(facts).map(([key, value]) => [componentPresetFactLabel(key), componentPresetListText(value, "", key)])].filter(([, value]) => value !== "—" && value !== "" && value != null));
 }
 
-function componentPresetFacetValues(payload, keys, items, fallbackExtractor) {
-  const filterRoot = asObject(payload?.filters);
-  const facetRoot = asObject(payload?.facets);
-  for (const key of keys) {
-    const values = asArray(filterRoot[key] ?? facetRoot[key]);
-    if (values.length) return values.map((item) => String(asObject(item).value ?? asObject(item).name ?? asObject(item).key ?? item)).filter(Boolean);
-  }
-  return items.map(fallbackExtractor).map(String).filter(Boolean);
+function componentPresetFacetValues(payload, key) {
+  return asArray(asObject(payload?.filters)[key]).filter((value) => typeof value === "string");
 }
 
 function replaceFilterOptions(control, label, values, optionLabel = (value) => value) {
@@ -10048,9 +10007,9 @@ function replaceFilterOptions(control, label, values, optionLabel = (value) => v
 }
 
 function syncComponentPresetFilters(payload, items) {
-  replaceFilterOptions(dom.componentPresetKindFilter, "全部类型", componentPresetFacetValues(payload, ["component_kind", "kinds", "kind"], items, componentPresetKind));
-  replaceFilterOptions(dom.componentPresetVendorFilter, "全部厂商", componentPresetFacetValues(payload, ["vendors", "vendor", "manufacturers"], items, componentPresetVendor));
-  replaceFilterOptions(dom.componentPresetEvidenceFilter, "全部状态", componentPresetFacetValues(payload, ["evidence_level", "evidence", "evidence_statuses", "evidence_status"], items, componentPresetEvidence), componentPresetEvidenceLabel);
+  replaceFilterOptions(dom.componentPresetKindFilter, "全部类型", componentPresetFacetValues(payload, "component_kind"));
+  replaceFilterOptions(dom.componentPresetVendorFilter, "全部厂商", items.map(componentPresetVendor));
+  replaceFilterOptions(dom.componentPresetEvidenceFilter, "全部状态", componentPresetFacetValues(payload, "evidence_level"), componentPresetEvidenceLabel);
 }
 
 function componentPresetFactMarkup(facts) {
@@ -10060,15 +10019,14 @@ function componentPresetFactMarkup(facts) {
 }
 
 function componentPresetDetailsMarkup(preset) {
-  const provenance = asObject(preset?.provenance);
   const componentMetadata = asObject(componentPresetSpec(preset).metadata);
-  const derived = preset?.derived ?? preset?.derivations ?? preset?.inferences ?? provenance.derived ?? {
+  const derived = {
     measurement_basis: componentMetadata.measurement_basis,
     derived_formula: componentMetadata.derived_formula,
     cost_profile_parameter_basis: componentMetadata.cost_profile_parameter_basis,
   };
-  const assumptions = preset?.assumptions ?? provenance.assumptions ?? componentMetadata.conditions ?? preset?.notes;
-  const limitations = preset?.limitations ?? preset?.limits ?? provenance.limitations;
+  const assumptions = preset?.conditions;
+  const limitations = preset?.limitations;
   return `<div class="component-preset-detail-grid">
     <section><h4>事实（Facts）</h4>${componentPresetFactMarkup(componentPresetFacts(preset))}</section>
     <section><h4>厂商（Vendor）</h4><p>${escapeHtml(componentPresetVendor(preset))}</p><h4>来源（Source）</h4>${componentPresetSourceMarkup(preset)}<h4>证据（Evidence）</h4><p>${escapeHtml(componentPresetEvidenceLabel(componentPresetEvidence(preset)))}</p></section>
@@ -10371,7 +10329,7 @@ function materializeComponentPreset(preset) {
   const source = deepClone(componentPresetSpec(preset));
   requireScenarioSchemaV4(source, "component preset");
   if (presetCostProfileTemplate(source)) delete source.cost_profile_id;
-  const kind = normalizedComponentKind(source.kind ?? preset?.kind ?? preset?.component_kind);
+  const kind = normalizedComponentKind(source.kind);
   if (!kind || kind === "unknown") throw new Error("组件预设缺少可识别的组件类型（kind），当前拓扑未修改。");
   const componentId = uniqueComponentPresetId(kind);
   const reservedPortIds = new Set(asArray(source.ports).map((port) => String(port?.port_id ?? "").trim()).filter(Boolean));
@@ -10520,7 +10478,7 @@ function appendTopologyBundle(bundle, label) {
     state.topologyView.layout.positions = state.nodePositions;
     state.selectedComponents = new Set(bundle.group.members);
     state.selected = { type: "group", id: bundle.group.group_id };
-    savePositions();
+    saveTopologyView();
     refreshColocatedRankMapping();
     commitTopologyHistory(historyBefore, label, { mappingImpact: true });
     markScenarioChanged("", { mappingImpact: true, mappingReason: "组合芯片拓扑已新增，映射需要重新生成。" });
@@ -10548,7 +10506,7 @@ function appendUnconnectedComponent(component, label) {
   state.nodePositions[component.component_id] = placement.positions[component.component_id];
   state.selectedComponents = new Set([component.component_id]);
   state.selected = { type: "component", id: component.component_id };
-  savePositions();
+  saveTopologyView();
   commitTopologyHistory(historyBefore, label, { mappingImpact: true });
   markScenarioChanged("", { mappingImpact: true, mappingReason: "硬件组件已新增，映射需要重新生成。" });
   return placement.adjusted;
@@ -10616,84 +10574,44 @@ function scheduleComponentPresetSearch() {
 }
 
 function architecturePresetEnvelopeItems(payload) {
-  if (Array.isArray(payload)) return payload;
-  return asArray(payload?.items ?? payload?.presets ?? payload?.architecture_presets ?? payload?.results);
+  return asArray(payload?.items);
 }
 
 function architecturePresetDetailItem(payload) {
-  const preset = asObject(payload?.preset ?? payload?.item ?? payload);
+  const preset = asObject(payload?.preset);
   return {
     ...preset,
-    hardware: deepClone(asObject(payload?.hardware ?? preset.hardware)),
-    profiles: deepClone(asObject(payload?.profiles ?? preset.profiles)),
-    profiles_parameter_basis: deepClone(asObject(payload?.profiles_parameter_basis ?? preset.profiles_parameter_basis)),
-    topology_view: deepClone(asObject(payload?.topology_view ?? preset.topology_view)),
-    compatibility: deepClone(asObject(payload?.compatibility ?? preset.compatibility)),
-    usage_hint: payload?.usage_hint ?? preset.usage_hint,
-    topology_evidence: payload?.topology_evidence ?? preset.topology_evidence,
-    parameter_basis: payload?.parameter_basis ?? preset.parameter_basis,
-    physical_composition: payload?.physical_composition ?? preset.physical_composition,
-    aggregate_node: payload?.aggregate_node ?? preset.aggregate_node,
-    aggregate_node_explanation: payload?.aggregate_node_explanation ?? preset.aggregate_node_explanation,
-    planner_executable: payload?.planner_executable ?? preset.planner_executable,
-    requires_gpu_attachment: payload?.requires_gpu_attachment ?? preset.requires_gpu_attachment,
-    requires_cpu_attachment: payload?.requires_cpu_attachment ?? preset.requires_cpu_attachment,
-    requires_profile_review: payload?.requires_profile_review ?? preset.requires_profile_review,
-    catalog: deepClone(asObject(payload?.catalog ?? preset.catalog)),
+    hardware: deepClone(asObject(payload?.hardware)),
+    profiles: deepClone(asObject(payload?.profiles)),
+    profiles_parameter_basis: deepClone(asObject(payload?.profiles_parameter_basis)),
+    topology_view: deepClone(asObject(payload?.topology_view)),
+    compatibility: deepClone(asObject(payload?.compatibility)),
+    catalog: deepClone(asObject(payload?.catalog)),
   };
 }
 
 function architecturePresetNames(preset) {
-  const zh = String(
-    preset?.name_zh
-    ?? preset?.display_name_zh
-    ?? asObject(preset?.localized_names).zh
-    ?? preset?.display_name
-    ?? preset?.name
-    ?? componentPresetId(preset)
-    ?? "未命名架构",
-  ).trim();
-  const en = String(
-    preset?.name_en
-    ?? preset?.display_name_en
-    ?? asObject(preset?.localized_names).en
-    ?? preset?.english_name
-    ?? "",
-  ).trim();
-  return { zh: zh || "未命名架构", en: en && en !== zh ? en : "" };
-}
-
-function architecturePresetField(preset, keys, fallback = "—") {
-  const metadata = asObject(preset?.metadata);
-  for (const key of keys) {
-    const value = preset?.[key] ?? metadata[key];
-    if (value !== undefined && value !== null && value !== "") return String(value);
-  }
-  return fallback;
+  return { zh: String(preset?.name || "未命名架构"), en: "" };
 }
 
 function architecturePresetCategory(preset) {
-  return architecturePresetField(preset, ["category", "architecture_category", "topology_class", "family", "architecture_family"]);
+  return String(preset?.topology_class || "—");
 }
 
 function architecturePresetLevel(preset) {
-  return architecturePresetField(preset, ["level", "topology_level", "scope", "scale"]);
+  return String(preset?.scale || "—");
 }
 
 function architecturePresetVendor(preset) {
-  return architecturePresetField(preset, ["vendor", "manufacturer", "organization", "publisher"], componentPresetVendor(preset));
+  return String(preset?.vendor || "未注明厂商");
 }
 
 function architecturePresetSupport(preset) {
-  return architecturePresetField(preset, ["support", "support_level", "support_status", "status"], "未注明");
+  return String(preset?.support_level || "未注明");
 }
 
 function architecturePresetFidelity(preset) {
-  const raw = architecturePresetField(
-    preset,
-    ["fidelity", "modeling_fidelity", "accuracy", "support_level", "support"],
-    "experimental",
-  ).toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+  const raw = String(preset?.support_level || "experimental").toLowerCase();
   if (["exact", "verified", "calibrated", "vendor_exact"].includes(raw) || raw.includes("exact")) return "exact";
   if (raw.includes("analytical") || raw.includes("approx")) return "analytical";
   return "experimental";
@@ -10712,31 +10630,18 @@ function architecturePresetCompatibility(preset) {
 }
 
 function architecturePresetIsLoadable(preset) {
-  const compatibility = architecturePresetCompatibility(preset);
-  for (const value of [preset?.loadable, preset?.can_load, compatibility.loadable, compatibility.can_load, compatibility.supported]) {
-    if (typeof value === "boolean") return value;
-  }
-  const status = String(compatibility.status ?? preset?.support_status ?? "").toLowerCase();
-  if (["unsupported", "incompatible", "out_of_domain", "display_only", "unavailable"].includes(status)) return false;
-  return true;
-}
-
-function architecturePresetFacetValues(payload, keys, items, fallbackExtractor) {
-  return componentPresetFacetValues(payload, keys, items, fallbackExtractor);
+  return preset?.loadable === true;
 }
 
 function syncArchitecturePresetFilters(payload, items) {
-  replaceFilterOptions(dom.architecturePresetCategoryFilter, "全部类别", architecturePresetFacetValues(payload, ["categories", "category", "topology_class"], items, architecturePresetCategory));
-  replaceFilterOptions(dom.architecturePresetLevelFilter, "全部层级", architecturePresetFacetValues(payload, ["levels", "level", "topology_levels", "scale"], items, architecturePresetLevel));
-  replaceFilterOptions(dom.architecturePresetVendorFilter, "全部厂商", architecturePresetFacetValues(payload, ["vendors", "vendor", "manufacturers"], items, architecturePresetVendor));
-  replaceFilterOptions(dom.architecturePresetSupportFilter, "全部支持状态", architecturePresetFacetValues(payload, ["support", "support_level", "support_levels", "support_statuses"], items, architecturePresetSupport));
+  replaceFilterOptions(dom.architecturePresetCategoryFilter, "全部类别", componentPresetFacetValues(payload, "topology_class"));
+  replaceFilterOptions(dom.architecturePresetLevelFilter, "全部层级", componentPresetFacetValues(payload, "scale"));
+  replaceFilterOptions(dom.architecturePresetVendorFilter, "全部厂商", componentPresetFacetValues(payload, "vendor"));
+  replaceFilterOptions(dom.architecturePresetSupportFilter, "全部支持状态", componentPresetFacetValues(payload, "support_level"));
 }
 
 function architecturePresetLimitations(preset) {
-  return preset?.limitations
-    ?? preset?.limits
-    ?? architecturePresetCompatibility(preset).limitations
-    ?? asObject(preset?.provenance).limitations;
+  return preset?.limitations;
 }
 
 function architecturePhysicalUnitLabel(value) {
@@ -10913,18 +10818,16 @@ function architecturePresetHardwareMarkup(preset) {
 
 function architecturePresetDetailsMarkup(preset) {
   const compatibility = architecturePresetCompatibility(preset);
-  const usageHint = preset?.usage_hint ?? compatibility.usage_hint;
-  const topologyEvidence = preset?.topology_evidence ?? asObject(preset?.provenance).topology_evidence;
-  const parameterBasis = preset?.parameter_basis ?? {
-    bandwidth: preset?.bandwidth_basis ?? asObject(preset?.metadata).bandwidth_basis,
-    peak_ops: preset?.ops_basis ?? preset?.peak_ops_basis ?? asObject(preset?.metadata).ops_basis,
-  };
-  const composition = preset?.physical_composition ?? asObject(preset?.metadata).physical_composition;
-  const aggregateNode = preset?.aggregate_node_explanation ?? preset?.aggregate_node ?? asObject(preset?.metadata).aggregate_node;
-  const plannerExecutable = preset?.planner_executable ?? compatibility.planner_executable;
-  const requiresGpuAttachment = preset?.requires_gpu_attachment ?? compatibility.requires_gpu_attachment;
-  const requiresCpuAttachment = preset?.requires_cpu_attachment ?? compatibility.requires_cpu_attachment;
-  const requiresProfileReview = preset?.requires_profile_review ?? compatibility.requires_profile_review;
+  const usageHint = preset?.notes;
+  const topologyEvidence = preset?.topology_evidence;
+  const parameterBasis = preset?.parameter_basis;
+  const hardwareMetadata = asObject(preset?.hardware?.metadata);
+  const composition = hardwareMetadata.physical_composition;
+  const aggregateNode = hardwareMetadata.aggregate_node;
+  const plannerExecutable = compatibility.planner_executable;
+  const requiresGpuAttachment = compatibility.requires_gpu_attachment;
+  const requiresCpuAttachment = compatibility.requires_cpu_attachment;
+  const requiresProfileReview = compatibility.requires_profile_review;
   const booleanLabel = (value) => value === true ? "是（Yes）" : value === false ? "否（No）" : "未声明";
   return `<div class="component-preset-detail-grid architecture-preset-detail-grid">
     <section><h4>层级与类别（Level &amp; Category）</h4>${componentPresetFactMarkup({
@@ -10977,9 +10880,9 @@ function architecturePresetCardMarkup(preset) {
   const fidelity = architecturePresetFidelity(value);
   const loadable = architecturePresetIsLoadable(value);
   const compatibility = architecturePresetCompatibility(value);
-  const plannerExecutable = value.planner_executable ?? compatibility.planner_executable;
-  const requiresGpuAttachment = value.requires_gpu_attachment ?? compatibility.requires_gpu_attachment;
-  const requiresCpuAttachment = value.requires_cpu_attachment ?? compatibility.requires_cpu_attachment;
+  const plannerExecutable = compatibility.planner_executable;
+  const requiresGpuAttachment = compatibility.requires_gpu_attachment;
+  const requiresCpuAttachment = compatibility.requires_cpu_attachment;
   const topologyEvidence = asObject(value.topology_evidence);
   const componentCount = Number(value.component_count ?? asArray(asObject(value.hardware).components).length) || 0;
   const linkCount = Number(value.link_count ?? asArray(asObject(value.hardware).links).length) || 0;
@@ -11010,7 +10913,7 @@ function architecturePresetCardMarkup(preset) {
 function renderArchitecturePresets() {
   const items = filteredArchitecturePresets();
   const catalog = asObject(state.architecturePresetCatalog);
-  const catalogLabel = catalog.catalog_version || catalog.version || catalog.cutoff_at || "本地目录";
+  const catalogLabel = catalog.version || "本地目录";
   dom.architecturePresetStatus.textContent = `显示 ${items.length} / ${state.architecturePresets.length} 个架构预设 · ${catalogLabel}；载入会替换硬件并保留模型与负载。`;
   dom.architecturePresetList.innerHTML = items.length
     ? items.map(architecturePresetCardMarkup).join("")
@@ -11239,8 +11142,7 @@ function scheduleArchitecturePresetSearch() {
 }
 
 function protocolPresetEnvelopeItems(payload) {
-  if (Array.isArray(payload)) return payload;
-  return asArray(payload?.items ?? payload?.presets ?? payload?.protocol_presets ?? payload?.results);
+  return asArray(payload?.items);
 }
 
 function protocolPresetDetailItem(payload) {
@@ -11252,7 +11154,7 @@ function protocolPresetDetailItem(payload) {
       catalog: asObject(payload.catalog),
     };
   }
-  return asObject(payload?.item ?? payload?.preset ?? payload);
+  throw new Error("协议预设响应缺少 preset 对象。");
 }
 
 function protocolPresetBandwidthMarkup(preset) {
@@ -11303,10 +11205,10 @@ function renderProtocolPresets() {
   hydrateConceptHelp(dom.protocolPresetList);
 }
 
-function syncProtocolPresetFilters(payload, items) {
+function syncProtocolPresetFilters(payload) {
   const filters = asObject(payload?.filters);
-  replaceFilterOptions(dom.protocolPresetProtocolFilter, "全部协议", asArray(filters.protocol).length ? filters.protocol : items.map((item) => item.protocol));
-  replaceFilterOptions(dom.protocolPresetOrganizationFilter, "全部组织", asArray(filters.organization).length ? filters.organization : items.map((item) => item.organization));
+  replaceFilterOptions(dom.protocolPresetProtocolFilter, "全部协议", asArray(filters.protocol));
+  replaceFilterOptions(dom.protocolPresetOrganizationFilter, "全部组织", asArray(filters.organization));
 }
 
 async function loadProtocolPresets() {
@@ -11317,7 +11219,7 @@ async function loadProtocolPresets() {
     const payload = await apiRequest("/protocol-presets", { method: "GET", headers: {} });
     state.protocolPresets = protocolPresetEnvelopeItems(payload).filter((item) => Object.keys(asObject(item)).length);
     state.protocolPresetsLoaded = true;
-    syncProtocolPresetFilters(payload, state.protocolPresets);
+    syncProtocolPresetFilters(payload);
     renderProtocolPresets();
   } catch (error) {
     dom.protocolPresetStatus.textContent = "通信协议目录载入失败。";
@@ -11514,14 +11416,11 @@ async function loadModelPresets({ offset = 0, selectedId = null } = {}) {
   }
 }
 
-function presetFactValue(preset, keys, fallback = "—") {
-  for (const key of keys) {
-    const value = preset[key];
-    if (Array.isArray(value)) return value.length ? joinChineseList(value) : fallback;
-    if (value && typeof value === "object") return JSON.stringify(value);
-    if (value !== undefined && value !== null && value !== "") return String(value);
-  }
-  return fallback;
+function presetFactValue(preset, key, fallback = "—") {
+  const value = preset[key];
+  if (Array.isArray(value)) return value.length ? joinChineseList(value) : fallback;
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return presetText(preset, key, fallback);
 }
 
 function joinChineseList(values) {
@@ -11572,19 +11471,19 @@ function modelPresetCardMarkup(preset, selectedId = "") {
   const generationDisabled = preset.generation_allowed === false;
   const disabled = level === "out_of_domain" || generationDisabled || !id;
   const ggufSourceFacts = ggufSourceFactsMarkup(preset.gguf_source);
-  const familyName = presetText(preset, ["family", "model_family"]);
-  const name = presetText(preset, ["display_name", "name"], id || "未命名预设");
-  const scale = presetCatalogValue(presetText(preset, ["scale", "parameter_scale", "parameters", "parameter_count"]));
-  const layerCount = compactPresetNumber(presetFactValue(preset, ["layer_count", "num_layers", "layers"]));
-  const context = compactPresetNumber(presetText(preset, ["context_length", "max_sequence_length", "context_window"]));
-  const license = [presetText(preset, ["license_category", "license"]), presetCatalogValue(presetText(preset, ["openness"], ""))].filter(Boolean).join(" · ");
-  const source = presetCatalogValue(presetText(preset, ["source", "source_name", "source_repo", "source_url"]));
-  const architecture = presetFactValue(preset, ["architecture", "architecture_type"]);
-  const modelKind = presetFactValue(preset, ["model_kind", "model_type", "kind"]);
-  const limitations = presetFactValue(preset, ["limitations", "limitation"]);
-  const unsupported = presetFactValue(preset, ["unsupported_subgraphs", "unsupported", "unsupported_features"]);
-  const coverage = presetCatalogValue(presetFactValue(preset, ["coverage", "coverage_notes", "supported_features"]));
-  const notes = presetFactValue(preset, ["notes", "note"]);
+  const familyName = presetText(preset, "family");
+  const name = presetText(preset, "name", id || "未命名预设");
+  const scale = presetCatalogValue(presetText(preset, "parameter_scale"));
+  const layerCount = compactPresetNumber(presetFactValue(preset, "layer_count"));
+  const context = compactPresetNumber(presetText(preset, "max_sequence_length"));
+  const license = [presetText(preset, "license"), presetCatalogValue(presetText(preset, "openness", ""))].filter(Boolean).join(" · ");
+  const source = presetCatalogValue(presetText(preset, "source"));
+  const architecture = presetFactValue(preset, "architecture");
+  const modelKind = presetFactValue(preset, "model_kind");
+  const limitations = presetFactValue(preset, "limitations");
+  const unsupported = presetFactValue(preset, "unsupported_subgraphs");
+  const coverage = presetCatalogValue(presetFactValue(preset, "coverage"));
+  const notes = presetFactValue(preset, "notes");
   const evidence = asObject(preset.architecture_evidence);
   const evidenceStatus = String(evidence.status || "");
   const evidenceLabel = architectureEvidenceCopy(evidenceStatus);
@@ -11756,7 +11655,7 @@ async function searchRemoteModelPresets() {
   dom.remotePresetList.innerHTML = `<div class="preset-empty">在线搜索中。</div>`;
   try {
     const payload = await apiRequest(`/model-presets/remote-search?query=${encodeURIComponent(query)}&limit=12`, { method: "GET", headers: {} });
-    state.remotePresets = asArray(payload?.items ?? payload?.candidates ?? payload?.results ?? payload).filter((item) => item && typeof item === "object");
+    state.remotePresets = asArray(payload?.items).filter((item) => item && typeof item === "object");
     renderRemoteModelPresets();
   } catch (error) {
     dom.remotePresetStatus.textContent = "在线搜索失败。";
@@ -11765,12 +11664,12 @@ async function searchRemoteModelPresets() {
 }
 
 function remoteModelPresetCardMarkup(preset) {
-  const repoId = presetText(preset, ["repo_id", "id", "source_repo"], "");
-  const revision = presetText(preset, ["revision", "sha"], "");
-  const name = presetText(preset, ["display_name", "name"], repoId || "未命名在线预设");
-  const source = presetText(preset, ["source", "provider", "host"], "remote");
-  const license = presetText(preset, ["license", "license_category"]);
-  const updated = presetText(preset, ["updated_at", "last_modified", "modified_at"]);
+  const repoId = presetText(preset, "repo_id", "");
+  const revision = presetText(preset, "sha", "");
+  const name = repoId || "未命名在线预设";
+  const source = "Hugging Face";
+  const license = presetText(preset, "license");
+  const updated = presetText(preset, "last_modified");
   return `<article class="preset-card remote-preset-card">
     <div class="preset-card-head"><div><h3>${escapeHtml(name)}</h3><code>${escapeHtml(repoId)}</code></div></div>
     <details class="preset-details remote-preset-details">
@@ -11916,7 +11815,8 @@ async function importModelPreset(repoId, revision = "", button = null) {
   dom.remotePresetStatus.textContent = `正在导入 ${id}…`;
   try {
     const payload = await apiRequest("/model-presets/import", { method: "POST", body: JSON.stringify({ repo_id: id, ...(revision ? { revision } : {}) }) });
-    const importedId = presetId(payload?.preset || payload) || String(payload?.id || id);
+    const importedId = presetId(asObject(payload.preset));
+    if (!importedId) throw new Error("模型预设导入响应缺少 preset.id。");
     state.selectedPresetId = importedId;
     dom.presetSearchInput.value = importedId;
     setPresetMode("local");
@@ -12025,10 +11925,6 @@ function modelPortDirectionLabel(direction) {
   return pair ? uiText(pair[0], pair[1]) : String(direction || uiText("端口", "Port"));
 }
 
-function modelPortCompatibility(outputPort, inputPort) {
-  return ModelGraph.modelPortCompatibility(outputPort, inputPort);
-}
-
 function normalizeModelGraphPayload(payloadValue, modelValue = {}) {
   const root = asObject(payloadValue);
   const model = asObject(modelValue);
@@ -12064,7 +11960,7 @@ function modelGraphLayerSpecs(graphValue) {
 
 function modelExecutionLayerIsAuxiliary(layerValue) {
   const layer = asObject(layerValue);
-  const kind = String(layer.kind || layer.op_kind || "").toLowerCase();
+  const kind = String(layer.kind || "").toLowerCase();
   const layerId = String(layer.layer_id || "");
   const metadata = asObject(layer.metadata);
   return kind.startsWith("mtp_")
@@ -12154,7 +12050,6 @@ function clearModelGraphConnectionPreviewWatchdog() {
 function modelGraphConnectionPreviewTimeoutDiagnostic() {
   return {
     ok: false,
-    compatible: false,
     code: "preview_timeout",
     timeout_kind: "frontend_watchdog",
     message: uiText("端口连接预览超时；graph 未改变。", "Port connection preview timed out; graph was not changed."),
@@ -12822,9 +12717,9 @@ function modelOverviewContractTitle(edge) {
 
 function modelGraphEndpointIdentity(endpoint) {
   if (!endpoint) return null;
-  const operatorId = String(endpoint.operatorId ?? endpoint.operator_id ?? "");
-  const portId = String(endpoint.portId ?? endpoint.port_id ?? "");
-  return operatorId && portId ? { operatorId, portId } : null;
+  const operatorId = String(endpoint.operator_id ?? "");
+  const portId = String(endpoint.port_id ?? "");
+  return operatorId && portId ? { operator_id: operatorId, port_id: portId } : null;
 }
 
 function modelGraphPortInteractionClass(graph, endpoint) {
@@ -12832,7 +12727,7 @@ function modelGraphPortInteractionClass(graph, endpoint) {
   const preview = editor.connectPreview;
   const source = modelGraphEndpointIdentity(preview?.active ? preview.source : editor.connectSource);
   if (!source) return "";
-  if (source.operatorId === endpoint.operatorId && source.portId === endpoint.portId) return "is-connect-source";
+  if (source.operator_id === endpoint.operator_id && source.port_id === endpoint.port_id) return "is-connect-source";
   if (endpoint.direction !== "input") return "is-connect-unavailable";
   const compatibility = preview?.active
     ? ModelGraph.connectionPreviewCompatibility(graph, preview, endpoint)
@@ -12854,8 +12749,8 @@ function modelGraphRouteClass(route) {
 function modelGraphPortPlacementPlan(rectByNode, edgeEntries) {
   const samples = new Map();
   const add = (endpoint, nodeId, dx, dy) => {
-    if (!endpoint?.operatorId || !endpoint?.portId || !rectByNode.has(nodeId)) return;
-    const key = modelGraphRouteEndpointKey(endpoint.operatorId, endpoint.portId);
+    if (!endpoint?.operator_id || !endpoint?.port_id || !rectByNode.has(nodeId)) return;
+    const key = modelGraphRouteEndpointKey(endpoint.operator_id, endpoint.port_id);
     if (!samples.has(key)) samples.set(key, { key, nodeId, endpoint, dx: 0, dy: 0 });
     const sample = samples.get(key);
     sample.dx += dx;
@@ -12915,8 +12810,8 @@ function modelGraphOverviewRoutePlan(projection, positions, placementOverride = 
   entries.forEach((entry) => {
     const sourceRect = rectByNode.get(entry.sourceNodeId);
     const targetRect = rectByNode.get(entry.targetNodeId);
-    const sourcePlacement = placements.get(modelGraphRouteEndpointKey(entry.source.operatorId, entry.source.portId));
-    const targetPlacement = placements.get(modelGraphRouteEndpointKey(entry.target.operatorId, entry.target.portId));
+    const sourcePlacement = placements.get(modelGraphRouteEndpointKey(entry.source.operator_id, entry.source.port_id));
+    const targetPlacement = placements.get(modelGraphRouteEndpointKey(entry.target.operator_id, entry.target.port_id));
     const source = modelGraphPlacedPort(sourceRect, sourcePlacement, "right");
     const target = modelGraphPlacedPort(targetRect, targetPlacement, "left");
     const route = ModelGraph.modelGraphRouteEdge(sourceRect, targetRect, obstacles, {
@@ -12959,7 +12854,7 @@ function modelOverviewPortMarkup(graph, node, placements = new Map()) {
   const ports = asArray(node.boundary_ports);
   if (!ports.length) return "";
   const markup = (port, index, siblings) => {
-    const endpoint = { operatorId: port.operator_id, portId: port.port_id, direction: port.direction };
+    const endpoint = { operator_id: port.operator_id, port_id: port.port_id, direction: port.direction };
     const contract = `${port.dtype || "?"} [${modelShapeText(port.shape)}] / ${port.layout || "logical"}`;
     const interaction = modelGraphPortInteractionClass(graph, endpoint);
     const placement = placements.get(modelGraphRouteEndpointKey(port.operator_id, port.port_id));
@@ -12981,15 +12876,15 @@ function modelOverviewPortPoint(projection, positions, endpointValue, placements
   const endpoint = modelGraphEndpointIdentity(endpointValue);
   if (!endpoint) return null;
   const node = projection.nodes.find((item) => asArray(item.boundary_ports).some((port) => (
-    port.operator_id === endpoint.operatorId && port.port_id === endpoint.portId
+    port.operator_id === endpoint.operator_id && port.port_id === endpoint.port_id
   )));
   const position = node ? positions[node.display_id] : null;
   if (!node || !position) return null;
-  const port = asArray(node.boundary_ports).find((item) => item.operator_id === endpoint.operatorId && item.port_id === endpoint.portId);
+  const port = asArray(node.boundary_ports).find((item) => item.operator_id === endpoint.operator_id && item.port_id === endpoint.port_id);
   const siblings = asArray(node.boundary_ports).filter((item) => item.direction === port?.direction);
-  const index = Math.max(0, siblings.findIndex((item) => item.operator_id === endpoint.operatorId && item.port_id === endpoint.portId));
+  const index = Math.max(0, siblings.findIndex((item) => item.operator_id === endpoint.operator_id && item.port_id === endpoint.port_id));
   const rect = { id: node.display_id, x: Number(position.x) || 0, y: Number(position.y) || 0, ...modelGraphOverviewNodeSize(node) };
-  const placement = placements?.get(modelGraphRouteEndpointKey(endpoint.operatorId, endpoint.portId));
+  const placement = placements?.get(modelGraphRouteEndpointKey(endpoint.operator_id, endpoint.port_id));
   return modelGraphPlacedPort(rect, placement, port?.direction === "output" ? "right" : "left", (index + 1) / (siblings.length + 1));
 }
 
@@ -13003,8 +12898,8 @@ function modelOverviewProjectedEdgeEndpoints(edge, projection) {
   const targetPort = asArray(targetNode.boundary_ports).find((port) => port.direction === "input" && tensorIds.has(String(port.tensor_id)))
     || asArray(targetNode.boundary_ports).find((port) => port.direction === "input");
   return sourcePort && targetPort ? {
-    source: { operatorId: sourcePort.operator_id, portId: sourcePort.port_id },
-    target: { operatorId: targetPort.operator_id, portId: targetPort.port_id },
+    source: { operator_id: sourcePort.operator_id, port_id: sourcePort.port_id },
+    target: { operator_id: targetPort.operator_id, port_id: targetPort.port_id },
   } : null;
 }
 
@@ -13066,7 +12961,7 @@ function renderModelGraphOverviewEdges(graph, projection, ui, bounds, routePlan 
     const targetNode = projection.nodes.find((item) => item.display_id === edge.target_id);
     const sideBranch = modelGraphOverviewIsMtp(targetNode) || modelGraphOverviewIsMtp(sourceNode);
     const direction = modelGraphOverviewEdgeDirection(edge);
-    return `<path class="model-graph-edge is-overview ${modelGraphRouteClass(route)} ${sideBranch ? "is-mtp-branch is-skip-route" : ""} ${modelGraphOverviewEdgeDirectionClass(edge)}" data-model-route-profile="overview" data-model-route-points="${escapeHtml(JSON.stringify(asArray(route.points)))}" data-model-route-source-node="${escapeHtml(edge.source_id)}" data-model-route-target-node="${escapeHtml(edge.target_id)}" data-model-route-source-operator="${escapeHtml(endpoints.source.operatorId)}" data-model-route-source-port="${escapeHtml(endpoints.source.portId)}" data-model-route-target-operator="${escapeHtml(endpoints.target.operatorId)}" data-model-route-target-port="${escapeHtml(endpoints.target.portId)}" ${direction ? `data-model-hop-direction="${direction}"` : ""} data-model-route-outer="false" d="${escapeHtml(route.path)}" tabindex="-1"><title>${escapeHtml(modelOverviewContractTitle(edge))}</title></path>`;
+    return `<path class="model-graph-edge is-overview ${modelGraphRouteClass(route)} ${sideBranch ? "is-mtp-branch is-skip-route" : ""} ${modelGraphOverviewEdgeDirectionClass(edge)}" data-model-route-profile="overview" data-model-route-points="${escapeHtml(JSON.stringify(asArray(route.points)))}" data-model-route-source-node="${escapeHtml(edge.source_id)}" data-model-route-target-node="${escapeHtml(edge.target_id)}" data-model-route-source-operator="${escapeHtml(endpoints.source.operator_id)}" data-model-route-source-port="${escapeHtml(endpoints.source.port_id)}" data-model-route-target-operator="${escapeHtml(endpoints.target.operator_id)}" data-model-route-target-port="${escapeHtml(endpoints.target.port_id)}" ${direction ? `data-model-hop-direction="${direction}"` : ""} data-model-route-outer="false" d="${escapeHtml(route.path)}" tabindex="-1"><title>${escapeHtml(modelOverviewContractTitle(edge))}</title></path>`;
   });
   const preview = state.modelGraphEditor.connectPreview;
   if (preview?.active) {
@@ -13080,7 +12975,7 @@ function renderModelGraphOverviewEdges(graph, projection, ui, bounds, routePlan 
         : (Number(target.y) < Number(source.y) ? "bottom" : "top"));
       const previewTarget = { ...target, side: targetSide };
       const previewRect = { id: "model-connection-pointer", x: Number(target.x), y: Number(target.y), width: 1, height: 1 };
-      const sourceEntry = plan.entries.find((entry) => entry.source.operatorId === preview.source.operator_id || entry.source.operatorId === preview.source.operatorId);
+      const sourceEntry = plan.entries.find((entry) => entry.source.operator_id === preview.source.operator_id);
       const sourceRect = sourceEntry ? plan.rectByNode.get(sourceEntry.sourceNodeId) : { id: "model-connection-source", x: source.x - 1, y: source.y - 1, width: 2, height: 2 };
       const route = ModelGraph.modelGraphRouteEdge(sourceRect, previewRect, [...plan.rectByNode.values(), previewRect], {
         sourcePoint: source,
@@ -13323,8 +13218,8 @@ function modelInlineRoutePlan(layout) {
       edge,
       sourceNodeId: edge.source_operator_id,
       targetNodeId: edge.target_operator_id,
-      source: { operatorId: edge.source_operator_id, portId: sourcePort.port_id },
-      target: { operatorId: edge.target_operator_id, portId: targetPort.port_id },
+      source: { operator_id: edge.source_operator_id, port_id: sourcePort.port_id },
+      target: { operator_id: edge.target_operator_id, port_id: targetPort.port_id },
     };
   }).filter(Boolean);
   const placements = modelGraphPortPlacementPlan(rectByNode, entries);
@@ -13334,8 +13229,8 @@ function modelInlineRoutePlan(layout) {
   entries.forEach((entry) => {
     const sourceRect = rectByNode.get(entry.sourceNodeId);
     const targetRect = rectByNode.get(entry.targetNodeId);
-    const source = modelGraphPlacedPort(sourceRect, placements.get(modelGraphRouteEndpointKey(entry.source.operatorId, entry.source.portId)), "bottom");
-    const target = modelGraphPlacedPort(targetRect, placements.get(modelGraphRouteEndpointKey(entry.target.operatorId, entry.target.portId)), "top");
+    const source = modelGraphPlacedPort(sourceRect, placements.get(modelGraphRouteEndpointKey(entry.source.operator_id, entry.source.port_id)), "bottom");
+    const target = modelGraphPlacedPort(targetRect, placements.get(modelGraphRouteEndpointKey(entry.target.operator_id, entry.target.port_id)), "top");
     const residual = residualIds.has(entry.edge.edge_id) || operatorById.get(entry.targetNodeId)?.op_kind === "residual_add";
     routes.set(entry.edge.edge_id, ModelGraph.modelGraphRouteEdge(sourceRect, targetRect, obstacles, {
       sourcePoint: source,
@@ -13404,10 +13299,10 @@ function renderModelInlineAuthoritativeGraph(graph, inline, width, { groupId = "
     const residual = plan.residualIds.has(entry.edge.edge_id) || operatorById.get(entry.targetNodeId)?.op_kind === "residual_add";
     const direction = modelGraphInlineEdgeDirection(entry);
     // Base authoritative-edge contract remains: class="model-inline-edge ${modelGraphRouteClass(route)}${residual ? " is-residual is-skip-route" : ""}" data-authoritative="true".
-    return `<path class="model-inline-edge ${modelGraphRouteClass(route)}${residual ? " is-residual is-skip-route" : ""}${modelGraphInlineEdgeDirectionClass(entry)}" data-authoritative="true" data-model-inline-edge-id="${escapeHtml(entry.edge.edge_id)}" data-model-route-source-node="${escapeHtml(entry.sourceNodeId)}" data-model-route-target-node="${escapeHtml(entry.targetNodeId)}" data-model-route-source-operator="${escapeHtml(entry.source.operatorId)}" data-model-route-source-port="${escapeHtml(entry.source.portId)}" data-model-route-target-operator="${escapeHtml(entry.target.operatorId)}" data-model-route-target-port="${escapeHtml(entry.target.portId)}" ${direction ? `data-model-hop-direction="${direction}"` : ""} data-model-route-outer="false" d="${escapeHtml(route.path)}"><title>${escapeHtml(`${entry.edge.tensor_id} · ${entry.edge.dtype || "?"} [${modelShapeText(entry.edge.shape)}] / ${entry.edge.layout || "logical"}`)}</title></path>`;
+    return `<path class="model-inline-edge ${modelGraphRouteClass(route)}${residual ? " is-residual is-skip-route" : ""}${modelGraphInlineEdgeDirectionClass(entry)}" data-authoritative="true" data-model-inline-edge-id="${escapeHtml(entry.edge.edge_id)}" data-model-route-source-node="${escapeHtml(entry.sourceNodeId)}" data-model-route-target-node="${escapeHtml(entry.targetNodeId)}" data-model-route-source-operator="${escapeHtml(entry.source.operator_id)}" data-model-route-source-port="${escapeHtml(entry.source.port_id)}" data-model-route-target-operator="${escapeHtml(entry.target.operator_id)}" data-model-route-target-port="${escapeHtml(entry.target.port_id)}" ${direction ? `data-model-hop-direction="${direction}"` : ""} data-model-route-outer="false" d="${escapeHtml(route.path)}"><title>${escapeHtml(`${entry.edge.tensor_id} · ${entry.edge.dtype || "?"} [${modelShapeText(entry.edge.shape)}] / ${entry.edge.layout || "logical"}`)}</title></path>`;
   }).join("");
   const portMarkup = (operator, port, index, siblings) => {
-    const interaction = modelGraphPortInteractionClass(graph, { operatorId: operator.operator_id, portId: port.port_id, direction: port.direction });
+    const interaction = modelGraphPortInteractionClass(graph, { operator_id: operator.operator_id, port_id: port.port_id, direction: port.direction });
     const placement = plan.placements.get(modelGraphRouteEndpointKey(operator.operator_id, port.port_id));
     const placed = modelGraphPortPlacementStyle(placement, port.direction === "output" ? "right" : "left", (index + 1) / (siblings.length + 1));
     const endpointId = `${operator.operator_id}.${port.port_id}`;
@@ -13617,7 +13512,7 @@ function renderModelGraph() {
     const outputs = operator.ports.filter((item) => item.direction === "output");
     const weights = operator.ports.filter((item) => item.direction === "weight");
     const portMarkup = (item) => {
-      const interaction = modelGraphPortInteractionClass(graph, { operatorId: operator.operator_id, portId: item.port_id, direction: item.direction });
+      const interaction = modelGraphPortInteractionClass(graph, { operator_id: operator.operator_id, port_id: item.port_id, direction: item.direction });
       const direction = modelPortDirectionLabel(item.direction);
       const contract = `${item.tensor_id} · ${item.dtype || "?"} [${modelShapeText(item.shape)}] / ${item.layout || "logical"}`;
       const accessibleLabel = uiText(
@@ -13769,8 +13664,6 @@ function renderModelGraphInspector() {
   }
   dom.modelGraphInspectorTitle.textContent = operator.operator_id;
   const params = Object.entries(operator.parameters).filter(([key, value]) => key === "quantization" || ["string", "number", "boolean"].includes(typeof value));
-  const template = operator.op_kind === "layer_group" ? asObject(operator.parameters.layer_template) : {};
-  const templateFields = ["kind", "hidden_size", "intermediate_size", "attention_heads", "kv_heads", "dtype", "quantization", "num_experts", "experts_per_token"].filter((key) => template[key] != null);
   const activationPorts = operator.ports.filter((item) => ["input", "output"].includes(item.direction));
   const weightPorts = operator.ports.filter((item) => item.direction === "weight");
   const readout = (label, value) => `<div class="readout"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value ?? "—")}</strong></div>`;
@@ -13785,10 +13678,9 @@ function renderModelGraphInspector() {
     ${readout(uiText("组件 ID（Operator ID）", "Operator ID"), operator.operator_id)}
     ${readout(uiText("组件类型（Op Kind）", "Operator kind"), operator.op_kind)}</section>
     ${params.length ? `<section class="inspector-section"><h3>${escapeHtml(uiText("组件参数（Parameters）", "Component parameters"))}</h3>${params.map(([key, value]) => editor(modelGraphParameterLabel(key), key, value)).join("")}</section>` : ""}
-    ${templateFields.length ? `<section class="inspector-section"><h3>${escapeHtml(uiText("Block 组参数（Group Template）", "Block group parameters"))}</h3>${templateFields.map((key) => editor(modelGraphParameterLabel(key), key, template[key], "data-model-template-param")).join("")}</section>` : ""}
     <section class="inspector-section"><h3>${fieldTitleMarkup(uiText("带类型端口（Typed Ports）", "Typed ports"), "typed_port")}</h3><p class="inspector-note">${escapeHtml(uiText("编辑具体 input/output 端口的 Shape 与 DType 会同步该 TensorValue 及所有引用端口；量化仍是当前组件参数。", "Editing a concrete input/output port's Shape or DType updates that TensorValue and every referencing port; quantization remains a component parameter."))}</p>${activationPorts.map(portEditor).join("") || `<p class="muted">${escapeHtml(uiText("此组件没有声明 input/output 端口。", "This component declares no input/output ports."))}</p>`}${weightPorts.length ? `<h4>${escapeHtml(uiText("权重端口（只读）", "Weight ports (read-only)"))}</h4>${weightPorts.map((item) => `<div class="model-port-contract"><strong>${escapeHtml(item.port_id)} · ${escapeHtml(modelPortDirectionLabel("weight"))}</strong><span>${escapeHtml(`${item.dtype || "?"} [${modelShapeText(item.shape)}] / ${item.layout || "logical"}`)}</span><small>${escapeHtml(item.tensor_id || uiText("未连接张量", "Unconnected tensor"))}</small></div>`).join("")}` : ""}</section>`;
   hydrateConceptHelp(dom.modelGraphInspectorContent);
-  $$('[data-model-param], [data-model-template-param], [data-model-port-field]', dom.modelGraphInspectorContent)
+  $$('[data-model-param], [data-model-port-field]', dom.modelGraphInspectorContent)
     .forEach((control) => control.addEventListener("change", () => updateModelGraphInspector(operator, control)));
   if (state.scenario?.model?.metadata?.model_preset_id) {
     $$('input', dom.modelGraphInspectorContent).forEach((control) => { control.readOnly = true; });
@@ -13803,16 +13695,7 @@ function updateModelGraphInspector(operator, control) {
     if (control.dataset.modelOperatorId !== undefined) {
       const nextId = control.value.trim();
       if (!nextId || graph.operators.some((item) => item !== operator && item.operator_id === nextId)) throw new Error("组件 ID 不能为空且必须唯一。");
-      const previousId = operator.operator_id;
-      operator.operator_id = nextId;
-      graph.tensors.forEach((tensor) => {
-        if (tensor.producer_operator_id === previousId) tensor.producer_operator_id = nextId;
-        tensor.consumer_operator_ids = tensor.consumer_operator_ids.map((id) => id === previousId ? nextId : id);
-      });
-      graph.operators.forEach((item) => { if (item.attributes.parent_group_id === previousId) item.attributes.parent_group_id = nextId; });
-      const ui = modelGraphUi(graph);
-      if (ui.positions[previousId]) { ui.positions[nextId] = ui.positions[previousId]; delete ui.positions[previousId]; }
-      ui.collapsed_groups = ui.collapsed_groups.map((id) => id === previousId ? nextId : id);
+      state.scenario.model.graph = ModelGraph.updateNode(graph, operator.operator_id, { operator_id: nextId });
       state.modelGraphEditor.selectedOperatorId = nextId;
     } else if (control.dataset.modelParam) {
       const key = control.dataset.modelParam;
@@ -13820,12 +13703,6 @@ function updateModelGraphInspector(operator, control) {
       operator.parameters[key] = key === "quantization"
         ? (control.value.trim() || null)
         : typeof previous === "number" ? Number(control.value) : typeof previous === "boolean" ? control.value === "true" : control.value.trim();
-    } else if (control.dataset.modelTemplateParam) {
-      const key = control.dataset.modelTemplateParam;
-      const template = asObject(operator.parameters.layer_template);
-      const previous = template[key];
-      template[key] = typeof previous === "number" ? Number(control.value) : control.value.trim() || null;
-      operator.parameters.layer_template = template;
     } else if (control.dataset.modelOverrides !== undefined) {
       operator.parameters.overrides = asObject(JSON.parse(control.value || "{}"));
     } else if (control.dataset.modelPortField) {
@@ -13863,8 +13740,8 @@ function modelGraphPortEndpoint(button) {
   let mappedPorts = [];
   try { mappedPorts = JSON.parse(String(button.dataset.modelPortMapped || "[]")); } catch (_error) { /* Non-proxy port. */ }
   return {
-    operatorId: String(button.dataset.modelPortOperator || ""),
-    portId: String(button.dataset.modelPortId || ""),
+    operator_id: String(button.dataset.modelPortOperator || ""),
+    port_id: String(button.dataset.modelPortId || ""),
     direction: String(button.dataset.modelPortDirection || ""),
     mappedPorts: asArray(mappedPorts).map((item) => ({ operator_id: String(item.operator_id || ""), port_id: String(item.port_id || "") })).filter((item) => item.operator_id && item.port_id),
   };
@@ -14020,12 +13897,12 @@ function refreshModelGraphConnectionPreviewPath() {
     || state.modelGraphEditor.connectSourceElement
     || $$('[data-model-port-id]', dom.modelGraphNodeLayer).find((button) => {
       const endpoint = modelGraphPortEndpoint(button);
-      return endpoint.operatorId === sourceIdentity?.operatorId && endpoint.portId === sourceIdentity?.portId;
+      return endpoint.operator_id === sourceIdentity?.operator_id && endpoint.port_id === sourceIdentity?.port_id;
     });
   const targetButton = preview.target ? (state.modelGraphEditor.connectTargetElement || $$('[data-model-port-id]', dom.modelGraphNodeLayer).find((button) => {
     const endpoint = modelGraphPortEndpoint(button);
     const target = modelGraphEndpointIdentity(preview.target);
-    return endpoint.operatorId === target?.operatorId && endpoint.portId === target?.portId;
+    return endpoint.operator_id === target?.operator_id && endpoint.port_id === target?.port_id;
   })) : null;
   const sourceNode = sourceButton?.closest?.('[data-model-route-node]');
   const targetNode = targetButton?.closest?.('[data-model-route-node]');
@@ -14072,7 +13949,7 @@ function startModelGraphConnectionPreview(endpoint, pointer = null, sourceElemen
   editor.connectSource = preview.active ? { ...endpoint } : null;
   editor.connectMode = preview.active;
   editor.diagnostics = [preview.active
-    ? `已选择源端口 ${endpoint.operatorId}.${endpoint.portId}；移动指针并点击输入端口，或按住拖至输入端口。`
+    ? `已选择源端口 ${endpoint.operator_id}.${endpoint.port_id}；移动指针并点击输入端口，或按住拖至输入端口。`
     : (preview.diagnostic?.message || "连接必须从输出端口开始。")];
   return preview.active;
 }
@@ -14086,7 +13963,8 @@ function updateModelGraphConnectionPreview(event) {
   editor.connectPreview = ModelGraph.updateConnectionPreview(
     state.scenario.model.graph,
     editor.connectPreview,
-    { pointer: modelGraphPointerWorldPoint(event), target },
+    modelGraphPointerWorldPoint(event),
+    target,
   );
   editor.connectSource = modelGraphEndpointIdentity(editor.connectPreview.source);
   editor.connectMode = true;
@@ -14282,7 +14160,7 @@ function bindModelGraphDynamicEvents() {
       if (!source) {
         if (endpoint.direction !== "output") editor.diagnostics = ["请先选择一个输出端口，再选择目标输入端口。"];
         else startModelGraphConnectionPreview(endpoint, event.detail ? modelGraphPointerWorldPoint(event) : null, portButton);
-      } else if (source.operatorId === endpoint.operatorId && source.portId === endpoint.portId) {
+      } else if (source.operator_id === endpoint.operator_id && source.port_id === endpoint.port_id) {
         clearModelGraphConnectionPreview("source-click", { announce: true });
       } else if (endpoint.direction !== "input") {
         editor.diagnostics = ["目标必须是输入端口；当前源端口仍保持选中。"];
@@ -14715,11 +14593,11 @@ function effectiveParallelRanks() {
   const parallel = asObject(runtimePlacementForView(placement).parallel || placement.parallel);
   const explicit = asArray(parallel.rank_mapping);
   if (explicit.length) {
-    return explicit.map((rank, index) => ({
-      rank: Number(rank.rank ?? index),
-      tp_rank: Number(rank.tp_rank ?? 0),
-      pp_rank: Number(rank.pp_rank ?? 0),
-      ep_rank: Number(rank.ep_rank ?? 0),
+    return explicit.map((rank) => ({
+      rank: rank.rank,
+      tp_rank: rank.tp_rank,
+      pp_rank: rank.pp_rank,
+      ep_rank: rank.ep_rank,
       component_id: String(rank.component_id || ""),
       memory_component_id: rank.memory_component_id == null ? null : String(rank.memory_component_id),
       cim_component_id: rank.cim_component_id == null ? null : String(rank.cim_component_id),
@@ -14746,69 +14624,58 @@ function effectiveParallelRanks() {
   return ranks;
 }
 
+function controlPlaneRank(entry) {
+  for (const field of ["rank_id", "tp_rank", "pp_rank", "ep_rank"]) {
+    if (!Number.isSafeInteger(entry[field]) || entry[field] < 0) throw new Error(`运行时 Rank 记录缺少有效的 ${field}。`);
+  }
+  if (typeof entry.compute_component_id !== "string" || !entry.compute_component_id) throw new Error("运行时 Rank 记录缺少 compute_component_id。");
+  return {
+    rank: entry.rank_id,
+    tp_rank: entry.tp_rank,
+    pp_rank: entry.pp_rank,
+    ep_rank: entry.ep_rank,
+    component_id: entry.compute_component_id,
+  };
+}
+
 function operatorTargetRows(decision, ranks) {
-  const direct = decision.operator_execution_targets;
   const rows = [];
-  if (!direct || typeof direct !== "object" || Array.isArray(direct)) return rows;
-  Object.entries(direct).sort(([left], [right]) => left.localeCompare(right)).forEach(([operator, rawEntries]) => {
-    const entries = asArray(rawEntries);
-    const usedRanks = new Set();
-    entries.forEach((raw, entryIndex) => {
-      const entry = typeof raw === "string" ? { component_id: raw } : asObject(raw);
-      const componentId = String(entry.component_id || entry.execution_component_id || entry.node_id || raw || "");
-      let rank = null;
-      const rankId = entry.rank_id ?? entry.rank;
-      if (rankId !== undefined && rankId !== null && rankId !== "") {
-        rank = ranks.find((candidate) => candidate.rank === Number(rankId)) || null;
-      }
-      if (!rank) {
-        const matches = ranks.filter((candidate) => candidate.component_id === componentId && !usedRanks.has(candidate.rank));
-        if (matches.length === 1) rank = matches[0];
-        else if (matches.length > 1 && entries.length === matches.length) rank = matches[Math.min(entryIndex, matches.length - 1)];
-      }
-      if (rank) usedRanks.add(rank.rank);
-      const partition = String(entry.partition || entry.partition_kind || entry.shard_kind || (
-        operator.includes("expert")
-          ? uiText("TP×EP 专家分片", "TP×EP expert shard")
-          : ranks.some((item) => item.ep_rank > 0)
-            ? uiText("TP 分片 / EP 副本", "TP shard / EP replica")
-            : ranks.some((item) => item.tp_rank > 0)
-              ? uiText("TP 张量分片", "TP tensor shard")
-              : uiText("完整算子", "Full operator")
-      ));
-      rows.push({ operator, componentId, rank, partition });
+  Object.entries(asObject(decision.operator_execution_targets)).sort(([left], [right]) => left.localeCompare(right)).forEach(([operator, rawEntries]) => {
+    objectArray(rawEntries, "operator_execution_targets").forEach((entry) => {
+      const rank = controlPlaneRank(entry);
+      if (typeof entry.component_id !== "string" || !entry.component_id) throw new Error("算子执行目标缺少 component_id。");
+      const partition = operator.includes("expert")
+        ? uiText("TP×EP 专家分片", "TP×EP expert shard")
+        : ranks.some((item) => item.ep_rank > 0)
+          ? uiText("TP 分片 / EP 副本", "TP shard / EP replica")
+          : ranks.some((item) => item.tp_rank > 0)
+            ? uiText("TP 张量分片", "TP tensor shard")
+            : uiText("完整算子", "Full operator");
+      rows.push({ operator, componentId: entry.component_id, rank, partition });
     });
   });
   return rows;
 }
 
-function tensorShardRows(decision, ranks) {
-  const details = asObject(decision.weight_tensor_details);
-  const shardsByTensor = asObject(decision.rank_weight_shards);
+function tensorShardRows(decision) {
   const rows = [];
-  Object.entries(shardsByTensor).sort(([left], [right]) => left.localeCompare(right)).forEach(([tensorId, rawShards]) => {
-    const detail = asObject(details[tensorId]);
-    asArray(rawShards).forEach((rawShard) => {
-      const shard = asObject(rawShard);
-      const rankId = Number(shard.rank_id ?? shard.rank);
-      const rank = ranks.find((candidate) => candidate.rank === rankId) || {
-        rank: Number.isFinite(rankId) ? rankId : null,
-        tp_rank: Number(shard.tp_rank ?? 0),
-        pp_rank: Number(shard.pp_rank ?? 0),
-        ep_rank: Number(shard.ep_rank ?? 0),
-        component_id: String(shard.compute_component_id || ""),
-      };
+  Object.entries(asObject(decision.rank_weight_shards)).sort(([left], [right]) => left.localeCompare(right)).forEach(([tensorId, rawShards]) => {
+    objectArray(rawShards, "rank_weight_shards").forEach((shard) => {
+      const rank = controlPlaneRank(shard);
+      for (const field of ["storage_component_id", "logical_bytes", "physical_bytes", "shard_index", "shard_count", "residency", "shard_kind"]) {
+        if (shard[field] == null) throw new Error(`权重分片记录缺少 ${field}。`);
+      }
       rows.push({
         tensorId,
         rank,
-        compute: String(shard.compute_component_id || rank.component_id || ""),
-        storage: String(shard.storage_component_id || shard.component_id || ""),
-        logicalBytes: Number(shard.logical_bytes ?? shard.length_bytes ?? 0),
-        physicalBytes: Number(shard.physical_bytes ?? shard.logical_bytes ?? shard.length_bytes ?? 0),
-        shardIndex: Number.isInteger(Number(shard.shard_index)) ? Number(shard.shard_index) : null,
-        shardCount: Number.isInteger(Number(shard.shard_count)) ? Number(shard.shard_count) : null,
-        residency: String(shard.residency || detail.residency || ""),
-        shardKind: String(shard.shard_kind || detail.shard_policy || "rank shard"),
+        compute: shard.compute_component_id,
+        storage: shard.storage_component_id,
+        logicalBytes: shard.logical_bytes,
+        physicalBytes: shard.physical_bytes,
+        shardIndex: shard.shard_index,
+        shardCount: shard.shard_count,
+        residency: shard.residency,
+        shardKind: shard.shard_kind,
       });
     });
   });
@@ -14919,7 +14786,7 @@ function renderEffectiveMapping() {
   const decision = controlPlaneDecision(state.scenario.placement);
   const ranks = effectiveParallelRanks();
   const operatorRows = operatorTargetRows(decision, ranks);
-  const shardRows = tensorShardRows(decision, ranks);
+  const shardRows = tensorShardRows(decision);
   syncEffectiveMappingFilters(operatorRows, shardRows);
   const operatorGroups = filterEffectiveMappingGroups(groupEffectiveMappingRows(operatorRows, "operator"), "operator", state.effectiveMappingView);
   const tensorGroups = filterEffectiveMappingGroups(groupEffectiveMappingRows(shardRows, "tensorId"), "tensor", state.effectiveMappingView);
@@ -15066,7 +14933,7 @@ function controlPlaneTargetComponentFilter(targetType) {
   if (targetType === "kv_cache_target" || targetType === "linear_state_target") return (component) => isWritableActiveRankMemory(component);
   if (targetType === "linear_state_offload_target") {
     return (component) => isWritableActiveRankMemory(component)
-      || (isFlashStorage(component.kind) && asObject(component.metadata).read_only !== true && asObject(component.metadata).writable !== false);
+      || (isFlashStorage(component.kind) && asObject(component.metadata).writable !== false);
   }
   return null;
 }
@@ -15429,7 +15296,6 @@ function renderPlacementControls() {
     if (isWritableActiveRankMemory(component)) return true;
     const metadata = asObject(component?.metadata);
     return isFlashStorage(component?.kind)
-      && metadata.read_only !== true
       && metadata.writable !== false;
   };
   const backingPlannerExplanation = uiText(
@@ -15563,7 +15429,7 @@ function workloadPresetOptions(selectedId) {
 
 function normalizeWorkloadPresetCatalogItem(item) {
   const source = asObject(item);
-  const id = String(source.id || source.preset_id || "").trim();
+  const id = String(source.id || "").trim();
   const label = asArray(source.label).map(String);
   const description = asArray(source.description).map(String);
   const numericFields = ["promptTokens", "outputTokens", "batch", "batchTokens", "prefillChunkTokens"];
@@ -15574,7 +15440,7 @@ function normalizeWorkloadPresetCatalogItem(item) {
     label: [label[0], label[1]],
     description: [description[0], description[1]],
     source: String(source.source || WORKLOAD_PRESET_SOURCE),
-    sourceId: String(source.sourceId || source.source_id || ""),
+    sourceId: String(source.sourceId || ""),
     promptTokens: Number(source.promptTokens),
     outputTokens: Number(source.outputTokens),
     batch: Number(source.batch),
@@ -15586,7 +15452,7 @@ function normalizeWorkloadPresetCatalogItem(item) {
 async function loadWorkloadPresetCatalog() {
   try {
     const payload = await apiRequest("/workload-presets", { method: "GET", headers: {} });
-    const items = asArray(asObject(payload).items ?? asObject(payload).presets);
+    const items = asArray(asObject(payload).items);
     const normalized = items.map(normalizeWorkloadPresetCatalogItem).filter(Boolean);
     workloadPresetCatalog = Object.freeze(normalized);
     workloadPresetCatalogError = "";
@@ -16081,156 +15947,87 @@ function finiteTraceNumber(...values) {
   return null;
 }
 
-function normalizeTraceRank(rawEvent, metadata) {
-  const rankSource = asObject(rawEvent.rank);
-  const rankId = finiteTraceNumber(rankSource.rank, rankSource.rank_id, rawEvent.rank_id, metadata.rank, metadata.rank_id);
-  const known = rankId == null ? null : effectiveParallelRanks().find((candidate) => candidate.rank === rankId);
-  const componentId = String(
-    rankSource.component_id
-    || rawEvent.compute_component_id
-    || metadata.compute_component_id
-    || metadata.target_component
-    || known?.component_id
-    || "",
-  );
-  if (rankId == null && !componentId) return null;
+function normalizeTraceRank(rawEvent) {
+  if (rawEvent.rank == null) return null;
+  const rank = asObject(rawEvent.rank);
   return {
-    ...rankSource,
-    rank: rankId,
-    tp_rank: finiteTraceNumber(rankSource.tp_rank, rawEvent.tp_rank, metadata.tp_rank, known?.tp_rank),
-    pp_rank: finiteTraceNumber(rankSource.pp_rank, rawEvent.pp_rank, metadata.pp_rank, known?.pp_rank),
-    ep_rank: finiteTraceNumber(rankSource.ep_rank, rawEvent.ep_rank, metadata.ep_rank, known?.ep_rank),
-    component_id: componentId,
+    ...rank,
+    rank: finiteTraceNumber(rank.rank),
+    tp_rank: finiteTraceNumber(rank.tp_rank),
+    pp_rank: finiteTraceNumber(rank.pp_rank),
+    ep_rank: finiteTraceNumber(rank.ep_rank),
+    component_id: String(rank.component_id || ""),
   };
 }
 
-function normalizeTraceHops(rawHops, eventStart, eventEnd) {
+function normalizeTraceHops(rawHops) {
   return asArray(rawHops).map((rawHop, index) => {
     const hop = asObject(rawHop);
-    const startNs = Object.hasOwn(hop, "start_ns") ? finiteTraceNumber(hop.start_ns) : eventStart;
-    const endNs = Object.hasOwn(hop, "end_ns") ? finiteTraceNumber(hop.end_ns) : eventEnd;
     return {
       ...hop,
-      link_id: String(hop.link_id || hop.id || hop.resource_id || ""),
-      protocol: String(hop.protocol || hop.protocol_name || ""),
-      source_component: String(hop.source_component || hop.source || ""),
-      target_component: String(hop.target_component || hop.target || ""),
-      resource_id: String(hop.resource_id || hop.link_id || ""),
-      start_ns: startNs,
-      end_ns: endNs == null || startNs == null ? endNs : Math.max(startNs, endNs),
-      interval_semantics: Object.hasOwn(hop, "interval_semantics")
-        ? hop.interval_semantics == null ? null : String(hop.interval_semantics)
-        : "",
-      index: Math.trunc(finiteTraceNumber(hop.index) ?? index),
+      link_id: String(hop.link_id || ""),
+      protocol: String(hop.protocol || ""),
+      source_component: String(hop.source_component || ""),
+      target_component: String(hop.target_component || ""),
+      resource_id: String(hop.resource_id || ""),
+      start_ns: finiteTraceNumber(hop.start_ns),
+      end_ns: finiteTraceNumber(hop.end_ns),
+      interval_semantics: String(hop.interval_semantics || ""),
+      index,
     };
   });
 }
 
-function normalizeTraceEvent(rawValue, index) {
+function normalizeTraceEvent(rawValue) {
   const raw = asObject(rawValue);
-  const metadata = asObject(raw.metadata);
-  const start = finiteTraceNumber(raw.start_ns, raw.timestamp_ns, metadata.start_ns, 0) ?? 0;
-  const end = Math.max(start, finiteTraceNumber(raw.end_ns, metadata.end_ns, start) ?? start);
-  const transferRaw = asObject(raw.transfer);
-  const tensorRaw = asObject(raw.tensor);
-  const sourceComponent = String(
-    transferRaw.source_component
-    || raw.source_component
-    || metadata.source_component
-    || metadata.weight_source_component
-    || "",
-  );
-  const targetComponent = String(
-    transferRaw.target_component
-    || raw.target_component
-    || metadata.target_component
-    || metadata.weight_target_component
-    || "",
-  );
-  const logicalTensor = String(
-    tensorRaw.logical_id
-    || tensorRaw.logical_tensor_id
-    || raw.logical_tensor_id
-    || metadata.logical_weight_tensor
-    || metadata.logical_tensor
-    || metadata.tensor
-    || "",
-  );
-  const physicalTensor = String(
-    tensorRaw.physical_id
-    || tensorRaw.physical_tensor_id
-    || raw.physical_tensor_id
-    || metadata.tensor
-    || logicalTensor
-    || "",
-  );
-  const tensorComponent = String(tensorRaw.component_id || sourceComponent || "");
-  const rank = normalizeTraceRank(raw, metadata);
-  const rawHops = transferRaw.hops || raw.hops || metadata.hops || metadata.route_hops;
-  const resources = asArray(raw.resources || raw.resource_intervals).map((resource) => {
-    const item = asObject(resource);
-    return {
-      ...item,
-      resource_id: String(item.resource_id || item.id || ""),
-      component_id: String(item.component_id || ""),
-      start_ns: finiteTraceNumber(item.start_ns, start) ?? start,
-      end_ns: finiteTraceNumber(item.end_ns, end) ?? end,
-      bytes: finiteTraceNumber(item.bytes, item.bytes_moved),
-    };
-  });
-  const eventKind = String(raw.event_kind || raw.event_type || metadata.event_kind || raw.category || "event");
-  const operatorId = String(raw.operator_id || raw.operator || metadata.operator_id || metadata.operator || "");
-  const layerId = String(raw.layer_id || raw.layer || metadata.layer_id || metadata.layer || "");
-  const phase = String(raw.phase || metadata.phase || metadata.serving_phase || "");
-  const requestId = String(raw.request_id || metadata.request_id || "");
-  const requestIds = asArray(raw.request_ids || metadata.request_ids)
-    .map((value) => String(value ?? ""))
-    .filter(Boolean);
+  if (typeof raw.event_id !== "string" || !raw.event_id
+      || !Number.isFinite(raw.start_ns) || !Number.isFinite(raw.end_ns)
+      || raw.end_ns < raw.start_ns) {
+    throw new Error("回放事件必须提供 event_id 和有效的 start_ns/end_ns。");
+  }
+  const tensor = raw.tensor == null ? null : asObject(raw.tensor);
+  const transfer = raw.transfer == null ? null : asObject(raw.transfer);
+  const requestId = String(raw.request_id || "");
+  const requestIds = asArray(raw.request_ids).map(String).filter(Boolean);
   if (requestId && !requestIds.includes(requestId)) requestIds.unshift(requestId);
-  const batchId = String(raw.batch_id || raw.cohort_id || metadata.batch_id || metadata.cohort_id || "");
   return {
     ...raw,
-    event_id: String(raw.event_id || raw.task_id || `trace-event-${index}`),
     task_id: String(raw.task_id || ""),
     request_id: requestId,
     request_ids: requestIds,
-    request_ids_truncated: raw.request_ids_truncated === true || metadata.request_ids_truncated === true,
-    request_id_limit: finiteTraceNumber(raw.request_id_limit, raw.detail_limit, metadata.request_id_limit),
-    batch_id: batchId,
-    event_kind: eventKind,
-    category: String(raw.category || metadata.category || ""),
-    phase,
-    marker: raw.marker ?? metadata.marker ?? null,
-    token_index: raw.token_index ?? metadata.token_index ?? null,
-    detail_semantics: raw.detail_semantics ?? metadata.detail_semantics ?? "",
-    detail_limit: finiteTraceNumber(raw.detail_limit, metadata.detail_limit),
-    representative_items: asArray(raw.representative_items || metadata.representative_items),
-    representative_items_truncated: raw.representative_items_truncated === true || metadata.representative_items_truncated === true,
-    layer_id: layerId,
-    operator_id: operatorId,
-    name: String(raw.name || metadata.name || operatorId || eventKind),
-    start_ns: start,
-    end_ns: end,
-    rank,
-    tensor: logicalTensor || physicalTensor ? {
-      ...tensorRaw,
-      logical_id: logicalTensor || physicalTensor,
-      physical_id: physicalTensor || logicalTensor,
-      component_id: tensorComponent,
-      offset_bytes: finiteTraceNumber(tensorRaw.offset_bytes, raw.offset_bytes, metadata.offset_bytes),
-      length_bytes: finiteTraceNumber(tensorRaw.length_bytes, tensorRaw.bytes, raw.bytes, metadata.bytes),
-      shard_index: finiteTraceNumber(tensorRaw.shard_index, raw.shard_index, metadata.shard_index),
-      shard_count: finiteTraceNumber(tensorRaw.shard_count, raw.shard_count, metadata.shard_count),
+    batch_id: String(raw.batch_id || ""),
+    event_kind: String(raw.event_kind || ""),
+    category: String(raw.category || ""),
+    phase: String(raw.phase || ""),
+    layer_id: raw.layer_id == null ? "" : String(raw.layer_id),
+    operator_id: String(raw.operator_id || ""),
+    name: String(raw.name || ""),
+    rank: normalizeTraceRank(raw),
+    tensor: tensor ? {
+      ...tensor,
+      logical_id: String(tensor.logical_id || ""),
+      physical_id: String(tensor.physical_id || ""),
+      component_id: String(tensor.component_id || ""),
+      offset_bytes: finiteTraceNumber(tensor.offset_bytes),
+      length_bytes: finiteTraceNumber(tensor.length_bytes),
+      shard_index: finiteTraceNumber(tensor.shard_index),
+      shard_count: finiteTraceNumber(tensor.shard_count),
     } : null,
-    transfer: sourceComponent || targetComponent || rawHops ? {
-      ...transferRaw,
-      source_component: sourceComponent,
-      target_component: targetComponent,
-      bytes: finiteTraceNumber(transferRaw.bytes, raw.bytes, metadata.bytes, 0) ?? 0,
-      hops: normalizeTraceHops(rawHops, start, end),
+    transfer: transfer ? {
+      ...transfer,
+      source_component: String(transfer.source_component || ""),
+      target_component: String(transfer.target_component || ""),
+      bytes: finiteTraceNumber(transfer.bytes),
+      hops: normalizeTraceHops(transfer.hops),
     } : null,
-    resources,
-    metadata,
+    resources: asArray(raw.resources).map((resource) => ({
+      ...resource,
+      resource_id: String(resource.resource_id || ""),
+      start_ns: finiteTraceNumber(resource.start_ns),
+      end_ns: finiteTraceNumber(resource.end_ns),
+      bytes: finiteTraceNumber(resource.bytes),
+    })),
+    metadata: asObject(raw.metadata),
   };
 }
 
@@ -16263,8 +16060,8 @@ function traceVisualizationFromReport(report) {
     .filter((event) => Number.isFinite(event.start_ns) && Number.isFinite(event.end_ns))
     .sort((left, right) => left.start_ns - right.start_ns || left.end_ns - right.end_ns || left.event_id.localeCompare(right.event_id));
   const range = asArray(candidate.time_range_ns);
-  const startNs = finiteTraceNumber(range[0], candidate.start_ns, events[0]?.start_ns, 0) ?? 0;
-  const endNs = Math.max(startNs, finiteTraceNumber(range[1], candidate.end_ns, events.at(-1)?.end_ns, startNs) ?? startNs);
+  const startNs = finiteTraceNumber(range[0], 0) ?? 0;
+  const endNs = Math.max(startNs, finiteTraceNumber(range[1], startNs) ?? startNs);
   const fidelity = String(candidate.fidelity || "unavailable");
   const limitations = asArray(candidate.limitations).map(String);
   if (fidelity === "aggregate") limitations.push("聚合回放仅展示批次包络；不会将批次伪装成逐层、逐算子或逐 Rank 的任务事件。");
@@ -16281,7 +16078,7 @@ function traceVisualizationFromReport(report) {
     memory_layout: memoryLayout,
     start_ns: startNs,
     end_ns: endNs,
-    total_events: Number(candidate.total_events ?? asObject(candidate.pagination).total ?? events.length),
+    total_events: Number(asObject(candidate.pagination).total),
     pagination: asObject(candidate.pagination),
     granularity: String(candidate.granularity || "task"),
     trace_source: String(candidate.trace_source || "unified_event_kernel"),
@@ -16302,9 +16099,9 @@ function tracePagePagination(payload, returned) {
   const source = asObject(payload.pagination);
   const offset = Math.max(0, Math.trunc(finiteTraceNumber(source.offset) ?? 0));
   const limit = Math.min(5000, Math.max(1, Math.trunc(finiteTraceNumber(source.limit) ?? 5000)));
-  const total = Math.max(returned, Math.trunc(finiteTraceNumber(source.total, payload.total_events) ?? returned));
+  const total = Math.max(returned, Math.trunc(finiteTraceNumber(source.total) ?? returned));
   const nextOffset = finiteTraceNumber(source.next_offset);
-  const hasMore = typeof source.has_more === "boolean" ? source.has_more : offset + returned < total;
+  const hasMore = source.has_more === true;
   return {
     ...source,
     offset,
@@ -16320,8 +16117,7 @@ function tracePagePagination(payload, returned) {
 function tracePageData(payloadValue, batchId, aggregateData) {
   const payload = asObject(payloadValue);
   const rawEvents = asArray(payload.events);
-  const pageOffset = Math.max(0, Math.trunc(finiteTraceNumber(asObject(payload.pagination).offset) ?? 0));
-  const events = rawEvents.map((raw, index) => normalizeTraceEvent({ ...asObject(raw), batch_id: asObject(raw).batch_id || batchId }, pageOffset + index))
+  const events = rawEvents.map(normalizeTraceEvent)
     .filter((event) => Number.isFinite(event.start_ns) && Number.isFinite(event.end_ns))
     .sort((left, right) => left.start_ns - right.start_ns || left.end_ns - right.end_ns || left.event_id.localeCompare(right.event_id));
   const pagination = tracePagePagination(payload, events.length);
@@ -17463,11 +17259,13 @@ function endTraceCanvasPointer(event) {
       const committed = TraceView.dragTraceNode({
         components: drag.layout.components,
         links: drag.layout.links,
-        positions: playback.layoutView.positions,
-        node_sizes: drag.layout.sizes,
-        bounds: drag.layout.bounds,
+        layout: {
+          positions: playback.layoutView.positions,
+          node_sizes: drag.layout.sizes,
+          bounds: drag.layout.bounds,
+        },
       }, drag.componentId, drag.previewPosition);
-      playback.layoutView.positions = committed.positions;
+      playback.layoutView.positions = committed.layout.positions;
       playback.topologyLayout = null;
     }
     drag.element.style.transform = "";
@@ -18893,17 +18691,16 @@ function runtimeGroup(title, stats, className = "", helpKey = "") {
 function renderRuntime(report) {
   const summary = asObject(report.summary);
   const parallel = asObject(summary.parallel);
-  const scenarioParallel = asObject(state.scenario?.placement?.parallel);
   const scheduler = asObject(report.scheduler);
   const kv = asObject(report.kv_cache);
-  const kvRoot = { ...asObject(summary), ...asObject(report), ...kv };
-  const kvComponentCapacity = asObject(kvRoot.kv_capacity_bytes_by_component);
-  const kvComponentUsed = asObject(kvRoot.kv_used_bytes_by_component);
-  const kvComponentPeak = asObject(kvRoot.kv_peak_bytes_by_component);
-  const kvComponentLayers = asObject(kvRoot.kv_component_owner_layers);
-  const kvLayerOwner = asObject(kvRoot.kv_layer_components || kvRoot.kv_layer_owner);
-  const kvLayerBpt = asObject(kvRoot.kv_layer_bytes_per_token);
-  const kvLayerBpp = asObject(kvRoot.kv_layer_bytes_per_page);
+  const kvRoot = kv;
+  const kvComponentCapacity = asObject(kvRoot.capacity_bytes_by_component);
+  const kvComponentUsed = asObject(kvRoot.used_bytes_by_component);
+  const kvComponentPeak = asObject(kvRoot.peak_bytes_by_component);
+  const kvComponentLayers = asObject(kvRoot.component_owner_layers);
+  const kvLayerOwner = asObject(kvRoot.layer_owner);
+  const kvLayerBpt = asObject(kvRoot.layer_bytes_per_token);
+  const kvLayerBpp = asObject(kvRoot.layer_bytes_per_page);
   const kvComponentRows = Object.keys({ ...kvComponentCapacity, ...kvComponentUsed, ...kvComponentPeak, ...kvComponentLayers }).map((component) => {
     const cap = Number(kvComponentCapacity[component]);
     const used = Number(kvComponentUsed[component]);
@@ -18912,19 +18709,18 @@ function renderRuntime(report) {
     return `<tr><td>${escapeHtml(component)}</td><td>${formatResultBytes(kvComponentCapacity[component]).html}</td><td>${formatResultBytes(kvComponentUsed[component]).html}</td><td>${free == null ? "—" : formatResultBytes(free).html}</td><td>${escapeHtml(layers)}</td></tr>`;
   }).join("");
   const kvLayerRows = Object.keys(kvLayerOwner).map((layer) => `<tr><td>${escapeHtml(layer)}</td><td>${escapeHtml(kvLayerOwner[layer])}</td><td>${formatResultBytes(kvLayerBpt[layer]).html}</td><td>${formatResultBytes(kvLayerBpp[layer]).html}</td></tr>`).join("");
-  const kvAnalysisMarkup = (kvComponentRows || kvLayerRows || Object.hasOwn(kvRoot, "kv_layout_mode")) ? `<section class="runtime-kv-analysis" data-runtime-section="kv-analysis"><h3>${escapeHtml(uiText("KV 容量与放置分析", "KV capacity and placement analysis"))}</h3><dl class="technical-facts"><div><dt>${escapeHtml(uiText("驻留模式", "Layout mode"))}</dt><dd>${escapeHtml(String(kvRoot.kv_layout_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("Split 模式", "Split mode"))}</dt><dd>${escapeHtml(String(kvRoot.split_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("统一 KV", "Unified KV"))}</dt><dd>${escapeHtml(String(kvRoot.kv_unified ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("有效物理容量", "Effective physical capacity"))}</dt><dd>${formatResultBytes(kvRoot.effective_physical_capacity).html}</dd></div><div><dt>${escapeHtml(uiText("瓶颈组件", "Bottleneck component"))}</dt><dd>${escapeHtml(String(kvRoot.kv_bottleneck_component ?? "—"))}</dd></div></dl>${kvComponentRows ? `<h4>${escapeHtml(uiText("按组件", "By component"))}</h4><div class="table-shell"><table class="data-table compact-data-table kv-component-table"><thead><tr><th>${escapeHtml(uiText("组件", "Component"))}</th><th>${escapeHtml(uiText("容量", "Capacity"))}</th><th>${escapeHtml(uiText("已用", "Used"))}</th><th>${escapeHtml(uiText("空闲", "Free"))}</th><th>${escapeHtml(uiText("所属层", "Owned layers"))}</th></tr></thead><tbody>${kvComponentRows}</tbody></table></div>` : ""}${kvLayerRows ? `<h4>${escapeHtml(uiText("按 layer", "By layer"))}</h4><div class="table-shell"><table class="data-table compact-data-table"><thead><tr><th>Layer</th><th>Owner</th><th>Bytes/token</th><th>Bytes/page</th></tr></thead><tbody>${kvLayerRows}</tbody></table></div>` : ""}<p class="muted">${escapeHtml(uiText("运行事件：批次重试 {retry}；上下文偏移 {shift}；空闲槽位清理 {idle}；容量失败 {failure}。", "Runtime events: batch retry {retry}; context shift {shift}; idle slot cleanup {idle}; capacity failure {failure}.", { retry: String(kvRoot.kv_batch_retry_count ?? 0), shift: String(kvRoot.kv_context_shift_count ?? 0), idle: String(kvRoot.kv_idle_slots_cleared ?? 0), failure: kvRoot.kv_capacity_failure_count ?? kvRoot.kv_capacity_failure ?? 0 } ))}</p></section>` : "";
+  const kvAnalysisMarkup = (kvComponentRows || kvLayerRows || Object.hasOwn(kvRoot, "layout_mode")) ? `<section class="runtime-kv-analysis" data-runtime-section="kv-analysis"><h3>${escapeHtml(uiText("KV 容量与放置分析", "KV capacity and placement analysis"))}</h3><dl class="technical-facts"><div><dt>${escapeHtml(uiText("驻留模式", "Layout mode"))}</dt><dd>${escapeHtml(String(kvRoot.layout_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("Split 模式", "Split mode"))}</dt><dd>${escapeHtml(String(kvRoot.split_mode ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("统一 KV", "Unified KV"))}</dt><dd>${escapeHtml(String(kvRoot.kv_unified ?? "—"))}</dd></div><div><dt>${escapeHtml(uiText("有效物理容量", "Effective physical capacity"))}</dt><dd>${formatResultBytes(kvRoot.effective_physical_capacity_bytes).html}</dd></div><div><dt>${escapeHtml(uiText("瓶颈组件", "Bottleneck component"))}</dt><dd>${escapeHtml(String(kvRoot.bottleneck_component ?? "—"))}</dd></div></dl>${kvComponentRows ? `<h4>${escapeHtml(uiText("按组件", "By component"))}</h4><div class="table-shell"><table class="data-table compact-data-table kv-component-table"><thead><tr><th>${escapeHtml(uiText("组件", "Component"))}</th><th>${escapeHtml(uiText("容量", "Capacity"))}</th><th>${escapeHtml(uiText("已用", "Used"))}</th><th>${escapeHtml(uiText("空闲", "Free"))}</th><th>${escapeHtml(uiText("所属层", "Owned layers"))}</th></tr></thead><tbody>${kvComponentRows}</tbody></table></div>` : ""}${kvLayerRows ? `<h4>${escapeHtml(uiText("按 layer", "By layer"))}</h4><div class="table-shell"><table class="data-table compact-data-table"><thead><tr><th>Layer</th><th>Owner</th><th>Bytes/token</th><th>Bytes/page</th></tr></thead><tbody>${kvLayerRows}</tbody></table></div>` : ""}<p class="muted">${escapeHtml(uiText("运行事件：批次重试 {retry}；上下文偏移 {shift}；空闲槽位清理 {idle}；容量失败 {failure}。", "Runtime events: batch retry {retry}; context shift {shift}; idle slot cleanup {idle}; capacity failure {failure}.", { retry: String(kvRoot.batch_retry_count ?? 0), shift: String(kvRoot.context_shift_count ?? 0), idle: String(kvRoot.idle_slots_cleared ?? 0), failure: kvRoot.capacity_failure_count ?? 0 } ))}</p></section>` : "";
   const mtp = asObject(summary.mtp);
   const goodput = asObject(summary.goodput);
-  const machineMode = String(report.execution_mode || (state.scenario?.workload?.scheduler?.mode === "continuous" ? "continuous_batching" : "static"));
+  const machineMode = String(report.execution_mode || "—");
   const modeLabel = {
     static: uiText("静态", "Static"),
-    continuous: uiText("连续批处理", "Continuous Batching"),
     continuous_batching: uiText("连续批处理", "Continuous Batching"),
   }[machineMode] || machineMode;
   dom.runtimeModeMeta.textContent = modeLabel;
 
   const degree = (key) => {
-    const value = parallel[key] ?? scenarioParallel[key];
+    const value = parallel[key];
     return value == null ? unavailableResult() : formatResultNumber(value);
   };
   const batchPeak = Object.hasOwn(scheduler, "max_batch_sequences") || Object.hasOwn(scheduler, "max_batch_tokens")
@@ -19037,7 +18833,7 @@ function runManifestMarkup(report) {
   const evidence = String(manifest.evidence || "analytical").toUpperCase();
   const language = (globalThis.UiI18n?.language?.() || state?.settings?.language) === "en" ? "en" : "zh-CN";
   const localText = (zh, en) => language === "en" ? en : zh;
-  const source = manifest.source || metadata.source || report?.source || localText("本地分析仿真", "Local analytical simulation");
+  const source = metadata.source || localText("本地分析仿真", "Local analytical simulation");
   const assumptions = asArray(manifest[language === "en" ? "assumptions_en" : "assumptions_zh"])
     .map(String)
     .filter(Boolean);
@@ -19054,7 +18850,7 @@ function runManifestMarkup(report) {
         ${fact(localText("运行 ID", "Run ID"), manifest.run_id, "span-all")}
         ${fact(localText("场景 Schema", "Schema"), manifest.schema_version)}
         ${fact(localText("模拟器版本", "Simulator"), manifest.simulator_version)}
-        ${fact(localText("解析模型版本（兼容字段）", "Analytical Model (compatibility field)"), manifest.calibration_version || "task-transaction-analytical-v4")}
+        ${fact(localText("解析模型版本", "Analytical Model"), manifest.analytical_model_version)}
         ${fact(localText("随机种子", "Random Seed"), manifest.random_seed)}
         ${fact(localText("模型", "Model"), manifest.model_name)}
         ${fact(localText("硬件", "Hardware"), manifest.hardware_name)}
@@ -19086,7 +18882,7 @@ function timeseriesMetricLabelPair(metric, fallbackCn = "", fallbackEn = "") {
 
 function timeseriesSeriesLabel(series) {
   const metric = String(series?.metric || "unknown");
-  const labels = timeseriesMetricLabelPair(metric, series?.label_cn || series?.label_zh, series?.label_en);
+  const labels = timeseriesMetricLabelPair(metric, series?.label_cn, series?.label_en);
   return uiText(labels.zh, labels.en);
 }
 
@@ -19115,7 +18911,7 @@ function timeseriesFidelityDescription(normalized) {
 
 function normalizeComponentTimeseries(reportValue) {
   const report = asObject(reportValue);
-  const payload = asObject(report.component_timeseries || asObject(report.report).component_timeseries);
+  const payload = asObject(report.component_timeseries);
   const normalizeSeries = (seriesValue, owner) => asArray(seriesValue).map((value, index) => {
     const series = asObject(value);
     const metric = String(series.metric || "unknown");
@@ -19125,7 +18921,7 @@ function normalizeComponentTimeseries(reportValue) {
     const rank = series.rank == null ? null : Number(series.rank);
     const channelId = series.channel_id == null ? null : String(series.channel_id);
     const ownerKey = `${owner.owner_type}:${owner.owner_id}`;
-    const labels = timeseriesMetricLabelPair(metric, series.label_cn || series.label_zh, series.label_en);
+    const labels = timeseriesMetricLabelPair(metric, series.label_cn, series.label_en);
     const fidelityValue = series.fidelity == null || series.fidelity === "" ? payload.fidelity : series.fidelity;
     return {
       ...deepClone(series),
@@ -19151,7 +18947,7 @@ function normalizeComponentTimeseries(reportValue) {
   });
   const components = asArray(payload.components).map((value) => {
     const component = asObject(value);
-    return { ...deepClone(component), component_id: String(component.component_id || ""), component_kind: String(component.component_kind || component.kind || "unknown"), capacities: asObject(component.capacities), drilldown: asObject(component.drilldown) };
+    return { ...deepClone(component), component_id: String(component.component_id || ""), component_kind: String(component.component_kind || "unknown"), capacities: asObject(component.capacities), drilldown: asObject(component.drilldown) };
   });
   const links = asArray(payload.links).map((value) => ({ ...deepClone(asObject(value)), link_id: String(value?.link_id || ""), source_component: String(value?.source_component || ""), target_component: String(value?.target_component || "") }));
   const series = [
@@ -19802,8 +19598,8 @@ function renderRequestResults(requests) {
     const tbt95 = formatResultDurationNs(tbtP95);
     const tpot = formatResultDurationNs(tpotValue);
     const e2e = formatResultDurationNs(e2eValue);
-    const status = String(request.status ?? request.request_status ?? (request.rejected === true ? "rejected" : "—"));
-    const rejectionReason = request.rejection_reason ?? request.reason ?? request.reject_reason ?? request.rejection?.reason ?? "—";
+    const status = String(request.status ?? "—");
+    const rejectionReason = request.rejection_reason ?? "—";
     const statusClass = slug(status);
     return `<tr>
       <td${dataLabel("请求（Request）", "Request")}><span class="mono-readout">${escapeHtml(requestId)}</span></td>
@@ -20112,9 +19908,7 @@ async function importScenarioFile(file) {
       ensureScenarioShape(next);
       setScenario(next, { dirty: true, message: "GGUF 模型预设已导入；已生成可查看的模型架构图" });
     } else if (value?.kind === "hardware_input" && value.hardware) {
-      if (String(value.contract_version || "") !== "2") {
-        throw new Error("统一硬件参数必须使用 contract_version=2。旧的双表格式已移除。");
-      }
+      validateHardwareInputForImport(value);
       const importedHardware = deepClone(value.hardware);
       const parameters = asObject(importedHardware.parameters);
       for (const field of ["host_orchestration", "fusion", "runtime"]) {

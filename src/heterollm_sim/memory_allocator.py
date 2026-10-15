@@ -262,8 +262,11 @@ class PhysicalAddressAllocator:
         """Register one descriptor declaration without accepting hidden overlap."""
         if not isinstance(declaration, dict):
             raise AllocationError("physical allocation declaration must be a mapping")
+        obsolete = {"allocation_size_bytes", "allocation_generation"}.intersection(declaration)
+        if obsolete:
+            raise AllocationError("allocation record uses size_bytes and generation; unsupported fields: " + ", ".join(sorted(obsolete)))
         buffer_id = declaration.get("buffer_id")
-        size = declaration.get("size_bytes", declaration.get("allocation_size_bytes"))
+        size = declaration.get("size_bytes")
         if size is None:
             raise AllocationError("physical allocation requires size_bytes")
         return self.allocate(
@@ -273,7 +276,7 @@ class PhysicalAddressAllocator:
             # producing an extent different from the one the caller declared.
             buffer_id,
             size,
-            declaration.get("generation", declaration.get("allocation_generation", 0)),
+            declaration.get("generation", 0),
             alias_of=declaration.get("alias_of"),
             alias_generation=declaration.get("alias_generation"),
             address=declaration.get("base_address"),
@@ -359,7 +362,7 @@ class PhysicalAddressAllocator:
                         workspace_capacity_bytes=snapshot.get("workspace_capacity_bytes", 0))
         # Serialized snapshots are address/name ordered, not alias ordered.
         # Register targets before views, including chains of nested aliases.
-        pending = list(snapshot.get("allocations", ()))
+        pending = list(snapshot["allocations"])
         ordered = []
         available = set()
         while pending:
@@ -370,6 +373,9 @@ class PhysicalAddressAllocator:
                     alias_of, alias_generation = item.alias_of, item.alias_generation
                 else:
                     item = dict(item)
+                    obsolete = {"allocation_size_bytes", "allocation_generation"}.intersection(item)
+                    if obsolete:
+                        raise AllocationError("allocation record uses size_bytes and generation; unsupported fields: " + ", ".join(sorted(obsolete)))
                     buffer_id, generation = item["buffer_id"], item.get("generation", 0)
                     alias_of, alias_generation = item.get("alias_of"), item.get("alias_generation")
                 if alias_of is not None and (alias_of, generation if alias_generation is None else alias_generation) not in available:
@@ -393,7 +399,7 @@ class PhysicalAddressAllocator:
                 allocator._allocations[(item.buffer_id, item.generation)] = item
             else:
                 item = dict(item)
-                size = item.get("size_bytes", item.get("allocation_size_bytes"))
+                size = item.get("size_bytes")
                 if size is None:
                     raise AllocationError("physical allocation requires size_bytes")
                 alias_generation = item.get("alias_generation")

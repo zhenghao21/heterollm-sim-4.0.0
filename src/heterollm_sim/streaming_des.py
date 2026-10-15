@@ -11,7 +11,6 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field, replace
 import math
-from threading import Lock
 from typing import Any, Deque, Dict, Iterator, List, Mapping, Optional, Sequence, Set, Tuple
 from weakref import WeakValueDictionary
 
@@ -112,23 +111,15 @@ class _PathKeyIndex:
     abandoned branches disappear once no path state references them.
     """
 
-    __slots__ = ("root", "_nodes", "_lock", "__weakref__")
+    __slots__ = ("root", "_nodes", "__weakref__")
 
-    def __init__(self, *, thread_safe: bool = False) -> None:
+    def __init__(self) -> None:
         self._nodes = WeakValueDictionary()
-        self._lock = Lock() if thread_safe else None
         self.root = _PathKeyNode(self, None, None)
 
     def extend(self, parent: _PathKeyNode, key: str) -> _PathKeyNode:
         cache_key = (parent, key)
-        lock = self._lock
-        if lock is None:
-            return self._extend_unlocked(cache_key, parent, key)
-        # Only the process-global compatibility index can be shared.  A
-        # simulation-owned index is mutated by its single accumulator and
-        # deliberately avoids a lock on every realized path extension.
-        with lock:
-            return self._extend_unlocked(cache_key, parent, key)
+        return self._extend_unlocked(cache_key, parent, key)
 
     def _extend_unlocked(
         self,
@@ -152,7 +143,6 @@ class _PathKeyIndex:
         return node
 
 
-_PATH_KEY_INDEX = _PathKeyIndex(thread_safe=True)
 
 
 class _PathState:
@@ -175,7 +165,7 @@ class _PathState:
         duration_ns: float = 0.0,
         category: Optional[TaskCategory] = None,
         *,
-        key_path: Optional[_PathKeyNode] = None,
+        key_path: _PathKeyNode,
     ) -> None:
         self.distance = distance
         self.previous = previous
@@ -183,19 +173,7 @@ class _PathState:
         self.end_ns = end_ns
         self.duration_ns = duration_ns
         self.category = category
-        if key_path is not None:
-            self.key_path = key_path
-        else:
-            parent_key_path = (
-                previous.key_path
-                if previous is not None
-                else _PATH_KEY_INDEX.root
-            )
-            self.key_path = (
-                parent_key_path
-                if node_key is None
-                else parent_key_path.index.extend(parent_key_path, node_key)
-            )
+        self.key_path = key_path
 
 
 def _path_keys(state: _PathState) -> Tuple[str, ...]:
@@ -256,12 +234,7 @@ def _compare_path_keys(left: _PathState, right: _PathState) -> int:
     left_path = left.key_path
     right_path = right.key_path
     if left_path.index is not right_path.index:
-        # Private callers that manually assemble states may use independent
-        # indexes.  Production accumulators never mix indexes; retain exact
-        # historical tuple semantics for this compatibility edge case.
-        left_keys = _path_keys(left)
-        right_keys = _path_keys(right)
-        return (left_keys > right_keys) - (left_keys < right_keys)
+        raise ValueError("critical paths must share their simulation index")
     if left_path is right_path:
         return 0
 
@@ -307,6 +280,7 @@ def _extend_path(
         end_ns,
         duration_ns,
         category,
+        key_path=source.key_path.index.extend(source.key_path, node_key),
     )
 
 
@@ -379,11 +353,11 @@ class _CriticalPathAccumulator:
             if state is not None:
                 candidates.append(state)
 
-        for resource_id, info in resource_predecessors.items():
-            if isinstance(info, Mapping) and info.get("end_ns", start_ns) > start_ns:
+        for info in resource_predecessors.values():
+            if info["end_ns"] > start_ns:
                 continue  # Internal Core wait is already in this task's span.
-            lane = int(info.get("lane", 0)) if isinstance(info, Mapping) else 0
-            predecessor_resource = info.get("resource_id", resource_id) if isinstance(info, Mapping) else resource_id
+            lane = int(info.get("lane", 0))
+            predecessor_resource = info["resource_id"]
             state = self._resource_states.get((str(predecessor_resource), lane))
             if state is not None:
                 candidates.append(state)
@@ -927,12 +901,12 @@ class _ResultAccumulator:
         resource_predecessors: Mapping[str, Mapping[str, object]],
         resource_lanes: Optional[Mapping[str, int]] = None,
     ) -> None:
-        if isinstance(task.metadata.get("physical_execution"), Mapping):
+        if isinstance(task.metadata.get("physical_execution_by_owner"), Mapping):
             _merge_storage_traffic(
                 self.storage_traffic,
                 _summarize_nand_task_traffic((task,), resource_owners=self.resource_owners),
             )
-        if isinstance(task.metadata.get("physical_execution"), Mapping):
+        if isinstance(task.metadata.get("physical_execution_by_owner"), Mapping):
             _merge_dram_traffic(
                 self.dram_traffic,
                 _summarize_dram_task_traffic((task,), resource_owners=self.resource_owners),
@@ -1185,7 +1159,7 @@ def _request_task_chunks(
 ) -> Iterator[RequestTaskChunk]:
     """Lower one request and split only at stable visible-token boundaries."""
 
-    yield from iter_request_task_chunks(schedule.scenario, request)
+    yield from iter_request_task_chunks(schedule, request)
 
 
 def _arrival_key(request: Any) -> Tuple[float, float, float, float, str]:
@@ -1229,14 +1203,14 @@ def execute_incremental_schedule(
         metadata={"retention_policy": retention_policy.value},
     )
 
-    resource_owners = dict(getattr(schedule, "resource_owners", {}))
+    resource_owners = dict(schedule.resource_owners)
     accumulator = _ResultAccumulator(
         retention_policy, retained_task_limit, resource_owners=resource_owners
     )
     kernel = execution_kernel or UnifiedEventKernel(resource_owners=resource_owners)
     if resource_owners != dict(kernel.resource_owners):
         raise ValueError("live kernel physical resource owners differ from schedule")
-    resource_capacities = getattr(schedule, "resource_capacities", {})
+    resource_capacities = schedule.resource_capacities
     # Static streaming and online serving must use the same declared
     # execution lanes. ``ensure_resource_capacities`` is idempotent for an
     # already-bootstrapped kernel and rejects conflicting capacities.
@@ -1255,7 +1229,7 @@ def execute_incremental_schedule(
             else replace(task, earliest_start_ns=runtime_origin_ns)
             for task in chunk.tasks
         )
-        kernel.add_tasks(tasks)
+        kernel.submit(tasks)
         stream.terminal_task_id = chunk.terminal_task_id
         stream.final = chunk.final
         streams_by_terminal[chunk.terminal_task_id] = stream

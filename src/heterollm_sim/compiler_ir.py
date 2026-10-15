@@ -11,6 +11,7 @@ from .ir import (
     ACTIVE_MEMORY_COMPONENT_KINDS,
     STORAGE_COMPONENT_KINDS,
     LayerSpec,
+    RequestSpec,
     model_graph_execution_digest,
     model_graph_execution_view,
     normalize_component_kind,
@@ -1095,15 +1096,12 @@ def _build_workload_graph(
             else 0.0
         )
         source_requests = (
-            {
-                "request_id": "request-{:04d}".format(index),
-                "arrival_ns": index * interval_ns,
-                "prompt_tokens": scenario.workload.prompt_tokens,
-                "output_tokens": scenario.workload.output_tokens,
-                "priority": 0,
-                "deadline_ns": None,
-                "metadata": {},
-            }
+            RequestSpec(
+                request_id="request-{:04d}".format(index),
+                arrival_ns=index * interval_ns,
+                prompt_tokens=scenario.workload.prompt_tokens,
+                output_tokens=scenario.workload.output_tokens,
+            )
             for index in range(scenario.workload.request_count)
         )
         transform = "expand_synthetic_request"
@@ -1111,21 +1109,16 @@ def _build_workload_graph(
         source_requests = ()
         transform = "preserve_synthetic_template"
     for raw in source_requests:
-        getter = raw.get if isinstance(raw, Mapping) else lambda name, default=None: getattr(raw, name, default)
-        request_id = str(getter("request_id", ""))
+        request_id = raw.request_id
         requests.append(
             RequestNode(
                 request_id=request_id,
-                arrival_ns=float(getter("arrival_ns", 0.0)),
-                prompt_tokens=int(getter("prompt_tokens", 0)),
-                output_tokens=int(getter("output_tokens", 0)),
-                priority=int(getter("priority", 0)),
-                deadline_ns=(
-                    float(getter("deadline_ns"))
-                    if getter("deadline_ns") is not None
-                    else None
-                ),
-                attributes=dict(getter("metadata", {}) or {}),
+                arrival_ns=raw.arrival_ns,
+                prompt_tokens=raw.prompt_tokens,
+                output_tokens=raw.output_tokens,
+                priority=raw.priority,
+                deadline_ns=raw.deadline_ns,
+                attributes=dict(raw.metadata),
                 provenance=(
                     _origin(
                         scenario,
@@ -1711,6 +1704,12 @@ def _tensor_plan_from_rank_shards(
     source_name: str = "rank_weight_shards",
     default_residency: str = "rank_weight_shard",
 ) -> TensorPlan:
+    if tensor_id in scenario.placement.tensor_bytes:
+        raise CanonicalizationError(
+            CompilationPhase.PLAN_PLACEMENT,
+            "rank-sharded tensors must not declare representative tensor_bytes; use rank_weight_shards physical_bytes",
+            "placement.tensor_bytes.{}".format(tensor_id),
+        )
     shard_map: Dict[str, TensorShard] = {}
     replicas = []
     rank_by_id = {rank.rank: rank for rank in runtime_ranks}
@@ -1718,7 +1717,9 @@ def _tensor_plan_from_rank_shards(
     seen_rank_ids = set()
     components = scenario.hardware.component_map()
     parallel = scenario.placement.parallel
-    expected_shard_count = (
+    shared_backing = (len(entries) == 1 and isinstance(entries[0], Mapping)
+                      and entries[0].get("shard_kind") == "packed_backing")
+    expected_shard_count = 1 if shared_backing else (
         parallel.tp_degree * parallel.ep_degree
         if expert_sharded
         else parallel.tp_degree
@@ -1733,14 +1734,23 @@ def _tensor_plan_from_rank_shards(
                 "rank_weight_shards entries must be objects",
                 source_ref,
             )
-        component_raw = raw.get("component_id")
+        retired_fields = sorted({"rank", "component_id"}.intersection(raw))
+        if retired_fields:
+            raise CanonicalizationError(
+                CompilationPhase.PLAN_PLACEMENT,
+                "rank_weight_shards entries contain retired fields: {}".format(
+                    ", ".join(retired_fields)
+                ),
+                source_ref,
+            )
+        component_raw = raw.get("storage_component_id")
         rank_raw = raw.get("rank_id")
         shard_index_raw = raw.get("shard_index")
         shard_count_raw = raw.get("shard_count")
         if component_raw in (None, "") or rank_raw is None:
             raise CanonicalizationError(
                 CompilationPhase.PLAN_PLACEMENT,
-                "rank_weight_shards entries require rank_id and component_id",
+                "rank_weight_shards entries require rank_id and storage_component_id",
                 source_ref,
             )
         rank_id = _optional_nonnegative_int(rank_raw, "rank_id")
@@ -1827,7 +1837,7 @@ def _tensor_plan_from_rank_shards(
                 ),
                 source_ref,
             )
-        expected_shard_index = (
+        expected_shard_index = 0 if shared_backing else (
             rank.ep_rank * parallel.tp_degree + rank.tp_rank
             if expert_sharded
             else rank.tp_rank
@@ -1857,7 +1867,7 @@ def _tensor_plan_from_rank_shards(
                 source_ref,
             )
         shard_kind = str(raw.get("shard_kind", ""))
-        allowed_kinds = (
+        allowed_kinds = {"packed_backing"} if shared_backing else (
             {"", "tp_ep_expert_shard"}
             if expert_sharded
             else {"", "tp_shard", "tp_shard_ep_replica"}
@@ -1952,10 +1962,10 @@ def _tensor_plan_from_rank_shards(
                 source_name, tensor_id
             ),
         )
+    shard_logical_total = sum(
+        int(shard.logical_bytes or 0) for shard in shard_map.values()
+    )
     if logical_bytes is not None:
-        shard_logical_total = sum(
-            int(shard.logical_bytes or 0) for shard in shard_map.values()
-        )
         if shard_logical_total != logical_bytes:
             raise CanonicalizationError(
                 CompilationPhase.PLAN_PLACEMENT,
@@ -1968,7 +1978,7 @@ def _tensor_plan_from_rank_shards(
             )
     return TensorPlan(
         tensor_id=tensor_id,
-        logical_bytes=logical_bytes,
+        logical_bytes=shard_logical_total,
         shards=tuple(sorted(shard_map.values(), key=lambda item: (item.shard_index, item.shard_id))),
         replicas=tuple(sorted(replicas, key=lambda item: item.replica_id)),
         source_tensor_id=tensor_id,

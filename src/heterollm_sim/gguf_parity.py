@@ -889,7 +889,7 @@ def compare_gguf_to_model(gguf: GGUFMetadata, model: Any, *, context_length: int
                           expected_output_tokens: int | None = None, actual_output_tokens: int | None = None) -> dict[str, Any]:
     expected = _expected_geometry(model)
     mismatches: list[dict[str, Any]] = []
-    family = str(getattr(model, "metadata", {}).get("family", "")).lower()
+    family = str(model.metadata.get("family", "")).lower()
     if not gguf.architecture:
         mismatches.append({"field": "architecture", "expected": family or expected["architecture"], "actual": None})
     elif family and not any(part in gguf.architecture.lower() for part in family.replace(".", " ").split()):

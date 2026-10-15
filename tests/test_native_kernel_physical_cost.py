@@ -10,6 +10,7 @@ from heterollm_sim.cost_models import (
     HBMProfile, TensorCoreProfile,
 )
 from heterollm_sim.event_kernel import UnifiedEventKernel
+from heterollm_sim.data_motion import lower_physical_allocations
 from heterollm_sim.kernel_memory import attach_l2_contract
 from heterollm_sim.kernel_model import KernelCapability, KernelModelProfile, estimate_kernel
 from heterollm_sim.memory_types import make_hbm_config
@@ -35,7 +36,7 @@ def native_task(bandwidth, *, l2=False, compute_cycles=1., launch=0.):
         metadata={"physical_memory_config": make_hbm_config(capacity_bytes=1 << 20),
             "physical_owner": hbm.resource_id,
             "phase_metadata": phase.metadata, "cost_model": estimate.metadata,
-            "memory_access": tuple({"operation": op, "address": address, "byte_count": count,
+            "memory_accesses": tuple({"operation": op, "address": address, "byte_count": count,
                 "resource_id": hbm.resource_id, "buffer_id": buffer, "offset_bytes": 0,
                 "allocation_size_bytes": count}
                 for op, address, count, buffer in (("read", 0, reads, "input"),
@@ -45,7 +46,7 @@ def native_task(bandwidth, *, l2=False, compute_cycles=1., launch=0.):
             cache_resource="gpu.l2", owner="gpu.l2", accesses=(
                 CacheAccess("input", 0, reads, "read", reads),
                 CacheAccess("output", 0, writes, "write", writes)))
-    return task, estimate
+    return lower_physical_allocations(task), estimate
 
 
 @pytest.mark.parametrize("l2", [False, True])

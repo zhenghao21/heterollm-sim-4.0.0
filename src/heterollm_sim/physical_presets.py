@@ -28,7 +28,7 @@ _DRAM_RESEARCH_BASE = {
     "subchannels_per_channel": 1, "pseudo_channels_per_channel": 2,
     "stacks": 1, "dies_per_stack": 1, "ranks_per_channel": 1,
     "bank_geometry_scope": "per_die", "stack_interface_mode": "shared",
-    "control_mode": "legacy", "activated_row_msb": None, "refresh_policy": "disabled",
+    "control_mode": "analytical", "activated_row_msb": None, "refresh_policy": "disabled",
     **{name: 0.0 for name in HBM_CONTROL_TIMING_FIELDS},
     "bank_groups_per_rank": 1, "banks_per_group": 8,
     "rows_per_bank": 524288, "row_bytes": 8192, "burst_bytes": 64,
@@ -51,7 +51,7 @@ _DRAM_RESEARCH_BASE = {
         "parameter_basis": "synthetic_research_assumptions",
         "configuration_scope": "explicit_physical_memory_research",
         "geometry_basis": "equivalent geometry; not a vendor die or bank specification",
-        "timing_basis": "legacy zero bank-group timing control; other array timings are analytical assumptions",
+        "timing_basis": "analytical zero bank-group timing control; other array timings are analytical assumptions",
     },
 }
 _NAND_RESEARCH_BASE = {
@@ -92,7 +92,7 @@ def _preset(base, **changes):
 
 
 _PHYSICAL_CONFIG_CATALOG = {
-    "hbm_legacy_zero": _preset(_DRAM_RESEARCH_BASE),
+    "hbm_analytical_zero": _preset(_DRAM_RESEARCH_BASE),
     "hbm_group_geometry_control": _preset(_DRAM_RESEARCH_BASE,
         bank_groups_per_rank=4, banks_per_group=2),
     "hbm_synthetic_bank_groups": _preset(_DRAM_RESEARCH_BASE, **_SYNTHETIC_BANK_GROUPS,
@@ -106,12 +106,9 @@ _PHYSICAL_CONFIG_CATALOG = {
     "hbf_synthetic": _preset(_NAND_RESEARCH_BASE),
     "ssd_synthetic": _preset(_NAND_RESEARCH_BASE, kind="SSD",
         host_bandwidth_gb_s=112.0, internal_bandwidth_gb_s=112.0,
-        host_read_bandwidth_gb_s=None, host_write_bandwidth_gb_s=None,
+        host_read_bandwidth_gb_s=112.0, host_write_bandwidth_gb_s=112.0,
         page_read_ns=50000.0, page_program_ns=800000.0, front_ns=0.0),
 }
-# Descriptive compatibility alias; both select the same geometry-only control.
-_PHYSICAL_CONFIG_CATALOG["hbm_group_geometry_zero"] = _preset(
-    _PHYSICAL_CONFIG_CATALOG["hbm_group_geometry_control"])
 _PHYSICAL_CONFIG_CATALOG["published_hbf"] = _preset(
     _NAND_RESEARCH_BASE, channels=128, parallel_units=128, capacity_bytes=512 * 1024 ** 3,
     front_ns=0.0, internal_bandwidth_gb_s=488000.0,
@@ -121,7 +118,6 @@ _PHYSICAL_CONFIG_CATALOG["published_hbf"] = _preset(
 _PHYSICAL_CONFIG_CATALOG["study_nvme_baseline"] = _preset(
     _PHYSICAL_CONFIG_CATALOG["ssd_synthetic"], channels=32, blocks_per_plane=8192,
     host_bandwidth_gb_s=7.0, host_read_bandwidth_gb_s=7.0, host_write_bandwidth_gb_s=4.0)
-_PHYSICAL_CONFIG_CATALOG["study_ssd"] = _preset(_PHYSICAL_CONFIG_CATALOG["study_nvme_baseline"])
 
 # Ideal medium controls deliberately retain their authored synthetic geometry.
 # Non-ideal HBM microbenchmarks are defined with the standard references below.
@@ -130,7 +126,7 @@ _PHYSICAL_CONFIG_CATALOG.update({
         capacity_bytes=33554432),
     "research_hbf_media_write": _preset(_NAND_RESEARCH_BASE, channels=4, parallel_units=4,
         host_bandwidth_gb_s=64.0, host_read_bandwidth_gb_s=64.0, host_write_bandwidth_gb_s=16.0,
-        internal_bandwidth_gb_s=128.0, metadata={"buffered_write_mode": True}),
+        internal_bandwidth_gb_s=128.0),
     "research_hbf_migration": _preset(_NAND_RESEARCH_BASE, channels=32, parallel_units=32,
         host_bandwidth_gb_s=128.0, host_read_bandwidth_gb_s=128.0, host_write_bandwidth_gb_s=32.0,
         internal_bandwidth_gb_s=128.0),
@@ -160,8 +156,8 @@ _PHYSICAL_CONFIG_CATALOG.update({
     "research_hbf_wear_trace": _preset(_NAND_RESEARCH_BASE, planes_per_lun=4,
         planes_independent=True, parallel_units=2, blocks_per_plane=2,
         pages_per_block=64, page_bytes=4096, host_granularity_bytes=1,
-        host_bandwidth_gb_s=100.0, host_read_bandwidth_gb_s=None,
-        host_write_bandwidth_gb_s=None, internal_bandwidth_gb_s=100.0,
+        host_bandwidth_gb_s=100.0, host_read_bandwidth_gb_s=100.0,
+        host_write_bandwidth_gb_s=100.0, internal_bandwidth_gb_s=100.0,
         front_ns=0.0, detailed_observability=True, capacity_bytes=2097152,
         wear_model={"rated_pe_cycles": 3000, "initial_pe_cycles": 2968,
             "program_latency_growth_at_rated_pe": 1.0, "max_program_latency_scale": 2.0,
@@ -190,24 +186,14 @@ _HBM_MICRO_REFERENCE_DEFAULTS = {
     "research_hbm_package": {"capacity_bytes": 33554432, "interface_bandwidth_gb_s": 256.0},
     "research_hbm_path_relay": {"capacity_bytes": 16777216, "interface_bandwidth_gb_s": 128.0},
 }
-# Old published_* names remain readable, but no longer select the legacy
-# 8-channel / 8 KiB equivalent array. These are standard-organization research
-# references, not evidence of a particular GPU's undisclosed memory parts.
+# These standard-organization research references do not identify a GPU part.
 _HBM_REFERENCE_PROFILES = {
     "hbm3e_reference": "standard",
     "hbm3e_reference_flat": "flat",
-    "hbm3e_reference_flat_zero": "flat",
     "hbm3e_reference_synthetic_timing": "timed",
     "hbm4_reference": "standard",
     "hbm4_reference_flat": "flat",
-    "hbm4_reference_flat_zero": "flat",
     "hbm4_reference_synthetic_timing": "timed",
-    "published_hbm": "timed",
-    "published_hbm_legacy_zero": "standard",
-    "published_hbm_group_geometry_zero": "standard",
-    "published_hbm_serving": "timed",
-    "published_hbm_serving_legacy_zero": "standard",
-    "published_hbm_serving_group_geometry_zero": "standard",
     **{profile_id: "standard" for profile_id in _HBM_MICRO_REFERENCE_DEFAULTS},
 }
 
@@ -231,7 +217,7 @@ def _hbm_reference(profile_id, updates, expand_geometry=False):
         max_stack_bytes = (16 if generation in {"HBM2", "HBM2E"} else 64) * 1024 ** 3
         stacks = max(8, (capacity + max_stack_bytes - 1) // max_stack_bytes)
     interface = values.pop("interface_bandwidth_gb_s", 4000.0)
-    # A rate-mode caller may clear the old bandwidth field. The seed only
+    # A rate-mode caller may clear the bandwidth input. The seed only
     # establishes a complete organization; the public contract applies the
     # explicit None and rate/clock together below.
     if interface is None:
@@ -272,7 +258,6 @@ def _hbm_reference(profile_id, updates, expand_geometry=False):
         "timing_basis": ("synthetic bank-group timing sensitivity above known JEDEC minima; unknown vendor timings remain assumptions, not vendor calibration"
                          if mode == "timed" else payload["metadata"]["timing_basis"]),
         "geometry_control": mode,
-        "profile_name_basis": "legacy flat_zero/zero aliases no longer disable known JEDEC timing minima; inspect actual fields",
     }
     if micro_reference:
         provenance = {**deepcopy(payload["metadata"]["parameter_provenance"]),
@@ -350,7 +335,6 @@ def resolve_physical_config(profile_id, *, overrides=None, expand_geometry=False
         if isinstance(page_bytes, bool) or not isinstance(page_bytes, int) or page_bytes <= 0:
             raise ValueError("page_bytes must be a positive integer")
         read_bw = values["host_read_bandwidth_gb_s"]
-        read_bw = values["host_bandwidth_gb_s"] if read_bw is None else read_bw
         for name, value in (("host read bandwidth", read_bw), ("page_read_ns", values["page_read_ns"]),
                             ("host_bandwidth_gb_s", values["host_bandwidth_gb_s"])):
             if (isinstance(value, bool) or not isinstance(value, (int, float))
@@ -393,9 +377,6 @@ def resolve_physical_config(profile_id, *, overrides=None, expand_geometry=False
         overrides=updates, expand_geometry=expand_geometry)
 
 
-load_physical_config = resolve_physical_config
-
-
 def make_analytical_dram_config(
     *, kind: str, generation: str, capacity_bytes: int,
     read_bandwidth_gbps: float, write_bandwidth_gbps: float,
@@ -421,7 +402,7 @@ def make_analytical_dram_config(
         )
         result["metadata"]["unused_component_latency_ns"] = {
             "read": read_latency_ns, "write": write_latency_ns,
-            "basis": "legacy aggregate latency is not a JEDEC RL/WL encoding and is not added to physical execution",
+            "basis": "aggregate component latency is not a JEDEC RL/WL encoding and is not added to physical execution",
         }
         if reference_stacks > 1:
             result["metadata"]["parameter_provenance"]["stacks"] = {
@@ -471,14 +452,14 @@ def make_analytical_dram_config(
     )
     if kind.upper() == "HBM":
         # No verified addressing table is selected for unnamed/unsupported HBM.
-        # Preserve explicitly analytical legacy templates without representing
+        # Preserve explicitly analytical templates without representing
         # their bank/page organization as a standard or vendor specification.
         payload["metadata"].update(
             geometry_status="explicit_assumption",
             unknown_parameters=["bank_groups_per_rank", "banks_per_group",
                                 "rows_per_bank", "row_bytes", "burst_bytes",
                                 "dies_per_stack", "vendor_address_mapping"],
-            geometry_basis="Unverified legacy analytical HBM organization; not a JEDEC device configuration",
+            geometry_basis="Unverified analytical HBM organization; not a JEDEC device configuration",
         )
     return asdict(parse_execution_physical_config(payload))
 

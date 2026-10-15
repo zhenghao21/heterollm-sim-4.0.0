@@ -56,7 +56,7 @@ def mmq_stage_source_binding(stage: str, source, *, source_hashes: Mapping[str, 
     """Describe identity checks shared by planner metadata and surface import."""
     if stage not in MMQ_STAGE_NAMES:
         raise ValueError("unsupported MMQ stage")
-    runtime = getattr(source, "runtime_binary_sha256", "")
+    runtime = source.runtime_binary_sha256
     binding = {
         "schema": "heterollm.mmq-stage-source-binding/v1",
         "stage": stage,

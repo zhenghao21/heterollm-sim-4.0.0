@@ -365,11 +365,11 @@ def make_hbm_geometry_config(
     record(("refresh_policy",), "controller_policy", "simulator",
            "periodic REFab per PC; no postponement/pull-in or per-bank optimization; disabled where tRFC is unresolved")
     record(("refresh_interval_ns",), "standard_reference" if refresh_ns is not None else "unknown", organization_source,
-           "tREFI max3.9us reference; actual temperature-dependent rate must follow the device; unknown tRFC disables automatic refresh")
+           "selected 3900ns periodic refresh interval within the supported range; vendor applicability unverified; unknown tRFC disables automatic refresh")
     record(("refresh_cycle_ns",), "standard_reference" if refresh_ns is not None else "unknown", organization_source,
            "AC tRFCab table for selected density/height; HBM3 24/32Gb entries are TBD and never copied from HBM4")
     record(("maximum_active_ns",), "standard_reference", organization_source,
-           "tRAS(max)=9*tREFI at the selected normal-temperature 3900ns reference; enforced independently of automatic refresh; temperature/vendor conditions remain unverified")
+           "tRAS(max)=9*tREFI at the selected 3900ns reference interval; enforced independently of automatic refresh; vendor applicability unverified")
     inactive = ["activate_same_group_ns", "activate_different_group_ns", "four_activate_window_ns",
                 "read_to_precharge_ns", "write_to_read_same_group_ns", "write_to_read_different_group_ns",
                 "read_to_write_command_ns"]
@@ -381,12 +381,12 @@ def make_hbm_geometry_config(
         timing_basis="JEDEC command rules and stated minima; IDD example, legal MR reference selections and unknown vendor timings are separately labelled",
         timing_validation="not_a_vendor_speed_bin",
         unconfigured_timing_parameters=inactive + ([] if refresh_ns is not None else ["refresh_cycle_ns"]),
-        control_limitations=["training, low-power entry/exit, parity/ECC transport, auto-precharge and per-bank refresh are not implemented",
+        control_limitations=["training, parity/ECC transport, auto-precharge and per-bank refresh are not implemented",
                              "FCFS open-page controller and bandwidth-cap pacing are model policies, not JEDEC scheduling requirements",
                              "electrical PHY turnaround offsets and unspecified array timing gates require vendor inputs"],
         accounting_basis="command bus occupancy, DQ busy time and dependency wait are separate; one full 32B DQ burst is charged once; WR recovery limits PRE and is not a write-completion tail",
         directional_cap_basis="independent read/write start pacing; DQ remains half-duplex at physical 2CK per burst; interleaved directions may together exceed either directional cap but never the physical interface",
-        inactive_legacy_fields=["open_ns", "close_ns", "burst_interval_ns", "read_recovery_ns", "write_recovery_ns"],
+        analytical_only_fields=["open_ns", "close_ns", "burst_interval_ns", "read_recovery_ns", "write_recovery_ns"],
     )
     metadata["unknown_parameters"].extend(["vendor_supported_rl_wl", *inactive])
     if refresh_ns is None:

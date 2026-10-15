@@ -53,10 +53,7 @@ def bank_group_variants(group):
         for row in group.get('rows', []):
             if row.get('hardware_profile') != profile:
                 continue
-            configs = row.get('executed_hbm_parameters') or {
-                owner: item['physical_config'] for owner, item in
-                row.get('core_execution_audit', {}).get('executed_physical_configurations', {}).items()
-                if item.get('physical_config', {}).get('kind') == 'HBM'}
+            configs = row['executed_hbm_parameters']
             for owner, config in configs.items():
                 existing = next((r for r in records if r['owner'] == owner and r['config'] == config), None)
                 if existing is None:
@@ -193,13 +190,15 @@ def render_report(report):
            '<p class="muted">完整复跑：<code>python -B scripts/hbf_hbm_experiments.py --output-dir &quot;'+output_dir+'&quot; --workers 4</code>；生成图表：<code>python -B scripts/plot_hbf_hbm_results.py --input &quot;'+output_dir+'/results.json&quot; --output &quot;'+output_dir+'/figures&quot; --update-report</code>。使用项目虚拟环境。时间原始单位 ns，带宽十进制 GB/s，容量 bytes；表中延迟已转换为 ms/µs。</p>',
            '<h2 id="coverage">修改和覆盖范围</h2><ul>'+''.join('<li>'+esc(x)+'</li>' for x in report.get('audit_fixes',[]))+'</ul>',
            table(('实验组','检查状态','结果行数','检查支持的范围'),[(g.get('title',g['id']),g['status'],len(g.get('rows',[])),supported_scope(g)) for g in groups])]
+    if report.get('artifact_note'):
+        parts.insert(4, '<p class="lead">'+esc(report['artifact_note'])+'</p>')
     study=next((g for g in groups if g['id'].startswith('09')),None)
     core=report.get('memory_core_coverage',{})
     parts.append('<h2 id="core">计算、访存与迁移的职责边界</h2>'
         '<p>GPU侧继续使用聚合简化模型估算计算和启动时间。上层算子与KV管理器生成实际读写请求；'
         'HBM统一交给DRAM Core处理地址、行/Bank、命令和数据通道、排队与完成时间；HBF交给NAND Core处理页读取与编程。'
         'KV迁移按源内存读取、链路传输、目标内存写入的依赖顺序执行。调度器组合这些依赖与重叠，不再额外叠加HBM聚合带宽耗时。</p>')
-    parts.append('<p>标准参考几何不等于完整JEDEC协议仿真。jedec_hbm 路径执行共享行/列命令接口、PC/SID与激活页状态，以及已配置的刷新约束；已知时序硬下限对手动实验值同样生效。初始化、训练、低功耗及完整PHY行为仍不在普通读写子集内。具体执行范围、刷新是否启用、约束检查状态和未知参数以每点保存的Core配置为准，不能据此推断已验证某个厂商速度档。</p>')
+    parts.append('<p>标准参考几何不等于完整JEDEC协议仿真。jedec_hbm 路径执行共享行/列命令接口、PC/SID与激活页状态，以及已配置的刷新约束；已知时序硬下限对手动实验值同样生效。初始化、训练及完整PHY行为仍不在普通读写子集内。具体执行范围、刷新是否启用、约束检查状态和未知参数以每点保存的Core配置为准，不能据此推断已验证某个厂商速度档。</p>')
     if core.get('all_full_serving_hbm_verified'):
         parts.append('<p><strong>本报告 '+str(core['verified_hbm_dram_core_rows'])+' / '+str(core['full_serving_rows'])+
             ' 个完整服务点均记录到实际HBM DRAM Core执行。</strong>证据来自持久在线服务运行时的实际提交，排除规划预演、隔离重放与服务启动前初始化。'
@@ -369,7 +368,7 @@ def render_report(report):
             channel_rows.append((r['id'],len(channels),number(sum(channels)/len(channels) if channels else None,6),
                 number(max(channels) if channels else None,6),imbalance.get('observed_lanes'),number(imbalance.get('coefficient_of_variation'))))
     parts.append(table(('ID','观测到的通道数','平均忙时比例','最高忙时比例','观测到的有效服务单元','有效单元忙时变异系数'),channel_rows))
-    parts.append('<p>上述有效服务单元只汇总被观察到的资源。第14组另启用真实物理plane和NAND页队列观测，包含闲置plane；未启用详细观测的其他行保留空值，不能混用两类指标。</p>')
+    parts.append('<p>上述有效服务单元只汇总被观察到的资源。物理plane和NAND页队列指标只来自启用详细观测的记录，并包含闲置plane；未启用详细观测的行保留空值，不能混用两类指标。</p>')
     speculative=[r for r in service if r['id'].startswith('speculative/')]
     if speculative:
         parts.append('<h3>投机解码：实际草稿、接受与拒绝</h3>')
@@ -431,7 +430,7 @@ def render_report(report):
         parts.append(table(('年限','工作时间比例','购置成本$','条件购置$/百万token'),[
             (r['years'],number(r['active_fraction'],1),number(r['capex_usd'],2),number(r['conditional_usd_per_million_tokens'],4))
             for r in economics.get('purchase_cost_amortization_rows',[])]))
-        parts.append('<p>均匀磨损为独立条件推导；第14组提供按实际 NAND 访问反馈到 GPU 服务时间线的磨损实验。两者不混算，也不包含完整 FTL、retention 或坏块机制。</p>')
+        parts.append('<p>均匀磨损为独立条件推导，应与直接影响服务时间线的磨损实验分别解读。本节不包含完整 FTL、retention 或坏块机制。</p>')
         wear=[r for r in economics.get('uniform_wear_rows',[]) if r['capacity_bytes']==512_000_000_000 and r['rated_pe_cycles']==3000 and r['additional_gc_factor']==1 and r['study_years']==3]
         parts.append(table(('写率来源','每年P/E','均匀磨损寿命年','3年内更换成本$'),[
             (r['write_rate_source_id'],number(r['pe_cycles_per_year']),number(r['uniform_wear_lifetime_years']),number(r['replacement_cost_usd'])) for r in wear]))

@@ -54,23 +54,7 @@ STORAGE_COMPONENT_KINDS = (
 def normalize_component_kind(value: str) -> str:
     """Return the canonical V4 spelling for a component kind."""
 
-    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
-    aliases = {
-        "high_i_o_ssd": "high_io_ssd",
-        "highio_ssd": "high_io_ssd",
-        "high_i/o_ssd": "high_io_ssd",
-        "ddr3": "ddr",
-        "ddr4": "ddr",
-        "ddr5": "ddr",
-        "lpddr5": "lpddr",
-        "lpddr5x": "lpddr",
-        # Generation is carried by component metadata; the component family
-        # remains canonical ``gddr`` for profile binding and topology.
-        "gddr6": "gddr",
-        "gddr6x": "gddr",
-        "gddr7": "gddr",
-    }
-    return aliases.get(normalized, normalized)
+    return value.strip().lower().replace("-", "_").replace(" ", "_")
 
 
 def _require_name(value: str, field_name: str) -> None:
@@ -427,7 +411,7 @@ class ModelSpec:
     def _execution_view(self) -> ModelGraphExecutionView:
         """Return the guarded graph-derived view on every access.
 
-        The graph dataclass is frozen, but its compatibility mappings remain
+        The graph dataclass is frozen, but its nested mappings remain
         mutable.  ``model_graph_execution_view`` owns a content guard and
         refreshes its cache when nested execution data changes.
         """
@@ -1022,7 +1006,7 @@ def _project_model_graph_layers_unchecked(
     result = []
     for group in groups:
         params = dict(group.parameters)
-        layer_ids = params.get("layer_ids", group.attributes.get("layer_ids", []))
+        layer_ids = params.get("layer_ids")
         if not isinstance(layer_ids, (list, tuple)) or not layer_ids:
             raise ValueError("组件组 {} 缺少 layer_ids".format(group.operator_id))
         repeat = params.get("repeat", len(layer_ids))
@@ -1526,9 +1510,6 @@ def _model_graph_execution_payload(graph: "ModelGraph") -> Dict[str, Any]:
     attributes = payload.get("attributes")
     if isinstance(attributes, dict):
         attributes.pop("ui", None)
-        # Older serialized graphs predate the explicit tying contract.
-        # Missing means independent output storage for backward compatibility.
-        attributes.setdefault("tie_word_embeddings", False)
     operators = payload.get("operators")
     if isinstance(operators, list):
         payload["operators"] = sorted(
@@ -1539,17 +1520,6 @@ def _model_graph_execution_payload(graph: "ModelGraph") -> Dict[str, Any]:
                 str(item.get("op_kind", "")) if isinstance(item, Mapping) else "",
             ),
         )
-        # ``gated_mlp`` was added after the fixed validation graphs were
-        # authored.  Its schema default is true, so an explicit true and an
-        # omitted value describe the same execution graph.  Keep false
-        # visible: it changes the projected GEMM shape and must remain part of
-        # the coverage contract.
-        for operator in payload["operators"]:
-            if not isinstance(operator, dict):
-                continue
-            parameters = operator.get("parameters")
-            if isinstance(parameters, dict) and parameters.get("gated_mlp") is True:
-                parameters.pop("gated_mlp")
     tensors = payload.get("tensors")
     if isinstance(tensors, list):
         symbols = {}
@@ -1650,9 +1620,7 @@ def _assert_execution_projection_coverage(
     base_layers: List[LayerSpec] = []
     for group_index, group in enumerate(groups):
         params = dict(group.parameters)
-        layer_ids = params.get(
-            "layer_ids", group.attributes.get("layer_ids", [])
-        )
+        layer_ids = params["layer_ids"]
         children = by_parent.get(group.operator_id, [])
         marker = "__projection_group_{}".format(group_index)
         for layer_id in layer_ids:
@@ -1773,7 +1741,7 @@ def model_graph_execution_view(
     # not a dataclass field, hence canonical serialization and equality are
     # unchanged; ``dataclasses.replace`` creates a fresh graph without the
     # cache, which is the required invalidation boundary.
-    # ``ModelGraph`` is frozen, but its compatibility-facing nested mappings
+    # ``ModelGraph`` is frozen, but its nested mappings
     # are intentionally mutable.  Guard the object-local cache with the exact
     # executable payload so a post-parse mutation can never reuse a stale
     # validated projection.  Building this normalized payload is materially
@@ -1841,9 +1809,7 @@ def model_graph_execution_view(
     projected_index = 0
     for group in groups:
         params = dict(group.parameters)
-        layer_ids = params.get(
-            "layer_ids", group.attributes.get("layer_ids", [])
-        )
+        layer_ids = params["layer_ids"]
         for repeat_index, layer_id in enumerate(layer_ids):
             layer = projected[projected_index]
             layer_instances.append(
@@ -1951,13 +1917,18 @@ class ComponentSpec:
     # media models, but local interface links and typed memory profiles bind to
     # this value when it is present.
     bandwidth_gbps: float = field(default=0.0, kw_only=True)
-    # Physical memory generation is explicit for GDDR; other component kinds
-    # leave it empty.  Metadata remains accepted for older authoring payloads.
-    generation: str = field(default="", kw_only=True)
 
     def __post_init__(self) -> None:
         _require_name(self.component_id, "component_id")
         _require_name(self.kind, "kind")
+        if self.normalized_kind in {"high_i_o_ssd", "highio_ssd", "high_i/o_ssd"}:
+            raise ValueError("high I/O SSD component kind must be high_io_ssd")
+        if self.normalized_kind in {"gddr6", "gddr6x", "gddr7"}:
+            raise ValueError("GDDR component kind must be gddr; declare generation in physical_memory_config")
+        if self.normalized_kind in {"ddr3", "ddr4", "ddr5"}:
+            raise ValueError("DDR component kind must be ddr; declare generation in physical_memory_config")
+        if self.normalized_kind in {"lpddr5", "lpddr5x"}:
+            raise ValueError("LPDDR component kind must be lpddr; declare generation in physical_memory_config")
         _require_optional_name(self.cost_profile_id, "cost_profile_id")
         _require_tuple(self.ports, "ports")
         if not all(isinstance(port, PortSpec) for port in self.ports):
@@ -1987,34 +1958,19 @@ class ComponentSpec:
                     metadata.setdefault("bandwidth_mode", "directional")
                     object.__setattr__(self, "metadata", metadata)
         _require_mapping(self.metadata, "metadata")
+        if "read_only" in self.metadata:
+            raise ValueError("component metadata uses writable; read_only is unsupported")
+        if "writable" in self.metadata and not isinstance(self.metadata["writable"], bool):
+            raise ValueError("component metadata.writable must be a boolean")
         if self.normalized_kind in {"gddr", "gddr_memory"}:
-            # Preserve generation before replacing a generation-shaped kind
-            # with its canonical family.  Physical config is authoritative;
-            # explicit contradictions fail instead of silently choosing one.
+            # The physical config owns the memory generation.
             from dataclasses import asdict, is_dataclass
             from .memory_types import DramConfig, MemoryKind, parse_physical_memory_config
 
             metadata = dict(self.metadata)
-            alias = self.kind.strip().upper().replace("-", "")
-            component_generation = str(
-                self.generation
-                or metadata.get(
-                    "generation", metadata.get("memory_generation", "")
-                ) or ""
-            ).strip().upper().replace("-", "")
-            if alias in {"GDDR6", "GDDR6X", "GDDR7"}:
-                if component_generation and component_generation != alias:
-                    raise ValueError(
-                        "component {} kind={} conflicts with metadata.generation={}".format(
-                            self.component_id, self.kind, component_generation
-                        )
-                    )
-                component_generation = alias
-            if component_generation and component_generation not in {"GDDR6", "GDDR6X", "GDDR7"}:
-                raise ValueError(
-                    "component {} metadata.generation must be GDDR6, GDDR6X or GDDR7".format(self.component_id)
-                )
             physical_raw = metadata.get("physical_memory_config")
+            if physical_raw is None:
+                raise ValueError("component {} requires physical_memory_config with an explicit GDDR generation".format(self.component_id))
             if physical_raw is not None:
                 parsed = parse_physical_memory_config(physical_raw)
                 if not isinstance(parsed, DramConfig) or parsed.kind is not MemoryKind.GDDR:
@@ -2023,17 +1979,11 @@ class ComponentSpec:
                             self.component_id, parsed.kind.value
                         )
                     )
-                if component_generation and parsed.generation and component_generation != parsed.generation:
-                    raise ValueError(
-                        "component {} metadata.generation={} conflicts with physical_memory_config.generation={}".format(
-                            self.component_id, component_generation, parsed.generation
-                        )
-                    )
-                component_generation = component_generation or parsed.generation
+                if parsed.generation not in {"GDDR6", "GDDR6X", "GDDR7"}:
+                    raise ValueError("component {} physical_memory_config.generation must be GDDR6, GDDR6X or GDDR7".format(self.component_id))
                 physical = asdict(physical_raw) if is_dataclass(physical_raw) else dict(physical_raw)
                 physical["kind"] = "GDDR"
-                if component_generation:
-                    physical["generation"] = component_generation
+                physical["generation"] = parsed.generation
                 if parsed.interface_bandwidth_gb_s is not None:
                     physical["interface_bandwidth_gb_s"] = parsed.interface_bandwidth_gb_s
                 metadata["physical_memory_config"] = physical
@@ -2060,9 +2010,6 @@ class ComponentSpec:
                     # bounded view of a larger declared geometry.
                     physical["capacity_bytes"] = self.capacity_bytes
                     metadata["physical_memory_config"] = physical
-            if component_generation:
-                metadata["generation"] = component_generation
-                object.__setattr__(self, "generation", component_generation)
             if not str(metadata.get("memory_service_owner", "")).strip():
                 metadata["memory_service_owner"] = "{}.memory".format(self.component_id)
             object.__setattr__(self, "kind", "gddr")
@@ -2120,23 +2067,6 @@ class ComponentSpec:
                         self.component_id
                     )
                 )
-            if parsed_kind == "GDDR":
-                technology = self.metadata.get("technology", {})
-                declared_generations = {
-                    str(value).strip().upper().replace("-", "")
-                    for value in (
-                        getattr(parsed_config, "generation", ""),
-                        self.metadata.get("generation", ""),
-                        technology.get("generation", "") if isinstance(technology, Mapping) else "",
-                    )
-                    if str(value).strip()
-                }
-                if len(declared_generations) > 1:
-                    raise ValueError(
-                        "component {} GDDR generation conflicts: {}".format(
-                            self.component_id, ", ".join(sorted(declared_generations))
-                        )
-                    )
         if self.package_id:
             _require_name(self.package_id, "package_id")
         if self.die_id:
@@ -2170,10 +2100,7 @@ class ComponentSpec:
     def is_writable(self) -> bool:
         """Return metadata-declared writability, independent of bandwidth."""
 
-        return (
-            self.metadata.get("read_only", False) is not True
-            and self.metadata.get("writable", True) is not False
-        )
+        return self.metadata.get("writable", True)
 
     @property
     def is_storage(self) -> bool:
@@ -2225,13 +2152,11 @@ def is_local_memory_interface_link(link: "LinkSpec", hardware: "HardwareSpec") -
     target = hardware.component_map().get(link.target_component)
     if source is None or target is None:
         return False
-    source_flag = str(link.metadata.get("bandwidth_source", "")).strip().lower()
-    if source_flag in {"component", "memory_component", "shared_component"}:
-        return True
-    protocol = normalize_component_kind(str(link.protocol))
-    if protocol in {"hbm", "gddr", "gddr6", "gddr6x", "gddr7", "hbf", "ddr", "dram", "tsv", "lpddr5x"}:
-        return source.is_active_memory or target.is_active_memory
-    return False
+    reference = link.metadata.get("service_ref")
+    return any(
+        component.is_storage and reference == component.component_id + ".access"
+        for component in (source, target)
+    )
 
 
 @dataclass(frozen=True)

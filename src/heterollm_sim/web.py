@@ -292,11 +292,9 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/component-presets":
                 params = parse_qs(split.query, keep_blank_values=True)
-                component_kind = (
-                    _query_value(params, "component_kind")
-                    or _query_value(params, "kind")
-                    or ""
-                )
+                if "kind" in params:
+                    raise HttpError(400, "unknown_fields", "组件筛选只接受 component_kind 字段")
+                component_kind = _query_value(params, "component_kind") or ""
                 self._send_json(
                     200,
                     self._component_catalog().page(
@@ -673,25 +671,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/model-files":
                 payload = self._read_json_object()
-                model = payload.get("model", payload)
-                if not isinstance(model, Mapping):
-                    raise HttpError(
-                        400,
-                        "missing_model",
-                        "模型文件请求必须包含 model 对象",
-                        message_en="model file request requires a model object",
-                    )
-                if payload.get("model") is not None:
-                    unexpected = sorted(
-                        set(payload) - {"model", "artifact_id", "provenance"}
-                    )
-                    if unexpected:
-                        raise HttpError(
-                            400,
-                            "unknown_fields",
-                            "模型文件请求包含未知字段：{}".format(", ".join(unexpected)),
-                            message_en="unknown model file fields: {}".format(", ".join(unexpected)),
-                        )
+                model = _model_file_request(payload)
                 document = save_model_artifact(
                     model,
                     artifact_dir=self._model_artifact_dir(),
@@ -703,7 +683,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/model-files/import":
                 payload = self._read_json_object()
                 unexpected = sorted(
-                    set(payload) - {"preset_id", "path", "gguf_path", "artifact_id"}
+                    set(payload) - {"preset_id", "path", "artifact_id"}
                 )
                 if unexpected:
                     raise HttpError(
@@ -713,18 +693,7 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
                         message_en="unknown model-file import fields: {}".format(", ".join(unexpected)),
                     )
                 preset_id = payload.get("preset_id")
-                if payload.get("path") is not None and payload.get("gguf_path") is not None:
-                    raise HttpError(
-                        400,
-                        "ambiguous_source",
-                        "path 与 gguf_path 只能二选一",
-                        message_en="path and gguf_path are mutually exclusive",
-                    )
-                source_path = (
-                    payload.get("path")
-                    if payload.get("path") is not None
-                    else payload.get("gguf_path")
-                )
+                source_path = payload.get("path")
                 selected_sources = [
                     name for name, present in (
                         ("preset_id", bool(preset_id)),
@@ -1259,6 +1228,16 @@ def _scenario_parse_messages(exc: BaseException) -> Tuple[str, str]:
     return "场景 JSON 解析失败：字段值或结构不符合配置约束", detail
 
 
+def _model_file_request(payload: Mapping[str, Any]) -> Mapping[str, Any]:
+    unexpected = sorted(set(payload) - {"model", "artifact_id", "provenance"})
+    if unexpected:
+        raise HttpError(400, "unknown_fields", "模型文件请求包含未知字段：{}".format(", ".join(unexpected)))
+    model = payload.get("model")
+    if not isinstance(model, Mapping):
+        raise HttpError(400, "missing_model", "模型文件请求必须包含 model 对象")
+    return model
+
+
 def hardware_input_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
     """Serialize the hardware-only source file used by every UI run."""
     hardware = to_primitive(scenario.hardware)
@@ -1291,7 +1270,7 @@ def hardware_input_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
         "runtime": to_primitive(scenario.runtime_profile),
     }
     return {
-        "schema_version": "4.0",
+        "schema_version": "4.0.0",
         "kind": "hardware_input",
         "contract_version": "2",
         "hardware": hardware,
@@ -1489,9 +1468,9 @@ def _run_job_request(
     scenario = scenario_or_http_error(
         scenario_payload, model_artifact_dir=model_artifact_dir
     )
-    scheduler = getattr(scenario.workload, "scheduler", None)
+    scheduler = scenario.workload.scheduler
     scheduler_mode = (
-        str(getattr(scheduler, "mode", "static")) if scheduler else "static"
+        scheduler.mode if scheduler else "static"
     )
     if scheduler_mode == "continuous" and retention_policy not in {
         None,
@@ -1518,7 +1497,7 @@ def _ui_score_request(
     """Parse the unconstrained UI scenario plus its explicit native reference."""
     unexpected = sorted(
         set(payload)
-        - {"scenario", "native", "native_report", "r0", "r0_reference", "threshold_pct"}
+        - {"scenario", "native", "r0", "threshold_pct"}
     )
     if unexpected:
         raise HttpError(
@@ -1537,7 +1516,7 @@ def _ui_score_request(
             "直接评分请求需要完整的 UI 场景输入",
             message_en="direct score request requires the complete UI scenario input",
         )
-    native = payload.get("native", payload.get("native_report"))
+    native = payload.get("native")
     if not isinstance(native, Mapping):
         raise HttpError(
             400,
@@ -1555,7 +1534,7 @@ def _ui_score_request(
                 message_en="threshold_pct must be a positive number",
             )
         threshold = float(threshold)
-    r0 = payload.get("r0", payload.get("r0_reference"))
+    r0 = payload.get("r0")
     if r0 is not None and not isinstance(r0, Mapping):
         raise HttpError(
             400,
@@ -1875,7 +1854,7 @@ def simulation_score_payload(
         normalized_r0 = _normalize_r0_reference(r0_reference)
         r0_requests = normalized_r0["requests"]
         r0_scheduler = r0_reference.get("scheduler")
-        r0_mapping = r0_reference.get("mapping", r0_reference.get("placement"))
+        r0_mapping = r0_reference.get("mapping")
         score["r0_reference_fingerprint"] = stable_hash(to_primitive(r0_reference))
         r0_logic = {
             key: r0_reference[key]
@@ -2036,7 +2015,7 @@ def _compare_ui_simulation_to_native(
         # separately defined subset contract.
         passed = False
     native_scheduler = native_reference.get("scheduler")
-    native_mapping = native_reference.get("mapping", native_reference.get("placement"))
+    native_mapping = native_reference.get("mapping")
     structural = {}
     for name, candidate, native in (
         ("scheduler", scheduler, native_scheduler),

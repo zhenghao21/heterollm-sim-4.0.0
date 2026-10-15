@@ -10,7 +10,7 @@ class BufferedServiceTests(unittest.TestCase):
     def test_ack_and_failed_transaction_do_not_publish_staged_mutations(self):
         config = make_hbf_config(capacity_bytes=16 * 16384, page_bytes=16384,
             write_buffer_bytes=16384, host_granularity_bytes=4096,
-            metadata={"buffered_write_mode": True})
+            metadata={})
         component = ComponentSpec("hbf", "hbf", capacity_bytes=config.capacity_bytes,
             read_bandwidth_gbps=800, write_bandwidth_gbps=80,
             metadata={"physical_memory_config": config})

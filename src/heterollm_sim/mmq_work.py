@@ -86,8 +86,8 @@ class MMQWork:
     partial_writer_count: int
     fixup_tile_indices: tuple[int, ...]
     fixup_valid_elements: int
-    # Optional loaded CUDA binary identity.  Older source-only callers leave
-    # this empty; calibrated MMQ callers must bind it before using a surface.
+    # Source-only analytical work has no loaded CUDA binary identity.
+    # Calibrated MMQ requires this binding before a timing surface can apply.
     runtime_binary_sha256: str = ""
 
     @property

@@ -41,6 +41,7 @@ class BatchedGemmInput:
     n: Any
     peak_tops: Any
     memory_bandwidth_gb_s: Any
+    memory_bandwidth_model: str
     activation_bits: Any = 8
     weight_bits: Any = 8
     output_bits: Any = 16
@@ -96,7 +97,6 @@ class BatchedGemmResult:
     peak_effective_hbm_bandwidth_gb_s: np.ndarray
     shape_effective_hbm_bandwidth_gb_s: np.ndarray
     hbm_bandwidth_proxy_enabled: np.ndarray
-    fallback_to_fixed_bandwidth: np.ndarray
     compute_ns: np.ndarray
     memory_ns: np.ndarray
     roofline_ns: np.ndarray
@@ -160,9 +160,10 @@ def evaluate_batched_gemm(
     peak_effective_memory_bandwidth = (
         columns["memory_bandwidth_gb_s"] * columns["memory_efficiency"]
     )
-    # Structural fields are optional for compatibility with existing batched
-    # callers.  The proxy is enabled only for complete, valid structural rows;
-    # all other rows retain the historical fixed effective bandwidth.
+    # Callers select the analytical model explicitly. Incomplete structural
+    # declarations are errors, never an implicit switch to nominal bandwidth.
+    if candidates.memory_bandwidth_model not in {"nominal_bandwidth", "mma_output_tile_wave"}:
+        raise ValueError("memory_bandwidth_model must be nominal_bandwidth or mma_output_tile_wave")
     integral_structure = (
         (columns["sm_count"] == xp.floor(columns["sm_count"]))
         & (
@@ -173,7 +174,7 @@ def evaluate_batched_gemm(
         & (columns["mma_n"] == xp.floor(columns["mma_n"]))
         & (columns["mma_k"] == xp.floor(columns["mma_k"]))
     )
-    hbm_bandwidth_proxy_enabled = (
+    valid_structure = (
         integral_structure
         & (columns["sm_count"] > 0.0)
         & (columns["tensor_cores_per_sm"] > 0.0)
@@ -183,6 +184,10 @@ def evaluate_batched_gemm(
         & (columns["occupancy"] > 0.0)
         & (columns["occupancy"] <= 1.0)
     )
+    structural = candidates.memory_bandwidth_model == "mma_output_tile_wave"
+    if structural and not _device_bool(xp.all(valid_structure)):
+        raise ValueError("mma_output_tile_wave requires positive integral geometry and occupancy in (0, 1]")
+    hbm_bandwidth_proxy_enabled = xp.full(m.shape, structural, dtype=bool)
     tile_wave = mma_output_tile_wave_proxy(
         m, k, n,
         sm_count=xp.where(hbm_bandwidth_proxy_enabled, columns["sm_count"], 1.0),
@@ -257,9 +262,6 @@ def evaluate_batched_gemm(
         "hbm_bandwidth_proxy_enabled": _to_numpy(
             hbm_bandwidth_proxy_enabled, used, xp
         ),
-        "fallback_to_fixed_bandwidth": _to_numpy(
-            ~hbm_bandwidth_proxy_enabled, used, xp
-        ),
         "compute_ns": _to_numpy(compute_ns, used, xp),
         "memory_ns": _to_numpy(memory_ns, used, xp),
         "roofline_ns": _to_numpy(roofline_ns, used, xp),
@@ -287,8 +289,12 @@ def evaluate_batched_gemm(
         backend_requested=requested,
         backend_used=used,
         diagnostics=diagnostics,
-        hbm_bandwidth_model=str(mma_output_tile_wave_contract()["model"]),
-        hbm_bandwidth_contract=mma_output_tile_wave_contract(),
+        hbm_bandwidth_model=(str(mma_output_tile_wave_contract()["model"])
+                             if structural else "nominal_bandwidth"),
+        hbm_bandwidth_contract=(mma_output_tile_wave_contract() if structural else {
+            "model": "nominal_bandwidth", "evidence": "analytical",
+            "validation_status": "unvalidated_nominal_bandwidth_assumption",
+        }),
         bound=bound,
         sort_order=sort_order,
         rank=rank,

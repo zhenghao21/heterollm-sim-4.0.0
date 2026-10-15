@@ -221,7 +221,10 @@ def summarize_batch(results, *, bandwidth_ceiling_gb_s: float = 0.0) -> BatchRes
     if not all(isinstance(item, TransactionResult) for item in items):
         raise TypeError("results must contain TransactionResult values")
     if not items:
-        return BatchResult((), 0.0, 0.0, 0, 0, {"bandwidth_ceiling_gb_s": float(bandwidth_ceiling_gb_s)})
+        return BatchResult((), 0.0, 0.0, 0, 0, {
+            "bandwidth_ceiling_gb_s": float(bandwidth_ceiling_gb_s),
+            "internal_transfer_bytes": 0,
+        })
     first = min(item.arrival_ns for item in items)
     last = max(item.completion_ns for item in items)
     counters = {

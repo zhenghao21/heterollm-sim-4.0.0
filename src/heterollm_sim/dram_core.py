@@ -84,7 +84,7 @@ def _mapping_cycle(lanes, banks, groups, banks_per_group,
 class DramCore:
     """Generate ordered DRAM command, array and data-path timing.
 
-    Legacy mode retains the reduced model: PRE/ACT reserve a bank for
+    Analytical mode uses the reduced model: PRE/ACT reserve a bank for
     close_ns/open_ns, columns reserve per-lane command resources, and optional
     group gates use (stack, die, lane, rank). It does not model refresh/tRAS.
 
@@ -94,7 +94,7 @@ class DramCore:
     activated page, maximum row-active deadlines are enforced, and an
     explicit periodic all-bank refresh policy is supported. Its configured
     timing inputs do not establish a vendor speed
-    grade or support for training, low-power modes or the full standard.
+    grade or support for training or the full standard.
     Both modes keep request submission order; neither implements FR-FCFS.
     """
 
@@ -234,10 +234,6 @@ class DramCore:
             )
         return earliest
 
-    def execute(self, request: AccessRequest) -> TransactionResult:
-        """Submit one request through the same admission gate as batches."""
-        return self.submit(request)
-
     def submit(self, request: AccessRequest) -> TransactionResult:
         validate_dram_request(request, self.config)
         if self._finite_guard_required(request):
@@ -271,7 +267,7 @@ class DramCore:
         except OverflowError:
             return True
 
-    def _submit_validated(self, request: AccessRequest) -> TransactionResult:
+    def _submit_validated(self, request: AccessRequest, *, execute=None) -> TransactionResult:
         effective_arrival = max(request.arrival_ns, self._acceptance_ns)
         inflight = [end for end in self._inflight if end > effective_arrival]
         if len(inflight) >= self.config.max_outstanding_requests:
@@ -284,7 +280,7 @@ class DramCore:
                 else 0
             )
         )
-        result = self._execute_accepted(
+        result = (self._execute_accepted if execute is None else execute)(
             request if effective_arrival == request.arrival_ns
             else replace(request, arrival_ns=effective_arrival)
         )
@@ -293,7 +289,7 @@ class DramCore:
             **self.timeline.metrics_delta(before_metrics),
             **({
                 "bank_group_timing_enabled": True,
-                "bank_group_timing_fallback": self.config.control_mode == "legacy" and not self.capture_details,
+                "bank_group_timing_fallback": self.config.control_mode == "analytical" and not self.capture_details,
             } if self.config.bank_group_timing_enabled else {}),
         })
         self._acceptance_ns = effective_arrival
@@ -305,6 +301,16 @@ class DramCore:
         items = tuple(requests)
         for request in items:
             validate_dram_request(request, self.config)
+        if (len(items) > 1 and self.config.control_mode == "jedec_hbm" and not self.capture_details
+                and not any(self._finite_guard_required(request) for request in items)):
+            try:
+                from ._compiled_hbm import execute_hbm_numeric_many
+            except (ImportError, OSError):
+                pass
+            else:
+                results = execute_hbm_numeric_many(self, items)
+                if results is not None:
+                    return results
         if (len(items) > 1 and self._can_accelerate()
                 and not any(self._finite_guard_required(request) for request in items)):
             from ._compiled_dram import execute_compiled_many
@@ -670,18 +676,15 @@ class DramCore:
             },
         )
 
-    def execute_batch(self, requests: Iterable[AccessRequest]) -> tuple[TransactionResult, ...]:
-        return tuple(self.submit(request) for request in requests)
-
     def run(self, requests: Iterable[AccessRequest]):
         """Execute a batch and return the unified aggregate result."""
         from .memory_transfer import summarize_batch
-        return summarize_batch(self.execute_batch(requests), bandwidth_ceiling_gb_s=self.config.bandwidth_gb_s)
+        return summarize_batch(self.submit_many(requests), bandwidth_ceiling_gb_s=self.config.bandwidth_gb_s)
 
 
 def dram_service(config: DramConfig, request: AccessRequest, *, timeline: Optional[ResourceTimeline] = None) -> TransactionResult:
     """Functional convenience wrapper around :class:`DramCore`."""
-    return DramCore(config, timeline).execute(request)
+    return DramCore(config, timeline).submit(request)
 
 
 __all__ = ["DramCore", "dram_service"]

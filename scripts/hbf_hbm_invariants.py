@@ -43,8 +43,8 @@ def check_ideal_read_equivalence() -> dict[str, Any]:
     """Same read link/granularity and no media overhead give equal timing."""
 
     request = AccessRequest("ideal-read", Operation.READ, 0, 4096)
-    hbm_result = DramCore(_ideal_hbm(), ResourceTimeline()).execute(request)
-    hbf_result = NandCore(_ideal_hbf(), ResourceTimeline()).execute(request)
+    hbm_result = DramCore(_ideal_hbm(), ResourceTimeline()).submit(request)
+    hbf_result = NandCore(_ideal_hbf(), ResourceTimeline()).submit(request)
     timing_error = _ratio(hbm_result.completion_ns, hbf_result.completion_ns)
     passed = (
         hbm_result.logical_bytes == hbf_result.logical_bytes == request.byte_count
@@ -76,12 +76,12 @@ def check_aggregate_execution_consistency() -> dict[str, Any]:
 
     config = _ideal_hbm()
     total_bytes = 128 * config.burst_bytes
-    aggregate = DramCore(config, ResourceTimeline(), capture_details=False).execute(
+    aggregate = DramCore(config, ResourceTimeline(), capture_details=False).submit(
         AccessRequest("aggregate", Operation.READ, 0, total_bytes)
     )
     split_core = DramCore(config, ResourceTimeline(), capture_details=False)
     split = tuple(
-        split_core.execute(AccessRequest(f"burst-{index}", Operation.READ, index * config.burst_bytes, config.burst_bytes))
+        split_core.submit(AccessRequest(f"burst-{index}", Operation.READ, index * config.burst_bytes, config.burst_bytes))
         for index in range(128)
     )
     split_last = max(item.completion_ns for item in split)
@@ -117,14 +117,14 @@ def check_long_context_event_bound() -> dict[str, Any]:
         **{**dram_config.__dict__, "max_expanded_segments": 16}
     )
     dram_bytes = 4 * 1024 * 1024
-    dram = DramCore(dram_config, ResourceTimeline(), capture_details=False).execute(
+    dram = DramCore(dram_config, ResourceTimeline(), capture_details=False).submit(
         AccessRequest("long-hbm", Operation.READ, 0, dram_bytes)
     )
     hbf_config = _ideal_hbf()
     hbf_config = type(hbf_config)(
         **{**hbf_config.__dict__, "max_expanded_segments": 16}
     )
-    hbf = NandCore(hbf_config, ResourceTimeline(), capture_details=False).execute(
+    hbf = NandCore(hbf_config, ResourceTimeline(), capture_details=False).submit(
         AccessRequest("long-hbf", Operation.READ, 0, 4 * 1024 * 1024)
     )
     passed = (
