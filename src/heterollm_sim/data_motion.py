@@ -1915,10 +1915,9 @@ def endpoint_service(
     component: ComponentSpec,
     byte_count: int,
     *,
-    read: bool,
+    operation: str,
     name: str,
     page_offset_bytes: Optional[int] = None,
-    operation: Optional[str] = None,
     runtime: Optional[PhysicalRuntimeContext] = None,
     arrival_ns: Optional[float] = None,
     preview: bool = False,
@@ -1944,13 +1943,9 @@ def endpoint_service(
         raise ValueError("physical_memory_config requires an explicit memory address")
     if address is not None:
         _non_negative_int(address, "memory access address")
-    op_name = ("read" if read else "write") if operation is None else str(operation).lower()
+    op_name = str(operation).lower()
     if op_name not in {"read", "write", "erase"}:
         raise ValueError("operation must be read, write or erase")
-    if op_name == "read" and not read:
-        raise ValueError("read operation requires read=True")
-    if op_name == "write" and read:
-        raise ValueError("write operation requires read=False")
     service = resolve_service(component)
     billed = service.price(
         AccessKind.READ if op_name == "read" else AccessKind.WRITE if op_name == "write" else AccessKind.ERASE,

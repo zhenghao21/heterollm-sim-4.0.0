@@ -34,9 +34,10 @@ def test_saved_architecture_topology_uses_current_groups_and_layout_fields():
     run_browser("""
 for (const item of payload) {
   const ids = item.hardware.components.map(c => c.component_id);
-  const view = Topology.normalizeTopologyView(item.topology_view, ids);
-  assert.deepEqual(view.groups, item.topology_view.groups);
-  assert.deepEqual(view.layout.positions, item.topology_view.layout.positions);
+  const stored = item.hardware.metadata.topology_view;
+  const view = Topology.normalizeTopologyView(stored, ids);
+  assert.deepEqual(view.groups, stored.groups);
+  assert.deepEqual(view.layout.positions, stored.layout.positions);
   assert.deepEqual(Topology.normalizeTopologyView(view, ids), view);
 }
 assert.throws(() => Topology.normalizeTopologyView({positions: {gpu: {x: 9, y: 7}}}, ['gpu']));

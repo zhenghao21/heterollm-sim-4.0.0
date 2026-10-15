@@ -993,7 +993,6 @@ def bootstrap_control_plane(
                     "request_id": flow_id,
                     "flow_id": flow_id,
                     "required_bytes": weight_bytes,
-                    "byte_count": control_bytes,
                     "control_byte_count": control_bytes,
                     "storage_byte_count": weight_bytes,
                     "host_weight_byte_count": (

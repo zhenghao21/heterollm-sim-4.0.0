@@ -3615,8 +3615,7 @@ function renderControlPlaneStatus() {
 function controlPlaneMemoryTierMaps(placement = state.scenario?.placement) {
   if (placement === state.scenario?.placement && (state.reportStale || state.mappingStale)) return {};
   const runtime = runtimePlacementForView(placement);
-  return asObject(runtime.memory_tiers ?? runtime.metadata?.memory_tiers
-    ?? runtime.control_plane?.memory_tiers ?? placement?.metadata?.memory_tiers);
+  return asObject(runtime.memory_tiers);
 }
 
 function controlPlaneMemoryTierDetails(placement = state.scenario?.placement) {
@@ -7195,7 +7194,7 @@ function createProtocolLink(sourceId, targetId, protocol) {
     if (memoryGeneration !== selectedGeneration) throw new Error(`显存 ${target.component_id} 的代际 ${memoryGeneration} 与链路 ${selectedGeneration} 不一致`);
     const supported = asArray(source.metadata?.supported_gddr_generations);
     const controllerGenerations = supported.length ? supported.map((value) => String(value).toUpperCase())
-      : asArray(source.ports).filter((port) => /^GDDR/i.test(String(port.protocol))).map((port) => String(port.version || port.protocol).match(/GDDR(?:6X|6|7)/i)?.[0]?.toUpperCase()).filter(Boolean);
+      : asArray(source.ports).filter((port) => port.protocol === "GDDR").map((port) => String(port.version || "").toUpperCase());
     if (!controllerGenerations.includes(selectedGeneration)) throw new Error(`GPU ${source.component_id} 未声明支持 ${selectedGeneration} 控制器，请在 GPU 元数据或端口中声明 supported_gddr_generations`);
   }
   const historyBefore = topologyHistorySnapshot();
@@ -10584,7 +10583,6 @@ function architecturePresetDetailItem(payload) {
     hardware: deepClone(asObject(payload?.hardware)),
     profiles: deepClone(asObject(payload?.profiles)),
     profiles_parameter_basis: deepClone(asObject(payload?.profiles_parameter_basis)),
-    topology_view: deepClone(asObject(payload?.topology_view)),
     compatibility: deepClone(asObject(payload?.compatibility)),
     catalog: deepClone(asObject(payload?.catalog)),
   };
@@ -11068,9 +11066,7 @@ function applyArchitecturePresetDetail(detail) {
   const historyBefore = topologyHistorySnapshot();
   if (!historyBefore) throw new Error("当前场景尚未准备好，无法替换硬件拓扑。");
   const hardware = normalizeArchitecturePresetHardware(detail);
-  const rawTopologyView = Object.keys(asObject(detail.topology_view)).length
-    ? detail.topology_view
-    : asObject(hardware.metadata).topology_view;
+  const rawTopologyView = asObject(hardware.metadata).topology_view;
   const normalized = collisionSafeArchitectureTopologyView(rawTopologyView, hardware);
   try {
     state.scenario.hardware = hardware;
@@ -14589,39 +14585,16 @@ function renderMapping() {
 }
 
 function effectiveParallelRanks() {
-  const placement = asObject(state.scenario?.placement);
-  const parallel = asObject(runtimePlacementForView(placement).parallel || placement.parallel);
-  const explicit = asArray(parallel.rank_mapping);
-  if (explicit.length) {
-    return explicit.map((rank) => ({
-      rank: rank.rank,
-      tp_rank: rank.tp_rank,
-      pp_rank: rank.pp_rank,
-      ep_rank: rank.ep_rank,
-      component_id: String(rank.component_id || ""),
-      memory_component_id: rank.memory_component_id == null ? null : String(rank.memory_component_id),
-      cim_component_id: rank.cim_component_id == null ? null : String(rank.cim_component_id),
-    })).sort((a, b) => a.rank - b.rank);
-  }
-  const tp = Math.max(1, Number(parallel.tp_degree ?? 1));
-  const pp = Math.max(1, Number(parallel.pp_degree ?? 1));
-  const ep = Math.max(1, Number(parallel.ep_degree ?? 1));
-  const gpus = asArray(state.scenario?.hardware?.components)
-    .filter((component) => normalizedComponentKind(component.kind) === "gpu")
-    .sort((a, b) => String(a.component_id).localeCompare(String(b.component_id)));
-  const ranks = [];
-  let flat = 0;
-  for (let ppRank = 0; ppRank < pp; ppRank += 1) {
-    for (let epRank = 0; epRank < ep; epRank += 1) {
-      for (let tpRank = 0; tpRank < tp; tpRank += 1) {
-        const component = gpus[flat];
-        if (!component) return ranks;
-        ranks.push({ rank: flat, tp_rank: tpRank, pp_rank: ppRank, ep_rank: epRank, component_id: component.component_id });
-        flat += 1;
-      }
-    }
-  }
-  return ranks;
+  const parallel = asObject(runtimePlacementForView().parallel);
+  return asArray(parallel.rank_mapping).map((rank) => ({
+    rank: rank.rank,
+    tp_rank: rank.tp_rank,
+    pp_rank: rank.pp_rank,
+    ep_rank: rank.ep_rank,
+    component_id: String(rank.component_id || ""),
+    memory_component_id: rank.memory_component_id == null ? null : String(rank.memory_component_id),
+    cim_component_id: rank.cim_component_id == null ? null : String(rank.cim_component_id),
+  })).sort((a, b) => a.rank - b.rank);
 }
 
 function controlPlaneRank(entry) {
@@ -14707,8 +14680,8 @@ function filterEffectiveMappingGroups(groups, kind, view) {
     const rows = group.rows.filter((row) => {
       const rowRank = row.rank?.rank == null ? "" : String(row.rank.rank);
       const rowComponents = kind === "operator"
-        ? [String(row.componentId || row.rank?.component_id || "")]
-        : [String(row.compute || row.rank?.component_id || ""), String(row.storage || "")];
+        ? [String(row.componentId || "")]
+        : [String(row.compute || ""), String(row.storage || "")];
       const rowText = [rowRank, ...rowComponents, rankCoordinateLabel(row.rank), row.partition, row.shardKind, row.shardIndex, row.shardCount, row.residency]
         .filter(Boolean).join(" ").toLocaleLowerCase();
       return (!rank || rowRank === rank)
@@ -14727,8 +14700,8 @@ function effectiveMappingPage(groups, rawPage, pageSize = EFFECTIVE_MAPPING_PAGE
 
 function effectiveMappingGroupMarkup(group, kind) {
   const componentIds = Array.from(new Set(group.rows.map((row) => kind === "operator"
-    ? String(row.componentId || row.rank?.component_id || "—")
-    : `${String(row.compute || row.rank?.component_id || "—")}↔${String(row.storage || "—")}`)));
+    ? String(row.componentId || "—")
+    : `${String(row.compute || "—")}↔${String(row.storage || "—")}`)));
   const label = kind === "operator" ? uiText("Rank 目标", "Rank targets") : uiText("Rank 分片", "Rank shards");
   const headers = kind === "operator"
     ? `<th data-concept-help="rank">${escapeHtml(uiText("逻辑 Rank", "Logical Rank"))}</th><th>${escapeHtml(uiText("TP / PP / EP 坐标", "TP / PP / EP Coordinates"))}</th><th>${escapeHtml(uiText("执行组件", "Compute Component"))}</th><th>${escapeHtml(uiText("分区语义", "Partition Semantics"))}</th>`
@@ -14739,12 +14712,12 @@ function effectiveMappingGroupMarkup(group, kind) {
   const rows = group.rows.map((row) => kind === "operator" ? `<tr>
       <td>${row.rank?.rank == null ? "—" : formatNumber(row.rank.rank)}</td>
       <td>${escapeHtml(rankCoordinateLabel(row.rank))}</td>
-      <td>${escapeHtml(row.componentId || row.rank?.component_id || "—")}</td>
+      <td>${escapeHtml(row.componentId || "—")}</td>
       <td>${escapeHtml(row.partition)}</td>
     </tr>` : `<tr>
       <td>${row.rank?.rank == null ? "—" : formatNumber(row.rank.rank)}</td>
       <td>${escapeHtml(rankCoordinateLabel(row.rank))}</td>
-      <td>${escapeHtml(row.compute || row.rank?.component_id || "—")}</td>
+      <td>${escapeHtml(row.compute || "—")}</td>
       <td>${escapeHtml(row.storage || "—")}</td>
       <td>${escapeHtml(formatBytes(row.logicalBytes))}</td>
       <td>${escapeHtml(formatBytes(row.physicalBytes))}</td>
@@ -14762,8 +14735,8 @@ function syncEffectiveMappingFilters(operatorRows, shardRows) {
     .filter((rank) => rank != null)
     .map(String))).sort((left, right) => Number(left) - Number(right));
   const componentValues = Array.from(new Set([
-    ...operatorRows.map((row) => String(row.componentId || row.rank?.component_id || "")),
-    ...shardRows.map((row) => String(row.compute || row.rank?.component_id || "")),
+    ...operatorRows.map((row) => String(row.componentId || "")),
+    ...shardRows.map((row) => String(row.compute || "")),
     ...shardRows.map((row) => String(row.storage || "")),
   ].filter(Boolean))).sort((left, right) => left.localeCompare(right));
   if (!rankValues.includes(view.rank)) view.rank = "";
@@ -18365,7 +18338,7 @@ function traceSemanticEvents() {
 function syncTraceSemanticFilters() {
   const playback = state.tracePlayback;
   const events = playback.filteredEvents;
-  const categories = Array.from(new Set(events.map((event) => event.category || event.event_kind).filter(Boolean))).sort();
+  const categories = Array.from(new Set(events.map((event) => event.category).filter(Boolean))).sort();
   const phases = Array.from(new Set(events.map((event) => event.phase).filter(Boolean))).sort();
   if (playback.semanticCategory && !categories.includes(playback.semanticCategory)) categories.push(playback.semanticCategory);
   if (playback.semanticPhase && !phases.includes(playback.semanticPhase)) phases.push(playback.semanticPhase);

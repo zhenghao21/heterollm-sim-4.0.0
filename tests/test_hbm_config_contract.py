@@ -75,8 +75,8 @@ def test_scenario_reports_core_caps_separately_from_effective_profile():
     service = memory.metadata["memory_service"]
     assert (service["physical_bandwidth_gb_s"], service["physical_read_bandwidth_gb_s"],
             service["physical_write_bandwidth_gb_s"]) == (512., 128., 64.)
-    assert (service["effective_bandwidth_gb_s"], service["effective_read_bandwidth_gb_s"],
-            service["effective_write_bandwidth_gb_s"]) == (128., 128., 64.)
+    assert (service["bandwidth_gb_s"], service["read_bandwidth_gb_s"],
+            service["write_bandwidth_gb_s"]) == (128., 128., 64.)
     assert resolve_service(memory).write_bandwidth_gb_s == 64.
 
 

@@ -8059,7 +8059,7 @@ def _add_direct_state_access(builder, scenario, router, storage, device, byte_co
     )
     if binding is not None:
         offset = binding["address"]
-    service = endpoint_service(_component(scenario, storage), byte_count, read=read,
+    service = endpoint_service(_component(scenario, storage), byte_count,
         name=name, page_offset_bytes=offset, operation=operation,
         compact_preview=True)
     demands = list(service.demands if service else ())
@@ -15816,7 +15816,7 @@ def _add_kv_access(
         if offset is None:
             offset = _direct_memory_address(scenario, rank, owner, byte_count, metadata)
         service = endpoint_service(
-            _component(scenario, owner), byte_count, read=is_read, name=name,
+            _component(scenario, owner), byte_count, operation="read" if is_read else "write", name=name,
             page_offset_bytes=offset, compact_preview=True)
         demands = list(service.demands if service else ())
         if not is_read:
@@ -17177,7 +17177,6 @@ def _append_storage_probe_tasks(
         service = endpoint_service(
             component,
             byte_count,
-            read=operation == "read",
             name="storage_probe.{}".format(index),
             page_offset_bytes=raw.get("page_offset_bytes"),
             operation=operation,

@@ -1954,7 +1954,6 @@ def _metadata(item: ArchitecturePresetDefinition) -> Dict[str, Any]:
         "topology_class": item.topology_class,
         "scale": item.scale,
         "support_level": item.support_level,
-        "evidence_level": item.support_level,
         "topology_evidence": dict(hardware_metadata["topology_evidence"]),
         "parameter_basis": dict(hardware_metadata["parameter_basis"]),
         "loadable": item.loadable,
@@ -2083,7 +2082,6 @@ def materialize_architecture_payload(preset_id: str, *, component_catalog=None) 
 def architecture_preset_detail(preset_id: str, *, component_catalog=None) -> Dict[str, Any]:
     item = get_architecture_preset(preset_id)
     hardware = materialize_architecture_payload(preset_id, component_catalog=component_catalog) if item.loadable else None
-    topology_view = hardware["metadata"]["topology_view"] if hardware else None
     profiles: Dict[str, Any] = {}
     if hardware is not None:
         # These are the existing analytical scenario policies, now explicitly
@@ -2117,10 +2115,6 @@ def architecture_preset_detail(preset_id: str, *, component_catalog=None) -> Dic
             "is_native_measurement": False,
             "is_manufacturer_specification": False,
         } if profiles else {},
-        "components": hardware["components"] if hardware else [],
-        "links": hardware["links"] if hardware else [],
-        "groups": topology_view["groups"] if topology_view else [],
-        "topology_view": topology_view,
         "compatibility": _compatibility(item),
         "replacement_policy": dict(REPLACEMENT_POLICY),
         "catalog": {"version": CATALOG_VERSION, "cutoff_at": CATALOG_CUTOFF_AT},

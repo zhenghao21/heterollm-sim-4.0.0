@@ -44,7 +44,7 @@ def test_aggregate_objects_do_not_expose_duplicate_properties():
 
 def test_current_aggregate_root_reaches_kernel_completion_and_expansion():
     state = RuntimeState()
-    context = {"request_id": "r", "required_bytes": 128, "byte_count": 16,
+    context = {"request_id": "r", "required_bytes": 128, "control_byte_count": 16,
                "instruction_count": 7, "transaction_count": 3,
                "placement": "gpu0"}
     root, = build_initial_control_tasks(context=context)

@@ -411,13 +411,15 @@ class RuntimeDispatcher:
         action = completion.action
         payload = dict(completion.payload)
         flow_id = str(payload.get("flow_id", completion.task.request_id))
-        required_bytes = _non_negative_int(
-            payload.get("required_bytes", payload.get("byte_count", 0)),
-            "required_bytes",
-        )
-
         if action is RuntimeAction.NOOP:
             return self._result(completion)
+
+        missing = {"required_bytes", "control_byte_count"}.difference(payload)
+        if missing:
+            raise RuntimeDispatchError(
+                "runtime payload requires explicit {}".format(", ".join(sorted(missing)))
+            )
+        required_bytes = _non_negative_int(payload["required_bytes"], "required_bytes")
 
         if action is RuntimeAction.CAPACITY_CHECK:
             resource_id = str(payload.get("capacity_resource", "vram"))
@@ -496,7 +498,7 @@ class RuntimeDispatcher:
             if payload["page_cache_hit"]:
                 payload["byte_count"] = (
                     transfer_bytes if transfer_bytes > 0 else
-                    _non_negative_int(payload.get("control_byte_count", payload.get("byte_count")),
+                    _non_negative_int(payload["control_byte_count"],
                                       "control_byte_count")
                 )
                 next_action = (
@@ -531,7 +533,7 @@ class RuntimeDispatcher:
             )
             payload["byte_count"] = (
                 transfer_bytes if transfer_bytes > 0 else
-                _non_negative_int(payload.get("control_byte_count", payload.get("byte_count")),
+                _non_negative_int(payload["control_byte_count"],
                                   "control_byte_count")
             )
             next_action = (
@@ -560,7 +562,7 @@ class RuntimeDispatcher:
 
         if action is RuntimeAction.PCIE_TRANSFER:
             payload["byte_count"] = _non_negative_int(
-                payload.get("control_byte_count", payload.get("byte_count")),
+                payload["control_byte_count"],
                 "control_byte_count",
             )
             delta = RuntimeDelta()
@@ -622,7 +624,7 @@ class RuntimeDispatcher:
                         {
                             "gpu_component_id": component_id,
                             "byte_count": _non_negative_int(
-                                target.get("control_byte_count", payload.get("byte_count")),
+                                target.get("control_byte_count", payload["control_byte_count"]),
                                 "GPU control_byte_count",
                             ),
                             "service_ns_by_action": dict(
@@ -778,6 +780,10 @@ def build_initial_control_tasks(
     roots = []
     for index, raw_request in enumerate(requests):
         request = dict(raw_request)
+        if "byte_count" in request:
+            raise RuntimeDispatchError(
+                "request.byte_count is removed; use control_byte_count for control traffic"
+            )
         request_id = str(request.get("request_id", "request-{}".format(index)))
         flow_id = str(request.get("flow_id", request_id))
         required_bytes = _non_negative_int(
@@ -787,9 +793,9 @@ def build_initial_control_tasks(
             ),
             "required_bytes",
         )
-        byte_count = _non_negative_int(
-            request.get("byte_count", required_bytes),
-            "byte_count",
+        control_byte_count = _non_negative_int(
+            request.get("control_byte_count", profile_data.get("control_byte_count", 0)),
+            "control_byte_count",
         )
         payload = {
             key: value
@@ -807,7 +813,8 @@ def build_initial_control_tasks(
             {
                 "flow_id": flow_id,
                 "required_bytes": required_bytes,
-                "byte_count": byte_count,
+                "control_byte_count": control_byte_count,
+                "byte_count": control_byte_count,
                 "capacity_resource": str(
                     request.get("capacity_resource", "vram")
                 ),
@@ -827,7 +834,7 @@ def build_initial_control_tasks(
             batch_id="{}.transactions".format(task_id),
             controller=ControllerKind.CPU,
             transaction_count=dispatcher._transaction_count(action, payload),
-            byte_count=byte_count,
+            byte_count=control_byte_count,
         )
         roots.append(
             HardwareTask(
@@ -842,7 +849,7 @@ def build_initial_control_tasks(
                     ResourceDemand(
                         resource_id=resource_id,
                         service_ns=dispatcher._service_ns(action, payload),
-                        bytes_moved=byte_count,
+                        bytes_moved=control_byte_count,
                     )
                     for resource_id in dispatcher._resources(action, payload)
                 ),
@@ -851,7 +858,7 @@ def build_initial_control_tasks(
                     batch_id="{}.instructions".format(task_id),
                     instruction_class=InstructionClass.CONTROL,
                     instruction_count=instruction_count,
-                    byte_count=byte_count,
+                    byte_count=control_byte_count,
                 ),
                 controller_batch=controller_batch,
             )

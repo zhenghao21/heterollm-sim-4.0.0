@@ -22,7 +22,7 @@ from heterollm_sim.runtime_state import RuntimeState
 def test_host_only_weight_load_keeps_control_bytes_after_cache_transition(page_cached):
     runtime = ControlPlaneRuntime(state=RuntimeState(page_cache={"pages"} if page_cached else set()))
     result = runtime.run(None, {"request_id": "r", "required_bytes": 4096,
-        "byte_count": 64, "control_byte_count": 64, "transfer_byte_count": 0,
+        "control_byte_count": 64, "transfer_byte_count": 0,
         "placement": "host", "weight_key": "weights", "page_key": "pages"})
     actions = [row.action.value for row in result.completions]
     assert ("nvme_read" in actions) is not page_cached
@@ -40,7 +40,7 @@ def test_per_gpu_control_payload_matches_the_profile_cost_geometry():
     targets = profile["gpu_command_targets"]
     assert [row["control_byte_count"] for row in targets] == [160, 320]
     result = ControlPlaneRuntime(profile, RuntimeState(weight_cache={"weights"})).run(None,
-        {"request_id": "r", "required_bytes": 4096, "byte_count": profile["control_byte_count"],
+        {"request_id": "r", "required_bytes": 4096, "control_byte_count": profile["control_byte_count"],
          "weight_key": "weights", "placement": "gpu0"})
     moved = {row.payload["gpu_component_id"]: row.task.demands[0].bytes_moved
              for row in result.completions if row.action.value == "vram_controller"}
@@ -57,7 +57,7 @@ def test_explicit_continuation_runs_once_after_all_gpu_controllers(target_ids):
     second = replace(first, task_id="body-last", name="last", dependencies=(first.task_id,),
                      demands=(ResourceDemand("gpu0", 200.),))
     result = ControlPlaneRuntime({"gpu_command_targets": targets}, RuntimeState(weight_cache={"weights"})).run(
-        None, {"request_id": "r", "required_bytes": 4096, "byte_count": 64,
+        None, {"request_id": "r", "required_bytes": 4096, "control_byte_count": 64,
                "weight_key": "weights", "placement": "gpu0", "continuations": (first, second)})
     body = {row.task.task_id: row for row in result.completions if row.task.task_id.startswith("body-")}
     assert set(body) == {"body-first", "body-last"}

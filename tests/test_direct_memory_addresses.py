@@ -48,6 +48,6 @@ def test_endpoint_requires_its_current_address_parameter():
     config = make_hbf_config(capacity_bytes=65536)
     component = ComponentSpec("flash", "hbf", capacity_bytes=config.capacity_bytes,
         metadata={"physical_memory_config": config, "memory_access_offset_bytes": 16384})
-    assert endpoint_service(component, 64, read=True, name="read").metadata["address"] == 16384
+    assert endpoint_service(component, 64, operation="read", name="read").metadata["address"] == 16384
     with pytest.raises(TypeError, match="dram_address_bytes"):
-        endpoint_service(component, 64, read=True, name="read", dram_address_bytes=0)
+        endpoint_service(component, 64, operation="read", name="read", dram_address_bytes=0)

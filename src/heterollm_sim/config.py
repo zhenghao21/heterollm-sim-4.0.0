@@ -716,11 +716,8 @@ class ScenarioConfig:
                 "bandwidth_gb_s": profile.effective_bandwidth_gb_s,
                 "read_bandwidth_gb_s": profile.effective_read_bandwidth_gb_s,
                 "write_bandwidth_gb_s": profile.effective_write_bandwidth_gb_s,
-                # Explicit names keep the calibrated rate distinct from the
-                # physical ceiling in the resolved service contract.
-                "effective_bandwidth_gb_s": profile.effective_bandwidth_gb_s,
-                "effective_read_bandwidth_gb_s": profile.effective_read_bandwidth_gb_s,
-                "effective_write_bandwidth_gb_s": profile.effective_write_bandwidth_gb_s,
+                # Physical ceilings remain separate from the effective rates
+                # consumed by the resolved service above.
                 "physical_bandwidth_gb_s": caps[0] / 8,
                 "physical_read_bandwidth_gb_s": caps[1] / 8,
                 "physical_write_bandwidth_gb_s": caps[2] / 8,

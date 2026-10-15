@@ -965,7 +965,7 @@
       temporal: traceEventTemporalState(event, timeNs),
     })).filter((entry) => (
       entry.score >= 0
-      && (!category || String(entry.event?.category || entry.event?.event_kind || "") === category)
+      && (!category || String(entry.event?.category || "") === category)
       && (!phase || String(entry.event?.phase || "") === phase)
       && (!temporal || entry.temporal === temporal)
     )).sort((left, right) => (

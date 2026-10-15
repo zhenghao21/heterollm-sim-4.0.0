@@ -614,7 +614,7 @@ class TopologyRouter:
         read = self._endpoint_phase(
             source,
             byte_count,
-            read=True,
+            operation="read",
             name=name,
             page_offset_bytes=source_page_offset_bytes,
         )
@@ -649,7 +649,7 @@ class TopologyRouter:
         write = self._endpoint_phase(
             target,
             byte_count,
-            read=False,
+            operation="write",
             name=name,
             page_offset_bytes=target_page_offset_bytes,
         )
@@ -902,14 +902,14 @@ class TopologyRouter:
         component: ComponentSpec,
         byte_count: int,
         *,
-        read: bool,
+        operation: str,
         name: str,
         page_offset_bytes: Optional[int] = None,
     ) -> Optional[TransferPhase]:
         service = endpoint_service(
             component,
             byte_count,
-            read=read,
+            operation=operation,
             name=name,
             page_offset_bytes=page_offset_bytes,
             compact_preview=True,

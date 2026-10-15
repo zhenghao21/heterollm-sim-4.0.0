@@ -47,8 +47,8 @@ def test_current_gddr_presets_validate_and_share_one_physical_service(component_
         assert hop.service_ref == "memory.access"
         assert hop.resource_id == service.resource_id
         assert hop.demands(256) == ()
-    for read in (True, False):
-        endpoint = endpoint_service(memory, 256, read=read, name="gddr", page_offset_bytes=0)
+    for operation in ("read", "write"):
+        endpoint = endpoint_service(memory, 256, operation=operation, name="gddr", page_offset_bytes=0)
         assert endpoint is not None
         assert endpoint.metadata["physical_memory_config"]["generation"] == generation
         physical = endpoint.metadata["physical_execution_by_owner"][service.resource_id]
