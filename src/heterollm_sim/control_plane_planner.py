@@ -1515,7 +1515,7 @@ def plan_runtime_placement(
     else:
         placement_metadata.pop("memory_tiers", None)
     placement_metadata["control_plane"] = control_plane_metadata
-    placement_metadata["logical_weight_aliases"] = dict(logical_aliases)
+    placement_metadata.pop("logical_weight_aliases", None)
     placement_metadata.pop("auto_mapping", None)
     candidate_placement = replace(
         scenario.placement,

@@ -965,9 +965,10 @@ def summarize_kernel_predictions(tasks):
         if metadata.get('phase') == 'kernel_launch':
             launch_count += 1
             continue
-        audit = metadata.get('phase_metadata', {}).get('kernel_model', metadata.get('cost_model', {}).get('kernel_model'))
+        phase_metadata = metadata.get('phase_metadata', {})
+        audit = phase_metadata.get('kernel_model')
         if not audit:
-            fallback = metadata.get('cost_model', {}).get('prediction')
+            fallback = phase_metadata.get('kernel_prediction')
             if fallback:
                 fallback_count += 1
             continue

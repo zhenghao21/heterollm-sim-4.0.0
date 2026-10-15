@@ -3621,7 +3621,7 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
     # the event kernel resolves cache state first and forwards only backing
     # misses/write-backs to the physical core; skipping this contract would
     # make a physical descriptor bypass stateful cache semantics.
-    audit = task.metadata.get("phase_metadata", {}).get("kernel_model", task.metadata.get("cost_model", {}).get("kernel_model"))
+    audit = task.metadata.get("phase_metadata", {}).get("kernel_model")
     if audit and task.metadata.get("phase") != "kernel_launch":
         task = replace(task, metadata={**task.metadata, "kernel_prediction": audit})
     context = _COMPILATION_CONTEXT.get()
@@ -3644,7 +3644,7 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
     if not any(d.resource_id == memory_resource for d in task.demands):
         return task
     cost = task.metadata.get("cost_model", {})
-    model = task.metadata.get("phase_metadata", {}).get("kernel_model", cost.get("kernel_model", {}))
+    model = task.metadata.get("phase_metadata", {}).get("kernel_model", {})
     if model:
         read, write = model["read_bytes"], model["write_bytes"]
     elif "activation_bytes" in cost:

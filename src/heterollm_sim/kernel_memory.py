@@ -42,21 +42,25 @@ def _l2_execution_metadata(metadata, duration, demands, *, physical=False):
     updated = {**metadata, 'analytical_service_ns': duration}
     resource_service = {d.resource_id: d.service_ns for d in demands}
     reason = 'stateful_l2_physical_recost' if physical else 'stateful_l2_runtime_recost'
+    def prediction(value):
+        return {**value, 'prediction_ns': duration, 'analytical_ns': duration,
+                'model': 'analytical', 'reason': reason}
     def audit(value):
         return {**value, 'analytical_service_ns': duration,
                 'resource_service_ns': resource_service,
                 'pipeline_timing_scope': 'descriptor_before_l2_dispatch',
-                'prediction': {**value.get('prediction', {}),
-                'prediction_ns': duration, 'analytical_ns': duration,
-                'model': 'analytical', 'reason': reason}}
+                'prediction': prediction(value.get('prediction', {}))}
     if metadata.get('kernel_prediction'):
         updated['kernel_prediction'] = audit(metadata['kernel_prediction'])
-    for key in ('phase_metadata', 'cost_model'):
-        value = metadata.get(key)
-        if isinstance(value, dict) and isinstance(value.get('kernel_model'), dict):
-            updated[key] = {**value, 'kernel_model': audit(value['kernel_model'])}
-            if key == 'cost_model' and isinstance(value.get('prediction'), dict):
-                updated[key]['prediction'] = updated[key]['kernel_model']['prediction']
+    phase = metadata.get('phase_metadata')
+    if isinstance(phase, dict):
+        phase_updates = {}
+        if isinstance(phase.get('kernel_model'), dict):
+            phase_updates['kernel_model'] = audit(phase['kernel_model'])
+        if isinstance(phase.get('kernel_prediction'), dict):
+            phase_updates['kernel_prediction'] = prediction(phase['kernel_prediction'])
+        if phase_updates:
+            updated['phase_metadata'] = {**phase, **phase_updates}
     return updated
 
 
@@ -153,7 +157,7 @@ def attach_l2_contract(task, *, gpu, hbm, memory_resource, cache_resource, owner
     for access in accesses:
         if not isinstance(access, CacheAccess):
             raise ValueError('explicit CacheAccess required')
-    model = task.metadata.get('phase_metadata', {}).get('kernel_model', task.metadata.get('cost_model', {}).get('kernel_model', {}))
+    model = task.metadata.get('phase_metadata', {}).get('kernel_model', {})
     if model.get('prediction', {}).get('model', 'analytical') != 'analytical':
         raise ValueError('measured kernel cache protocol cannot be combined with stateful L2')
     bandwidth = model.get('achieved_bandwidth_gb_s', hbm.effective_bandwidth_gb_s)

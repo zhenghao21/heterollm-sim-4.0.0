@@ -1004,8 +1004,6 @@ def _recost_physical_kernel_envelope(task: TaskSpec) -> TaskSpec:
     """
     metadata = task.metadata
     audit = metadata.get("phase_metadata", {}).get("kernel_model")
-    if not isinstance(audit, Mapping):
-        audit = metadata.get("cost_model", {}).get("kernel_model")
     contract = audit.get("physical_memory_envelope") if isinstance(audit, Mapping) else None
     if not isinstance(contract, Mapping):
         return task
@@ -1039,12 +1037,7 @@ def _recost_physical_kernel_envelope(task: TaskSpec) -> TaskSpec:
                         "scope": "Core memory plus existing compute resource model; not measured whole-kernel replay",
                     }}}
     changes = {"analytical_service_ns": duration}
-    for key in ("phase_metadata", "cost_model"):
-        value = metadata.get(key)
-        if isinstance(value, Mapping) and isinstance(value.get("kernel_model"), Mapping):
-            changes[key] = {**value, "kernel_model": updated(value["kernel_model"])}
-            if key == "cost_model" and "prediction" in value:
-                changes[key]["prediction"] = changes[key]["kernel_model"]["prediction"]
+    changes["phase_metadata"] = {**metadata["phase_metadata"], "kernel_model": updated(audit)}
     if isinstance(metadata.get("kernel_prediction"), Mapping):
         changes["kernel_prediction"] = updated(metadata["kernel_prediction"])
     return replace(task, demands=demands, metadata={**metadata, **changes})

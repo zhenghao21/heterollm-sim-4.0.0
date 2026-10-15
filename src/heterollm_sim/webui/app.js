@@ -17497,7 +17497,7 @@ function traceIntervalActive(item, timeNs) {
 
 function activeTraceLinkIds(events, timeNs = state.tracePlayback.timeNs) {
   const ids = new Set();
-  const eventList = Array.isArray(events) ? events : events ? [events] : [];
+  const eventList = asArray(events);
   const activeEvents = eventList.filter((event) => traceIntervalActive(event, timeNs));
   activeEvents.forEach((event) => {
     const transfer = event?.transfer;
@@ -17549,8 +17549,8 @@ function traceLinkDirection(link, sourceComponent, targetComponent, proxyFor = n
 
 function traceTransferEndpoints(pair) {
   return {
-    source: String(pair?.source_component || pair?.source || ""),
-    target: String(pair?.target_component || pair?.target || ""),
+    source: String(pair?.source_component || ""),
+    target: String(pair?.target_component || ""),
   };
 }
 
@@ -17561,16 +17561,11 @@ function traceTransferIdentityValues(pair) {
 }
 
 function traceTransferKind(pair, fallback = "data") {
-  const source = pair?.transfer && typeof pair.transfer === "object" ? pair.transfer : pair;
-  const candidate = source?.transfer_kind ?? source?.transferKind ?? source?.kind;
-  const normalized = String(candidate ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (normalized === "instruction" || normalized === "instructions" || normalized.includes("instruction")) return "instruction";
-  if (normalized === "data" || normalized === "payload" || normalized.includes("data")) return "data";
-  return String(fallback).toLowerCase() === "instruction" ? "instruction" : "data";
+  return pair?.kind === "instruction" || pair?.kind === "data" ? pair.kind : fallback;
 }
 
 function traceLinkFlowDirections(link, events, activeIds = new Set(), timeNs = state.tracePlayback.timeNs, proxyFor = new Map()) {
-  const eventList = Array.isArray(events) ? events : events ? [events] : [];
+  const eventList = asArray(events);
   const flows = [];
   let exactDirectionRejected = false;
   eventList.forEach((event) => {
@@ -17608,17 +17603,16 @@ function traceLinkFlowDirections(link, events, activeIds = new Set(), timeNs = s
       const transferKind = traceTransferKind(pair, traceTransferKind(transfer));
       flows.push({
         direction,
-        event_id: String(event?.event_id || event?.task_id || ""),
+        event_id: String(event?.event_id || ""),
         kind,
         index,
         exact,
-        transferKind,
         transfer_kind: transferKind,
       });
     });
   });
   if (!flows.length && !exactDirectionRejected && Array.from(activeIds || []).some((value) => traceLinkIdentityMatches(link, value))) {
-    flows.push({ direction: 1, event_id: "", kind: "identity", index: -1, exact: true, transferKind: "data", transfer_kind: "data" });
+    flows.push({ direction: 1, event_id: "", kind: "identity", index: -1, exact: true, transfer_kind: "data" });
   }
   return flows;
 }
@@ -17844,11 +17838,10 @@ function tracePointAlongRoute(points, ratio) {
 
 function traceParticleRouteForDirection(route, direction) {
   const normalizedDirection = Number(direction) < 0 ? -1 : 1;
-  const transferKind = traceTransferKind(route);
+  const transferKind = route?.transfer_kind || "data";
   return {
     ...route,
     direction: normalizedDirection,
-    transferKind,
     transfer_kind: transferKind,
     points: normalizedDirection < 0 ? asArray(route?.points).slice().reverse() : route?.points,
   };
@@ -17912,7 +17905,7 @@ function renderTraceParticles(routes) {
       const phase = particleIndex / TRACE_PARTICLES_PER_ROUTE;
       const point = tracePointAlongRoute(route.points, staticMode ? 0.5 : phase);
       const reverse = Number(route.direction) < 0;
-      const transferKind = traceTransferKind(route);
+      const transferKind = route?.transfer_kind || "data";
       const kindClass = transferKind === "instruction" ? "is-instruction" : "is-data";
       return `<i class="trace-flow-particle ${kindClass} ${staticMode ? "is-static" : ""} ${reverse ? "is-reverse" : ""}" data-trace-particle data-trace-route-index="${routeIndex}" data-trace-phase="${phase}" data-trace-direction="${reverse ? "reverse" : "forward"}" data-trace-transfer-kind="${transferKind}" style="transform:translate(${view.offsetX + point.x * zoom}px,${view.offsetY + point.y * zoom}px)"></i>`;
     })
@@ -18118,14 +18111,14 @@ function renderTraceTopology() {
       const particleGroups = new Map();
       flows.forEach((flow) => {
         const direction = Number(flow.direction) < 0 ? -1 : 1;
-        const transferKind = traceTransferKind(flow);
+        const transferKind = flow.transfer_kind;
         const key = `${direction}:${transferKind}`;
-        if (!particleGroups.has(key)) particleGroups.set(key, { direction, transferKind });
+        if (!particleGroups.has(key)) particleGroups.set(key, { direction, transfer_kind: transferKind });
       });
       dashDirections.forEach((direction) => activeRoutes.push(
         ...Array.from(particleGroups.values())
           .filter((group) => group.direction === direction)
-          .map((group) => traceParticleRouteForDirection({ ...route, transferKind: group.transferKind }, direction)),
+          .map((group) => traceParticleRouteForDirection({ ...route, transfer_kind: group.transfer_kind }, direction)),
       ));
     }
   });

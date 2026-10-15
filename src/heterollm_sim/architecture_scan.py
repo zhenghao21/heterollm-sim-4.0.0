@@ -58,11 +58,11 @@ class BatchedGemmCandidate:
     component_id: str
     component_kind: str
     capability_basis: str
-    logical_rank: Optional[int]
-    tp_rank: Optional[int]
-    pp_rank: Optional[int]
-    ep_rank: Optional[int]
-    rank_component_id: Optional[str]
+    logical_rank: int
+    tp_rank: int
+    pp_rank: int
+    ep_rank: int
+    rank_component_id: str
     rank_memory_component_id: Optional[str]
     rank_cim_component_id: Optional[str]
     m: int
@@ -477,20 +477,18 @@ def _link_bandwidth_gbps(
 
 def _representative_operators(
     scenario: ScenarioConfig,
-    plan: Optional[ParallelPlan],
+    plan: ParallelPlan,
     diagnostics: List[str],
 ) -> Tuple[_OperatorTemplate, ...]:
     batch_tokens = _representative_batch_tokens(scenario)
-    parallel = scenario.placement.parallel
-    tp_degree = plan.tp_degree if plan is not None else parallel.tp_degree
-    pp_degree = plan.pp_degree if plan is not None else parallel.pp_degree
-    allow_padding = plan.allow_padding if plan is not None else parallel.allow_padding
+    tp_degree = plan.tp_degree
+    allow_padding = plan.allow_padding
     operators: List[_OperatorTemplate] = []
     execution_view = model_graph_execution_view(
         scenario.model.graph,
         schema_version=scenario.model.schema_version,
     )
-    for layer_index, descriptor in enumerate(execution_view.layer_instances):
+    for descriptor in execution_view.layer_instances:
         layer = descriptor.layer
         try:
             activation_bits, weight_bits = _layer_precision_bits(layer)
@@ -499,17 +497,7 @@ def _representative_operators(
                 "已跳过层 {} 的代表性 GEMM：{}。".format(layer.layer_id, exc)
             )
             continue
-        stage = (
-            plan.stage_for_layer(layer)
-            if plan is not None
-            else parallel.layer_to_stage.get(
-                layer.layer_id,
-                min(
-                    pp_degree - 1,
-                    layer_index * pp_degree // max(1, scenario.model.num_layers),
-                ),
-            )
-        )
+        stage = plan.stage_for_layer(layer)
         if layer.is_linear_attention and layer.linear_attention is not None:
             geometry = layer.linear_attention
             projection_width = (
@@ -755,7 +743,7 @@ def _layer_precision_bits(layer: LayerSpec) -> Tuple[int, int]:
 
 def _build_candidates(
     scenario: ScenarioConfig,
-    plan: Optional[ParallelPlan],
+    plan: ParallelPlan,
     operators: Sequence[_OperatorTemplate],
     capabilities: Sequence[_ComponentCapability],
     router: TopologyRouter,
@@ -768,10 +756,8 @@ def _build_candidates(
     rejected_route = 0
 
     for operator in operators:
-        ranks: Tuple[Optional[LogicalRank], ...]
-        if plan is None:
-            ranks = (None,)
-        elif operator.rank_scope == "all_stage":
+        ranks: Tuple[LogicalRank, ...]
+        if operator.rank_scope == "all_stage":
             ranks = tuple(
                 rank
                 for rank in plan.ranks_for_stage(operator.stage)
@@ -783,21 +769,19 @@ def _build_candidates(
         for rank in ranks:
             n = operator.n_global
             if operator.shard_axis == "n":
-                degree = plan.tp_degree if plan is not None else scenario.placement.parallel.tp_degree
-                allow_padding = plan.allow_padding if plan is not None else True
-                n = _shard_size(operator.n_global, degree, allow_padding)
+                n = _shard_size(operator.n_global, plan.tp_degree, plan.allow_padding)
             for capability in eligible:
                 component = capability.component
                 route_values = _communication_values(
                     router,
-                    rank.component_id if rank is not None else None,
+                    rank.component_id,
                     component.component_id,
                     operator.m,
                     operator.k,
                     n,
                     operator.activation_bits,
                     operator.output_bits,
-                    plan.routing_policy if plan is not None else "lowest_latency",
+                    plan.routing_policy,
                 )
                 if route_values is None:
                     rejected_route += 1
@@ -861,11 +845,7 @@ def _build_candidates(
                     )
                     kernel_launch_ns = float(gpu_profile.kernel_launch_ns)
 
-                rank_label = (
-                    "rank{:04d}".format(rank.rank)
-                    if rank is not None
-                    else "rank-none"
-                )
+                rank_label = "rank{:04d}".format(rank.rank)
                 candidate_id = "{}|{}|{}".format(
                     operator.operator_id, rank_label, component.component_id
                 )
@@ -883,19 +863,13 @@ def _build_candidates(
                         component_id=component.component_id,
                         component_kind=component.normalized_kind,
                         capability_basis=capability_basis,
-                        logical_rank=rank.rank if rank is not None else None,
-                        tp_rank=rank.tp_rank if rank is not None else None,
-                        pp_rank=rank.pp_rank if rank is not None else None,
-                        ep_rank=rank.ep_rank if rank is not None else None,
-                        rank_component_id=(
-                            rank.component_id if rank is not None else None
-                        ),
-                        rank_memory_component_id=(
-                            rank.memory_component_id if rank is not None else None
-                        ),
-                        rank_cim_component_id=(
-                            rank.cim_component_id if rank is not None else None
-                        ),
+                        logical_rank=rank.rank,
+                        tp_rank=rank.tp_rank,
+                        pp_rank=rank.pp_rank,
+                        ep_rank=rank.ep_rank,
+                        rank_component_id=rank.component_id,
+                        rank_memory_component_id=rank.memory_component_id,
+                        rank_cim_component_id=rank.cim_component_id,
                         m=operator.m,
                         k=operator.k,
                         n=n,
@@ -937,7 +911,7 @@ def _build_candidates(
 
 def _communication_values(
     router: TopologyRouter,
-    source_id: Optional[str],
+    source_id: str,
     target_id: str,
     m: int,
     k: int,
@@ -946,7 +920,7 @@ def _communication_values(
     output_bits: int,
     policy: str,
 ) -> Optional[Tuple[int, float, float, Tuple[str, ...]]]:
-    if source_id is None or source_id == target_id:
+    if source_id == target_id:
         return (0, 0.0, 0.0, ())
     activation_bytes = int(math.ceil(m * k * activation_bits / 8.0))
     output_bytes = int(math.ceil(m * n * output_bits / 8.0))
@@ -1128,12 +1102,7 @@ def _result_payload(
         "model_name": scenario.model.name,
         "backend_requested": backend_requested,
         "backend_used": backend_used,
-        "backend": {
-            "requested": backend_requested,
-            "used": backend_used,
-        },
         "counts": counts,
-        "statistics": dict(counts),
         "diagnostics": list(diagnostics),
         "components": list(component_rows),
         "operators": list(operator_rows),
@@ -1174,9 +1143,7 @@ def _operator_row(operator: _OperatorTemplate) -> Dict[str, Any]:
     }
 
 
-def _rank_rows(plan: Optional[ParallelPlan]) -> List[Dict[str, Any]]:
-    if plan is None:
-        return []
+def _rank_rows(plan: ParallelPlan) -> List[Dict[str, Any]]:
     return [
         {
             "rank": rank.rank,

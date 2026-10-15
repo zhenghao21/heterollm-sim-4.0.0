@@ -800,102 +800,6 @@
     return loopProgress(withinPeriod / periodMs, phase);
   }
 
-  function routeLookup(routes, key) {
-    if (!routes || !key) return null;
-    if (routes instanceof Map) return routes.get(String(key)) || routes.get(key) || null;
-    return object(routes)[String(key)] || null;
-  }
-
-  function routePointsForTransfer(transfer, routes = {}) {
-    const source = object(transfer);
-    const direct = source.points || source.route_points || source.polyline || (Array.isArray(source.route) ? source.route : null);
-    if (direct) return normalizePolyline(direct);
-    if (source.route && typeof source.route === "object" && Array.isArray(source.route.points)) return normalizePolyline(source.route.points);
-    const joined = [];
-    for (const hop of array(source.hops)) {
-      const route = routeLookup(routes, hop.link_id || hop.resource_id) || object(hop);
-      const points = normalizePolyline(route.points || route.route_points || route.polyline);
-      for (const point of points) {
-        const previous = joined[joined.length - 1];
-        if (!previous || previous.x !== point.x || previous.y !== point.y) joined.push(point);
-      }
-    }
-    if (joined.length) return joined;
-    const keyed = [source.transfer_id, source.event_id, source.link_id]
-      .map((key) => routeLookup(routes, key))
-      .find(Boolean);
-    if (keyed) return normalizePolyline(keyed.points || keyed.route_points || keyed.polyline || keyed);
-    if (source.source_point && source.target_point) return normalizePolyline([source.source_point, source.target_point]);
-    return [];
-  }
-
-  function transferValue(item) {
-    const source = object(item);
-    return source.transfer && typeof source.transfer === "object"
-      ? {
-        ...source.transfer,
-        event_id: source.event_id,
-        event: source,
-        start_ns: source.transfer.start_ns ?? source.start_ns,
-        end_ns: source.transfer.end_ns ?? source.end_ns,
-      }
-      : source;
-  }
-
-  function transferProgress(transfer, options, index) {
-    const source = object(transfer);
-    const configured = options.progress;
-    let value;
-    if (typeof configured === "function") value = configured(source, index);
-    else if (Array.isArray(configured)) value = configured[index];
-    else if (configured && typeof configured === "object") value = configured[source.transfer_id || source.event_id || source.link_id] ?? configured[index];
-    else value = configured;
-    if (value == null) value = source.progress;
-    if (value == null && hasFinite(options.timeNs) && hasFinite(source.start_ns) && hasFinite(source.end_ns)) {
-      const duration = Number(source.end_ns) - Number(source.start_ns);
-      value = duration > 0 ? (Number(options.timeNs) - Number(source.start_ns)) / duration : 1;
-    }
-    return clamp(finite(value, 0), 0, 1);
-  }
-
-  function buildTransferParticles(transfers, routes = {}, progressOrOptions) {
-    let options = progressOrOptions === undefined ? {} : object(progressOrOptions);
-    let routeMap = routes;
-    if (typeof progressOrOptions === "number") options = { progress: progressOrOptions };
-    if (routes && typeof routes === "object" && !Array.isArray(routes) && !(routes instanceof Map) && (routes.routes || routes.progress || routes.timeNs != null) && progressOrOptions === undefined) {
-      options = routes;
-      routeMap = options.routes || {};
-    }
-    const items = array(transfers).map(transferValue);
-    const particles = [];
-    items.forEach((transfer, index) => {
-      const points = routePointsForTransfer(transfer, options.routes || routeMap);
-      const baseProgress = transferProgress(transfer, options, index);
-      const count = Math.max(1, Math.trunc(finite(transfer.particle_count ?? transfer.particleCount ?? options.particleCount, 1)));
-      for (let particleIndex = 0; particleIndex < count; particleIndex += 1) {
-        const progress = count > 1 ? (baseProgress + particleIndex / count) % 1 : baseProgress;
-        particles.push({
-          id: `${asId(transfer.transfer_id || transfer.event_id || transfer.link_id || `transfer-${index}`)}:${particleIndex}`,
-          transfer_id: asId(transfer.transfer_id || transfer.event_id || transfer.link_id || `transfer-${index}`),
-          event_id: transfer.event_id ? asId(transfer.event_id) : undefined,
-          source_component: transfer.source_component,
-          target_component: transfer.target_component,
-          link_id: transfer.link_id,
-          progress,
-          points: clone(points),
-          total_length: polylineTotalLength(points),
-          point: pointAtProgress(points, progress),
-          particle_index: particleIndex,
-          particle_count: count,
-          active: options.activeSets
-            ? options.activeSets.linkIds.has(String(transfer.link_id || ""))
-            : true,
-        });
-      }
-    });
-    return particles;
-  }
-
   function animationCapability(environment, options = {}) {
     const env = environment || root || {};
     const raf = typeof env.requestAnimationFrame === "function";
@@ -1133,8 +1037,6 @@
     pointAtProgress,
     loopProgress,
     particleLoopProgress,
-    routePointsForTransfer,
-    buildTransferParticles,
     animationCapability,
     beginTracePointerDrag,
     tracePointerDragPosition,

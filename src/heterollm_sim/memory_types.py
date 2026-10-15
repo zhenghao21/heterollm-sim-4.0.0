@@ -701,14 +701,6 @@ class NandConfig:
         raise ValueError("host bandwidth requires a read or write operation")
 
     @property
-    def effective_host_read_bandwidth_gb_s(self) -> float:
-        return self.host_bandwidth_for(Operation.READ)
-
-    @property
-    def effective_host_write_bandwidth_gb_s(self) -> float:
-        return self.host_bandwidth_for(Operation.WRITE)
-
-    @property
     def buffered_write_mode(self) -> bool:
         """A positive staging capacity enables host-ack/page-merge semantics."""
         return self.write_buffer_bytes > 0
