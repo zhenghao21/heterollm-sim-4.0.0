@@ -40,6 +40,9 @@ from .calibration import (
     profile_from_mapping,
 )
 from .communication import TopologyRouter, plan_collective
+from ._cost_ledger import (
+    _task_memory_direction, _resource_busy_by_direction, _accumulate_physical_resource_totals,
+)
 from .contracts import (
     ANALYTICAL_MODEL_VERSION,
     EvidenceStatus,
@@ -4108,13 +4111,29 @@ def _gddr_access_alias(metadata: Mapping[str, object], side: str) -> Tuple[Optio
     return str(alias).strip(), alias_generation, _gddr_non_negative_int(offset, "alias_offset_bytes")
 
 
+def _cached_physical_memory_config(component):
+    """Validate each immutable scenario component once per compilation context.
+
+    This private borrowed config is only read by lowering. The public parser
+    still returns independently owned metadata, and callers outside the bound
+    immutable scenario take the normal validating path.
+    """
+    from .physical_contract import require_physical_memory_config
+
+    context = _COMPILATION_CONTEXT.get()
+    if (context is None
+            or context.component_map().get(component.component_id) is not component):
+        return require_physical_memory_config(component)
+    return context.invariant(("validated_physical_config", component.component_id),
+                             lambda: require_physical_memory_config(component))
+
+
 def _physical_dram_config(scenario: ScenarioConfig, component: ComponentSpec):
     """Resolve once per compilation; NAND is not a CPU cache backing model."""
     def resolve():
         from .memory_types import DramConfig
-        from .physical_contract import require_physical_memory_config
-        parsed = require_physical_memory_config(component)
-        return component.metadata["physical_memory_config"] if isinstance(parsed, DramConfig) else None
+        parsed = _cached_physical_memory_config(component)
+        return parsed if isinstance(parsed, DramConfig) else None
 
     context = _active_compilation_context(scenario)
     return resolve() if context is None else context.invariant(
@@ -4137,8 +4156,7 @@ def _physical_access_from_cache_access(access: Mapping[str, object]) -> Dict[str
 def _direct_backing_descriptors(task, scenario, component, direct):
     """Bind a direct operand to the same stable allocator as local operands."""
     from .memory_types import DramConfig
-    from .physical_contract import require_physical_memory_config
-    config = require_physical_memory_config(component)
+    config = _cached_physical_memory_config(component)
     alignment = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
     metadata = task.metadata
     reads = _gddr_non_negative_int(direct["read_bytes"], "read_bytes")
@@ -4294,8 +4312,7 @@ def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfi
     if not isinstance(direct, Mapping):
         return None
     component = _component(scenario, str(direct["component_id"]))
-    from .physical_contract import require_physical_memory_config
-    require_physical_memory_config(component)
+    _cached_physical_memory_config(component)
     remote_config = component.metadata["physical_memory_config"]
     remote_owner = str(direct["physical_owner"])
     remote_resource = str(direct["resource_id"])
@@ -4363,6 +4380,31 @@ def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfi
     return bound
 
 
+def _physical_backing_candidates(scenario, target_id, target_kind):
+    """Reuse the immutable topology-to-resource lookup while lowering tasks."""
+    def build():
+        from .physical_contract import DRAM_COMPONENT_KINDS
+        rows = []
+        for component in scenario.hardware.components:
+            component_kind = _kind(component)
+            hbf_memory = component_kind == "hbf" and component.is_active_memory
+            if component_kind not in DRAM_COMPONENT_KINDS and not hbf_memory:
+                continue
+            service = component.metadata.get("memory_service", {})
+            owner = str(service.get("physical_owner") or default_memory_resource_id(component))
+            profile = _resolve_component_profile(scenario, component.component_id)
+            resource_ids = {owner, component.component_id + ".access", profile.resource_id}
+            if isinstance(profile, HostMemoryProfile) and target_kind == "cpu":
+                resource_ids.add(_component_resource_id(profile.resource_id,
+                    reference_component_id=scenario.host_orchestration_profile.cpu_component_id,
+                    target_component_id=target_id))
+            rows.append((component, hbf_memory, owner, frozenset(resource_ids)))
+        return tuple(rows)
+    context = _active_compilation_context(scenario)
+    return build() if context is None else context.invariant(
+        ("physical_backing_candidates", target_id, target_kind), build)
+
+
 def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
     """Attach physical backing accesses to a lowered compute memory phase.
 
@@ -4374,7 +4416,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     phase_metadata = task.metadata.get("phase_metadata", {})
     direct_access = phase_metadata.get("direct_memory_access") if isinstance(phase_metadata, Mapping) else None
     if isinstance(direct_access, Mapping):
-        direct_component = scenario.hardware.component_map().get(str(direct_access.get("component_id")))
+        direct_component = _component_map(scenario).get(str(direct_access.get("component_id")))
         if direct_component is not None:
             direct_task = _attach_direct_backing_physical_task(task, scenario)
             if direct_task is not None:
@@ -4383,34 +4425,20 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         _assert_physical_memory_demands(task, scenario)
         return task
     target_id = task.metadata.get("target_component")
-    target = scenario.hardware.component_map().get(target_id)
+    target = _component_map(scenario).get(target_id)
     target_kind = _kind(target) if target is not None else None
     if target_kind not in {None, "cpu", "gpu"}:
         _assert_physical_memory_demands(task, scenario)
         return task
-    from .physical_contract import DRAM_COMPONENT_KINDS, require_physical_memory_config
     candidates = []
-    for component in scenario.hardware.components:
-        component_kind = _kind(component)
-        hbf_memory = component_kind == "hbf" and component.is_active_memory
-        if component_kind not in DRAM_COMPONENT_KINDS and not hbf_memory:
-            continue
-        service = component.metadata.get("memory_service", {})
-        owner = str(service.get("physical_owner") or default_memory_resource_id(component))
-        resource_ids = {owner, component.component_id + ".access"}
-        profile = _resolve_component_profile(scenario, component.component_id)
-        resource_ids.add(profile.resource_id)
-        if isinstance(profile, HostMemoryProfile):
-            if target_kind == "cpu":
-                resource_ids.add(_component_resource_id(profile.resource_id,
-                    reference_component_id=scenario.host_orchestration_profile.cpu_component_id,
-                    target_component_id=target_id))
+    for component, hbf_memory, owner, resource_ids in _physical_backing_candidates(
+            scenario, target_id, target_kind):
         if any(str(d.resource_id) in resource_ids and d.bytes_moved > 0 for d in task.demands):
             raw_config = (component.metadata["physical_memory_config"] if hbf_memory
                           else _physical_dram_config(scenario, component))
             if raw_config is None:
                 raise ValueError("task {} requires a DRAM backing component: {}".format(task.task_id, component.component_id))
-            require_physical_memory_config(component)
+            _cached_physical_memory_config(component)
             candidates.append((component, raw_config, owner, resource_ids))
     if not candidates:
         _assert_physical_memory_demands(task, scenario)
@@ -4459,7 +4487,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             )
         )
     from .memory_types import DramConfig
-    physical = require_physical_memory_config(component)
+    physical = _cached_physical_memory_config(component)
     capacity = physical.effective_capacity_bytes
     burst = physical.burst_bytes if isinstance(physical, DramConfig) else physical.page_bytes
     if capacity <= 0 or burst <= 0:
@@ -4900,7 +4928,7 @@ def _attach_hbf_host_staging(task: TaskSpec, scenario: ScenarioConfig) -> TaskSp
         return task
     from .data_motion import resolve_service
     from .memory_types import DramConfig, NandConfig
-    from .physical_contract import require_physical_memory_config, parse_execution_physical_config
+    from .physical_contract import parse_execution_physical_config
 
     def declared_bindings():
         bindings = {}
@@ -4913,14 +4941,14 @@ def _attach_hbf_host_staging(task: TaskSpec, scenario: ScenarioConfig) -> TaskSp
             unknown = set(declaration) - {"host_component_id", "capacity_bytes", "reserve_blocks"}
             if unknown:
                 raise ValueError("host_write_staging has unsupported fields: " + ", ".join(sorted(unknown)))
-            physical = require_physical_memory_config(component)
+            physical = _cached_physical_memory_config(component)
             if not isinstance(physical, NandConfig) or physical.protocol_mode != "ocp_hbf_0_7":
                 raise ValueError("host_write_staging requires strict ocp_hbf_0_7 HBF")
             host_id = declaration.get("host_component_id")
             host = scenario.hardware.component_map().get(host_id)
             if host is None or host.normalized_kind != "host_memory":
                 raise ValueError("host_write_staging requires an explicit host_memory component")
-            host_config = require_physical_memory_config(host)
+            host_config = _cached_physical_memory_config(host)
             if not isinstance(host_config, DramConfig):
                 raise ValueError("host_write_staging host component requires physical DRAM")
             capacity = declaration.get("capacity_bytes")
@@ -4986,7 +5014,9 @@ def _attach_hbf_host_staging(task: TaskSpec, scenario: ScenarioConfig) -> TaskSp
                 preloaded.add((owner, identity, int(row.get("allocation_generation", 0))))
     for owner in sorted(active):
         component, physical, host, host_config, capacity, reserve = bindings[owner]
-        host_owner = resolve_service(host).physical_owner
+        host_owner = (resolve_service(host).physical_owner if context is None else
+            context.invariant(("hbf_staging_host_owner", host.component_id),
+                              lambda: resolve_service(host).physical_owner))
         previous = configs.get(host_owner)
         if previous is not None and parse_execution_physical_config(previous) != host_config:
             raise ValueError("HBF host staging HOST DRAM physical configuration conflicts with the task")
@@ -5002,21 +5032,31 @@ def _attach_hbf_host_staging(task: TaskSpec, scenario: ScenarioConfig) -> TaskSp
                           "resource_capacities": dict(hop.resource_capacities),
                           "direction": hop.source_component + "->" + hop.target_component}
                          for hop in hops if hop.service_ref is None)
-
-        contracts[owner] = {"host_component_id": host.component_id,
-            "host_owner": host_owner, "host_config": host_config,
-            "capacity_bytes": capacity, "reserve_blocks": reserve,
-            "routes": {"to_host": route(initiator, host.component_id),
-                       "from_host": route(host.component_id, initiator),
-                       "to_hbf": route(host.component_id, component.component_id),
-                       "from_hbf": route(component.component_id, host.component_id),
-                       "read_hbf": route(component.component_id, initiator),
-                       "write_hbf": route(initiator, component.component_id)}}
-        for source, target in ((initiator, component.component_id),
-                               (component.component_id, initiator)):
-            replaced_link_ids.update(demand.resource_id
+        def make_contract():
+            contract = {"host_component_id": host.component_id,
+                "host_owner": host_owner, "host_config": host_config,
+                "capacity_bytes": capacity, "reserve_blocks": reserve,
+                "routes": {"to_host": route(initiator, host.component_id),
+                           "from_host": route(host.component_id, initiator),
+                           "to_hbf": route(host.component_id, component.component_id),
+                           "from_hbf": route(component.component_id, host.component_id),
+                           "read_hbf": route(component.component_id, initiator),
+                           "write_hbf": route(initiator, component.component_id)}}
+            replaced = frozenset(demand.resource_id
+                for source, target in ((initiator, component.component_id),
+                                       (component.component_id, initiator))
                 for hop in router.route(source, target, physical.page_bytes)
                 for demand in hop.demands(1))
+            return contract, replaced
+        # Routes and staging capacity are scenario invariants, independent of
+        # tensor addresses, Decode position and the current dirty-page state.
+        contract, replaced = (make_contract() if context is None else
+            context.invariant(("hbf_staging_routes", owner, initiator), make_contract))
+        contracts[owner] = {**contract, "routes": {
+            direction: tuple({**hop, "resource_capacities": dict(hop["resource_capacities"])}
+                             for hop in hops)
+            for direction, hops in contract["routes"].items()}}
+        replaced_link_ids.update(replaced)
     return replace(task, metadata={**task.metadata, "physical_memory_configs": configs,
         "hbf_host_staging_by_owner": contracts,
         "hbf_staging_replaced_link_ids": tuple(sorted(replaced_link_ids)),
@@ -5140,6 +5180,7 @@ class _TaskBuilder:
         # invocation emitter.  They are keyed by the already validated task id
         # and never become part of ScheduleIR or its public metadata contract.
         self._task_segment_dynamic_payloads: Dict[str, object] = {}
+        self._physical_segment_sources = None
         # Analytical MMVQ source-rule conversions may share one Q8_1 producer
         # when split physical projections consume the same F32 input buffer.
         # Receipt-bound paths keep their historical one-per-call behavior.
@@ -5229,11 +5270,14 @@ class _TaskBuilder:
             )
         )
         context = _COMPILATION_CONTEXT.get()
+        physical_source = self.tasks[-1]
         if context is not None:
             self.tasks[-1] = _attach_gddr_physical_task(self.tasks[-1], context.scenario)
         self.tasks[-1] = _attach_planned_l2(self.tasks[-1])
         if context is not None:
             self.tasks[-1] = _attach_hbf_host_staging(self.tasks[-1], context.scenario)
+        if self._physical_segment_sources is not None:
+            self._physical_segment_sources[task_id] = (physical_source, self.tasks[-1])
         inherited: Dict[int, str] = {}
         ambiguous = set()
         for dependency_id in dependency_ids:
@@ -6392,6 +6436,7 @@ class _TaskSegmentTemplate:
     lean_metadata_namespace_keys: Optional[Tuple[Tuple[str, ...], ...]]
     dynamic_payloads: Tuple[Optional[object], ...]
     source_phase: Optional[str]
+    rebind_physical: bool = False
 
     @classmethod
     def capture(
@@ -6407,10 +6452,26 @@ class _TaskSegmentTemplate:
         terminal_task_id: str,
         source_phase: Optional[str] = None,
         required_dynamic_attention_invocations: int = 0,
+        physical_sources: Optional[Mapping[str, object]] = None,
     ) -> Optional["_TaskSegmentTemplate"]:
         source_tasks = tuple(builder.tasks[first_task_index:])
         if not source_tasks:
             return None
+        if physical_sources is not None:
+            original_tasks = []
+            for task in source_tasks:
+                pair = physical_sources.get(task.task_id)
+                if pair is None:
+                    return None
+                original, attached = pair
+                # Rebuild physical descriptors from their logical source on
+                # replay. Never carry integer request generations or physical
+                # cache state across cohorts. Later task rewrites and already
+                # physical sources require their ordinary lowering.
+                if task != attached or original.metadata.get("physical_memory_config") is not None:
+                    return None
+                original_tasks.append(original)
+            source_tasks = tuple(original_tasks)
         dynamic_payloads = tuple(
             builder._task_segment_dynamic_payloads.get(task.task_id)
             for task in source_tasks
@@ -6610,6 +6671,7 @@ class _TaskSegmentTemplate:
             lean_metadata_namespace_keys=lean_metadata_namespace_keys_tuple,
             dynamic_payloads=dynamic_payloads,
             source_phase=source_phase,
+            rebind_physical=physical_sources is not None,
         )
 
     def replay(
@@ -6823,6 +6885,13 @@ class _TaskSegmentTemplate:
                     metadata=replay_metadata,
                 )
             )
+            if self.rebind_physical:
+                context = _COMPILATION_CONTEXT.get()
+                if context is None:
+                    raise RuntimeError("physical task segment requires its compilation context")
+                builder.tasks[-1] = _attach_gddr_physical_task(builder.tasks[-1], context.scenario)
+                builder.tasks[-1] = _attach_planned_l2(builder.tasks[-1])
+                builder.tasks[-1] = _attach_hbf_host_staging(builder.tasks[-1], context.scenario)
             if rank_values:
                 builder._rank_value_components[task_id] = dict(rank_values)
             else:
@@ -6994,33 +7063,33 @@ def _collect_physical_allocation_extents(
             extents[key] = max(extents.get(key, 0), extent, offset + size)
 
 
-def _promote_physical_allocation_extents(
+def _physical_task_metadata(
     tasks: Sequence[TaskSpec],
     *,
     extents: Optional[Mapping[Tuple[str, int, str], int]] = None,
-) -> Tuple[TaskSpec, ...]:
+) -> Tuple[Mapping[str, object], ...]:
     """Apply complete graph extents and emit explicit allocation declarations.
 
     Streaming compilation supplies its precomputed scenario-wide boundary.
     Other compilation paths collect that boundary from their complete cohort.
     Explicit extents remain authoritative and conflicts fail before dispatch.
     """
-    from .data_motion import lower_physical_allocations
+    from .data_motion import _physical_allocation_metadata
 
     if extents is None:
         extents = {}
         _collect_physical_allocation_extents(tasks, extents, {})
     if not extents:
-        return tuple(lower_physical_allocations(task) for task in tasks)
+        return tuple(_physical_allocation_metadata(task.task_id, task.metadata) for task in tasks)
 
     promoted = []
     for task in tasks:
-        metadata = dict(task.metadata)
+        metadata = task.metadata
         accesses = metadata.get("memory_accesses")
         if isinstance(accesses, (tuple, list)):
             access_rows = tuple(dict(item) for item in accesses)
         else:
-            promoted.append(task)
+            promoted.append(_physical_allocation_metadata(task.task_id, task.metadata))
             continue
         changed = False
         for row in access_rows:
@@ -7061,6 +7130,7 @@ def _promote_physical_allocation_extents(
                     )
             changed = True
         if changed or metadata.get("physical_allocations") is not None:
+            metadata = dict(metadata)
             metadata["memory_accesses"] = tuple(access_rows)
             # The event kernel registers ``physical_allocations`` before it
             # resolves a task's accesses.  A cohort may expose a short
@@ -7135,9 +7205,19 @@ def _promote_physical_allocation_extents(
                         row["buffer_size_bytes"] = extents[key]
                     rows.append(row)
                 metadata["stateful_l2"] = {**contract, "accesses": tuple(rows)}
-            task = replace(task, metadata=metadata)
-        promoted.append(task)
-    return tuple(lower_physical_allocations(task) for task in promoted)
+        metadata = _physical_allocation_metadata(task.task_id, metadata)
+        promoted.append(metadata)
+    return tuple(promoted)
+
+
+def _promote_physical_allocation_extents(
+    tasks: Sequence[TaskSpec],
+    *,
+    extents: Optional[Mapping[Tuple[str, int, str], int]] = None,
+) -> Tuple[TaskSpec, ...]:
+    """Publish complete allocation metadata for an executable physical graph."""
+    return tuple(task if metadata is task.metadata else replace(task, metadata=metadata)
+                 for task, metadata in zip(tasks, _physical_task_metadata(tasks, extents=extents)))
 
 
 def compile_scenario(scenario: ScenarioConfig) -> ScheduleIR:
@@ -7889,9 +7969,8 @@ def _direct_memory_address(
     address = component.metadata.get("memory_access_offset_bytes")
     if address is not None:
         return _gddr_non_negative_int(address, "memory_access_offset_bytes")
-    from .physical_contract import require_physical_memory_config
     from .memory_types import DramConfig
-    physical = require_physical_memory_config(component)
+    physical = _cached_physical_memory_config(component)
     capacity = physical.capacity_bytes
     rank_index = _gddr_non_negative_int(rank.rank, "rank")
     label = "|".join(
@@ -8123,8 +8202,7 @@ def _linear_state_endpoint_binding(
     if raw_config is None or byte_count <= 0:
         return None
     from .memory_types import DramConfig
-    from .physical_contract import require_physical_memory_config
-    config = require_physical_memory_config(component)
+    config = _cached_physical_memory_config(component)
     layer_id = str(metadata["layer_id"])
     layer = next(layer for layer in _execution_layers(scenario) if layer.layer_id == layer_id)
     owners = max(1, int(metadata.get("linear_state_independent_owner_count", 1)))
@@ -8827,8 +8905,7 @@ def _add_transfer_tasks(
                     raise ValueError("transfer {} has multiple physical memory backends on {}; specify its rank or memory endpoint".format(name, endpoint))
                 endpoints[index] = next(iter(memories)) if memories else _compute_local_runtime_memory_component_id(scenario, endpoint)
             if endpoint_kind in {"cpu", "gpu"}:
-                from .physical_contract import require_physical_memory_config
-                require_physical_memory_config(_component(scenario, endpoints[index]))
+                _cached_physical_memory_config(_component(scenario, endpoints[index]))
         if endpoints[0] == endpoints[1] and source_component != target_component and str(transfer_metadata.get("event_kind", "")).startswith("linear_state_"):
             read = _component(scenario, source_component).is_storage
             device = target_component if read else source_component
@@ -8861,8 +8938,7 @@ def _add_transfer_tasks(
             if not authored or sum(int(row["size_bytes"]) for row in authored) != byte_count:
                 raise ValueError("explicit transfer ranges must cover its bytes exactly")
             from .memory_types import DramConfig
-            from .physical_contract import require_physical_memory_config
-            config = require_physical_memory_config(_component(scenario, component_id))
+            config = _cached_physical_memory_config(_component(scenario, component_id))
             granularity = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
             rows = []
             for row in authored:
@@ -8898,8 +8974,7 @@ def _add_transfer_tasks(
             if component_id in state_bindings or address is not None or raw_config is None:
                 continue
             from .memory_types import DramConfig
-            from .physical_contract import require_physical_memory_config
-            config = require_physical_memory_config(component)
+            config = _cached_physical_memory_config(component)
             if not isinstance(config, DramConfig) and not component.metadata.get("host_write_staging"):
                 continue
             # The authoring IR may omit native addresses. Use an allocator
@@ -18110,7 +18185,11 @@ def _f32_hidden_storage_enabled(scenario: Optional[ScenarioConfig]) -> bool:
 def _activation_storage_bits(
     layer: LayerSpec, scenario: Optional[ScenarioConfig] = None
 ) -> int:
-    return 32 if _f32_hidden_storage_enabled(scenario) else _layer_precision_bits(layer)[0]
+    def resolve():
+        return 32 if _f32_hidden_storage_enabled(scenario) else _layer_precision_bits(layer)[0]
+    context = _bound_layer_compilation_context(layer, scenario)
+    return resolve() if context is None else context.invariant(
+        ("activation_storage_bits", id(layer), scenario is not None), resolve)
 
 
 def _activation_bytes(
@@ -19063,6 +19142,65 @@ def _compile_parallel_layer(
     return terminal
 
 
+def _compile_static_input_projection(
+    builder, scenario, plan, rank, layer, token_batch, kv_append_tokens,
+    kv_materialized_tokens, phase, prefix, dependencies, emit, *, eligible,
+):
+    """Replay only ordinary Decode normalization/QKV/bias logical tasks.
+
+    This segment never reads the KV page table or history-token count. RoPE,
+    cache writes/reads and attention remain outside it and lower every time.
+    All physical descriptors are regenerated from their logical sources.
+    """
+    context = _bound_layer_compilation_context(layer, scenario) if eligible else None
+    cache = None if context is None else _task_segment_cache(
+        context, ("static_input_projection_segments",))
+    if cache is None:
+        return emit()
+    phase_suffix = (phase[len(builder.request.request_id):]
+                    if phase.startswith(builder.request.request_id) else phase)
+    key = (id(layer), rank.rank, rank.tp_rank, rank.pp_rank, rank.component_id,
+           rank.memory_component_id, plan.tp_degree, plan.allow_padding,
+           token_batch, kv_append_tokens, kv_materialized_tokens,
+           builder.request.prompt_tokens, builder.request.output_tokens, phase_suffix,
+           builder.rank_value_component(dependencies, rank.rank), len(dependencies),
+           builder._last_coherent_dma_task is not None,
+           getattr(builder, "_cpu_graph_rows", None))
+    stored = cache.get(key)
+    if stored is not None:
+        cache.move_to_end(key)
+        template, values = stored
+        terminal = template.replay(builder, prefix=prefix, dependencies=dependencies,
+                                   metadata_overrides={"phase": phase})
+        if terminal is not None:
+            return (terminal, *values)
+    first_task = len(builder.tasks)
+    initial_counter, initial_previous = builder.counter, builder.previous
+    initial_dma = builder._last_coherent_dma_task
+    previous_sources = builder._physical_segment_sources
+    sources = {}
+    builder._physical_segment_sources = sources
+    try:
+        values = emit()
+    finally:
+        builder._physical_segment_sources = previous_sources
+    # Packed MMVQ projections can also register shared conversion producers.
+    # Their builder-side state is intentionally outside this ordinary fragment.
+    if values[7].packed_weight_formats:
+        return values
+    captured = _TaskSegmentTemplate.capture(builder, first_task_index=first_task,
+        source_prefix=prefix, source_counter_before=initial_counter,
+        source_dependencies=dependencies, source_initial_previous=initial_previous,
+        source_initial_dma=initial_dma, terminal_task_id=values[0],
+        source_phase=phase, physical_sources=sources)
+    if captured is not None:
+        cache[key] = (captured, values[1:])
+        cache.move_to_end(key)
+        while len(cache) > context.leaf_cache_entries:
+            cache.popitem(last=False)
+    return values
+
+
 def _add_qkv_projection_bias(
     builder, scenario, router, plan, rank, layer, contract,
     token_batch, query_width, kv_width, activation_bits,
@@ -19505,361 +19643,382 @@ def _compile_parallel_layer_body(
                 }
             )
         residual_input_component = builder.rank_value_component(dependencies, rank.rank) or rank.component_id
-        norm_reduce, norm_component = _add_rank_primitive(
-            builder,
-            scenario,
-            router,
-            plan,
-            rank,
-            OperatorClass.REDUCTION,
-            ReductionWorkload(
-                input_elements=hidden_elements,
-                output_elements=max(1, token_batch),
-                operations_per_combine=2,
-                fixed_operations=max(1, token_batch),
-                input_bits=activation_bits,
-                output_bits=max(16, activation_bits),
-                name="attention_input_norm_reduce",
-            ),
-            "{}.input_norm.reduce".format(layer.layer_id),
-            "{}.rank{:03d}.input_norm_reduce".format(prefix, rank.rank),
-            dependencies,
-            source_component_id=rank.component_id,
-            fallback_keys=("{}.norm".format(layer.layer_id),),
-            metadata={**rank_meta, "event_kind": "input_norm_reduce",
-                **({"buffer_accesses": (
-                    _rank_tensor_access(rank, hidden_input, input_norm_hidden_bytes, "read"),
-                    generic_access("input_norm_stats", input_norm_stats_bytes, "write"))}
-                   if bind_input_norm else {}),
-                **({"input_tensor_id": prefix + ".rank{:03d}.residual_input".format(rank.rank),
-                    "output_selection_input_shape": [token_batch, layer.hidden_size]}
-                   if output_selection is not None and output_selection.position == "before_last_ffn" else {})},
-        )
-        input_reduction_component = norm_component
-        norm_apply, norm_component = _add_rank_primitive(
-            builder,
-            scenario,
-            router,
-            plan,
-            rank,
-            OperatorClass.ELEMENTWISE,
-            ElementwiseWorkload(
-                elements=hidden_elements,
-                operations_per_element=2,
-                fixed_operations=max(1, token_batch),
-                fixed_transcendental_operations=max(1, token_batch),
-                input_count=2,
-                input_bits=activation_bits,
-                output_bits=activation_bits,
-                dependency_depth=4,
-                working_set_bytes=_activation_bytes(
-                    layer, hidden_elements * 3,
-                    scenario=scenario,
-                ),
-                reuse_factor=2.0,
-                name="attention_input_norm_apply",
-                read_storage_bytes=(input_norm_hidden_bytes + input_norm_stats_bytes
-                                    if bind_input_norm else None),
-            ),
-            "{}.input_norm.apply".format(layer.layer_id),
-            "{}.rank{:03d}.input_norm_apply".format(prefix, rank.rank),
-            (norm_reduce,),
-            source_component_id=norm_component,
-            fallback_keys=("{}.norm".format(layer.layer_id),),
-            metadata={**rank_meta, "event_kind": "input_norm_apply",
-                      **({"buffer_accesses": (
-                          _rank_tensor_access(rank, hidden_input, input_norm_hidden_bytes, "read"),
-                          generic_access("input_norm_stats", input_norm_stats_bytes, "read"),
-                          generic_access("input_norm", input_norm_hidden_bytes, "write"))}
-                         if bind_input_norm else {}),
-                      **({"output_buffer_id": source_base + ".input_norm"} if source_f32 else
-                         {"output_buffer_id": generic_base + ".input_norm"} if generic_kv is not None else {})},
-        )
-        qkv_metadata = {
-            **rank_meta,
-            "projection_id": "attention.qkv",
-            "projection_tp_degree": plan.tp_degree,
-            "projection_tp_rank": rank.tp_rank,
-            "projection_allow_padding": plan.allow_padding,
-            "modeled_memory_write_bytes": qkv_output_bytes,
-            "modeled_memory_write_kind": "qkv_output_including_kv_append",
-            "modeled_kv_write_bytes": kv_materialized_bytes,
-            "kv_materialized_tokens": max(0, kv_materialized_tokens),
-            "kv_materialized_bytes": kv_materialized_bytes,
-            "kv_persistent_append_tokens": max(0, kv_append_tokens),
-            "kv_persistent_append_bytes": (
-                _kv_bytes_per_token(scenario, layer, plan.tp_degree)
-                * max(0, kv_append_tokens)
-            ),
-        }
-        if generic_kv is not None:
-            qkv_metadata.update(input_buffer_id=generic_base + ".input_norm",
-                                output_buffer_id=generic_base + ".qkv")
-        if source_f32:
-            qkv_metadata.update(input_buffer_id=source_base + ".input_norm",
-                                output_buffer_id=source_base + ".qkv")
-        if qkv_is_transient:
-            qkv_metadata.update(
-                {
-                    "modeled_memory_write_bytes": qkv_transient_output_bytes,
-                    "modeled_memory_write_kind": "transient_qkv_activation",
-                    "modeled_kv_write_bytes": 0,
-                    "kv_materialized_bytes_geometry_only": kv_materialized_bytes,
-                    "kv_materialized_bytes": 0,
-                    "persistent_output_bytes": 0,
-                    "qkv_transient_output_bytes": (
-                        qkv_transient_output_bytes
-                    ),
-                    "qkv_transient_q_gate_bytes": query_output_bytes,
-                    "qkv_transient_kv_bytes": _activation_bytes(
-                        layer,
-                        token_batch
-                        * 2
-                        * kv_projection_shard.local_size,
-                        scenario=scenario,
-                    ),
-                    "persistent_kv_append_accounting": (
-                        "separate_kv_append_task"
-                    ),
-                }
-            )
-        if native_qkv_output:
-            qkv_metadata.update(
-                native_qkv_f32_output=True,
-                kv_materialized_bytes_geometry_only=kv_materialized_bytes,
-                kv_materialized_bytes=0,
-                persistent_output_bytes=0,
-                persistent_kv_append_accounting="native_cache_write_kernels",
-            )
-        qkv_target = _parallel_target(scenario, layer, "attention", rank)
-        source_contract = None
-        if source_attention is not None:
-            source_contract = _qwen35_source_execution_contract(
-                scenario, router, plan, rank, layer, source_attention, qkv_target, native_kv)
-            rank_meta["native_kv_work"] = source_contract
-            rank_meta["qwen35_source_execution_contract"] = source_contract
-            qkv_metadata.update(native_kv_work=source_contract, qwen35_source_execution_contract=source_contract)
-        kv_runtime_operand_component = _layer_local_runtime_memory_component_id(
-            scenario,
-            rank,
-            qkv_target,
-            rank.memory_component_id or rank.component_id,
-        )
-        rope_traffic_elements = max(
-            1,
-            token_batch
-            * (
-                query_shard.local_size + kv_projection_shard.local_size
-                if attention_execution is not None
-                else rope_shard.local_size
-            ),
-        )
-        rope_compute_elements = max(
-            1,
-            token_batch
-            * (
-                (
-                    query_head_shard.local_size
-                    + kv_head_shard.local_size
-                )
-                * attention_execution.rotary_dim
-                if attention_execution is not None
-                else rope_shard.local_size
-            ),
-        )
-        split_qkv = _declared_physical_projections(
-            scenario, layer, ("attention.q", "attention.k", "attention.v"),
-            combined_projection_id="attention.qkv", execution_component_id=qkv_target,
-        )
-        qkv_workload = _layer_gemm(
-            layer,
-            token_batch,
-            layer.hidden_size,
-            qkv_shard.local_size,
-            name="qkv_tp",
-            projection_id="attention.qkv",
-            projection_tp_degree=plan.tp_degree,
-            projection_tp_rank=rank.tp_rank,
-            projection_allow_padding=plan.allow_padding,
-            f32_storage=_f32_hidden_storage_enabled(scenario),
-        )
-        qkv_workload = replace(qkv_workload, output_storage_bytes=qkv_output_bytes)
-        rope_target = _primitive_target(
-            scenario,
-            router,
-            rank,
-            OperatorClass.ELEMENTWISE,
-            "{}.attention.rope".format(layer.layer_id),
-            fallback_keys=("{}.attention".format(layer.layer_id),),
-        )
-        qkv_rope_fused, qkv_rope_audit = _same_rank_gpu_fusion_decision(
-            scenario,
-            "qkv_rope",
-            rank,
-            qkv_workload.output_bytes
-            + _activation_bytes(layer, rope_traffic_elements * 2, scenario=scenario),
-            (
-                ("{}.attention".format(layer.layer_id), qkv_target),
-                (
-                    "{}.attention.rope".format(layer.layer_id),
-                    rope_target,
-                ),
-            ),
-        )
-        qkv_rope_audit = dict(qkv_rope_audit)
-        if qkv_rope_fused and not _gemm_epilogue_declared(
-            scenario, rank, qkv_target, qkv_workload, "rope", phase
-        ):
-            qkv_rope_fused = False
-            qkv_rope_audit.update(
-                fusion_enabled=False, fusion_decision="separate_rope_kernel_required_by_profile"
-            )
-        qkv_rope_audit.update(
-            {
-                "fusion_attention_target": qkv_target,
-                "fusion_rope_target": rope_target,
-            }
-        )
-        if has_qk_norm:
-            qkv_rope_fused = False
-            qkv_rope_audit.update(
-                {
-                    "fusion_applied": False,
-                    "fusion_reason": "explicit_qk_rmsnorm_boundary",
-                }
-            )
-        if qkv_bias is not None:
-            qkv_rope_fused = False
-            qkv_rope_audit.update(
-                fusion_enabled=False, fusion_applied=False,
-                fusion_decision="explicit_qkv_bias_boundary",
-                fusion_reason="explicit_qkv_bias_boundary",
-            )
-        gpu_qkv_invocation = _gpu_invocation_group(scenario, layer, qkv_target, "attention.qkv")
-        if gpu_qkv_invocation:
-            # A physically packed weight stays one MUL_MAT, but native CUDA
-            # does not fuse its full QKV projection with the following RoPE.
-            qkv_rope_fused = False
-            qkv_rope_audit.update(fusion_enabled=False, fusion_decision="native_projection_before_rope")
-        if split_qkv:
-            qkv_rope_fused = False
-            qkv_rope_audit = dict(qkv_rope_audit)
-            qkv_rope_audit.update(
-                {
-                    "fusion_enabled": False,
-                    "fusion_decision": "physical_projection_boundary",
-                    "physical_projection_invocations": ("q", "k", "v"),
-                }
-            )
-        if qkv_rope_fused:
-            qkv_workload = _append_gemm_epilogue(
-                qkv_workload,
-                operations=3 * rope_compute_elements,
-                name="rope",
-            )
-        source_rope = source_append = None
-        if source_attention is not None:
-            if not split_qkv or source_contract is None:
-                raise ValueError("Qwen3.5 source attention requires three physical projections")
-            qkv, source_rope, source_append = _add_qwen35_source_qkv(
-                builder, scenario, router, plan, rank, layer, source_attention, token_batch,
-                prefix, norm_apply, norm_component, qkv_target,
-                {**qkv_metadata, **qkv_rope_audit}, source_contract)
-        elif not split_qkv:
-            qkv = _add_rank_gemm(
+        def emit_input_projection():
+            norm_reduce, norm_component = _add_rank_primitive(
                 builder,
                 scenario,
                 router,
                 plan,
                 rank,
-                qkv_workload,
-                qkv_target,
-                "{}.rank{:03d}.qkv".format(prefix, rank.rank),
-                (norm_apply,),
-                weight_tensor_id="{}.attention_weights".format(layer.layer_id),
-                activation_source_component_id=norm_component,
-                keep_output_on_target=True,
-                metadata={**qkv_metadata, **qkv_rope_audit},
+                OperatorClass.REDUCTION,
+                ReductionWorkload(
+                    input_elements=hidden_elements,
+                    output_elements=max(1, token_batch),
+                    operations_per_combine=2,
+                    fixed_operations=max(1, token_batch),
+                    input_bits=activation_bits,
+                    output_bits=max(16, activation_bits),
+                    name="attention_input_norm_reduce",
+                ),
+                "{}.input_norm.reduce".format(layer.layer_id),
+                "{}.rank{:03d}.input_norm_reduce".format(prefix, rank.rank),
+                dependencies,
+                source_component_id=rank.component_id,
+                fallback_keys=("{}.norm".format(layer.layer_id),),
+                metadata={**rank_meta, "event_kind": "input_norm_reduce",
+                    **({"buffer_accesses": (
+                        _rank_tensor_access(rank, hidden_input, input_norm_hidden_bytes, "read"),
+                        generic_access("input_norm_stats", input_norm_stats_bytes, "write"))}
+                       if bind_input_norm else {}),
+                    **({"input_tensor_id": prefix + ".rank{:03d}.residual_input".format(rank.rank),
+                        "output_selection_input_shape": [token_batch, layer.hidden_size]}
+                       if output_selection is not None and output_selection.position == "before_last_ffn" else {})},
             )
-        else:
-            split_tasks = []
-            split_specs = (
-                ("q", query_output_bytes, "query"),
-                ("k", (qkv_output_bytes - query_output_bytes) // 2, "key"),
-                ("v", (qkv_output_bytes - query_output_bytes) // 2, "value"),
-            )
-            for projection_index, (projection_suffix, output_bytes, projection_name) in enumerate(split_specs):
-                workload = _layer_gemm(
-                    layer,
-                    token_batch,
-                    layer.hidden_size,
-                    q_projection_shard.local_size
-                    if projection_suffix == "q"
-                    else kv_projection_shard.local_size,
-                    name="{}_tp".format(projection_name),
-                    projection_id="attention.{}".format(projection_suffix),
-                    projection_tp_degree=plan.tp_degree,
-                    projection_tp_rank=rank.tp_rank,
-                    projection_allow_padding=plan.allow_padding,
-                    f32_storage=_f32_hidden_storage_enabled(scenario),
-                )
-                if qkv_is_transient:
-                    # Each physical projection pads its own output shard.
-                    output_bytes = _activation_bytes(layer, token_batch * workload.n, scenario=scenario)
-                workload = replace(workload, output_storage_bytes=output_bytes)
-                split_tasks.append(
-                    _add_rank_gemm(
-                        builder,
-                        scenario,
-                        router,
-                        plan,
-                        rank,
-                        workload,
-                        qkv_target,
-                        "{}.rank{:03d}.attention_{}".format(prefix, rank.rank, projection_suffix),
-                        (norm_apply,),
-                        weight_tensor_id="{}.attention_weights".format(layer.layer_id),
-                        activation_source_component_id=norm_component,
-                        keep_output_on_target=True,
-                        metadata={
-                            **qkv_metadata,
-                            **qkv_rope_audit,
-                            "projection_id": "attention.{}".format(projection_suffix),
-                            "physical_projection": projection_name,
-                            **({"output_buffer_id": source_base + ".qkv:segment:" + str(projection_index)}
-                               if source_f32 else {}),
-                            **({"output_offset_bytes": generic_projection(projection_suffix)["offset_bytes"],
-                                "output_buffer_size_bytes": qkv_transient_output_bytes} if generic_kv is not None else {}),
-                            "modeled_memory_write_bytes": output_bytes,
-                            "modeled_memory_write_kind": "split_projection_activation",
-                            "qkv_transient_output_bytes": output_bytes,
-                            "modeled_kv_write_bytes": (
-                                0 if projection_suffix == "q"
-                                else qkv_metadata["modeled_kv_write_bytes"] // 2
-                            ),
-                        },
-                    )
-                )
-            qkv = _add_join(
+            input_reduction_component = norm_component
+            norm_apply, norm_component = _add_rank_primitive(
                 builder,
-                "{}.rank{:03d}.attention_projections_ready".format(prefix, rank.rank),
-                tuple(split_tasks),
-                metadata={**rank_meta, **qkv_rope_audit, "event_kind": "attention_projection_join"},
+                scenario,
+                router,
+                plan,
+                rank,
+                OperatorClass.ELEMENTWISE,
+                ElementwiseWorkload(
+                    elements=hidden_elements,
+                    operations_per_element=2,
+                    fixed_operations=max(1, token_batch),
+                    fixed_transcendental_operations=max(1, token_batch),
+                    input_count=2,
+                    input_bits=activation_bits,
+                    output_bits=activation_bits,
+                    dependency_depth=4,
+                    working_set_bytes=_activation_bytes(
+                        layer, hidden_elements * 3,
+                        scenario=scenario,
+                    ),
+                    reuse_factor=2.0,
+                    name="attention_input_norm_apply",
+                    read_storage_bytes=(input_norm_hidden_bytes + input_norm_stats_bytes
+                                        if bind_input_norm else None),
+                ),
+                "{}.input_norm.apply".format(layer.layer_id),
+                "{}.rank{:03d}.input_norm_apply".format(prefix, rank.rank),
+                (norm_reduce,),
+                source_component_id=norm_component,
+                fallback_keys=("{}.norm".format(layer.layer_id),),
+                metadata={**rank_meta, "event_kind": "input_norm_apply",
+                          **({"buffer_accesses": (
+                              _rank_tensor_access(rank, hidden_input, input_norm_hidden_bytes, "read"),
+                              generic_access("input_norm_stats", input_norm_stats_bytes, "read"),
+                              generic_access("input_norm", input_norm_hidden_bytes, "write"))}
+                             if bind_input_norm else {}),
+                          **({"output_buffer_id": source_base + ".input_norm"} if source_f32 else
+                             {"output_buffer_id": generic_base + ".input_norm"} if generic_kv is not None else {})},
             )
-        qkv_component = (
-            rank.component_id
-            if _is_cim(_component(scenario, qkv_target))
-            else qkv_target
-        )
-        if qkv_bias is not None:
-            qkv = _add_qkv_projection_bias(
-                builder, scenario, router, plan, rank, layer, qkv_bias,
-                token_batch, query_shard.local_size, kv_projection_shard.local_size,
-                activation_bits, prefix, qkv, qkv_component, rank_meta,
-                projection_accesses=({part: source_projection_reads(part)[0] for part in ("q", "k", "v")}
-                    if source_f32 else {part: generic_projection(part) for part in ("q", "k", "v")}
-                    if generic_kv is not None else None),
+            qkv_metadata = {
+                **rank_meta,
+                "projection_id": "attention.qkv",
+                "projection_tp_degree": plan.tp_degree,
+                "projection_tp_rank": rank.tp_rank,
+                "projection_allow_padding": plan.allow_padding,
+                "modeled_memory_write_bytes": qkv_output_bytes,
+                "modeled_memory_write_kind": "qkv_output_including_kv_append",
+                "modeled_kv_write_bytes": kv_materialized_bytes,
+                "kv_materialized_tokens": max(0, kv_materialized_tokens),
+                "kv_materialized_bytes": kv_materialized_bytes,
+                "kv_persistent_append_tokens": max(0, kv_append_tokens),
+                "kv_persistent_append_bytes": (
+                    _kv_bytes_per_token(scenario, layer, plan.tp_degree)
+                    * max(0, kv_append_tokens)
+                ),
+            }
+            if generic_kv is not None:
+                qkv_metadata.update(input_buffer_id=generic_base + ".input_norm",
+                                    output_buffer_id=generic_base + ".qkv")
+            if source_f32:
+                qkv_metadata.update(input_buffer_id=source_base + ".input_norm",
+                                    output_buffer_id=source_base + ".qkv")
+            if qkv_is_transient:
+                qkv_metadata.update(
+                    {
+                        "modeled_memory_write_bytes": qkv_transient_output_bytes,
+                        "modeled_memory_write_kind": "transient_qkv_activation",
+                        "modeled_kv_write_bytes": 0,
+                        "kv_materialized_bytes_geometry_only": kv_materialized_bytes,
+                        "kv_materialized_bytes": 0,
+                        "persistent_output_bytes": 0,
+                        "qkv_transient_output_bytes": (
+                            qkv_transient_output_bytes
+                        ),
+                        "qkv_transient_q_gate_bytes": query_output_bytes,
+                        "qkv_transient_kv_bytes": _activation_bytes(
+                            layer,
+                            token_batch
+                            * 2
+                            * kv_projection_shard.local_size,
+                            scenario=scenario,
+                        ),
+                        "persistent_kv_append_accounting": (
+                            "separate_kv_append_task"
+                        ),
+                    }
+                )
+            if native_qkv_output:
+                qkv_metadata.update(
+                    native_qkv_f32_output=True,
+                    kv_materialized_bytes_geometry_only=kv_materialized_bytes,
+                    kv_materialized_bytes=0,
+                    persistent_output_bytes=0,
+                    persistent_kv_append_accounting="native_cache_write_kernels",
+                )
+            qkv_target = _parallel_target(scenario, layer, "attention", rank)
+            source_contract = None
+            if source_attention is not None:
+                source_contract = _qwen35_source_execution_contract(
+                    scenario, router, plan, rank, layer, source_attention, qkv_target, native_kv)
+                rank_meta["native_kv_work"] = source_contract
+                rank_meta["qwen35_source_execution_contract"] = source_contract
+                qkv_metadata.update(native_kv_work=source_contract, qwen35_source_execution_contract=source_contract)
+            kv_runtime_operand_component = _layer_local_runtime_memory_component_id(
+                scenario,
+                rank,
+                qkv_target,
+                rank.memory_component_id or rank.component_id,
             )
+            rope_traffic_elements = max(
+                1,
+                token_batch
+                * (
+                    query_shard.local_size + kv_projection_shard.local_size
+                    if attention_execution is not None
+                    else rope_shard.local_size
+                ),
+            )
+            rope_compute_elements = max(
+                1,
+                token_batch
+                * (
+                    (
+                        query_head_shard.local_size
+                        + kv_head_shard.local_size
+                    )
+                    * attention_execution.rotary_dim
+                    if attention_execution is not None
+                    else rope_shard.local_size
+                ),
+            )
+            split_qkv = _declared_physical_projections(
+                scenario, layer, ("attention.q", "attention.k", "attention.v"),
+                combined_projection_id="attention.qkv", execution_component_id=qkv_target,
+            )
+            qkv_workload = _layer_gemm(
+                layer,
+                token_batch,
+                layer.hidden_size,
+                qkv_shard.local_size,
+                name="qkv_tp",
+                projection_id="attention.qkv",
+                projection_tp_degree=plan.tp_degree,
+                projection_tp_rank=rank.tp_rank,
+                projection_allow_padding=plan.allow_padding,
+                f32_storage=_f32_hidden_storage_enabled(scenario),
+            )
+            qkv_workload = replace(qkv_workload, output_storage_bytes=qkv_output_bytes)
+            rope_target = _primitive_target(
+                scenario,
+                router,
+                rank,
+                OperatorClass.ELEMENTWISE,
+                "{}.attention.rope".format(layer.layer_id),
+                fallback_keys=("{}.attention".format(layer.layer_id),),
+            )
+            qkv_rope_fused, qkv_rope_audit = _same_rank_gpu_fusion_decision(
+                scenario,
+                "qkv_rope",
+                rank,
+                qkv_workload.output_bytes
+                + _activation_bytes(layer, rope_traffic_elements * 2, scenario=scenario),
+                (
+                    ("{}.attention".format(layer.layer_id), qkv_target),
+                    (
+                        "{}.attention.rope".format(layer.layer_id),
+                        rope_target,
+                    ),
+                ),
+            )
+            qkv_rope_audit = dict(qkv_rope_audit)
+            if qkv_rope_fused and not _gemm_epilogue_declared(
+                scenario, rank, qkv_target, qkv_workload, "rope", phase
+            ):
+                qkv_rope_fused = False
+                qkv_rope_audit.update(
+                    fusion_enabled=False, fusion_decision="separate_rope_kernel_required_by_profile"
+                )
+            qkv_rope_audit.update(
+                {
+                    "fusion_attention_target": qkv_target,
+                    "fusion_rope_target": rope_target,
+                }
+            )
+            if has_qk_norm:
+                qkv_rope_fused = False
+                qkv_rope_audit.update(
+                    {
+                        "fusion_applied": False,
+                        "fusion_reason": "explicit_qk_rmsnorm_boundary",
+                    }
+                )
+            if qkv_bias is not None:
+                qkv_rope_fused = False
+                qkv_rope_audit.update(
+                    fusion_enabled=False, fusion_applied=False,
+                    fusion_decision="explicit_qkv_bias_boundary",
+                    fusion_reason="explicit_qkv_bias_boundary",
+                )
+            gpu_qkv_invocation = _gpu_invocation_group(scenario, layer, qkv_target, "attention.qkv")
+            if gpu_qkv_invocation:
+                # A physically packed weight stays one MUL_MAT, but native CUDA
+                # does not fuse its full QKV projection with the following RoPE.
+                qkv_rope_fused = False
+                qkv_rope_audit.update(fusion_enabled=False, fusion_decision="native_projection_before_rope")
+            if split_qkv:
+                qkv_rope_fused = False
+                qkv_rope_audit = dict(qkv_rope_audit)
+                qkv_rope_audit.update(
+                    {
+                        "fusion_enabled": False,
+                        "fusion_decision": "physical_projection_boundary",
+                        "physical_projection_invocations": ("q", "k", "v"),
+                    }
+                )
+            if qkv_rope_fused:
+                qkv_workload = _append_gemm_epilogue(
+                    qkv_workload,
+                    operations=3 * rope_compute_elements,
+                    name="rope",
+                )
+            source_rope = source_append = None
+            if source_attention is not None:
+                if not split_qkv or source_contract is None:
+                    raise ValueError("Qwen3.5 source attention requires three physical projections")
+                qkv, source_rope, source_append = _add_qwen35_source_qkv(
+                    builder, scenario, router, plan, rank, layer, source_attention, token_batch,
+                    prefix, norm_apply, norm_component, qkv_target,
+                    {**qkv_metadata, **qkv_rope_audit}, source_contract)
+            elif not split_qkv:
+                qkv = _add_rank_gemm(
+                    builder,
+                    scenario,
+                    router,
+                    plan,
+                    rank,
+                    qkv_workload,
+                    qkv_target,
+                    "{}.rank{:03d}.qkv".format(prefix, rank.rank),
+                    (norm_apply,),
+                    weight_tensor_id="{}.attention_weights".format(layer.layer_id),
+                    activation_source_component_id=norm_component,
+                    keep_output_on_target=True,
+                    metadata={**qkv_metadata, **qkv_rope_audit},
+                )
+            else:
+                split_tasks = []
+                split_specs = (
+                    ("q", query_output_bytes, "query"),
+                    ("k", (qkv_output_bytes - query_output_bytes) // 2, "key"),
+                    ("v", (qkv_output_bytes - query_output_bytes) // 2, "value"),
+                )
+                for projection_index, (projection_suffix, output_bytes, projection_name) in enumerate(split_specs):
+                    workload = _layer_gemm(
+                        layer,
+                        token_batch,
+                        layer.hidden_size,
+                        q_projection_shard.local_size
+                        if projection_suffix == "q"
+                        else kv_projection_shard.local_size,
+                        name="{}_tp".format(projection_name),
+                        projection_id="attention.{}".format(projection_suffix),
+                        projection_tp_degree=plan.tp_degree,
+                        projection_tp_rank=rank.tp_rank,
+                        projection_allow_padding=plan.allow_padding,
+                        f32_storage=_f32_hidden_storage_enabled(scenario),
+                    )
+                    if qkv_is_transient:
+                        # Each physical projection pads its own output shard.
+                        output_bytes = _activation_bytes(layer, token_batch * workload.n, scenario=scenario)
+                    workload = replace(workload, output_storage_bytes=output_bytes)
+                    split_tasks.append(
+                        _add_rank_gemm(
+                            builder,
+                            scenario,
+                            router,
+                            plan,
+                            rank,
+                            workload,
+                            qkv_target,
+                            "{}.rank{:03d}.attention_{}".format(prefix, rank.rank, projection_suffix),
+                            (norm_apply,),
+                            weight_tensor_id="{}.attention_weights".format(layer.layer_id),
+                            activation_source_component_id=norm_component,
+                            keep_output_on_target=True,
+                            metadata={
+                                **qkv_metadata,
+                                **qkv_rope_audit,
+                                "projection_id": "attention.{}".format(projection_suffix),
+                                "physical_projection": projection_name,
+                                **({"output_buffer_id": source_base + ".qkv:segment:" + str(projection_index)}
+                                   if source_f32 else {}),
+                                **({"output_offset_bytes": generic_projection(projection_suffix)["offset_bytes"],
+                                    "output_buffer_size_bytes": qkv_transient_output_bytes} if generic_kv is not None else {}),
+                                "modeled_memory_write_bytes": output_bytes,
+                                "modeled_memory_write_kind": "split_projection_activation",
+                                "qkv_transient_output_bytes": output_bytes,
+                                "modeled_kv_write_bytes": (
+                                    0 if projection_suffix == "q"
+                                    else qkv_metadata["modeled_kv_write_bytes"] // 2
+                                ),
+                            },
+                        )
+                    )
+                qkv = _add_join(
+                    builder,
+                    "{}.rank{:03d}.attention_projections_ready".format(prefix, rank.rank),
+                    tuple(split_tasks),
+                    metadata={**rank_meta, **qkv_rope_audit, "event_kind": "attention_projection_join"},
+                )
+            qkv_component = (
+                rank.component_id
+                if _is_cim(_component(scenario, qkv_target))
+                else qkv_target
+            )
+            if qkv_bias is not None:
+                qkv = _add_qkv_projection_bias(
+                    builder, scenario, router, plan, rank, layer, qkv_bias,
+                    token_batch, query_shard.local_size, kv_projection_shard.local_size,
+                    activation_bits, prefix, qkv, qkv_component, rank_meta,
+                    projection_accesses=({part: source_projection_reads(part)[0] for part in ("q", "k", "v")}
+                        if source_f32 else {part: generic_projection(part) for part in ("q", "k", "v")}
+                        if generic_kv is not None else None),
+                )
+            return (
+                qkv, input_reduction_component, kv_runtime_operand_component,
+                qkv_component, qkv_rope_audit, qkv_rope_fused, qkv_target,
+                qkv_workload, rope_compute_elements, rope_target,
+                rope_traffic_elements, source_append, source_contract, source_rope,
+            )
+        projection_values = _compile_static_input_projection(
+            builder, scenario, plan, rank, layer, token_batch,
+            kv_append_tokens, kv_materialized_tokens, phase, prefix, dependencies,
+            emit_input_projection,
+            eligible=(generic_kv is not None and qkv_bias is not None and attention_execution is None
+                and source_geometry is None and not native_qkv_output and not source_f32
+                and scenario.workload.metadata.get("cuda_graph_structural_program") is None
+                and output_selection is None and "decode" in phase.split(".")))
+        (
+            qkv, input_reduction_component, kv_runtime_operand_component,
+            qkv_component, qkv_rope_audit, qkv_rope_fused, qkv_target,
+            qkv_workload, rope_compute_elements, rope_target,
+            rope_traffic_elements, source_append, source_contract, source_rope,
+        ) = projection_values
         rope_dependencies: Tuple[str, ...] = (qkv,)
         rope_source_component = qkv_component
         rope_input_component_bytes: Optional[Tuple[Tuple[str, int], ...]] = None
@@ -21960,13 +22119,14 @@ def _compile_parallel_dense_mlp(
 
     Attention and linear-state lowering remain context-sensitive and always
     execute normally.  The dense MLP contract has no context argument: for an
-    immutable scenario its task demands depend only on the layer, physical
-    token batch, and incoming rank-value placement.  Replaying that exact
+    immutable scenario its task demands depend on the layer, physical token
+    batch, host graph rows, and incoming rank-value placement. Request lengths
+    also remain part of the operation metadata. Replaying that exact
     segment avoids rebuilding thousands of identical tasks across MTP
     verifier positions and rounds while rebinding request-local identities.
     """
 
-    context = _active_compilation_context(scenario)
+    context = _bound_layer_compilation_context(layer, scenario)
     if context is None:
         return _compile_parallel_dense_mlp_uncached(
             builder,
@@ -22001,13 +22161,12 @@ def _compile_parallel_dense_mlp(
         input_components,
         len(tuple(dependencies)),
         builder._last_coherent_dma_task is not None,
+        builder.request.prompt_tokens,
+        builder.request.output_tokens,
+        getattr(builder, "_cpu_graph_rows", None),
     )
-    if any(component.metadata.get("physical_memory_config") is not None
-           for component in scenario.hardware.components):
-        # Physical descriptors include request-owned buffers and integer
-        # allocation generations that string-only template rebinding cannot
-        # safely reconstruct. Keep exact replay within the same request.
-        cache_key += (builder.request.request_id,)
+    physical = any(component.metadata.get("physical_memory_config") is not None
+                   for component in scenario.hardware.components)
     template = _task_segment_cache_get(cache, cache_key)
     if template is not None:
         replayed = template.replay(
@@ -22022,16 +22181,22 @@ def _compile_parallel_dense_mlp(
     initial_counter = builder.counter
     initial_previous = builder.previous
     initial_dma = builder._last_coherent_dma_task
-    terminal = _compile_parallel_dense_mlp_uncached(
-        builder,
-        scenario,
-        plan,
-        router,
-        layer,
-        token_batch,
-        prefix,
-        dependencies,
-    )
+    previous_sources = builder._physical_segment_sources
+    sources = {} if physical else None
+    builder._physical_segment_sources = sources
+    try:
+        terminal = _compile_parallel_dense_mlp_uncached(
+            builder,
+            scenario,
+            plan,
+            router,
+            layer,
+            token_batch,
+            prefix,
+            dependencies,
+        )
+    finally:
+        builder._physical_segment_sources = previous_sources
     captured = _TaskSegmentTemplate.capture(
         builder,
         first_task_index=first_task_index,
@@ -22041,6 +22206,7 @@ def _compile_parallel_dense_mlp(
         source_initial_previous=initial_previous,
         source_initial_dma=initial_dma,
         terminal_task_id=terminal,
+        physical_sources=sources,
     )
     if captured is not None:
         _task_segment_cache_put(context, cache, cache_key, captured)
@@ -27639,16 +27805,13 @@ def _replay_local_record_timeline(
     return ordered_records, local_end_by_task, local_interval_by_task
 
 
-def _execution_task_facts(
+def _ordered_execution_stage_records(
     records: Sequence[TaskExecutionRecord],
-    request_ids: Sequence[str],
-) -> Tuple[Mapping[str, object], ...]:
-    """Serialize one stage-local task DAG without losing resource slices.
+) -> Tuple[TaskExecutionRecord, ...]:
+    """Validate and order a draft stage before materializing its task facts.
 
-    Dependencies that cross the stage boundary are represented by the parent
-    stage dependency.  Keeping only local task edges makes the payload closed
-    and lets online serving validate/replay it through the same resource
-    semantics as the planner event kernel.
+    Frontend refinement may split this stage or expand zero-service edges.
+    Keep the original records until that final boundary is established.
     """
 
     record_by_id = {record.task_id: record for record in records}
@@ -27707,13 +27870,23 @@ def _execution_task_facts(
         if len(ordered_ids) != len(record_by_id):
             raise ValueError("execution stage task graph contains a cycle")
 
+    return tuple(record_by_id[task_id] for task_id in ordered_ids)
+
+
+def _serialize_execution_stage_tasks(
+    records: Sequence[TaskExecutionRecord],
+    request_ids: Sequence[str],
+    physical_metadata: Optional[Mapping[str, Mapping[str, object]]] = None,
+) -> Tuple[Mapping[str, object], ...]:
+    """Build public and trusted task facts once, after stage refinement."""
+    task_ids = {record.task_id for record in records}
     normalized_request_ids = tuple(
         dict.fromkeys(str(request_id) for request_id in request_ids)
     )
     facts: List[Mapping[str, object]] = []
     prepared_tasks: List[_PreparedExecutionTask] = []
-    for task_id in ordered_ids:
-        record = record_by_id[task_id]
+    for record in records:
+        task_id = record.task_id
         original_task = record.original_task
         replay_demands = original_task.demands if original_task is not None else record.demands
         task_dependencies = tuple(
@@ -27739,34 +27912,40 @@ def _execution_task_facts(
                 for demand in replay_demands
             ),
         }
-        retained_metadata = {
-            key: dict(value)
-            for key in (
-                "transient_residency_fact",
-                "stateful_l2",
-                "kernel_prediction",
-                "mmq_source_work",
-                "native_kv_work",
-                "qwen35_attention_work",
-                "qwen35_tensor_geometry",
-                "qwen35_shared_input_work",
-                "qwen35_attention_geometry",
-                "final_layer_output_selection",
-                "output_selection_tensor_geometry",
-            )
-            for value in (record.metadata.get(key),)
-            if isinstance(value, Mapping)
-        }
-        retained_metadata = {**compact_execution_metadata(record.metadata), **retained_metadata}
         if original_task is not None:
             # Preview timing is only a planning fact. Dispatch the original
             # descriptors and placeholder demands against the live serving
             # allocator, DRAM scheduler and L2 state exactly once.
-            retained_metadata = {**original_task.metadata,
+            source_metadata = (original_task.metadata if physical_metadata is None else
+                               physical_metadata.get(task_id, original_task.metadata))
+            retained_metadata = {**source_metadata,
                 "physical_replay_source": "unresolved_planner_task"}
+            if source_metadata.get("physical_execution_role") == "construction_preview":
+                retained_metadata.pop("physical_execution_by_owner", None)
+                retained_metadata.pop("physical_execution_role", None)
             if any(key in retained_metadata for key in (
                     "physical_execution_by_owner", "physical_demands_resource_ids")):
                 raise ValueError("physical stage source must be an unresolved planner task: " + task_id)
+        else:
+            retained_metadata = {
+                key: dict(value)
+                for key in (
+                    "transient_residency_fact",
+                    "stateful_l2",
+                    "kernel_prediction",
+                    "mmq_source_work",
+                    "native_kv_work",
+                    "qwen35_attention_work",
+                    "qwen35_tensor_geometry",
+                    "qwen35_shared_input_work",
+                    "qwen35_attention_geometry",
+                    "final_layer_output_selection",
+                    "output_selection_tensor_geometry",
+                )
+                for value in (record.metadata.get(key),)
+                if isinstance(value, Mapping)
+            }
+            retained_metadata = {**compact_execution_metadata(record.metadata), **retained_metadata}
         if retained_metadata:
             fact["metadata"] = retained_metadata
         facts.append(fact)
@@ -27808,7 +27987,7 @@ def _prepare_execution_stage_rows(
 
     This loop is proportional to stage count.  Task ordering, dependency
     closure, request identity, and ResourceDemand validation were established
-    in ``_execution_task_facts`` and are carried by its private tuple wrapper,
+    in ``_serialize_execution_stage_tasks`` and are carried by its private tuple wrapper,
     so no task or demand subtree is reparsed here.
     """
 
@@ -27987,9 +28166,7 @@ def _compact_host_control_stage(
                 }
             )
         ),
-        "execution_tasks": _execution_task_facts(
-            ordered, normalized_request_ids
-        ),
+        "execution_tasks": _ordered_execution_stage_records(ordered),
         "layer_ids": (),
         "service_ns": service_ns,
         "observed_span_ns": (
@@ -28131,9 +28308,7 @@ def _compact_device_prefix_stage(
                 }
             )
         ),
-        "execution_tasks": _execution_task_facts(
-            ordered, normalized_request_ids
-        ),
+        "execution_tasks": _ordered_execution_stage_records(ordered),
         "layer_ids": (),
         "service_ns": service_ns,
         "observed_span_ns": (
@@ -28294,9 +28469,7 @@ def _compact_device_suffix_stage(
                 }
             )
         ),
-        "execution_tasks": _execution_task_facts(
-            ordered, normalized_request_ids
-        ),
+        "execution_tasks": _ordered_execution_stage_records(ordered),
         "layer_ids": (),
         "service_ns": service_ns,
         "observed_span_ns": (
@@ -28355,7 +28528,7 @@ def _refine_gpu_frontend_wait_stages(
         return waiting[task_id]
 
     def row_records(row: Mapping[str, object]) -> Tuple[TaskExecutionRecord, ...]:
-        return tuple(by_id[str(task["task_id"])] for task in row["execution_tasks"])
+        return tuple(row["execution_tasks"])
 
     def positive(record: TaskExecutionRecord) -> bool:
         return max((d.service_ns for d in record.demands), default=0.0) > 0.0
@@ -28449,7 +28622,7 @@ def _refine_gpu_frontend_wait_stages(
                 "stage_role": "frontend_wait_region" if interleaved else "frontend_cpu_prefix",
                 "dependencies": (), "request_ids": request_ids,
                 "component_id": component_id, "layer_ids": (),
-                "execution_tasks": tuple({"task_id": record.task_id} for record in chunk),
+                "execution_tasks": tuple(chunk),
                 "frontend_wait_refinement": {
                     "representation": "bounded_detailed_initial_region" if interleaved else "quiescent_cpu_prefix",
                     "prefix_task_count": len(prefix), "prefix_stage_count": len(chunks),
@@ -28467,13 +28640,13 @@ def _refine_gpu_frontend_wait_stages(
             if group_id not in emitted:
                 refined.extend(new_rows)
                 emitted.add(str(group_id))
-            remaining = tuple(task for task in row["execution_tasks"] if str(task["task_id"]) not in prefix_ids)
-            if not any(positive(by_id[str(task["task_id"])]) for task in remaining):
+            remaining = tuple(task for task in row["execution_tasks"] if task.task_id not in prefix_ids)
+            if not any(positive(task) for task in remaining):
                 continue
             row = {**row, "execution_tasks": remaining}
         refined.append(row)
 
-    stage_by_task = {str(task["task_id"]): str(row["stage_id"])
+    stage_by_task = {task.task_id: str(row["stage_id"])
                      for row in refined for task in row["execution_tasks"]}
     expanded: Dict[str, Tuple[str, ...]] = {}
 
@@ -28508,7 +28681,7 @@ def _refine_gpu_frontend_wait_stages(
             "service_ns": max(local_ends.values(), default=0.0),
             "observed_span_ns": max(record.end_ns for record in ordered) - min(record.start_ns for record in ordered),
             "resource_ids": tuple(sorted({d.resource_id for record in ordered for d in record.demands})),
-            "execution_tasks": _execution_task_facts(ordered, tuple(row["request_ids"])),
+            "execution_tasks": _ordered_execution_stage_records(ordered),
         }
         ordering[stage_id] = (min(record.start_ns for record in ordered), index)
     result: List[Mapping[str, object]] = []
@@ -28528,6 +28701,8 @@ def _compact_execution_stages(
     scenario: ScenarioConfig,
     records: Sequence[TaskExecutionRecord],
     invocation_groups: Sequence[Mapping[str, object]],
+    *,
+    physical_metadata: Optional[Mapping[str, Mapping[str, object]]] = None,
 ) -> Tuple[Tuple[Mapping[str, object], ...], Optional[str]]:
     """Reduce executed request-local branches to component-stage facts.
 
@@ -28901,9 +29076,7 @@ def _compact_execution_stages(
                 "request_ids": request_ids,
                 "component_id": component_id,
                 "resource_ids": resource_ids,
-                "execution_tasks": _execution_task_facts(
-                    ordered_stage_records, request_ids
-                ),
+                "execution_tasks": _ordered_execution_stage_records(ordered_stage_records),
                 "layer_ids": tuple(layer_ids),
                 "service_ns": end_ns - start_ns,
                 "observed_span_ns": observed_end - observed_start,
@@ -29006,9 +29179,7 @@ def _compact_execution_stages(
                     }
                 )
             )
-            updated_stage["execution_tasks"] = _execution_task_facts(
-                combined_ordered, request_ids
-            )
+            updated_stage["execution_tasks"] = _ordered_execution_stage_records(combined_ordered)
             updated_stage["zero_service_output_attached"] = True
             updated_stage["zero_service_output_task_count"] = len(
                 zero_output_records
@@ -29047,9 +29218,7 @@ def _compact_execution_stages(
                             }
                         )
                     ),
-                    "execution_tasks": _execution_task_facts(
-                        _device_ordered, request_ids
-                    ),
+                    "execution_tasks": _ordered_execution_stage_records(_device_ordered),
                     "layer_ids": (),
                     "service_ns": device_service_ns,
                     "observed_span_ns": (
@@ -29088,9 +29257,7 @@ def _compact_execution_stages(
                             }
                         )
                     ),
-                    "execution_tasks": _execution_task_facts(
-                        _cpu_ordered, request_ids
-                    ),
+                    "execution_tasks": _ordered_execution_stage_records(_cpu_ordered),
                     "layer_ids": (),
                     "service_ns": cpu_service_ns,
                     "observed_span_ns": (
@@ -29149,6 +29316,8 @@ def _compact_execution_stages(
     stages = _refine_gpu_frontend_wait_stages(
         scenario, records, stages, set(frontend_stage_by_task),
     )
+    stages = [{**stage, "execution_tasks": _serialize_execution_stage_tasks(
+        stage["execution_tasks"], stage["request_ids"], physical_metadata)} for stage in stages]
     prepared_stages = _prepare_execution_stage_rows(stages)
     if prepared_stages is None:
         # Preserve the raw public payload and let serving's fail-closed parser
@@ -29274,18 +29443,6 @@ def _estimate_serving_cohort_cost(
         cached_router=cached_router,
         scenario_hash=scenario_hash,
     )
-    # A serving cohort reuses tensor identities across its ordered phases.
-    # Promote access-derived extents across the complete cohort before the
-    # event kernel registers any physical allocation.  Otherwise a smaller
-    # early slice can occupy a hashed address that a later larger slice needs
-    # to grow into, and the allocator correctly rejects the overlapping move.
-    lowering = replace(
-        lowering,
-        schedule=replace(
-            lowering.schedule,
-            tasks=_promote_physical_allocation_extents(lowering.schedule.tasks),
-        ),
-    )
     # Online execution will run the unchanged physical DAG against its live
     # controller. Replaying it here against a fresh controller duplicates the
     # expensive work and cannot provide the final persistent-state timings.
@@ -29297,6 +29454,17 @@ def _estimate_serving_cohort_cost(
             task.metadata.get("physical_memory_config") is not None
             or task.metadata.get("stateful_l2") is not None)
         for task in lowering.schedule.tasks)
+    # Validate one complete allocation envelope before preview. A deferred
+    # preview strips these descriptors; carry their final metadata straight
+    # into stage serialization instead of materializing a second TaskSpec DAG.
+    physical_metadata = None
+    if deferred_physical:
+        physical_metadata = dict(zip(
+            (task.task_id for task in lowering.schedule.tasks),
+            _physical_task_metadata(lowering.schedule.tasks)))
+    else:
+        lowering = replace(lowering, schedule=replace(lowering.schedule,
+            tasks=_promote_physical_allocation_extents(lowering.schedule.tasks)))
     summary = execute_cost_schedule(
         lowering.schedule,
         control=execution_control,
@@ -29327,6 +29495,7 @@ def _estimate_serving_cohort_cost(
         scenario,
         summary.execution_records,
         invocation_groups,
+        physical_metadata=physical_metadata,
     )
     explicit_host_stages = tuple(
         stage
@@ -29447,77 +29616,6 @@ def _summarize_kv_task_traffic(
     return rows
 
 
-def _task_memory_direction(task: TaskSpec) -> str:
-    explicit = str(task.metadata.get("memory_direction", "")).lower()
-    if explicit in {"read", "write"}:
-        return explicit
-    text = " ".join(
-        (
-            str(task.metadata.get("event_kind", "")),
-            str(task.metadata.get("phase", "")),
-            str(task.name),
-        )
-    ).lower()
-    return "write" if any(
-        token in text for token in ("append", "write", "store", "output")
-    ) else "read"
-
-
-def _resource_busy_by_direction(
-    tasks: Sequence[TaskSpec],
-) -> Mapping[str, Mapping[str, float]]:
-    rows: Dict[str, Dict[str, float]] = {"read": {}, "write": {}}
-    for task in tasks:
-        direction = _task_memory_direction(task)
-        raw_resource_directions = task.metadata.get("resource_directions", {})
-        resource_directions = (
-            raw_resource_directions
-            if isinstance(raw_resource_directions, Mapping)
-            else {}
-        )
-        modeled_write = max(
-            0, int(task.metadata.get("modeled_memory_write_bytes", 0))
-        )
-        for demand in task.demands:
-            resource_id = str(demand.resource_id)
-            explicit_resource_direction = str(
-                resource_directions.get(resource_id, "")
-            ).lower()
-            resource_direction = explicit_resource_direction or direction
-            if resource_direction not in {"read", "write"}:
-                resource_direction = direction
-            service_ns = max(0.0, float(demand.service_ns))
-            if service_ns <= 0.0:
-                continue
-            if explicit_resource_direction in {"read", "write"}:
-                rows[resource_direction][resource_id] = (
-                    rows[resource_direction].get(resource_id, 0.0)
-                    + service_ns
-                )
-                continue
-            write_share = 0.0
-            if modeled_write > 0 and demand.bytes_moved > 0:
-                write_share = min(
-                    1.0, modeled_write / float(demand.bytes_moved)
-                )
-            if write_share > 0.0:
-                rows["write"][resource_id] = (
-                    rows["write"].get(resource_id, 0.0)
-                    + service_ns * write_share
-                )
-                rows["read"][resource_id] = (
-                    rows["read"].get(resource_id, 0.0)
-                    + service_ns * (1.0 - write_share)
-                )
-            else:
-                rows[resource_direction][resource_id] = (
-                    rows[resource_direction].get(resource_id, 0.0) + service_ns
-                )
-    return {
-        direction: dict(sorted(values.items()))
-        for direction, values in rows.items()
-        if values
-    }
 
 
 def _physical_execution_rows(tasks):
@@ -29531,25 +29629,6 @@ def _physical_execution_rows(tasks):
         if "physical_execution" in task.metadata:
             raise ValueError("physical tasks require physical_execution_by_owner")
 
-
-def _accumulate_physical_resource_totals(resources, task, raw, resource_owners):
-    """Add only this owner row's contribution to a possibly shared wire."""
-    busy = raw.get("resource_busy_ns", {})
-    moved = raw.get("resource_bytes")
-    resolved_owners = raw.get("resource_owners", {})
-    for demand in task.demands:
-        resource_id = str(demand.resource_id)
-        if resource_id not in busy:
-            continue
-        if not isinstance(moved, Mapping):
-            raise ValueError("physical owner rows require resource_bytes")
-        owner = (resource_owners or {}).get(resource_id, resolved_owners.get(resource_id, "unknown"))
-        row = resources.setdefault(resource_id, {
-            "owner": owner, "bytes_moved": 0, "service_ns": 0.0, })
-        if row["owner"] != owner:
-            row["owner"] = resource_id
-        row["bytes_moved"] += int(moved.get(resource_id, 0))
-        row["service_ns"] += float(busy[resource_id])
 
 
 
@@ -31944,13 +32023,27 @@ def _layer_gemm(
     )
 
 
+def _bound_layer_compilation_context(layer, scenario=None):
+    """Only scenario-owned layers are immutable inputs to invariant caches."""
+    context = _COMPILATION_CONTEXT.get()
+    if context is None or (scenario is not None and context.scenario is not scenario):
+        return None
+    owned = context.invariant(("bound_layer_identities",),
+        lambda: {id(item): item for item in context.execution_layers()})
+    return context if owned.get(id(layer)) is layer else None
+
+
 def _layer_precision_bits(
     layer: LayerSpec,
     metadata: Optional[Mapping[str, object]] = None,
 ) -> Tuple[int, int]:
-    sources = _artifact_metadata_sources(layer, metadata, None)
-    artifact_label = _artifact_label_from_metadata(layer, sources)
-    return _layer_runtime_precision_bits(layer, sources, artifact_label)
+    def resolve():
+        sources = _artifact_metadata_sources(layer, metadata, None)
+        artifact_label = _artifact_label_from_metadata(layer, sources)
+        return _layer_runtime_precision_bits(layer, sources, artifact_label)
+    context = _bound_layer_compilation_context(layer) if metadata is None else None
+    return resolve() if context is None else context.invariant(
+        ("layer_precision_bits", id(layer)), resolve)
 
 
 def _dtype_bits(dtype_name: str) -> int:

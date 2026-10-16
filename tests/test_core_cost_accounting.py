@@ -216,3 +216,47 @@ def test_small_physical_batches_preserve_overlap_dependencies(monkeypatch):
     expected_bill["scheduler_batches"] = actual_bill["scheduler_batches"]
     assert actual == expected
     assert batched.snapshot()["timeline"] == serial.snapshot()["timeline"]
+
+
+def test_sparse_physical_counters_preserve_order_coverage_peaks_and_missing_values(monkeypatch):
+    from heterollm_sim.memory_types import TransactionResult
+
+    config = make_hbf_config(capacity_bytes=65536, page_bytes=4096)
+    rows = [
+        {"physical_operation_count": 2, "queue_wait_ns": 1e16,
+         "activate_commands": 2, "read_commands": 4, "refresh_commands": True,
+         "write_buffer_peak_bytes": 4, "host_outstanding_at_admission_peak": 5},
+        {"physical_operation_count": 3, "queue_wait_ns": 1.,
+         "activate_commands": 3, "read_commands": None, "refresh_commands": 0,
+         "write_buffer_peak_bytes": 9, "host_outstanding_at_admission_peak": True},
+        {"physical_operation_count": 1, "queue_wait_ns": 1.,
+         "activate_commands": 1, "read_commands": 2, "refresh_commands": 1,
+         "write_buffer_peak_bytes": 3, "host_outstanding_at_admission_peak": None},
+    ]
+    calls = []
+    def submit(core, request):
+        index = len(calls)
+        calls.append(request)
+        counters = {"resource_busy_ns": {"wire": 1.},
+                    "resource_bytes": {"wire": 4096},
+                    "row_hits": True, "row_misses": None,
+                    "unrelated_numeric_field": 123, **rows[index]}
+        # Vary mapping order independently of request order.
+        if index % 2:
+            counters = dict(reversed(tuple(counters.items())))
+        return TransactionResult(request.request_id, request.operation, request.arrival_ns,
+                                 request.arrival_ns + 1., 4096, 4096, counters=counters)
+    monkeypatch.setattr(NandCore, "submit", submit)
+    accesses = [{"operation": "read", "address": index * 4096, "byte_count": 4096}
+                for index in range(3)]
+    resolved = resolve_physical_task(task(config, accesses), PhysicalRuntimeContext(), 0.)
+    bill = resolved.metadata["physical_execution_by_owner"]["memory"]
+    assert bill["operation_count"] == 6
+    assert bill["queue_wait_ns"] == 1e16  # Strict left-to-right floating additions.
+    assert bill["activate_commands"] == 6
+    assert bill["read_commands"] is None  # Missing observation is not zero.
+    assert bill["refresh_commands"] is None  # bool does not count as observed.
+    assert bill["write_commands"] is None
+    assert bill["write_buffer_peak_bytes"] == 9
+    assert bill["host_outstanding_at_admission_peak"] == 5
+    assert not {"row_hits", "row_misses", "unrelated_numeric_field"} & bill.keys()

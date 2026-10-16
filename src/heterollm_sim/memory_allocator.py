@@ -9,6 +9,8 @@ simulation.  Overlap is accepted only through an explicit alias declaration.
 
 from __future__ import annotations
 
+from bisect import bisect_left
+
 from dataclasses import dataclass, replace
 from typing import Dict, Iterable, Optional, Tuple
 
@@ -65,6 +67,35 @@ class PhysicalAddressAllocator:
         self.alignment_bytes = alignment_bytes
         self.workspace_capacity_bytes = workspace_capacity_bytes
         self._allocations: Dict[Tuple[str, int], PhysicalAllocation] = {}
+        self._address_keys = []
+        self._address_rows = []
+        self._largest_allocation = 0
+
+    def _store_allocation(self, key, allocation):
+        previous = self._allocations.get(key)
+        if previous is allocation:
+            return
+        if previous is not None:
+            old_key = (previous.base_address, previous.buffer_id, previous.generation)
+            position = bisect_left(self._address_keys, old_key)
+            self._address_keys.pop(position)
+            self._address_rows.pop(position)
+        address_key = (allocation.base_address, allocation.buffer_id, allocation.generation)
+        position = bisect_left(self._address_keys, address_key)
+        self._address_keys.insert(position, address_key)
+        self._address_rows.insert(position, allocation)
+        self._largest_allocation = max(self._largest_allocation, allocation.size_bytes)
+        self._allocations[key] = allocation
+
+    def _restore_allocations(self, allocations):
+        """Rebuild the address index at the existing rollback boundary."""
+        self._allocations.clear()
+        self._allocations.update(allocations)
+        self._address_rows = sorted(allocations.values(),
+            key=lambda item: (item.base_address, item.buffer_id, item.generation))
+        self._address_keys = [(item.base_address, item.buffer_id, item.generation)
+                              for item in self._address_rows]
+        self._largest_allocation = max((item.size_bytes for item in self._address_rows), default=0)
 
     @staticmethod
     def _key(buffer_id: str, generation: int) -> Tuple[str, int]:
@@ -79,9 +110,7 @@ class PhysicalAddressAllocator:
         return ((value + alignment - 1) // alignment) * alignment
 
     def allocations(self) -> Tuple[PhysicalAllocation, ...]:
-        return tuple(
-            sorted(self._allocations.values(), key=lambda item: (item.base_address, item.buffer_id, item.generation))
-        )
+        return tuple(self._address_rows)
 
     def _check_extent(self, base: int, size: int) -> None:
         if type(base) is not int or base < 0:
@@ -120,20 +149,14 @@ class PhysicalAddressAllocator:
     def _find_first_fit(self, size: int, generation: int = 0, allocation_arena: Optional[str] = None) -> int:
         lower, upper = self._arena(generation, allocation_arena)
         cursor = lower
-        if self.workspace_capacity_bytes:
-            # Filtering a sorted list and sorting its retained subsequence
-            # produce the same order.  Arena allocations never inspect the
-            # other arena, so avoid sorting thousands of resident weights
-            # for each short-lived activation.
-            candidates = sorted(
-                (item for item in self._allocations.values()
-                 if item.alias_of is None and item.base_address + item.size_bytes > lower
-                 and item.base_address < upper),
-                key=lambda item: (item.base_address, item.buffer_id, item.generation),
-            )
-        else:
-            candidates = self.allocations()
-        for item in candidates:
+        # No allocation starting earlier than this can intersect the arena.
+        # The conservative maximum size also covers overlapping extents in
+        # imported snapshots; a single preceding row would not suffice there.
+        position = bisect_left(self._address_keys, (lower - self._largest_allocation,))
+        for index in range(position, len(self._address_rows)):
+            item = self._address_rows[index]
+            if item.base_address >= upper:
+                break
             if item.alias_of is not None:
                 continue
             if item.base_address + item.size_bytes <= lower or item.base_address >= upper:
@@ -214,7 +237,7 @@ class PhysicalAddressAllocator:
                 raise AllocationError("allocation size changed for {}".format(buffer_id))
             if arena != existing.allocation_arena:
                 existing = replace(existing, allocation_arena=arena)
-            self._allocations[key] = existing
+            self._store_allocation(key, existing)
             return existing
 
         alias_key = None
@@ -255,7 +278,7 @@ class PhysicalAddressAllocator:
                                         alias_generation=alias_generation,
                                         alias_offset_bytes=alias_offset_bytes,
                                         inferred=inferred, allocation_arena=allocation_arena)
-        self._allocations[key] = allocation
+        self._store_allocation(key, allocation)
         return allocation
 
     def register(self, declaration: dict) -> PhysicalAllocation:
@@ -344,7 +367,11 @@ class PhysicalAddressAllocator:
                 if target is None:
                     break
                 current = target
-        self._allocations.pop(key)
+        previous = self._allocations.pop(key)
+        position = bisect_left(self._address_keys,
+            (previous.base_address, previous.buffer_id, previous.generation))
+        self._address_keys.pop(position)
+        self._address_rows.pop(position)
 
     def snapshot(self) -> dict:
         snapshot = {
@@ -396,7 +423,7 @@ class PhysicalAddressAllocator:
                         alias_offset_bytes=item.alias_offset_bytes, inferred=item.inferred,
                         allocation_arena=item.allocation_arena,
                     )
-                allocator._allocations[(item.buffer_id, item.generation)] = item
+                allocator._store_allocation((item.buffer_id, item.generation), item)
             else:
                 item = dict(item)
                 size = item.get("size_bytes")
@@ -412,6 +439,10 @@ class PhysicalAddressAllocator:
                     inferred=item.get("inferred", False),
                     allocation_arena=item.get("allocation_arena"),
                 )
+        # Snapshot order is a stable sort of insertion order. Rebuild once
+        # here, rather than let incremental insertion change that public
+        # order for native snapshots containing non-total-order values.
+        allocator._restore_allocations(dict(allocator._allocations))
         return allocator
 
 

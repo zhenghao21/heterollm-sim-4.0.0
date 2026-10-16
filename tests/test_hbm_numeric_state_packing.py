@@ -44,6 +44,43 @@ def test_static_layout_lookup_is_immutable():
         layout[5][layout[1][0]] = 99
 
 
+def test_cached_calendar_identities_recheck_shapes_sharing_and_missing_slots():
+    runtime = PhysicalRuntimeContext(configuration(), "hbm", capture_details=False)
+    core = runtime.runtimes["hbm"].core
+    request = AccessRequest("all", "read", 0, 4096)
+    core.submit(request)
+    packed = core._hbm_numeric_state
+    slots = runtime.timeline.lane_available
+    assert packed.refresh_resources(4096, (request,))
+    assert packed.refresh_resources(4096, (request,))
+    first, second = packed.ids[:2]
+    slots[first].append(0.)
+    assert not packed.refresh_resources(4096, (request,))
+    slots[first].pop()
+    assert packed.refresh_resources(4096, (request,))
+    previous = slots[second]
+    slots[second] = slots[first]
+    assert not packed.refresh_resources(4096, (request,))
+    slots[second] = previous
+    assert packed.refresh_resources(4096, (request,))
+    del slots[first]
+    runtime.timeline.ready_ns[first] = 12345.125
+    assert packed.refresh_resources(4096, (request,))
+    assert packed.arrays[8][0, 0] == 12345.125
+
+
+def test_bulk_calendar_publication_preserves_existing_lane_objects_and_key_order():
+    core = DramCore(configuration(), capture_details=False)
+    core.submit(AccessRequest("seed", "read", 0, 4096))
+    fields = ("lane_available", "ready_ns", "busy_ns", "last_intervals", "bytes_moved", "directions")
+    orders = {field: list(getattr(core.timeline, field)) for field in fields}
+    lanes = dict(core.timeline.lane_available)
+    core.submit(AccessRequest("following", "write", 17, 8192, 1000.125))
+    for field in fields:
+        assert list(getattr(core.timeline, field)) == orders[field]
+    assert all(core.timeline.lane_available[key] is value for key, value in lanes.items())
+
+
 def test_sparse_commit_preserves_extension_fields_and_rebuilds_unmodified_pcs():
     config = configuration()
     reference, numeric = DramCore(config, capture_details=False), DramCore(config, capture_details=False)

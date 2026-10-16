@@ -213,15 +213,6 @@ class ResourceDemand:
                 or not math.isfinite(float(value))
             ):
                 raise ValueError("{} must be a finite number".format(name))
-        numeric_values = (
-            self.service_ns,
-            self.work_units,
-        )
-        if any(
-            isinstance(value, bool) or not math.isfinite(float(value))
-            for value in numeric_values
-        ):
-            raise ValueError("demand quantities must be finite numbers")
         if self.service_ns < 0:
             raise ValueError("service_ns must be non-negative")
         if self.bytes_moved < 0 or self.work_units < 0:

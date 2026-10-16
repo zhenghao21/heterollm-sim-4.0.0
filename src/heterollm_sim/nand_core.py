@@ -1,6 +1,7 @@
 """Shared page-level NAND core for SSD and HBF configurations."""
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from math import isfinite, sqrt
 from typing import Dict, Iterable, Optional
@@ -40,6 +41,138 @@ class _ReadCacheSlot:
     last_use: int = 0
 
 
+def _copy_nand_read_cache(cache, memo=None):
+    """Copy page buffers directly while retaining extension aliases/cycles."""
+    if memo is None:
+        memo = {}
+    if type(cache) is not dict:
+        return deepcopy(cache, memo)
+    result, rows, slots = {}, [], []
+    memo[id(cache)] = result
+    # Register every ordinary list/slot before copying extension attributes:
+    # extensions may refer to a later bank, another slot or the cache itself.
+    for row in cache.values():
+        if type(row) is not list or id(row) in memo:
+            continue
+        cloned = []
+        memo[id(row)] = cloned
+        rows.append((row, cloned))
+        for slot in row:
+            if type(slot) is _ReadCacheSlot and id(slot) not in memo:
+                cloned_slot = object.__new__(_ReadCacheSlot)
+                memo[id(slot)] = cloned_slot
+                memo[id(vars(slot))] = vars(cloned_slot)
+                slots.append((slot, cloned_slot))
+
+    def clone(value):
+        if type(value) in (int, float, str, bool, type(None)):
+            return value
+        if id(value) in memo:
+            return memo[id(value)]
+        if type(value) is tuple and all(type(item) is int for item in value):
+            return value
+        return deepcopy(value, memo)
+
+    for slot, cloned in slots:
+        values = vars(slot)
+        page_key = slot.page_key
+        if (values.keys() == {"page_key", "ready_ns", "reader_completion_ns", "last_use"}
+                and (page_key is None or type(page_key) is tuple
+                     and all(type(item) is int for item in page_key))
+                and type(slot.ready_ns) in (int, float)
+                and type(slot.reader_completion_ns) in (int, float)
+                and type(slot.last_use) is int):
+            # Ordinary controller slots contain only immutable scalar values.
+            # Copy their fields in C; extension objects still use the shared
+            # deepcopy memo registered above, retaining aliases and cycles.
+            cloned.__dict__.update(values)
+        else:
+            cloned.__dict__.update((name, clone(value)) for name, value in values.items())
+    for row, cloned in rows:
+        cloned.extend(clone(slot) for slot in row)
+    result.update((clone(key), clone(row)) for key, row in cache.items())
+    return result
+
+
+class _NandTransaction:
+    """Undo only media indexes changed while this transaction is open."""
+
+    def __init__(self, core):
+        self.program_frontiers = {}
+        self.block_wear = {}
+        self.cache_banks = {}
+        self.cache_slots = {}
+        self.cache_snapshot = None
+        self.array_frontiers = dict(core.__dict__["_array_ready"])
+        self.buffer_frontiers = dict(core.__dict__["_buffer_ready"])
+        self.numeric_at_begin = core._nand_numeric_state
+        self.numeric = None
+
+    def capture_numeric(self, packed):
+        if packed is self.numeric_at_begin and self.numeric is None:
+            self.numeric = packed.checkpoint()
+
+    def remember_cache(self, core, bank):
+        if self.cache_snapshot is not None or bank in self.cache_banks:
+            return
+        slots = core.__dict__["_read_cache"].get(bank)
+        if slots is not None and (type(slots) is not list
+                                  or any(type(slot) is not _ReadCacheSlot for slot in slots)):
+            self.materialize_cache(core)
+            return
+        self.cache_banks[bank] = slots
+        for slot in slots or ():
+            self.cache_slots.setdefault(id(slot), (
+                slot, slot.page_key, slot.ready_ns, slot.reader_completion_ns, slot.last_use))
+
+    def materialize_cache(self, core):
+        """Detach undo state before an external snapshot replaces live slots."""
+        if self.cache_snapshot is not None:
+            return
+        memo = {}
+        saved = _copy_nand_read_cache(core.__dict__["_read_cache"], memo)
+        for bank, previous in self.cache_banks.items():
+            if previous is None:
+                saved.pop(bank, None)
+            else:
+                saved[bank] = deepcopy(previous, memo)
+        for slot, page_key, ready, readers, use in self.cache_slots.values():
+            cloned = deepcopy(slot, memo)
+            cloned.page_key, cloned.ready_ns = page_key, ready
+            cloned.reader_completion_ns, cloned.last_use = readers, use
+        if self.numeric_at_begin is not None:
+            self.numeric_at_begin.publish(saved, self.array_frontiers, self.buffer_frontiers,
+                                          checkpoint=self.numeric)
+            self.numeric_at_begin = self.numeric = None
+        self.cache_snapshot = saved
+
+    def rollback(self, core):
+        for target, saved in ((core._next_program_page, self.program_frontiers),
+                              (core._block_wear_state, self.block_wear)):
+            for key, previous in saved.items():
+                if previous is None:
+                    target.pop(key, None)
+                else:
+                    target[key] = previous
+        if self.cache_snapshot is not None:
+            # Tokens can be restored by a public snapshot and used again.
+            core.__dict__["_read_cache"] = _copy_nand_read_cache(self.cache_snapshot)
+        else:
+            for bank, previous in self.cache_banks.items():
+                if previous is None:
+                    core.__dict__["_read_cache"].pop(bank, None)
+                else:
+                    core.__dict__["_read_cache"][bank] = previous
+            for slot, page_key, ready, readers, use in self.cache_slots.values():
+                slot.page_key, slot.ready_ns = page_key, ready
+                slot.reader_completion_ns, slot.last_use = readers, use
+        core.__dict__["_array_ready"] = dict(self.array_frontiers)
+        core.__dict__["_buffer_ready"] = dict(self.buffer_frontiers)
+        if self.numeric is not None:
+            self.numeric_at_begin.restore(self.numeric)
+        core._nand_numeric_state = self.numeric_at_begin
+
+
 class NandCore:
     """Page read/program/erase with optional explicit erase wear.
 
@@ -67,8 +200,8 @@ class NandCore:
         # Keep exact stage/mapping traces for normal runs; aggregate serving
         # estimates can disable them while preserving scalar timing/counters.
         self.capture_details = capture_details
-        self._array_ready: Dict[str, float] = {}
-        self._buffer_ready: Dict[str, float] = {}
+        self.__dict__["_array_ready"]: Dict[str, float] = {}
+        self.__dict__["_buffer_ready"]: Dict[str, float] = {}
         self._inflight: list[float] = []
         # Host request admission occupancy, bounded by max_outstanding_requests.
         # These are not per-plane page/read/program queues. Buffered writes
@@ -86,11 +219,107 @@ class NandCore:
         self._buffer_merge_bytes = 0
         self._media_drain_completion_ns = 0.0
         self._block_wear_state: Dict[str, dict] = {}
-        self._read_cache: Dict[tuple[int, ...], list[_ReadCacheSlot]] = {}
+        self.__dict__["_read_cache"]: Dict[tuple[int, ...], list[_ReadCacheSlot]] = {}
         self._cache_use = 0
         self._next_program_page: Dict[tuple[int, ...], int] = {}
+        self._nand_transactions: list[_NandTransaction] = []
+        self._nand_numeric_state = None
+        self._nand_numeric_enabled = False
+        self._nand_state_exposed = False
         self._observation_events: list[dict] = []
         self._observe_media = bool(config.detailed_observability or config.wear_model)
+
+    def begin_transaction(self):
+        """Protect program-order, wear and read buffers; caller owns other state."""
+        token = _NandTransaction(self)
+        if self._nand_state_exposed:
+            token.materialize_cache(self)
+        self._nand_transactions.append(token)
+        return token
+
+    def _finish_transaction(self, token):
+        if not self._nand_transactions or self._nand_transactions[-1] is not token:
+            raise ValueError("NAND transactions must finish once in reverse begin order")
+        self._nand_transactions.pop()
+
+    def commit_transaction(self, token):
+        self._finish_transaction(token)
+
+    def rollback_transaction(self, token):
+        self._finish_transaction(token)
+        token.rollback(self)
+
+    def _nand_before_reference(self):
+        self._nand_publish_numeric()
+        for token in self._nand_transactions:
+            token.materialize_cache(self)
+
+    def _nand_publish_numeric(self, *, exposed=False):
+        packed = self.__dict__.get("_nand_numeric_state")
+        if exposed:
+            self.__dict__["_nand_numeric_enabled"] = False
+            self.__dict__["_nand_state_exposed"] = True
+            for token in self.__dict__.get("_nand_transactions", ()):
+                token.materialize_cache(self)
+        if packed is None:
+            return
+        for token in self._nand_transactions:
+            token.capture_numeric(packed)
+        packed.publish(self.__dict__["_read_cache"], self.__dict__["_array_ready"],
+                       self.__dict__["_buffer_ready"], core=self)
+        self._nand_numeric_state = None
+
+    @property
+    def _read_cache(self):
+        self._nand_publish_numeric(exposed=True)
+        return self.__dict__["_read_cache"]
+
+    @_read_cache.setter
+    def _read_cache(self, value):
+        if "_read_cache" in self.__dict__:
+            self._nand_publish_numeric(exposed=True)
+        self.__dict__["_read_cache"] = value
+
+    @property
+    def _array_ready(self):
+        self._nand_publish_numeric(exposed=True)
+        return self.__dict__["_array_ready"]
+
+    @_array_ready.setter
+    def _array_ready(self, value):
+        if "_array_ready" in self.__dict__:
+            self._nand_publish_numeric(exposed=True)
+        self.__dict__["_array_ready"] = value
+
+    @property
+    def _buffer_ready(self):
+        self._nand_publish_numeric(exposed=True)
+        return self.__dict__["_buffer_ready"]
+
+    @_buffer_ready.setter
+    def _buffer_ready(self, value):
+        if "_buffer_ready" in self.__dict__:
+            self._nand_publish_numeric(exposed=True)
+        self.__dict__["_buffer_ready"] = value
+
+    def _touch_cache_bank(self, bank):
+        for token in self._nand_transactions:
+            token.remember_cache(self, bank)
+
+    def _set_program_frontier(self, key, value):
+        if self._nand_transactions:
+            previous = self._next_program_page.get(key)
+            for token in self._nand_transactions:
+                token.program_frontiers.setdefault(key, previous)
+        self._next_program_page[key] = value
+
+    def _update_program_frontiers(self, frontiers):
+        if self._nand_transactions:
+            for key in frontiers:
+                previous = self._next_program_page.get(key)
+                for token in self._nand_transactions:
+                    token.program_frontiers.setdefault(key, previous)
+        self._next_program_page.update(frontiers)
 
     @property
     def buffered_write_mode(self) -> bool:
@@ -163,10 +392,12 @@ class NandCore:
         if not count:
             return None, False
         bank = self._bank_key(mapping)
-        slots = self._read_cache.get(bank)
+        if self._nand_transactions:
+            self._touch_cache_bank(bank)
+        slots = self.__dict__["_read_cache"].get(bank)
         if slots is None:
             slots = [_ReadCacheSlot() for _ in range(count)]
-            self._read_cache[bank] = slots
+            self.__dict__["_read_cache"][bank] = slots
         key = self._staged_key(mapping)
         slot = next((slot for slot in slots if slot.page_key == key), None)
         hit = slot is not None
@@ -177,12 +408,15 @@ class NandCore:
         return slot, hit
 
     def _invalidate_cache(self, mapping, *, block=False) -> None:
-        for slot in self._read_cache.get(self._bank_key(mapping), ()):
+        bank = self._bank_key(mapping)
+        for slot in self.__dict__["_read_cache"].get(bank, ()):
             key = slot.page_key
             if key is not None and (key == self._staged_key(mapping)
                                     or (block and key[-2] == mapping.block)):
                 # Invalidate the tag, not the physical buffer's outstanding
                 # read lifetime. Its next fill must still wait for all readers.
+                if self._nand_transactions:
+                    self._touch_cache_bank(bank)
                 slot.page_key = None
 
     def _validate_program_order(self, request, expected=None) -> None:
@@ -256,6 +490,10 @@ class NandCore:
         if wear_config:
             wear = {"programs": wear["programs"]+int(name == "PAGE_PROGRAM"),
                     "erases": wear["erases"]+int(name == "BLOCK_ERASE")}
+            if self._nand_transactions:
+                previous = self._block_wear_state.get(block)
+                for token in self._nand_transactions:
+                    token.block_wear.setdefault(block, previous)
             self._block_wear_state[block] = wear
         self._observation_events.append({
             "operation": "program" if name == "PAGE_PROGRAM" else "erase" if name == "BLOCK_ERASE" else "read",
@@ -456,6 +694,7 @@ class NandCore:
         introducing a synthetic request into the event stream.
         """
 
+        self._nand_publish_numeric()
         observation_start = len(self._observation_events)
         if now_ns is not None and (isinstance(now_ns, bool) or not isfinite(now_ns) or now_ns < 0):
             raise ValueError("now_ns must be finite and non-negative")
@@ -510,7 +749,7 @@ class NandCore:
             self._invalidate_cache(m)
             array_id = self._array_id(m)
             array_resource = self._array_resource_id(m)
-            dependency = max(earliest_ns, staged.ready_ns, self._array_ready.get(array_id, 0.0), self._buffer_ready.get(array_id, 0.0))
+            dependency = max(earliest_ns, staged.ready_ns, self.__dict__["_array_ready"].get(array_id, 0.0), self.__dict__["_buffer_ready"].get(array_id, 0.0))
             if staged.ranges != ((0, self.config.page_bytes),):
                 read = self._media_stage("RMW_PAGE_READ", m, dependency, self.config.page_read_ns,
                                          eligible_ns=max(earliest_ns, staged.ready_ns))
@@ -530,8 +769,8 @@ class NandCore:
             program = self._media_stage(
                 "PAGE_PROGRAM", m, internal.end_ns, self.config.page_program_ns, eligible_ns=internal.end_ns
             )
-            self._array_ready[array_id] = program.end_ns
-            self._buffer_ready[array_id] = program.end_ns
+            self.__dict__["_array_ready"][array_id] = program.end_ns
+            self.__dict__["_buffer_ready"][array_id] = program.end_ns
             self.timeline.ready_ns[array_id] = program.end_ns
             start_ns = internal.start_ns if start_ns is None else min(start_ns, internal.start_ns)
             cursor = max(cursor, program.end_ns)
@@ -570,6 +809,7 @@ class NandCore:
         }
 
     def submit(self, request: AccessRequest) -> TransactionResult:
+        self._nand_publish_numeric()
         self._validate_request(request)
         if (type(self) is NandCore and not self.capture_details and not self._observe_media
                 and self.config.protocol_mode == "ocp_hbf_0_7"
@@ -639,7 +879,7 @@ class NandCore:
             "write_buffer_peak_bytes": self._held_write_buffer_bytes() + write_buffer_bytes,
             "write_buffer_draining_bytes": self.inflight_write_buffer_bytes,
             "buffered_write_mode": self._buffered_write_mode,
-            **self.timeline.metrics_delta(before_metrics),
+            **self.timeline._core_metrics_delta(before_metrics),
             **self._observations(),
         })
         self._reserve_write_buffer(write_buffer_bytes)
@@ -733,7 +973,7 @@ class NandCore:
             return end
 
         base = effective_arrival + config.front_ns
-        dependency = max(base, self._array_ready.get(array_id, 0.), self._buffer_ready.get(array_id, 0.))
+        dependency = max(base, self.__dict__["_array_ready"].get(array_id, 0.), self.__dict__["_buffer_ready"].get(array_id, 0.))
         host_bytes = request.byte_count  # Strict requests are already 64-byte aligned.
         internal_bytes = config.transfer_page_bytes
         host_ns = host_bytes / self._host_bandwidth(request.operation)
@@ -756,8 +996,8 @@ class NandCore:
                     slot.page_key = self._staged_key(mapping)
                     slot.ready_ns = internal_end
                     slot.reader_completion_ns = completion
-                self._array_ready[array_id] = read_end
-                self._buffer_ready[array_id] = internal_end
+                self.__dict__["_array_ready"][array_id] = read_end
+                self.__dict__["_buffer_ready"][array_id] = internal_end
                 timeline.ready_ns[array_id] = read_end
                 pages_read = 1
         else:
@@ -765,17 +1005,17 @@ class NandCore:
             if mapping.page == 0:
                 self._invalidate_cache(mapping, block=True)
                 erase_end = reserve(array_resource, dependency, config.block_erase_ns)
-                self._array_ready[array_id] = erase_end
+                self.__dict__["_array_ready"][array_id] = erase_end
                 timeline.ready_ns[array_id] = erase_end
                 erases = 1
             host_end = reserve(host_resource, base, host_ns, "write", host_bytes)
-            internal_end = reserve(channel, max(host_end, self._buffer_ready.get(array_id, 0.)),
+            internal_end = reserve(channel, max(host_end, self.__dict__["_buffer_ready"].get(array_id, 0.)),
                                    internal_ns, "write", internal_bytes)
-            completion = reserve(array_resource, max(internal_end, self._array_ready.get(array_id, 0.)),
+            completion = reserve(array_resource, max(internal_end, self.__dict__["_array_ready"].get(array_id, 0.)),
                                  config.page_program_ns)
-            self._array_ready[array_id] = self._buffer_ready[array_id] = completion
+            self.__dict__["_array_ready"][array_id] = self.__dict__["_buffer_ready"][array_id] = completion
             timeline.ready_ns[array_id] = completion
-            self._next_program_page[self._block_key(mapping)] = mapping.page + 1
+            self._set_program_frontier(self._block_key(mapping), mapping.page + 1)
             pages_programmed = 1
         completion = max(base, completion)
         moved = {resource: timeline.bytes_moved.get(resource, 0) - before_bytes[resource]
@@ -880,15 +1120,15 @@ class NandCore:
             logical_bytes += segment.logical_bytes
             array_id = self._array_id(m)
             array_resource = self._array_resource_id(m)
-            array_ready = self._array_ready.get(array_id, 0.0)
-            buffer_ready = self._buffer_ready.get(array_id, 0.0)
+            array_ready = self.__dict__["_array_ready"].get(array_id, 0.0)
+            buffer_ready = self.__dict__["_buffer_ready"].get(array_id, 0.0)
             dependency = max(request.arrival_ns + self.config.front_ns, array_ready, buffer_ready)
             if request.operation is Operation.ERASE:
                 self._invalidate_cache(m, block=True)
                 stage = self._media_stage("BLOCK_ERASE", m, dependency, self.config.block_erase_ns,
                                           eligible_ns=request.arrival_ns+self.config.front_ns)
                 record(stage)
-                self._array_ready[array_id] = stage.end_ns
+                self.__dict__["_array_ready"][array_id] = stage.end_ns
                 self.timeline.ready_ns[array_id] = stage.end_ns
                 completion = max(completion, stage.end_ns)
                 erases += 1
@@ -937,7 +1177,7 @@ class NandCore:
                 record(StageTiming("RMW_INTERNAL_TRANSFER", read_xfer.start_ns, read_xfer.end_ns, read_xfer.resource_id, read_xfer.bytes))
                 internal_bytes += read_xfer.bytes
                 dependency = read_xfer.end_ns
-                self._buffer_ready[array_id] = read_xfer.end_ns
+                self.__dict__["_buffer_ready"][array_id] = read_xfer.end_ns
                 pages_read += 1
             if request.operation is Operation.READ:
                 staged = self._staged_pages.get(self._staged_key(m)) if self._buffered_write_mode else None
@@ -1011,8 +1251,8 @@ class NandCore:
                     cache_slot.ready_ns = internal.end_ns
                     cache_slot.reader_completion_ns = host.end_ns
                 completion = max(completion, host.end_ns)
-                self._array_ready[array_id] = read.end_ns
-                self._buffer_ready[array_id] = internal.end_ns
+                self.__dict__["_array_ready"][array_id] = read.end_ns
+                self.__dict__["_buffer_ready"][array_id] = internal.end_ns
                 self.timeline.ready_ns[array_id] = read.end_ns
             else:
                 if self.config.protocol_mode == "ocp_hbf_0_7" and m.page == 0:
@@ -1020,7 +1260,7 @@ class NandCore:
                     erase = self._media_stage("BLOCK_ERASE", m, dependency, self.config.block_erase_ns,
                                               eligible_ns=request.arrival_ns + self.config.front_ns)
                     record(erase)
-                    self._array_ready[array_id] = erase.end_ns
+                    self.__dict__["_array_ready"][array_id] = erase.end_ns
                     self.timeline.ready_ns[array_id] = erase.end_ns
                     erases += 1
                 host = self.timeline.transfer(
@@ -1032,23 +1272,23 @@ class NandCore:
                 record(StageTiming("HOST_TRANSFER", host.start_ns, host.end_ns, host.resource_id, host.bytes))
                 internal = self.timeline.transfer(
                     self._channel_id(m), segment.internal_transfer_bytes,
-                    max(host.end_ns, self._buffer_ready.get(array_id, 0.0)),
+                    max(host.end_ns, self.__dict__["_buffer_ready"].get(array_id, 0.0)),
                     self.config.internal_bandwidth_gb_s,
                     direction="write",
                 )
                 record(StageTiming("INTERNAL_TRANSFER", internal.start_ns, internal.end_ns, internal.resource_id, internal.bytes))
                 program = self._media_stage("PAGE_PROGRAM", m,
-                                            max(internal.end_ns, self._array_ready.get(array_id, 0.0)),
+                                            max(internal.end_ns, self.__dict__["_array_ready"].get(array_id, 0.0)),
                                             self.config.page_program_ns,
                                             eligible_ns=internal.end_ns)
                 record(program)
                 pages_programmed += 1
                 completion = max(completion, program.end_ns)
-                self._array_ready[array_id] = program.end_ns
-                self._buffer_ready[array_id] = program.end_ns
+                self.__dict__["_array_ready"][array_id] = program.end_ns
+                self.__dict__["_buffer_ready"][array_id] = program.end_ns
                 self.timeline.ready_ns[array_id] = program.end_ns
                 if self.config.protocol_mode == "ocp_hbf_0_7":
-                    self._next_program_page[self._block_key(m)] = m.page + 1
+                    self._set_program_frontier(self._block_key(m), m.page + 1)
         return TransactionResult(
             request_id=request.request_id, operation=request.operation,
             arrival_ns=request.arrival_ns, completion_ns=completion,

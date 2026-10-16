@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
+from functools import cached_property
+from itertools import repeat
+from threading import Lock
 from typing import Callable, Hashable
+
+import numpy as np
 
 from .memory_types import NandConfig
 
@@ -61,13 +66,90 @@ def _intersection(ranges: list[Range], lo: int, hi: int) -> list[Range]:
     return [(max(a, lo), min(b, hi)) for a, b in ranges if a < hi and b > lo]
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class _Page:
     valid: list[Range] = field(default_factory=list)
     dirty: list[Range] = field(default_factory=list)
     slot: int | None = None
     flash: tuple[int, int] | None = None  # physical block id, page within block
-    ready_ns: float = 0.0
+    _ready_ns: float = 0.0
+    _read_state: object = field(default=None, repr=False, compare=False)
+    _read_index: int = field(default=0, repr=False, compare=False)
+
+    @property
+    def ready_ns(self):
+        state = self._read_state
+        return self._ready_ns if state is None else float(state.ready[self._read_index])
+
+    @ready_ns.setter
+    def ready_ns(self, value):
+        if self._read_state is None:
+            self._ready_ns = value
+        else:
+            self._read_state.ready[self._read_index] = value
+
+    def __eq__(self, other):
+        if not isinstance(other, _Page):
+            return NotImplemented
+        return (self.valid, self.dirty, self.slot, self.flash, self.ready_ns) == (
+            other.valid, other.dirty, other.slot, other.flash, other.ready_ns)
+
+
+class _BufferReadState:
+    """Dense page metadata and authoritative read dependencies for one buffer.
+
+    Clean KV pages remain numeric across Decode tokens. Dirty/partial pages
+    still use the ordinary HOST/flash merge path, and every scalar operation
+    sees the same ready value through its page object.
+    """
+
+    __slots__ = ("ready", "valid", "addresses", "plans")
+
+    def __init__(self, size):
+        capacity = 1 << (size - 1).bit_length()
+        self.ready = np.zeros(capacity)
+        self.valid = np.zeros(capacity, dtype=np.bool_)
+        self.addresses = np.full(capacity, -1, dtype=np.int64)
+        self.plans = OrderedDict()
+
+    def ensure(self, index):
+        if index < len(self.ready):
+            return
+        capacity = 1 << index.bit_length()
+        extra = capacity - len(self.ready)
+        self.ready = np.pad(self.ready, (0, extra))
+        self.valid = np.pad(self.valid, (0, extra))
+        self.addresses = np.pad(self.addresses, (0, extra), constant_values=-1)
+
+    def update(self, index, page, address):
+        self.ensure(index)
+        full = page.valid == [(0, PAGE)]
+        clean_address = address if full and not page.dirty and page.slot is None else -1
+        if self.addresses[index] != clean_address or self.valid[index] != full:
+            for bounds in tuple(self.plans):
+                if bounds[0] <= index < bounds[1]:
+                    self.plans.pop(bounds)
+            self.addresses[index] = clean_address
+            self.valid[index] = full
+        if page._read_state is not self:
+            self.ready[index] = page.ready_ns
+            page._read_state, page._read_index = self, index
+
+    def plan(self, first, stop, lanes, pages_per_block):
+        key = first, stop
+        plan = self.plans.get(key)
+        if plan is not None:
+            self.plans.move_to_end(key)
+            return plan
+        addresses = np.frombuffer(self.addresses[first:stop].tobytes(), dtype=np.int64)
+        physical = addresses // PAGE
+        block_ids = physical // (pages_per_block * lanes) * lanes + physical % lanes
+        blocks, inverse = np.unique(block_ids, return_inverse=True)
+        plan = addresses, tuple(blocks.tolist()), inverse
+        if len(self.plans) >= 4:
+            self.plans.popitem(last=False)
+        self.plans[key] = plan
+        return plan
 
 
 @dataclass(frozen=True)
@@ -75,7 +157,7 @@ class _Preload:
     byte_count: int
     block_ranges: tuple[range, ...]
 
-    @property
+    @cached_property
     def block_count(self) -> int:
         return sum(len(span) for span in self.block_ranges)
 
@@ -101,6 +183,57 @@ class _Preload:
         # Loaded weights and their range map never mutate. Snapshots share
         # this descriptor even when it represents tens of millions of pages.
         return self
+
+
+# This cache contains derived, immutable address descriptions only. It never
+# holds controller clocks, residency, program frontiers or other live state.
+# A byte limit also bounds plans for large models with many distinct weights.
+_PRELOAD_READ_PLANS = OrderedDict()
+_PRELOAD_READ_PLAN_BYTES = 0
+_PRELOAD_READ_PLAN_LIMIT = 64 * 1024 * 1024
+_PRELOAD_READ_PLAN_LOCK = Lock()
+
+
+def _preload_read_plan(preload, lanes, pages_per_block, first, stop):
+    global _PRELOAD_READ_PLAN_BYTES
+    key = (preload, lanes, pages_per_block, first, stop)
+    with _PRELOAD_READ_PLAN_LOCK:
+        plan = _PRELOAD_READ_PLANS.get(key)
+        if plan is not None:
+            _PRELOAD_READ_PLANS.move_to_end(key)
+            return plan
+    indexes = np.arange(first, stop, dtype=np.int64)
+    group, within = np.divmod(indexes, lanes * pages_per_block)
+    first_block = group * lanes
+    width = np.minimum(lanes, preload.block_count - first_block)
+    page, lane = np.divmod(within, width)
+    ranks = first_block + lane
+    unique, inverse = np.unique(ranks, return_inverse=True)
+    blocks = tuple(preload.block_at(int(rank)) for rank in unique)
+    physical = np.asarray(blocks, dtype=np.int64)[inverse]
+    addresses = ((physical // lanes * pages_per_block * lanes
+                  + page * lanes + physical % lanes) * PAGE)
+    # Bytes-backed arrays cannot be made writeable by a caller retaining a
+    # view. Repeated Decode accesses reuse these exact validated addresses.
+    addresses = np.frombuffer(addresses.tobytes(), dtype=np.int64)
+    inverse = np.frombuffer(inverse.tobytes(), dtype=np.int64)
+    plan = addresses, blocks, inverse
+    size = addresses.nbytes + inverse.nbytes + len(blocks) * 8
+    if size <= _PRELOAD_READ_PLAN_LIMIT:
+        with _PRELOAD_READ_PLAN_LOCK:
+            # Another scenario may have prepared the same immutable stream
+            # while NumPy released the GIL; do not count that plan twice.
+            previous = _PRELOAD_READ_PLANS.get(key)
+            if previous is not None:
+                _PRELOAD_READ_PLANS.move_to_end(key)
+                return previous
+            while _PRELOAD_READ_PLANS and _PRELOAD_READ_PLAN_BYTES + size > _PRELOAD_READ_PLAN_LIMIT:
+                _, previous = _PRELOAD_READ_PLANS.popitem(last=False)
+                _PRELOAD_READ_PLAN_BYTES -= (previous[0].nbytes + previous[2].nbytes
+                                            + len(previous[1]) * 8)
+            _PRELOAD_READ_PLANS[key] = plan
+            _PRELOAD_READ_PLAN_BYTES += size
+    return plan
 
 
 class _BlockPool:
@@ -146,6 +279,79 @@ class _BlockPool:
         return result
 
 
+_MISSING = object()
+_JOURNALED_MAPS = ("_used", "_slot_ready", "_block_ready")
+
+
+class _JournalDict(dict):
+    """Scalar dependencies/frontiers with first-write transaction journals."""
+
+    __slots__ = ("_journals",)
+
+    def __init__(self, values=()):
+        super().__init__(values)
+        self._journals = []
+
+    def begin(self):
+        token = {"values": {}, "order": None}
+        self._journals.append(token)
+        return token
+
+    def commit(self, token):
+        assert self._journals[-1] is token
+        self._journals.pop()
+
+    def rollback(self, token):
+        self.commit(token)
+        for key, value in token["values"].items():
+            if value is _MISSING:
+                dict.pop(self, key, None)
+            else:
+                dict.__setitem__(self, key, value)
+        if token["order"] is not None:
+            # Deletion is rare (GC), but a restored program-frontier mapping
+            # must retain insertion order because it breaks victim ties.
+            items = [(key, self[key]) for key in token["order"] if key in self]
+            dict.clear(self)
+            dict.update(self, items)
+
+    def _remember(self, key, *, deleting=False):
+        for token in self._journals:
+            values = token["values"]
+            if key not in values:
+                values[key] = self.get(key, _MISSING)
+            if deleting and token["order"] is None:
+                token["order"] = tuple(self)
+
+    def __setitem__(self, key, value):
+        self._remember(key)
+        dict.__setitem__(self, key, value)
+
+    def update_max(self, keys, values):
+        """Commit a unique block stream without a Python setter per block."""
+        previous = list(map(self.get, keys, repeat(_MISSING)))
+        for token in self._journals:
+            saved = token["values"]
+            if not saved:
+                saved.update(zip(keys, previous))
+            else:
+                saved.update((key, value) for key, value in zip(keys, previous) if key not in saved)
+        old_ready = np.asarray(
+            [0.0 if value is _MISSING else value for value in previous]
+            if _MISSING in previous else previous, dtype=np.float64)
+        # max(new, old) retains new on a tie, including signed zero.
+        ready = np.where(np.greater(old_ready, values), old_ready, values).tolist()
+        dict.update(self, zip(keys, ready))
+
+    def pop(self, key, default=_MISSING):
+        if key in self:
+            self._remember(key, deleting=True)
+            return dict.pop(self, key)
+        if default is _MISSING:
+            raise KeyError(key)
+        return default
+
+
 def _copy_controller_state(state, *, include_pages=True):
     """Copy mutable indexes once, sharing only immutable keys and descriptors.
 
@@ -155,17 +361,21 @@ def _copy_controller_state(state, *, include_pages=True):
     the same saved state is restored more than once.
     """
     result = {key: value for key, value in state.items()
-              if key not in {"_pages", "_buffer_pages", "_owners", "_transaction_stack"}}
-    for name in ("_used", "_preloads", "_slot_ready", "_block_ready", "stats"):
+              if key not in {"_pages", "_buffer_pages", "_owners", "_transaction_stack",
+                             "_read_states", "_slots", *_JOURNALED_MAPS}}
+    for name in ("_preloads", "stats"):
         result[name] = state[name].copy()
     if include_pages:
+        for name in _JOURNALED_MAPS:
+            result[name] = state[name].copy()
         result["_pages"] = {
             key: _Page(page.valid.copy(), page.dirty.copy(), page.slot, page.flash, page.ready_ns)
             for key, page in state["_pages"].items()}
         result["_buffer_pages"] = {owner: indexes.copy() for owner, indexes in state["_buffer_pages"].items()}
         result["_owners"] = {block: pages.copy() for block, pages in state["_owners"].items()}
         result["_transaction_stack"] = []
-    for name in ("_resident", "_active", "_slots"):
+        result["_slots"] = state["_slots"].copy()
+    for name in ("_resident", "_active"):
         result[name] = state[name].copy()
     result["_free_blocks"] = state["_free_blocks"].copy()
     return result
@@ -209,16 +419,18 @@ class HbfStagingController:
         self.usable_capacity_bytes = (self._block_count - 1) * config.block_bytes
         self._spare = self._block_count - 1
         self._free_blocks = _BlockPool(0, self._block_count - 1)
-        self._used: dict[int, int] = {}
+        self._used: dict[int, int] = _JournalDict()
         self._owners: dict[int, dict[int, Key]] = {}
         self._preloads: dict[tuple[Hashable, int], _Preload] = {}
+        self._preload_occupied_bytes = 0
         self._pages: dict[Key, _Page] = {}
         self._buffer_pages: dict[tuple[Hashable, int], dict[int, None]] = {}
+        self._read_states = {}
         self._resident: OrderedDict[Key, None] = OrderedDict()
         self._active: deque[int] = deque()
         self._slots = deque(range(host_capacity_bytes // PAGE - 1))
-        self._slot_ready: dict[int, float] = {}
-        self._block_ready: dict[int, float] = {}
+        self._slot_ready: dict[int, float] = _JournalDict()
+        self._block_ready: dict[int, float] = _JournalDict()
         self._scratch_ready = 0.0
         self.stats: dict[str, int] = {}
         self._transaction_stack: list[dict] = []
@@ -229,8 +441,7 @@ class HbfStagingController:
     @property
     def occupied_bytes(self) -> int:
         """Reserved logical media space, including preloaded block padding."""
-        return (len(self._pages) * PAGE
-                + sum(preload.block_count for preload in self._preloads.values()) * self.config.block_bytes)
+        return len(self._pages) * PAGE + self._preload_occupied_bytes
 
     @property
     def host_occupied_bytes(self) -> int:
@@ -261,11 +472,16 @@ class HbfStagingController:
     def restore(self, state: dict) -> None:
         self.__dict__.clear()
         self.__dict__.update(_copy_controller_state(state))
+        self._read_states = {}
+        for name in _JOURNALED_MAPS:
+            self.__dict__[name] = _JournalDict(self.__dict__[name])
 
     def begin_transaction(self):
         """Journal changed pages instead of copying every retained KV page."""
         token = {"state": _copy_controller_state(self.__dict__, include_pages=False),
-                 "pages": {}, "page_ready": {}, "owners": {}, "released_order": {}}
+                 "pages": {}, "page_ready": {}, "owners": {}, "released_order": {},
+                 "read_ready": {},
+                 "maps": {name: self.__dict__[name].begin() for name in _JOURNALED_MAPS}}
         self._transaction_stack.append(token)
         return token
 
@@ -276,9 +492,15 @@ class HbfStagingController:
 
     def commit_transaction(self, token):
         self._finish_transaction(token)
+        for name, journal in token["maps"].items():
+            self.__dict__[name].commit(journal)
 
     def rollback_transaction(self, token):
         self._finish_transaction(token)
+        for name, journal in token["maps"].items():
+            self.__dict__[name].rollback(journal)
+        for state, ready in token["read_ready"].values():
+            state.ready[:len(ready)] = ready
         for key, page in token["pages"].items():
             owner = key[:2]
             if page is None:
@@ -303,6 +525,23 @@ class HbfStagingController:
             else:
                 self._owners[block] = owners
         self.__dict__.update(token["state"])
+        # Rollback is exceptional. Materialize once so restored page objects
+        # cannot retain a plan that described an overwritten/collected page.
+        # Active outer transactions retain their original scalar values.
+        for key, page in self._pages.items():
+            if page._read_state is not None:
+                self._touch_page_ready(key, page)
+                page._ready_ns = page.ready_ns
+                page._read_state = None
+        self._read_states.clear()
+
+    @staticmethod
+    def _ready_before(token, page):
+        state = page._read_state
+        saved = None if state is None else token["read_ready"].get(id(state))
+        if saved is not None and page._read_index < len(saved[1]):
+            return float(saved[1][page._read_index])
+        return page.ready_ns
 
     def _touch_page(self, key):
         for token in self._transaction_stack:
@@ -310,14 +549,63 @@ class HbfStagingController:
                 page = self._pages.get(key)
                 token["pages"][key] = None if page is None else _Page(
                     page.valid.copy(), page.dirty.copy(), page.slot, page.flash,
-                    token["page_ready"].pop(key, page.ready_ns))
+                    token["page_ready"].pop(key, self._ready_before(token, page)))
+
+    def _touch_slots(self):
+        # Most physical tasks only read existing pages. The free HOST queue
+        # is large, but needs an undo copy only when a slot is taken/returned.
+        for token in self._transaction_stack:
+            state = token["state"]
+            if "_slots" not in state:
+                state["_slots"] = self._slots.copy()
 
     def _touch_page_ready(self, key, page):
         # Reads only advance a scalar dependency. Save that scalar until a
         # later write/release in the same transaction requires the full page.
         for token in self._transaction_stack:
             if key not in token["pages"]:
-                token["page_ready"].setdefault(key, page.ready_ns)
+                token["page_ready"].setdefault(key, self._ready_before(token, page))
+
+    def _touch_read_ready(self, state):
+        for token in self._transaction_stack:
+            if id(state) not in token["read_ready"]:
+                token["read_ready"][id(state)] = state, state.ready.copy()
+
+    def _read_state(self, owner):
+        state = self._read_states.get(owner)
+        if state is not None:
+            return state
+        indexes = self._buffer_pages.get(owner, {})
+        if len(indexes) < 16 or 0 not in indexes:
+            return None
+        size = max(indexes) + 1
+        if size > 2 * len(indexes):
+            return None  # Sparse offsets retain the ordinary sparse page map.
+        state = _BufferReadState(size)
+        for index in indexes:
+            page = self._pages[(*owner, index)]
+            address = -1 if page.flash is None else self._address(*page.flash)
+            state.update(index, page, address)
+        self._read_states[owner] = state
+        return state
+
+    def _refresh_read_state(self, key, page):
+        state = self._read_states.get(key[:2])
+        if state is not None:
+            if key[2] >= len(state.ready) and key[2] + 1 > 2 * len(self._buffer_pages[key[:2]]):
+                # A later sparse write must not turn a compact cached prefix
+                # into an allocation proportional to its largest byte offset.
+                for index in self._buffer_pages[key[:2]]:
+                    bound_key = (*key[:2], index)
+                    bound = self._pages[bound_key]
+                    if bound._read_state is state:
+                        self._touch_page_ready(bound_key, bound)
+                        bound._ready_ns = bound.ready_ns
+                        bound._read_state = None
+                self._read_states.pop(key[:2])
+                return
+            address = -1 if page.flash is None else self._address(*page.flash)
+            state.update(key[2], page, address)
 
     def _touch_owners(self, block):
         for token in self._transaction_stack:
@@ -368,6 +656,7 @@ class HbfStagingController:
             raise MemoryError("insufficient HBF space for immutable preload and GC reserve")
         blocks = self._free_blocks.take(blocks_needed)
         self._preloads[owner] = _Preload(byte_count, blocks)
+        self._preload_occupied_bytes += blocks_needed * self.config.block_bytes
         self._count("preload_bytes", byte_count)
         self._count("preload_padding_bytes", blocks_needed * self.config.block_bytes - byte_count)
 
@@ -377,6 +666,7 @@ class HbfStagingController:
             victim = self._pages[key]
             time = self._flush_page(key, victim, time, io)
             self._count("pressure_flushes")
+        self._touch_slots()
         slot = self._slots.popleft()
         return slot, max(time, self._slot_ready.get(slot, 0.0))
 
@@ -436,6 +726,7 @@ class HbfStagingController:
             target_owners[new_index] = key
             page.flash = (target, new_index)
             page.ready_ns = time
+            self._refresh_read_state(key, page)
         self._touch_owners(victim)
         self._touch_owners(target)
         self._owners.pop(victim, None)
@@ -488,7 +779,9 @@ class HbfStagingController:
         self._resident.pop(key)
         page.dirty = []
         page.ready_ns = time
+        self._refresh_read_state(key, page)
         self._slot_ready[slot] = time
+        self._touch_slots()
         self._slots.append(slot)
         return time
 
@@ -534,6 +827,7 @@ class HbfStagingController:
                     self._owners.get(page.flash[0], {}).pop(page.flash[1], None)
                 if page.slot is not None:
                     self._slot_ready[page.slot] = old_ready
+                    self._touch_slots()
                     self._slots.append(page.slot)
                     self._resident.pop(key)
                 page.flash = physical
@@ -544,6 +838,7 @@ class HbfStagingController:
                 page.valid = [(0, PAGE)]
                 page.dirty = []
                 page.ready_ns = time
+                self._refresh_read_state(key, page)
                 completion = max(completion, time)
                 continue
             if page.slot is None:
@@ -558,6 +853,7 @@ class HbfStagingController:
             page.ready_ns = time
             if page.dirty == [(0, PAGE)] or (not was_full and page.valid == [(0, PAGE)]):
                 time = self._flush_page(key, page, time, io)
+            self._refresh_read_state(key, page)
             completion = max(completion, time)
         return completion
 
@@ -590,6 +886,8 @@ class HbfStagingController:
         self.commit_transaction(token)
         completion = time_ns
         indexes = self._buffer_pages.setdefault((buffer_id, generation), {})
+        if isinstance(completions, np.ndarray):
+            completions = completions.tolist()
         for index, physical, ready, time in zip(range(first, stop), locations, old_ready, completions):
             key = (buffer_id, generation, index)
             self._touch_page(key)
@@ -603,6 +901,7 @@ class HbfStagingController:
                     self._owners.get(page.flash[0], {}).pop(page.flash[1], None)
                 if page.slot is not None:
                     self._slot_ready[page.slot] = ready
+                    self._touch_slots()
                     self._slots.append(page.slot)
                     self._resident.pop(key)
                 page.flash = physical
@@ -612,6 +911,7 @@ class HbfStagingController:
                 page.ready_ns = time
             self._touch_owners(physical[0])
             self._owners.setdefault(physical[0], {})[physical[1]] = key
+            self._refresh_read_state(key, self._pages[key])
             self._block_ready[physical[0]] = max(time, self._block_ready.get(physical[0], 0.0))
             completion = max(completion, time)
         self._count("flash_write_bytes", (stop - first) * PAGE)
@@ -626,6 +926,9 @@ class HbfStagingController:
             return float(time_ns)
         preload = self._preloads.get((buffer_id, generation))
         first, stop = offset // PAGE, (offset + byte_count + PAGE - 1) // PAGE
+        bulk_read = getattr(io, "read_flash_pages", None)
+        read_state = (self._read_state((buffer_id, generation))
+                      if preload is None and bulk_read is not None else None)
         # Validate the whole read before submitting any hardware work.
         if preload is not None:
             if offset + byte_count > preload.byte_count:
@@ -633,7 +936,12 @@ class HbfStagingController:
                     f"{buffer_id!r}, generation={generation}, offset={offset}, "
                     f"size={byte_count}, preloaded_size={preload.byte_count}")
         else:
-            for index in range(first, stop):
+            unchecked = range(first, stop)
+            if read_state is not None:
+                checked_stop = min(stop, len(read_state.valid))
+                unchecked = (np.flatnonzero(~read_state.valid[first:checked_stop]) + first).tolist()
+                unchecked.extend(range(max(first, checked_stop), stop))
+            for index in unchecked:
                 lo, hi = max(0, offset - index * PAGE), min(PAGE, offset + byte_count - index * PAGE)
                 page = self._pages.get((buffer_id, generation, index))
                 if page is None or _subtract([(lo, hi)], page.valid):
@@ -643,7 +951,6 @@ class HbfStagingController:
                         f"valid={None if page is None else page.valid}")
         completion = float(time_ns)
         self._count("logical_read_bytes", byte_count)
-        bulk_read = getattr(io, "read_flash_pages", None)
         index = first
         while index < stop:
             time = float(time_ns)
@@ -651,12 +958,17 @@ class HbfStagingController:
             if bulk_read is not None and lo == 0 and hi == PAGE:
                 end = (offset + byte_count) // PAGE
                 if preload is None:
-                    end = index
-                    while end < (offset + byte_count) // PAGE:
-                        page = self._pages[(buffer_id, generation, end)]
-                        if page.dirty or page.flash is None:
-                            break
-                        end += 1
+                    if read_state is not None:
+                        dirty = np.flatnonzero(read_state.addresses[index:end] < 0)
+                        if len(dirty):
+                            end = index + int(dirty[0])
+                    else:
+                        end = index
+                        while end < (offset + byte_count) // PAGE:
+                            page = self._pages[(buffer_id, generation, end)]
+                            if page.dirty or page.flash is None:
+                                break
+                            end += 1
                 if end - index >= 16:
                     bulk_end = self._read_full_pages(buffer_id, generation, index, end,
                                                      preload, time, bulk_read)
@@ -700,25 +1012,46 @@ class HbfStagingController:
         # Preserve the complete-page prefix of KV reads even when their last
         # bytes still reside in HOST DRAM. Partial/dirty pages execute in the
         # original order around this clean run.
-        pages = None if preload is not None else [
+        read_state = self._read_states.get((buffer_id, generation)) if preload is None else None
+        if preload is not None or read_state is not None:
+            if preload is not None:
+                addresses, blocks, inverse = _preload_read_plan(
+                    preload, self._lanes, self.config.pages_per_block, first, stop)
+                arrivals = time_ns
+            else:
+                addresses, blocks, inverse = read_state.plan(
+                    first, stop, self._lanes, self.config.pages_per_block)
+                arrivals = np.maximum(time_ns, read_state.ready[first:stop])
+            completions = bulk_read(addresses, arrivals)
+            if completions is None:
+                return None
+            if read_state is not None:
+                self._touch_read_ready(read_state)
+                read_state.ready[first:stop] = completions
+            self._count("flash_read_bytes", (stop - first) * PAGE)
+            self._count("read_hbf_bytes", (stop - first) * PAGE)
+            ready = np.full(len(blocks), -np.inf)
+            np.maximum.at(ready, inverse, completions)
+            self._block_ready.update_max(blocks, ready)
+            return max(time_ns, float(ready.max()))
+        pages = [
             self._pages[(buffer_id, generation, index)] for index in range(first, stop)]
-        locations = ([preload.page_location(index, self._lanes, self.config.pages_per_block)
-                      for index in range(first, stop)] if preload is not None
-                     else [page.flash for page in pages])
-        arrivals = time_ns if pages is None else [max(time_ns, page.ready_ns) for page in pages]
+        locations = [page.flash for page in pages]
+        arrivals = [max(time_ns, page.ready_ns) for page in pages]
         completions = bulk_read([self._address(*location) for location in locations], arrivals)
         if completions is None:
             return None
         self._count("flash_read_bytes", (stop - first) * PAGE)
         self._count("read_hbf_bytes", (stop - first) * PAGE)
         completion = time_ns
+        if isinstance(completions, np.ndarray):
+            completions = completions.tolist()
         for index, (block, _page), time in zip(range(first, stop), locations, completions):
-            if pages is not None:
-                page = pages[index - first]
-                self._touch_page_ready((buffer_id, generation, index), page)
-                page.ready_ns = time
-                if page.slot is not None:
-                    self._resident.move_to_end((buffer_id, generation, index))
+            page = pages[index - first]
+            self._touch_page_ready((buffer_id, generation, index), page)
+            page.ready_ns = time
+            if page.slot is not None:
+                self._resident.move_to_end((buffer_id, generation, index))
             self._block_ready[block] = max(time, self._block_ready.get(block, 0.0))
             completion = max(completion, time)
         return completion
@@ -730,11 +1063,57 @@ class HbfStagingController:
             time = max(time, self._flush_page(key, self._pages[key], float(time_ns), io))
         return time
 
+    def _release_clean_pages(self, owner, indexes, time):
+        """Discard a clean numeric buffer without reconstructing each page.
+
+        Only a committed release can discard the objects directly. A live
+        transaction still needs its per-page undo entries, and HOST-resident
+        tails still release their slots in the original page order.
+        """
+        state = self._read_states.get(owner)
+        if state is None or self._transaction_stack or not indexes:
+            return None
+        selected = np.fromiter(indexes, dtype=np.int64, count=len(indexes))
+        addresses, ready = state.addresses[selected], state.ready[selected]
+        if (np.any(addresses < 0) or not np.isfinite(ready).all()
+                or not np.isfinite(time)):
+            return None
+        # argmax retains the first equal maximum (including signed zero),
+        # matching max(time, page.ready_ns) in the buffer's insertion order.
+        time = max(time, float(ready[int(np.argmax(ready))]))
+        physical = addresses // PAGE
+        physical_blocks = (physical // (self.config.pages_per_block * self._lanes)
+                           * self._lanes + physical % self._lanes)
+        blocks, inverse, counts = np.unique(physical_blocks,
+                                            return_inverse=True, return_counts=True)
+        partial = []
+        for position, (block, count) in enumerate(zip(blocks.tolist(), counts.tolist())):
+            owners = self._owners.get(block)
+            if owners is None:
+                continue
+            if len(owners) == count:
+                owners.clear()
+            else:
+                partial.append((position, owners))
+        if partial:
+            order = np.argsort(inverse, kind="stable")
+            ends = np.cumsum(counts)
+            pages = physical // self._lanes % self.config.pages_per_block
+            for position, owners in partial:
+                start = 0 if position == 0 else int(ends[position - 1])
+                numbers = pages[order[start:int(ends[position])]].tolist()
+                deque(map(owners.pop, numbers, repeat(None)), maxlen=0)
+        # Both map and zip iterate in C; each physical mapping is still
+        # removed, and existing dictionaries keep their identity and order.
+        deque(map(self._pages.pop, zip(repeat(owner[0]), repeat(owner[1]), indexes)), maxlen=0)
+        return time
+
     def release(self, buffer_id: Hashable, generation: int, time_ns: float = 0.0) -> float:
         owner = (buffer_id, generation)
         time = float(time_ns)
         preload = self._preloads.pop(owner, None)
         if preload is not None:
+            self._preload_occupied_bytes -= preload.block_count * self.config.block_bytes
             for block in self._block_ready:
                 if not any(block in span for span in preload.block_ranges):
                     continue
@@ -743,21 +1122,31 @@ class HbfStagingController:
                 time = max(time, self._block_ready.get(block, 0.0))
             self._free_blocks.extend_ranges(preload.block_ranges)
         indexes = self._buffer_pages.pop(owner, ())
+        journaled = bool(self._transaction_stack)
+        clean_time = self._release_clean_pages(owner, indexes, time)
+        if clean_time is not None:
+            self._read_states.pop(owner)
+            self._count("released_buffers")
+            return clean_time
         for token in self._transaction_stack:
             if owner not in token["released_order"]:
                 token["released_order"][owner] = tuple(indexes)
         for index in indexes:
             key = (*owner, index)
-            self._touch_page(key)
+            if journaled:
+                self._touch_page(key)
             page = self._pages.pop(key)
             time = max(time, page.ready_ns)
             if page.slot is not None:
                 self._slot_ready[page.slot] = time
+                self._touch_slots()
                 self._slots.append(page.slot)
                 self._resident.pop(key)
             if page.flash is not None:
-                self._touch_owners(page.flash[0])
+                if journaled:
+                    self._touch_owners(page.flash[0])
                 self._owners.get(page.flash[0], {}).pop(page.flash[1], None)
+        self._read_states.pop(owner, None)
         self._count("released_buffers")
         return time
 

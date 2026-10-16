@@ -1,6 +1,14 @@
 # HBM 仿真执行速度优化
 
-2026-10-16 更新：B200 全 HBM/全 HBF 扫描期间进一步优化了状态维护、物理任务执行和独立 HBM 通道并行。最新完整请求耗时、数值等价结果及适用范围见 [B200 扫描仿真速度优化](../artifacts/scan_runtime_optimization/report.md)。下文保留 2026-10-15 第一轮优化记录，不能代表当前全部实现。
+2026-10-16 更新：B200 全 HBM/全 HBF 的本轮 Decode 优化已结束，用户已要求提交推送后恢复正式扫描，实时进度见 [扫描报告](../artifacts/b200_hbm_hbf_0_5b_7b_20261016/report.md)。最终 0.5B/64K 对照 HBM 约 6.40×、HBF 约 5.63×；完整结果与基线一致，十倍目标未达到。三次额外尝试均无稳定整步收益，已撤销。详情见 [Decode 仿真速度优化结果](../artifacts/decode_runtime_optimization/report.md)；前一轮完整请求优化见 [B200 扫描仿真速度优化](../artifacts/scan_runtime_optimization/report.md)。下文保留 2026-10-15 第一轮优化记录，不能代表当前全部实现。
+
+当前速度测量使用 Numba 数值核心和四个同源码 Cython 辅助模块。项目 Python 环境需要 NumPy、Numba、Cython、setuptools，编译还需要本机 C 编译器（Windows 使用 MSVC）。修改辅助模块源码后，先重建扩展，避免 Python 继续加载旧的本地二进制：
+
+```powershell
+.venv/Scripts/python.exe scripts/build_resource_ledger.py --inplace
+```
+
+扩展保留浮点运算顺序，未启用 fast-math。生成文件位于 `tmp/resource_ledger` 和源码目录，均不入库。没有扩展时同一份 Python 源码仍可执行，但不能用其速度代替启用扩展的测量。
 
 本轮优化减少仿真器自身的计算和状态处理开销。模型、硬件参数、每条内存命令的执行规则和预测精度保持原样。性能测量和等价检查见 [本轮结果](../artifacts/hbm_execution_performance_20261015/report.md)。
 

@@ -1,0 +1,3860 @@
+{
+  "architecture": "HBM",
+  "model_id": "qwen2_5-0_5b",
+  "prompt_tokens": 32,
+  "output_tokens": 9,
+  "status": "completed",
+  "ttft_ns": 953582.4365714286,
+  "tpot_ns": 814273.728,
+  "request_metrics": {
+    "request_id": "scan-request",
+    "status": "finished",
+    "arrival_ns": 0.0,
+    "start_ns": 14379.146666666666,
+    "first_token_ns": 953582.4365714286,
+    "finish_ns": 7467772.260571429,
+    "queue_delay_ns": 14379.146666666666,
+    "ttft_ns": 953582.4365714286,
+    "tpot_ns": 814273.728,
+    "prompt_tokens": 32,
+    "requested_output_tokens": 9,
+    "visible_output_tokens": 9,
+    "proposed_tokens": 9,
+    "accepted_tokens": 9,
+    "preemptions": 0,
+    "swaps": 0,
+    "recomputes": 0,
+    "deadline_met": null,
+    "rejection_reason": null,
+    "engine_start_ns": null
+  },
+  "batch_count": 9,
+  "physical_execution_scope": "persistent_live_kernel",
+  "resource_busy_ns": {
+    "cpu0.control_cache": 108.0,
+    "cpu0.h2d_dma": 7762.5,
+    "cpu0.iommu": 2250.0,
+    "cpu0.l1d": 18.0,
+    "cpu0.l2": 72.0,
+    "cpu0.l3": 324.0,
+    "cpu0.pack": 480.0,
+    "cpu0.pipeline": 1924.166666666667,
+    "cpu0.scheduler": 5201.666666666666,
+    "gpu0.command_processor": 45000.0,
+    "gpu0.command_queue": 2250.0,
+    "gpu0.frontend": 3492000.0,
+    "gpu0.l1_shared": 424194.3360000001,
+    "gpu0.l2": 1057908.6720000012,
+    "gpu0.mmu_tlb": 21600.0,
+    "gpu0.scalar": 5623.712650985381,
+    "gpu0.sfu": 2994.406996746567,
+    "gpu0.tensor_core": 124145.072149623,
+    "hbm0.hbm_fabric:dram:column_command:0:0": 1119303.6799931524,
+    "hbm0.hbm_fabric:dram:column_command:0:1": 1119302.6559931522,
+    "hbm0.hbm_fabric:dram:column_command:0:10": 1119485.9519931895,
+    "hbm0.hbm_fabric:dram:column_command:0:11": 1119485.9519931895,
+    "hbm0.hbm_fabric:dram:column_command:0:12": 1119475.7119931874,
+    "hbm0.hbm_fabric:dram:column_command:0:13": 1119475.7119931874,
+    "hbm0.hbm_fabric:dram:column_command:0:14": 1119082.4959931073,
+    "hbm0.hbm_fabric:dram:column_command:0:15": 1119082.4959931073,
+    "hbm0.hbm_fabric:dram:column_command:0:2": 1119302.6559931522,
+    "hbm0.hbm_fabric:dram:column_command:0:3": 1119302.143993152,
+    "hbm0.hbm_fabric:dram:column_command:0:4": 1119291.3919931499,
+    "hbm0.hbm_fabric:dram:column_command:0:5": 1119290.3679931497,
+    "hbm0.hbm_fabric:dram:column_command:0:6": 1119486.9759931897,
+    "hbm0.hbm_fabric:dram:column_command:0:7": 1119290.3679931497,
+    "hbm0.hbm_fabric:dram:column_command:0:8": 1119290.3679931497,
+    "hbm0.hbm_fabric:dram:column_command:0:9": 1119289.3439931495,
+    "hbm0.hbm_fabric:dram:column_command:1:0": 1119072.2559931052,
+    "hbm0.hbm_fabric:dram:column_command:1:1": 1119072.2559931052,
+    "hbm0.hbm_fabric:dram:column_command:1:10": 1118878.7199930658,
+    "hbm0.hbm_fabric:dram:column_command:1:11": 1118878.7199930658,
+    "hbm0.hbm_fabric:dram:column_command:1:12": 1118885.8879930673,
+    "hbm0.hbm_fabric:dram:column_command:1:13": 1118884.863993067,
+    "hbm0.hbm_fabric:dram:column_command:1:14": 1118688.255993027,
+    "hbm0.hbm_fabric:dram:column_command:1:15": 1118688.255993027,
+    "hbm0.hbm_fabric:dram:column_command:1:2": 1119072.2559931052,
+    "hbm0.hbm_fabric:dram:column_command:1:3": 1119072.2559931052,
+    "hbm0.hbm_fabric:dram:column_command:1:4": 1118872.5759930646,
+    "hbm0.hbm_fabric:dram:column_command:1:5": 1118872.5759930646,
+    "hbm0.hbm_fabric:dram:column_command:1:6": 1118872.5759930646,
+    "hbm0.hbm_fabric:dram:column_command:1:7": 1118872.5759930646,
+    "hbm0.hbm_fabric:dram:column_command:1:8": 1118878.7199930658,
+    "hbm0.hbm_fabric:dram:column_command:1:9": 1118878.7199930658,
+    "hbm0.hbm_fabric:dram:column_command:2:0": 1118697.471993029,
+    "hbm0.hbm_fabric:dram:column_command:2:1": 1118697.471993029,
+    "hbm0.hbm_fabric:dram:column_command:2:10": 1118679.0399930251,
+    "hbm0.hbm_fabric:dram:column_command:2:11": 1118679.0399930251,
+    "hbm0.hbm_fabric:dram:column_command:2:12": 1118666.7519930226,
+    "hbm0.hbm_fabric:dram:column_command:2:13": 1118666.7519930226,
+    "hbm0.hbm_fabric:dram:column_command:2:14": 1118666.7519930226,
+    "hbm0.hbm_fabric:dram:column_command:2:15": 1118666.7519930226,
+    "hbm0.hbm_fabric:dram:column_command:2:2": 1118697.471993029,
+    "hbm0.hbm_fabric:dram:column_command:2:3": 1118697.471993029,
+    "hbm0.hbm_fabric:dram:column_command:2:4": 1118692.3519930278,
+    "hbm0.hbm_fabric:dram:column_command:2:5": 1118691.3279930276,
+    "hbm0.hbm_fabric:dram:column_command:2:6": 1118691.3279930276,
+    "hbm0.hbm_fabric:dram:column_command:2:7": 1118691.3279930276,
+    "hbm0.hbm_fabric:dram:column_command:2:8": 1118680.0639930253,
+    "hbm0.hbm_fabric:dram:column_command:2:9": 1118679.0399930251,
+    "hbm0.hbm_fabric:dram:column_command:3:0": 1118663.679993022,
+    "hbm0.hbm_fabric:dram:column_command:3:1": 1118661.6319930216,
+    "hbm0.hbm_fabric:dram:column_command:3:10": 1118653.43999302,
+    "hbm0.hbm_fabric:dram:column_command:3:11": 1118653.43999302,
+    "hbm0.hbm_fabric:dram:column_command:3:12": 1118650.3679930193,
+    "hbm0.hbm_fabric:dram:column_command:3:13": 1118650.3679930193,
+    "hbm0.hbm_fabric:dram:column_command:3:14": 1118650.3679930193,
+    "hbm0.hbm_fabric:dram:column_command:3:15": 1118650.3679930193,
+    "hbm0.hbm_fabric:dram:column_command:3:2": 1118661.6319930216,
+    "hbm0.hbm_fabric:dram:column_command:3:3": 1118661.6319930216,
+    "hbm0.hbm_fabric:dram:column_command:3:4": 1118649.343993019,
+    "hbm0.hbm_fabric:dram:column_command:3:5": 1118649.343993019,
+    "hbm0.hbm_fabric:dram:column_command:3:6": 1118649.343993019,
+    "hbm0.hbm_fabric:dram:column_command:3:7": 1118649.343993019,
+    "hbm0.hbm_fabric:dram:column_command:3:8": 1118654.4639930201,
+    "hbm0.hbm_fabric:dram:column_command:3:9": 1118653.43999302,
+    "hbm0.hbm_fabric:dram:column_command:4:0": 1120586.7519934138,
+    "hbm0.hbm_fabric:dram:column_command:4:1": 1120575.4879934115,
+    "hbm0.hbm_fabric:dram:column_command:4:10": 1120555.0079934073,
+    "hbm0.hbm_fabric:dram:column_command:4:11": 1120555.0079934073,
+    "hbm0.hbm_fabric:dram:column_command:4:12": 1120550.9119934065,
+    "hbm0.hbm_fabric:dram:column_command:4:13": 1120550.9119934065,
+    "hbm0.hbm_fabric:dram:column_command:4:14": 1120550.9119934065,
+    "hbm0.hbm_fabric:dram:column_command:4:15": 1120550.9119934065,
+    "hbm0.hbm_fabric:dram:column_command:4:2": 1120567.2959934098,
+    "hbm0.hbm_fabric:dram:column_command:4:3": 1120567.2959934098,
+    "hbm0.hbm_fabric:dram:column_command:4:4": 1120570.3679934104,
+    "hbm0.hbm_fabric:dram:column_command:4:5": 1120570.3679934104,
+    "hbm0.hbm_fabric:dram:column_command:4:6": 1120570.3679934104,
+    "hbm0.hbm_fabric:dram:column_command:4:7": 1120569.3439934102,
+    "hbm0.hbm_fabric:dram:column_command:4:8": 1120555.0079934073,
+    "hbm0.hbm_fabric:dram:column_command:4:9": 1120555.0079934073,
+    "hbm0.hbm_fabric:dram:column_command:5:0": 1120538.623993404,
+    "hbm0.hbm_fabric:dram:column_command:5:1": 1120538.623993404,
+    "hbm0.hbm_fabric:dram:column_command:5:10": 1120521.2159934004,
+    "hbm0.hbm_fabric:dram:column_command:5:11": 1120521.2159934004,
+    "hbm0.hbm_fabric:dram:column_command:5:12": 1120229.375993341,
+    "hbm0.hbm_fabric:dram:column_command:5:13": 1120131.071993321,
+    "hbm0.hbm_fabric:dram:column_command:5:14": 1120131.071993321,
+    "hbm0.hbm_fabric:dram:column_command:5:15": 1120131.071993321,
+    "hbm0.hbm_fabric:dram:column_command:5:2": 1120538.623993404,
+    "hbm0.hbm_fabric:dram:column_command:5:3": 1120538.623993404,
+    "hbm0.hbm_fabric:dram:column_command:5:4": 1120527.3599934017,
+    "hbm0.hbm_fabric:dram:column_command:5:5": 1120526.3359934015,
+    "hbm0.hbm_fabric:dram:column_command:5:6": 1120526.3359934015,
+    "hbm0.hbm_fabric:dram:column_command:5:7": 1120526.3359934015,
+    "hbm0.hbm_fabric:dram:column_command:5:8": 1120521.2159934004,
+    "hbm0.hbm_fabric:dram:column_command:5:9": 1120521.2159934004,
+    "hbm0.hbm_fabric:dram:column_command:6:0": 1120156.6719933262,
+    "hbm0.hbm_fabric:dram:column_command:6:1": 1120155.647993326,
+    "hbm0.hbm_fabric:dram:column_command:6:10": 1120313.343993358,
+    "hbm0.hbm_fabric:dram:column_command:6:11": 1120313.343993358,
+    "hbm0.hbm_fabric:dram:column_command:6:12": 1120299.0079933552,
+    "hbm0.hbm_fabric:dram:column_command:6:13": 1120297.983993355,
+    "hbm0.hbm_fabric:dram:column_command:6:14": 1120297.983993355,
+    "hbm0.hbm_fabric:dram:column_command:6:15": 1120297.983993355,
+    "hbm0.hbm_fabric:dram:column_command:6:2": 1120155.647993326,
+    "hbm0.hbm_fabric:dram:column_command:6:3": 1120147.4559933243,
+    "hbm0.hbm_fabric:dram:column_command:6:4": 1120122.8799933193,
+    "hbm0.hbm_fabric:dram:column_command:6:5": 1120122.8799933193,
+    "hbm0.hbm_fabric:dram:column_command:6:6": 1120122.8799933193,
+    "hbm0.hbm_fabric:dram:column_command:6:7": 1120122.8799933193,
+    "hbm0.hbm_fabric:dram:column_command:6:8": 1120116.735993318,
+    "hbm0.hbm_fabric:dram:column_command:6:9": 1120116.735993318,
+    "hbm0.hbm_fabric:dram:column_command:7:0": 1120284.6719933522,
+    "hbm0.hbm_fabric:dram:column_command:7:1": 1120088.0639933122,
+    "hbm0.hbm_fabric:dram:column_command:7:10": 1119676.4159932283,
+    "hbm0.hbm_fabric:dram:column_command:7:11": 1119676.4159932283,
+    "hbm0.hbm_fabric:dram:column_command:7:12": 1119293.4399931503,
+    "hbm0.hbm_fabric:dram:column_command:7:13": 1119293.4399931503,
+    "hbm0.hbm_fabric:dram:column_command:7:14": 1119293.4399931503,
+    "hbm0.hbm_fabric:dram:column_command:7:15": 1119293.4399931503,
+    "hbm0.hbm_fabric:dram:column_command:7:2": 1120088.0639933122,
+    "hbm0.hbm_fabric:dram:column_command:7:3": 1120088.0639933122,
+    "hbm0.hbm_fabric:dram:column_command:7:4": 1119689.727993231,
+    "hbm0.hbm_fabric:dram:column_command:7:5": 1119689.727993231,
+    "hbm0.hbm_fabric:dram:column_command:7:6": 1119689.727993231,
+    "hbm0.hbm_fabric:dram:column_command:7:7": 1119689.727993231,
+    "hbm0.hbm_fabric:dram:column_command:7:8": 1119677.4399932285,
+    "hbm0.hbm_fabric:dram:column_command:7:9": 1119676.4159932283,
+    "hbm0.hbm_fabric:dram:data:0": 1119303.6799806098,
+    "hbm0.hbm_fabric:dram:data:1": 1119303.6799806098,
+    "hbm0.hbm_fabric:dram:data:10": 1119290.36798061,
+    "hbm0.hbm_fabric:dram:data:100": 1118661.631980625,
+    "hbm0.hbm_fabric:dram:data:101": 1118661.631980625,
+    "hbm0.hbm_fabric:dram:data:102": 1118661.631980625,
+    "hbm0.hbm_fabric:dram:data:103": 1118661.631980625,
+    "hbm0.hbm_fabric:dram:data:104": 1118649.3439806253,
+    "hbm0.hbm_fabric:dram:data:105": 1118649.3439806253,
+    "hbm0.hbm_fabric:dram:data:106": 1118649.3439806253,
+    "hbm0.hbm_fabric:dram:data:107": 1118649.3439806253,
+    "hbm0.hbm_fabric:dram:data:108": 1118649.3439806253,
+    "hbm0.hbm_fabric:dram:data:109": 1118649.3439806253,
+    "hbm0.hbm_fabric:dram:data:11": 1119290.36798061,
+    "hbm0.hbm_fabric:dram:data:110": 1118649.3439806253,
+    "hbm0.hbm_fabric:dram:data:111": 1118649.3439806253,
+    "hbm0.hbm_fabric:dram:data:112": 1118654.4639806252,
+    "hbm0.hbm_fabric:dram:data:113": 1118654.4639806252,
+    "hbm0.hbm_fabric:dram:data:114": 1118653.4399806252,
+    "hbm0.hbm_fabric:dram:data:115": 1118653.4399806252,
+    "hbm0.hbm_fabric:dram:data:116": 1118653.4399806252,
+    "hbm0.hbm_fabric:dram:data:117": 1118653.4399806252,
+    "hbm0.hbm_fabric:dram:data:118": 1118653.4399806252,
+    "hbm0.hbm_fabric:dram:data:119": 1118653.4399806252,
+    "hbm0.hbm_fabric:dram:data:12": 1119486.9759806055,
+    "hbm0.hbm_fabric:dram:data:120": 1118650.3679806252,
+    "hbm0.hbm_fabric:dram:data:121": 1118650.3679806252,
+    "hbm0.hbm_fabric:dram:data:122": 1118650.3679806252,
+    "hbm0.hbm_fabric:dram:data:123": 1118650.3679806252,
+    "hbm0.hbm_fabric:dram:data:124": 1118650.3679806252,
+    "hbm0.hbm_fabric:dram:data:125": 1118650.3679806252,
+    "hbm0.hbm_fabric:dram:data:126": 1118650.3679806252,
+    "hbm0.hbm_fabric:dram:data:127": 1118650.3679806252,
+    "hbm0.hbm_fabric:dram:data:128": 1120586.7519805795,
+    "hbm0.hbm_fabric:dram:data:129": 1120586.7519805795,
+    "hbm0.hbm_fabric:dram:data:13": 1119486.9759806055,
+    "hbm0.hbm_fabric:dram:data:130": 1120575.4879805797,
+    "hbm0.hbm_fabric:dram:data:131": 1120575.4879805797,
+    "hbm0.hbm_fabric:dram:data:132": 1120567.29598058,
+    "hbm0.hbm_fabric:dram:data:133": 1120567.29598058,
+    "hbm0.hbm_fabric:dram:data:134": 1120567.29598058,
+    "hbm0.hbm_fabric:dram:data:135": 1120567.29598058,
+    "hbm0.hbm_fabric:dram:data:136": 1120570.3679805798,
+    "hbm0.hbm_fabric:dram:data:137": 1120570.3679805798,
+    "hbm0.hbm_fabric:dram:data:138": 1120570.3679805798,
+    "hbm0.hbm_fabric:dram:data:139": 1120570.3679805798,
+    "hbm0.hbm_fabric:dram:data:14": 1119290.36798061,
+    "hbm0.hbm_fabric:dram:data:140": 1120570.3679805798,
+    "hbm0.hbm_fabric:dram:data:141": 1120570.3679805798,
+    "hbm0.hbm_fabric:dram:data:142": 1120570.3679805798,
+    "hbm0.hbm_fabric:dram:data:143": 1120568.31998058,
+    "hbm0.hbm_fabric:dram:data:144": 1120555.0079805802,
+    "hbm0.hbm_fabric:dram:data:145": 1120555.0079805802,
+    "hbm0.hbm_fabric:dram:data:146": 1120555.0079805802,
+    "hbm0.hbm_fabric:dram:data:147": 1120555.0079805802,
+    "hbm0.hbm_fabric:dram:data:148": 1120555.0079805802,
+    "hbm0.hbm_fabric:dram:data:149": 1120555.0079805802,
+    "hbm0.hbm_fabric:dram:data:15": 1119290.36798061,
+    "hbm0.hbm_fabric:dram:data:150": 1120555.0079805802,
+    "hbm0.hbm_fabric:dram:data:151": 1120555.0079805802,
+    "hbm0.hbm_fabric:dram:data:152": 1120550.9119805803,
+    "hbm0.hbm_fabric:dram:data:153": 1120550.9119805803,
+    "hbm0.hbm_fabric:dram:data:154": 1120550.9119805803,
+    "hbm0.hbm_fabric:dram:data:155": 1120550.9119805803,
+    "hbm0.hbm_fabric:dram:data:156": 1120550.9119805803,
+    "hbm0.hbm_fabric:dram:data:157": 1120550.9119805803,
+    "hbm0.hbm_fabric:dram:data:158": 1120550.9119805803,
+    "hbm0.hbm_fabric:dram:data:159": 1120550.9119805803,
+    "hbm0.hbm_fabric:dram:data:16": 1119290.36798061,
+    "hbm0.hbm_fabric:dram:data:160": 1120538.6239805806,
+    "hbm0.hbm_fabric:dram:data:161": 1120538.6239805806,
+    "hbm0.hbm_fabric:dram:data:162": 1120538.6239805806,
+    "hbm0.hbm_fabric:dram:data:163": 1120538.6239805806,
+    "hbm0.hbm_fabric:dram:data:164": 1120538.6239805806,
+    "hbm0.hbm_fabric:dram:data:165": 1120538.6239805806,
+    "hbm0.hbm_fabric:dram:data:166": 1120538.6239805806,
+    "hbm0.hbm_fabric:dram:data:167": 1120538.6239805806,
+    "hbm0.hbm_fabric:dram:data:168": 1120527.3599805809,
+    "hbm0.hbm_fabric:dram:data:169": 1120527.3599805809,
+    "hbm0.hbm_fabric:dram:data:17": 1119290.36798061,
+    "hbm0.hbm_fabric:dram:data:170": 1120526.335980581,
+    "hbm0.hbm_fabric:dram:data:171": 1120526.335980581,
+    "hbm0.hbm_fabric:dram:data:172": 1120526.335980581,
+    "hbm0.hbm_fabric:dram:data:173": 1120526.335980581,
+    "hbm0.hbm_fabric:dram:data:174": 1120526.335980581,
+    "hbm0.hbm_fabric:dram:data:175": 1120526.335980581,
+    "hbm0.hbm_fabric:dram:data:176": 1120521.215980581,
+    "hbm0.hbm_fabric:dram:data:177": 1120521.215980581,
+    "hbm0.hbm_fabric:dram:data:178": 1120521.215980581,
+    "hbm0.hbm_fabric:dram:data:179": 1120521.215980581,
+    "hbm0.hbm_fabric:dram:data:18": 1119289.3439806101,
+    "hbm0.hbm_fabric:dram:data:180": 1120521.215980581,
+    "hbm0.hbm_fabric:dram:data:181": 1120521.215980581,
+    "hbm0.hbm_fabric:dram:data:182": 1120521.215980581,
+    "hbm0.hbm_fabric:dram:data:183": 1120521.215980581,
+    "hbm0.hbm_fabric:dram:data:184": 1120327.6799805856,
+    "hbm0.hbm_fabric:dram:data:185": 1120131.0719805902,
+    "hbm0.hbm_fabric:dram:data:186": 1120131.0719805902,
+    "hbm0.hbm_fabric:dram:data:187": 1120131.0719805902,
+    "hbm0.hbm_fabric:dram:data:188": 1120131.0719805902,
+    "hbm0.hbm_fabric:dram:data:189": 1120131.0719805902,
+    "hbm0.hbm_fabric:dram:data:19": 1119289.3439806101,
+    "hbm0.hbm_fabric:dram:data:190": 1120131.0719805902,
+    "hbm0.hbm_fabric:dram:data:191": 1120131.0719805902,
+    "hbm0.hbm_fabric:dram:data:192": 1120156.6719805896,
+    "hbm0.hbm_fabric:dram:data:193": 1120156.6719805896,
+    "hbm0.hbm_fabric:dram:data:194": 1120155.6479805897,
+    "hbm0.hbm_fabric:dram:data:195": 1120155.6479805897,
+    "hbm0.hbm_fabric:dram:data:196": 1120155.6479805897,
+    "hbm0.hbm_fabric:dram:data:197": 1120155.6479805897,
+    "hbm0.hbm_fabric:dram:data:198": 1120155.6479805897,
+    "hbm0.hbm_fabric:dram:data:199": 1120139.26398059,
+    "hbm0.hbm_fabric:dram:data:2": 1119302.6559806098,
+    "hbm0.hbm_fabric:dram:data:20": 1119485.9519806055,
+    "hbm0.hbm_fabric:dram:data:200": 1120122.8799805904,
+    "hbm0.hbm_fabric:dram:data:201": 1120122.8799805904,
+    "hbm0.hbm_fabric:dram:data:202": 1120122.8799805904,
+    "hbm0.hbm_fabric:dram:data:203": 1120122.8799805904,
+    "hbm0.hbm_fabric:dram:data:204": 1120122.8799805904,
+    "hbm0.hbm_fabric:dram:data:205": 1120122.8799805904,
+    "hbm0.hbm_fabric:dram:data:206": 1120122.8799805904,
+    "hbm0.hbm_fabric:dram:data:207": 1120122.8799805904,
+    "hbm0.hbm_fabric:dram:data:208": 1120116.7359805906,
+    "hbm0.hbm_fabric:dram:data:209": 1120116.7359805906,
+    "hbm0.hbm_fabric:dram:data:21": 1119485.9519806055,
+    "hbm0.hbm_fabric:dram:data:210": 1120116.7359805906,
+    "hbm0.hbm_fabric:dram:data:211": 1120116.7359805906,
+    "hbm0.hbm_fabric:dram:data:212": 1120313.343980586,
+    "hbm0.hbm_fabric:dram:data:213": 1120313.343980586,
+    "hbm0.hbm_fabric:dram:data:214": 1120313.343980586,
+    "hbm0.hbm_fabric:dram:data:215": 1120313.343980586,
+    "hbm0.hbm_fabric:dram:data:216": 1120299.0079805863,
+    "hbm0.hbm_fabric:dram:data:217": 1120299.0079805863,
+    "hbm0.hbm_fabric:dram:data:218": 1120297.9839805863,
+    "hbm0.hbm_fabric:dram:data:219": 1120297.9839805863,
+    "hbm0.hbm_fabric:dram:data:22": 1119485.9519806055,
+    "hbm0.hbm_fabric:dram:data:220": 1120297.9839805863,
+    "hbm0.hbm_fabric:dram:data:221": 1120297.9839805863,
+    "hbm0.hbm_fabric:dram:data:222": 1120297.9839805863,
+    "hbm0.hbm_fabric:dram:data:223": 1120297.9839805863,
+    "hbm0.hbm_fabric:dram:data:224": 1120284.6719805866,
+    "hbm0.hbm_fabric:dram:data:225": 1120284.6719805866,
+    "hbm0.hbm_fabric:dram:data:226": 1120088.0639805913,
+    "hbm0.hbm_fabric:dram:data:227": 1120088.0639805913,
+    "hbm0.hbm_fabric:dram:data:228": 1120088.0639805913,
+    "hbm0.hbm_fabric:dram:data:229": 1120088.0639805913,
+    "hbm0.hbm_fabric:dram:data:23": 1119485.9519806055,
+    "hbm0.hbm_fabric:dram:data:230": 1120088.0639805913,
+    "hbm0.hbm_fabric:dram:data:231": 1120088.0639805913,
+    "hbm0.hbm_fabric:dram:data:232": 1119689.7279806007,
+    "hbm0.hbm_fabric:dram:data:233": 1119689.7279806007,
+    "hbm0.hbm_fabric:dram:data:234": 1119689.7279806007,
+    "hbm0.hbm_fabric:dram:data:235": 1119689.7279806007,
+    "hbm0.hbm_fabric:dram:data:236": 1119689.7279806007,
+    "hbm0.hbm_fabric:dram:data:237": 1119689.7279806007,
+    "hbm0.hbm_fabric:dram:data:238": 1119689.7279806007,
+    "hbm0.hbm_fabric:dram:data:239": 1119689.7279806007,
+    "hbm0.hbm_fabric:dram:data:24": 1119475.7119806057,
+    "hbm0.hbm_fabric:dram:data:240": 1119677.439980601,
+    "hbm0.hbm_fabric:dram:data:241": 1119677.439980601,
+    "hbm0.hbm_fabric:dram:data:242": 1119676.415980601,
+    "hbm0.hbm_fabric:dram:data:243": 1119676.415980601,
+    "hbm0.hbm_fabric:dram:data:244": 1119676.415980601,
+    "hbm0.hbm_fabric:dram:data:245": 1119676.415980601,
+    "hbm0.hbm_fabric:dram:data:246": 1119676.415980601,
+    "hbm0.hbm_fabric:dram:data:247": 1119676.415980601,
+    "hbm0.hbm_fabric:dram:data:248": 1119293.43998061,
+    "hbm0.hbm_fabric:dram:data:249": 1119293.43998061,
+    "hbm0.hbm_fabric:dram:data:25": 1119475.7119806057,
+    "hbm0.hbm_fabric:dram:data:250": 1119293.43998061,
+    "hbm0.hbm_fabric:dram:data:251": 1119293.43998061,
+    "hbm0.hbm_fabric:dram:data:252": 1119293.43998061,
+    "hbm0.hbm_fabric:dram:data:253": 1119293.43998061,
+    "hbm0.hbm_fabric:dram:data:254": 1119293.43998061,
+    "hbm0.hbm_fabric:dram:data:255": 1119293.43998061,
+    "hbm0.hbm_fabric:dram:data:26": 1119475.7119806057,
+    "hbm0.hbm_fabric:dram:data:27": 1119475.7119806057,
+    "hbm0.hbm_fabric:dram:data:28": 1119082.495980615,
+    "hbm0.hbm_fabric:dram:data:29": 1119082.495980615,
+    "hbm0.hbm_fabric:dram:data:3": 1119302.6559806098,
+    "hbm0.hbm_fabric:dram:data:30": 1119082.495980615,
+    "hbm0.hbm_fabric:dram:data:31": 1119082.495980615,
+    "hbm0.hbm_fabric:dram:data:32": 1119072.2559806153,
+    "hbm0.hbm_fabric:dram:data:33": 1119072.2559806153,
+    "hbm0.hbm_fabric:dram:data:34": 1119072.2559806153,
+    "hbm0.hbm_fabric:dram:data:35": 1119072.2559806153,
+    "hbm0.hbm_fabric:dram:data:36": 1119072.2559806153,
+    "hbm0.hbm_fabric:dram:data:37": 1119072.2559806153,
+    "hbm0.hbm_fabric:dram:data:38": 1119072.2559806153,
+    "hbm0.hbm_fabric:dram:data:39": 1119072.2559806153,
+    "hbm0.hbm_fabric:dram:data:4": 1119302.6559806098,
+    "hbm0.hbm_fabric:dram:data:40": 1118872.57598062,
+    "hbm0.hbm_fabric:dram:data:41": 1118872.57598062,
+    "hbm0.hbm_fabric:dram:data:42": 1118872.57598062,
+    "hbm0.hbm_fabric:dram:data:43": 1118872.57598062,
+    "hbm0.hbm_fabric:dram:data:44": 1118872.57598062,
+    "hbm0.hbm_fabric:dram:data:45": 1118872.57598062,
+    "hbm0.hbm_fabric:dram:data:46": 1118872.57598062,
+    "hbm0.hbm_fabric:dram:data:47": 1118872.57598062,
+    "hbm0.hbm_fabric:dram:data:48": 1118878.7199806198,
+    "hbm0.hbm_fabric:dram:data:49": 1118878.7199806198,
+    "hbm0.hbm_fabric:dram:data:5": 1119302.6559806098,
+    "hbm0.hbm_fabric:dram:data:50": 1118878.7199806198,
+    "hbm0.hbm_fabric:dram:data:51": 1118878.7199806198,
+    "hbm0.hbm_fabric:dram:data:52": 1118878.7199806198,
+    "hbm0.hbm_fabric:dram:data:53": 1118878.7199806198,
+    "hbm0.hbm_fabric:dram:data:54": 1118878.7199806198,
+    "hbm0.hbm_fabric:dram:data:55": 1118878.7199806198,
+    "hbm0.hbm_fabric:dram:data:56": 1118885.8879806197,
+    "hbm0.hbm_fabric:dram:data:57": 1118885.8879806197,
+    "hbm0.hbm_fabric:dram:data:58": 1118884.8639806197,
+    "hbm0.hbm_fabric:dram:data:59": 1118884.8639806197,
+    "hbm0.hbm_fabric:dram:data:6": 1119302.6559806098,
+    "hbm0.hbm_fabric:dram:data:60": 1118688.2559806244,
+    "hbm0.hbm_fabric:dram:data:61": 1118688.2559806244,
+    "hbm0.hbm_fabric:dram:data:62": 1118688.2559806244,
+    "hbm0.hbm_fabric:dram:data:63": 1118688.2559806244,
+    "hbm0.hbm_fabric:dram:data:64": 1118697.4719806241,
+    "hbm0.hbm_fabric:dram:data:65": 1118697.4719806241,
+    "hbm0.hbm_fabric:dram:data:66": 1118697.4719806241,
+    "hbm0.hbm_fabric:dram:data:67": 1118697.4719806241,
+    "hbm0.hbm_fabric:dram:data:68": 1118697.4719806241,
+    "hbm0.hbm_fabric:dram:data:69": 1118697.4719806241,
+    "hbm0.hbm_fabric:dram:data:7": 1119301.6319806098,
+    "hbm0.hbm_fabric:dram:data:70": 1118697.4719806241,
+    "hbm0.hbm_fabric:dram:data:71": 1118697.4719806241,
+    "hbm0.hbm_fabric:dram:data:72": 1118692.3519806243,
+    "hbm0.hbm_fabric:dram:data:73": 1118692.3519806243,
+    "hbm0.hbm_fabric:dram:data:74": 1118691.3279806243,
+    "hbm0.hbm_fabric:dram:data:75": 1118691.3279806243,
+    "hbm0.hbm_fabric:dram:data:76": 1118691.3279806243,
+    "hbm0.hbm_fabric:dram:data:77": 1118691.3279806243,
+    "hbm0.hbm_fabric:dram:data:78": 1118691.3279806243,
+    "hbm0.hbm_fabric:dram:data:79": 1118691.3279806243,
+    "hbm0.hbm_fabric:dram:data:8": 1119291.39198061,
+    "hbm0.hbm_fabric:dram:data:80": 1118680.0639806245,
+    "hbm0.hbm_fabric:dram:data:81": 1118680.0639806245,
+    "hbm0.hbm_fabric:dram:data:82": 1118679.0399806246,
+    "hbm0.hbm_fabric:dram:data:83": 1118679.0399806246,
+    "hbm0.hbm_fabric:dram:data:84": 1118679.0399806246,
+    "hbm0.hbm_fabric:dram:data:85": 1118679.0399806246,
+    "hbm0.hbm_fabric:dram:data:86": 1118679.0399806246,
+    "hbm0.hbm_fabric:dram:data:87": 1118679.0399806246,
+    "hbm0.hbm_fabric:dram:data:88": 1118666.7519806249,
+    "hbm0.hbm_fabric:dram:data:89": 1118666.7519806249,
+    "hbm0.hbm_fabric:dram:data:9": 1119291.39198061,
+    "hbm0.hbm_fabric:dram:data:90": 1118666.7519806249,
+    "hbm0.hbm_fabric:dram:data:91": 1118666.7519806249,
+    "hbm0.hbm_fabric:dram:data:92": 1118666.7519806249,
+    "hbm0.hbm_fabric:dram:data:93": 1118666.7519806249,
+    "hbm0.hbm_fabric:dram:data:94": 1118666.7519806249,
+    "hbm0.hbm_fabric:dram:data:95": 1118666.7519806249,
+    "hbm0.hbm_fabric:dram:data:96": 1118663.679980625,
+    "hbm0.hbm_fabric:dram:data:97": 1118663.679980625,
+    "hbm0.hbm_fabric:dram:data:98": 1118661.631980625,
+    "hbm0.hbm_fabric:dram:data:99": 1118661.631980625,
+    "hbm0.hbm_fabric:dram:row_command:0:0": 83656.70399976936,
+    "hbm0.hbm_fabric:dram:row_command:0:1": 83656.70399976936,
+    "hbm0.hbm_fabric:dram:row_command:0:10": 83623.93599976967,
+    "hbm0.hbm_fabric:dram:row_command:0:11": 83623.93599976967,
+    "hbm0.hbm_fabric:dram:row_command:0:12": 83587.07199977002,
+    "hbm0.hbm_fabric:dram:row_command:0:13": 83587.07199977002,
+    "hbm0.hbm_fabric:dram:row_command:0:14": 83582.97599977006,
+    "hbm0.hbm_fabric:dram:row_command:0:15": 83582.97599977006,
+    "hbm0.hbm_fabric:dram:row_command:0:2": 83656.70399976936,
+    "hbm0.hbm_fabric:dram:row_command:0:3": 83656.70399976936,
+    "hbm0.hbm_fabric:dram:row_command:0:4": 83615.74399976975,
+    "hbm0.hbm_fabric:dram:row_command:0:5": 83615.74399976975,
+    "hbm0.hbm_fabric:dram:row_command:0:6": 83615.74399976975,
+    "hbm0.hbm_fabric:dram:row_command:0:7": 83615.74399976975,
+    "hbm0.hbm_fabric:dram:row_command:0:8": 83619.83999976971,
+    "hbm0.hbm_fabric:dram:row_command:0:9": 83619.83999976971,
+    "hbm0.hbm_fabric:dram:row_command:1:0": 83546.11199977041,
+    "hbm0.hbm_fabric:dram:row_command:1:1": 83546.11199977041,
+    "hbm0.hbm_fabric:dram:row_command:1:10": 82812.92799977733,
+    "hbm0.hbm_fabric:dram:row_command:1:11": 82812.92799977733,
+    "hbm0.hbm_fabric:dram:row_command:1:12": 82847.743999777,
+    "hbm0.hbm_fabric:dram:row_command:1:13": 82847.743999777,
+    "hbm0.hbm_fabric:dram:row_command:1:14": 82847.743999777,
+    "hbm0.hbm_fabric:dram:row_command:1:15": 82847.743999777,
+    "hbm0.hbm_fabric:dram:row_command:1:2": 83546.11199977041,
+    "hbm0.hbm_fabric:dram:row_command:1:3": 83546.11199977041,
+    "hbm0.hbm_fabric:dram:row_command:1:4": 82771.96799977771,
+    "hbm0.hbm_fabric:dram:row_command:1:5": 82771.96799977771,
+    "hbm0.hbm_fabric:dram:row_command:1:6": 82771.96799977771,
+    "hbm0.hbm_fabric:dram:row_command:1:7": 82771.96799977771,
+    "hbm0.hbm_fabric:dram:row_command:1:8": 82812.92799977733,
+    "hbm0.hbm_fabric:dram:row_command:1:9": 82812.92799977733,
+    "hbm0.hbm_fabric:dram:row_command:2:0": 82952.19199977601,
+    "hbm0.hbm_fabric:dram:row_command:2:1": 82952.19199977601,
+    "hbm0.hbm_fabric:dram:row_command:2:10": 82878.46399977671,
+    "hbm0.hbm_fabric:dram:row_command:2:11": 82878.46399977671,
+    "hbm0.hbm_fabric:dram:row_command:2:12": 82833.40799977713,
+    "hbm0.hbm_fabric:dram:row_command:2:13": 82833.40799977713,
+    "hbm0.hbm_fabric:dram:row_command:2:14": 82833.40799977713,
+    "hbm0.hbm_fabric:dram:row_command:2:15": 82833.40799977713,
+    "hbm0.hbm_fabric:dram:row_command:2:2": 82952.19199977601,
+    "hbm0.hbm_fabric:dram:row_command:2:3": 82952.19199977601,
+    "hbm0.hbm_fabric:dram:row_command:2:4": 82919.42399977632,
+    "hbm0.hbm_fabric:dram:row_command:2:5": 82919.42399977632,
+    "hbm0.hbm_fabric:dram:row_command:2:6": 82919.42399977632,
+    "hbm0.hbm_fabric:dram:row_command:2:7": 82919.42399977632,
+    "hbm0.hbm_fabric:dram:row_command:2:8": 82878.46399977671,
+    "hbm0.hbm_fabric:dram:row_command:2:9": 82878.46399977671,
+    "hbm0.hbm_fabric:dram:row_command:3:0": 82788.35199977756,
+    "hbm0.hbm_fabric:dram:row_command:3:1": 82788.35199977756,
+    "hbm0.hbm_fabric:dram:row_command:3:10": 82731.0079997781,
+    "hbm0.hbm_fabric:dram:row_command:3:11": 82731.0079997781,
+    "hbm0.hbm_fabric:dram:row_command:3:12": 82718.71999977822,
+    "hbm0.hbm_fabric:dram:row_command:3:13": 82718.71999977822,
+    "hbm0.hbm_fabric:dram:row_command:3:14": 82718.71999977822,
+    "hbm0.hbm_fabric:dram:row_command:3:15": 82718.71999977822,
+    "hbm0.hbm_fabric:dram:row_command:3:2": 82788.35199977756,
+    "hbm0.hbm_fabric:dram:row_command:3:3": 82788.35199977756,
+    "hbm0.hbm_fabric:dram:row_command:3:4": 82743.29599977798,
+    "hbm0.hbm_fabric:dram:row_command:3:5": 82743.29599977798,
+    "hbm0.hbm_fabric:dram:row_command:3:6": 82743.29599977798,
+    "hbm0.hbm_fabric:dram:row_command:3:7": 82743.29599977798,
+    "hbm0.hbm_fabric:dram:row_command:3:8": 82731.0079997781,
+    "hbm0.hbm_fabric:dram:row_command:3:9": 82731.0079997781,
+    "hbm0.hbm_fabric:dram:row_command:4:0": 85903.35999974817,
+    "hbm0.hbm_fabric:dram:row_command:4:1": 85860.35199974857,
+    "hbm0.hbm_fabric:dram:row_command:4:10": 85839.87199974876,
+    "hbm0.hbm_fabric:dram:row_command:4:11": 85839.87199974876,
+    "hbm0.hbm_fabric:dram:row_command:4:12": 85829.63199974886,
+    "hbm0.hbm_fabric:dram:row_command:4:13": 85829.63199974886,
+    "hbm0.hbm_fabric:dram:row_command:4:14": 85141.50399975535,
+    "hbm0.hbm_fabric:dram:row_command:4:15": 85141.50399975535,
+    "hbm0.hbm_fabric:dram:row_command:4:2": 85860.35199974857,
+    "hbm0.hbm_fabric:dram:row_command:4:3": 85860.35199974857,
+    "hbm0.hbm_fabric:dram:row_command:4:4": 85884.92799974834,
+    "hbm0.hbm_fabric:dram:row_command:4:5": 85884.92799974834,
+    "hbm0.hbm_fabric:dram:row_command:4:6": 85884.92799974834,
+    "hbm0.hbm_fabric:dram:row_command:4:7": 85883.90399974835,
+    "hbm0.hbm_fabric:dram:row_command:4:8": 85839.87199974876,
+    "hbm0.hbm_fabric:dram:row_command:4:9": 85839.87199974876,
+    "hbm0.hbm_fabric:dram:row_command:5:0": 85098.49599975576,
+    "hbm0.hbm_fabric:dram:row_command:5:1": 85098.49599975576,
+    "hbm0.hbm_fabric:dram:row_command:5:10": 85805.0559997491,
+    "hbm0.hbm_fabric:dram:row_command:5:11": 85805.0559997491,
+    "hbm0.hbm_fabric:dram:row_command:5:12": 85819.39199974896,
+    "hbm0.hbm_fabric:dram:row_command:5:13": 85819.39199974896,
+    "hbm0.hbm_fabric:dram:row_command:5:14": 85819.39199974896,
+    "hbm0.hbm_fabric:dram:row_command:5:15": 85819.39199974896,
+    "hbm0.hbm_fabric:dram:row_command:5:2": 85098.49599975576,
+    "hbm0.hbm_fabric:dram:row_command:5:3": 85098.49599975576,
+    "hbm0.hbm_fabric:dram:row_command:5:4": 85067.77599975605,
+    "hbm0.hbm_fabric:dram:row_command:5:5": 85067.77599975605,
+    "hbm0.hbm_fabric:dram:row_command:5:6": 85067.77599975605,
+    "hbm0.hbm_fabric:dram:row_command:5:7": 85067.77599975605,
+    "hbm0.hbm_fabric:dram:row_command:5:8": 85805.0559997491,
+    "hbm0.hbm_fabric:dram:row_command:5:9": 85805.0559997491,
+    "hbm0.hbm_fabric:dram:row_command:6:0": 85968.89599974755,
+    "hbm0.hbm_fabric:dram:row_command:6:1": 85968.89599974755,
+    "hbm0.hbm_fabric:dram:row_command:6:10": 85174.27199975504,
+    "hbm0.hbm_fabric:dram:row_command:6:11": 85174.27199975504,
+    "hbm0.hbm_fabric:dram:row_command:6:12": 85149.69599975528,
+    "hbm0.hbm_fabric:dram:row_command:6:13": 85145.59999975532,
+    "hbm0.hbm_fabric:dram:row_command:6:14": 85145.59999975532,
+    "hbm0.hbm_fabric:dram:row_command:6:15": 85145.59999975532,
+    "hbm0.hbm_fabric:dram:row_command:6:2": 85968.89599974755,
+    "hbm0.hbm_fabric:dram:row_command:6:3": 85968.89599974755,
+    "hbm0.hbm_fabric:dram:row_command:6:4": 85915.64799974805,
+    "hbm0.hbm_fabric:dram:row_command:6:5": 85915.64799974805,
+    "hbm0.hbm_fabric:dram:row_command:6:6": 85915.64799974805,
+    "hbm0.hbm_fabric:dram:row_command:6:7": 85915.64799974805,
+    "hbm0.hbm_fabric:dram:row_command:6:8": 85895.16799974824,
+    "hbm0.hbm_fabric:dram:row_command:6:9": 85895.16799974824,
+    "hbm0.hbm_fabric:dram:row_command:7:0": 85098.49599975576,
+    "hbm0.hbm_fabric:dram:row_command:7:1": 85098.49599975576,
+    "hbm0.hbm_fabric:dram:row_command:7:10": 83490.81599977093,
+    "hbm0.hbm_fabric:dram:row_command:7:11": 83490.81599977093,
+    "hbm0.hbm_fabric:dram:row_command:7:12": 83486.71999977097,
+    "hbm0.hbm_fabric:dram:row_command:7:13": 83486.71999977097,
+    "hbm0.hbm_fabric:dram:row_command:7:14": 83486.71999977097,
+    "hbm0.hbm_fabric:dram:row_command:7:15": 83486.71999977097,
+    "hbm0.hbm_fabric:dram:row_command:7:2": 85098.49599975576,
+    "hbm0.hbm_fabric:dram:row_command:7:3": 85098.49599975576,
+    "hbm0.hbm_fabric:dram:row_command:7:4": 83511.29599977074,
+    "hbm0.hbm_fabric:dram:row_command:7:5": 83511.29599977074,
+    "hbm0.hbm_fabric:dram:row_command:7:6": 83511.29599977074,
+    "hbm0.hbm_fabric:dram:row_command:7:7": 83511.29599977074,
+    "hbm0.hbm_fabric:dram:row_command:7:8": 83490.81599977093,
+    "hbm0.hbm_fabric:dram:row_command:7:9": 83490.81599977093,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:0": 14.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:1": 14.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:2": 14.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:3": 14.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:0": 14.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:1": 14.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:2": 14.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:3": 14.0,
+    "hostmem0.memory:dram:command:0": 98.57142857142864,
+    "hostmem0.memory:dram:data:0": 98.57142857142864,
+    "interrupt": 0.0,
+    "link.cpu_gpu_pcie.cpu0->gpu0": 16.25,
+    "link.cpu_gpu_pcie.cpu0->gpu0.inflight": 7216.25,
+    "link.cpu_hostmem_ddr.hostmem0->cpu0": 22.85714285714286,
+    "link.cpu_hostmem_ddr.hostmem0->cpu0.inflight": 742.857142857143
+  },
+  "storage_traffic": {
+    "schema_version": "heterollm.nand-traffic/v1",
+    "task_count": 0
+  },
+  "dram_traffic": {
+    "schema_version": "heterollm.dram-traffic/v1",
+    "task_count": 3528,
+    "logical_read_bytes": 8923158144,
+    "logical_write_bytes": 33300918,
+    "physical_read_bytes": 8923158944,
+    "physical_write_bytes": 33307968,
+    "physical_bytes": 8956466912,
+    "logical_bytes": 8956459062,
+    "burst_count": 279889522,
+    "row_hits": 269371653,
+    "row_misses": 8200,
+    "row_conflicts": 10509669,
+    "queue_wait_ns": 0.0,
+    "service_ns": 3780676.9086666713,
+    "read_write_switches": null,
+    "scheduler_reordered_requests": 0,
+    "scheduler_batches": 1962,
+    "controller_direction_switches": 6587,
+    "refresh_wait_ns": null,
+    "turnaround_wait_ns": null,
+    "row_command_bus_busy_ns": null,
+    "column_command_bus_busy_ns": null,
+    "activate_commands": null,
+    "precharge_commands": null,
+    "read_commands": null,
+    "write_commands": null,
+    "refresh_commands": null,
+    "metric_availability": {
+      "read_write_switches": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "scheduler_reordered_requests": {
+        "status": "recorded",
+        "recorded_batch_count": 9,
+        "physical_batch_count": 9
+      },
+      "scheduler_batches": {
+        "status": "recorded",
+        "recorded_batch_count": 9,
+        "physical_batch_count": 9
+      },
+      "controller_direction_switches": {
+        "status": "recorded",
+        "recorded_batch_count": 9,
+        "physical_batch_count": 9
+      },
+      "refresh_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "turnaround_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "row_command_bus_busy_ns": {
+        "status": "partial",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "column_command_bus_busy_ns": {
+        "status": "partial",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "activate_commands": {
+        "status": "partial",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "precharge_commands": {
+        "status": "partial",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "read_commands": {
+        "status": "partial",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "write_commands": {
+        "status": "partial",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "refresh_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      },
+      "organization_profiles": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 9
+      }
+    },
+    "resource_totals": {
+      "hbm0.hbm_fabric:dram:column_command:0:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119303.6799931524
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119302.6559931522
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119485.9519931895
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119485.9519931895
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119475.7119931874
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119475.7119931874
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119082.4959931073
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119082.4959931073
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119302.6559931522
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119302.143993152
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119291.3919931499
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119290.3679931497
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119486.9759931897
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119290.3679931497
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119290.3679931497
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119289.3439931495
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119072.2559931052
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119072.2559931052
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118878.7199930658
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118878.7199930658
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118885.8879930673
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118884.863993067
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118688.255993027
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118688.255993027
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119072.2559931052
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119072.2559931052
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118872.5759930646
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118872.5759930646
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118872.5759930646
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118872.5759930646
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118878.7199930658
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118878.7199930658
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118697.471993029
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118697.471993029
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118679.0399930251
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118679.0399930251
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118666.7519930226
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118666.7519930226
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118666.7519930226
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118666.7519930226
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118697.471993029
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118697.471993029
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118692.3519930278
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118691.3279930276
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118691.3279930276
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118691.3279930276
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118680.0639930253
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118679.0399930251
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118663.679993022
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118661.6319930216
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118653.43999302
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118653.43999302
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118650.3679930193
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118650.3679930193
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118650.3679930193
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118650.3679930193
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118661.6319930216
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118661.6319930216
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118649.343993019
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118649.343993019
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118649.343993019
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118649.343993019
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118654.4639930201
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1118653.43999302
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120586.7519934138
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120575.4879934115
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120555.0079934073
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120555.0079934073
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120550.9119934065
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120550.9119934065
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120550.9119934065
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120550.9119934065
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120567.2959934098
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120567.2959934098
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120570.3679934104
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120570.3679934104
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120570.3679934104
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120569.3439934102
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120555.0079934073
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120555.0079934073
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120538.623993404
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120538.623993404
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120521.2159934004
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120521.2159934004
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120229.375993341
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120131.071993321
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120131.071993321
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120131.071993321
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120538.623993404
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120538.623993404
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120527.3599934017
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120526.3359934015
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120526.3359934015
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120526.3359934015
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120521.2159934004
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120521.2159934004
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120156.6719933262
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120155.647993326
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120313.343993358
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120313.343993358
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120299.0079933552
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120297.983993355
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120297.983993355
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120297.983993355
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120155.647993326
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120147.4559933243
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120122.8799933193
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120122.8799933193
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120122.8799933193
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120122.8799933193
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120116.735993318
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120116.735993318
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120284.6719933522
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120088.0639933122
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119676.4159932283
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119676.4159932283
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119293.4399931503
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119293.4399931503
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119293.4399931503
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119293.4399931503
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120088.0639933122
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1120088.0639933122
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119689.727993231
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119689.727993231
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119689.727993231
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119689.727993231
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119677.4399932285
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 1119676.4159932283
+      },
+      "hbm0.hbm_fabric:dram:data:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34978240,
+        "service_ns": 1119303.6799806098
+      },
+      "hbm0.hbm_fabric:dram:data:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34978240,
+        "service_ns": 1119303.6799806098
+      },
+      "hbm0.hbm_fabric:dram:data:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977824,
+        "service_ns": 1119290.36798061
+      },
+      "hbm0.hbm_fabric:dram:data:100": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958176,
+        "service_ns": 1118661.631980625
+      },
+      "hbm0.hbm_fabric:dram:data:101": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958176,
+        "service_ns": 1118661.631980625
+      },
+      "hbm0.hbm_fabric:dram:data:102": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958176,
+        "service_ns": 1118661.631980625
+      },
+      "hbm0.hbm_fabric:dram:data:103": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958176,
+        "service_ns": 1118661.631980625
+      },
+      "hbm0.hbm_fabric:dram:data:104": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957792,
+        "service_ns": 1118649.3439806253
+      },
+      "hbm0.hbm_fabric:dram:data:105": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957792,
+        "service_ns": 1118649.3439806253
+      },
+      "hbm0.hbm_fabric:dram:data:106": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957792,
+        "service_ns": 1118649.3439806253
+      },
+      "hbm0.hbm_fabric:dram:data:107": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957792,
+        "service_ns": 1118649.3439806253
+      },
+      "hbm0.hbm_fabric:dram:data:108": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957792,
+        "service_ns": 1118649.3439806253
+      },
+      "hbm0.hbm_fabric:dram:data:109": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957792,
+        "service_ns": 1118649.3439806253
+      },
+      "hbm0.hbm_fabric:dram:data:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977824,
+        "service_ns": 1119290.36798061
+      },
+      "hbm0.hbm_fabric:dram:data:110": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957792,
+        "service_ns": 1118649.3439806253
+      },
+      "hbm0.hbm_fabric:dram:data:111": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957792,
+        "service_ns": 1118649.3439806253
+      },
+      "hbm0.hbm_fabric:dram:data:112": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957952,
+        "service_ns": 1118654.4639806252
+      },
+      "hbm0.hbm_fabric:dram:data:113": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957952,
+        "service_ns": 1118654.4639806252
+      },
+      "hbm0.hbm_fabric:dram:data:114": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957920,
+        "service_ns": 1118653.4399806252
+      },
+      "hbm0.hbm_fabric:dram:data:115": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957920,
+        "service_ns": 1118653.4399806252
+      },
+      "hbm0.hbm_fabric:dram:data:116": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957920,
+        "service_ns": 1118653.4399806252
+      },
+      "hbm0.hbm_fabric:dram:data:117": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957920,
+        "service_ns": 1118653.4399806252
+      },
+      "hbm0.hbm_fabric:dram:data:118": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957920,
+        "service_ns": 1118653.4399806252
+      },
+      "hbm0.hbm_fabric:dram:data:119": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957920,
+        "service_ns": 1118653.4399806252
+      },
+      "hbm0.hbm_fabric:dram:data:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983968,
+        "service_ns": 1119486.9759806055
+      },
+      "hbm0.hbm_fabric:dram:data:120": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957824,
+        "service_ns": 1118650.3679806252
+      },
+      "hbm0.hbm_fabric:dram:data:121": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957824,
+        "service_ns": 1118650.3679806252
+      },
+      "hbm0.hbm_fabric:dram:data:122": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957824,
+        "service_ns": 1118650.3679806252
+      },
+      "hbm0.hbm_fabric:dram:data:123": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957824,
+        "service_ns": 1118650.3679806252
+      },
+      "hbm0.hbm_fabric:dram:data:124": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957824,
+        "service_ns": 1118650.3679806252
+      },
+      "hbm0.hbm_fabric:dram:data:125": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957824,
+        "service_ns": 1118650.3679806252
+      },
+      "hbm0.hbm_fabric:dram:data:126": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957824,
+        "service_ns": 1118650.3679806252
+      },
+      "hbm0.hbm_fabric:dram:data:127": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34957824,
+        "service_ns": 1118650.3679806252
+      },
+      "hbm0.hbm_fabric:dram:data:128": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35018336,
+        "service_ns": 1120586.7519805795
+      },
+      "hbm0.hbm_fabric:dram:data:129": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35018336,
+        "service_ns": 1120586.7519805795
+      },
+      "hbm0.hbm_fabric:dram:data:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983968,
+        "service_ns": 1119486.9759806055
+      },
+      "hbm0.hbm_fabric:dram:data:130": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017984,
+        "service_ns": 1120575.4879805797
+      },
+      "hbm0.hbm_fabric:dram:data:131": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017984,
+        "service_ns": 1120575.4879805797
+      },
+      "hbm0.hbm_fabric:dram:data:132": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017728,
+        "service_ns": 1120567.29598058
+      },
+      "hbm0.hbm_fabric:dram:data:133": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017728,
+        "service_ns": 1120567.29598058
+      },
+      "hbm0.hbm_fabric:dram:data:134": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017728,
+        "service_ns": 1120567.29598058
+      },
+      "hbm0.hbm_fabric:dram:data:135": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017728,
+        "service_ns": 1120567.29598058
+      },
+      "hbm0.hbm_fabric:dram:data:136": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017824,
+        "service_ns": 1120570.3679805798
+      },
+      "hbm0.hbm_fabric:dram:data:137": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017824,
+        "service_ns": 1120570.3679805798
+      },
+      "hbm0.hbm_fabric:dram:data:138": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017824,
+        "service_ns": 1120570.3679805798
+      },
+      "hbm0.hbm_fabric:dram:data:139": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017824,
+        "service_ns": 1120570.3679805798
+      },
+      "hbm0.hbm_fabric:dram:data:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977824,
+        "service_ns": 1119290.36798061
+      },
+      "hbm0.hbm_fabric:dram:data:140": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017824,
+        "service_ns": 1120570.3679805798
+      },
+      "hbm0.hbm_fabric:dram:data:141": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017824,
+        "service_ns": 1120570.3679805798
+      },
+      "hbm0.hbm_fabric:dram:data:142": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017824,
+        "service_ns": 1120570.3679805798
+      },
+      "hbm0.hbm_fabric:dram:data:143": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017760,
+        "service_ns": 1120568.31998058
+      },
+      "hbm0.hbm_fabric:dram:data:144": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017344,
+        "service_ns": 1120555.0079805802
+      },
+      "hbm0.hbm_fabric:dram:data:145": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017344,
+        "service_ns": 1120555.0079805802
+      },
+      "hbm0.hbm_fabric:dram:data:146": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017344,
+        "service_ns": 1120555.0079805802
+      },
+      "hbm0.hbm_fabric:dram:data:147": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017344,
+        "service_ns": 1120555.0079805802
+      },
+      "hbm0.hbm_fabric:dram:data:148": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017344,
+        "service_ns": 1120555.0079805802
+      },
+      "hbm0.hbm_fabric:dram:data:149": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017344,
+        "service_ns": 1120555.0079805802
+      },
+      "hbm0.hbm_fabric:dram:data:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977824,
+        "service_ns": 1119290.36798061
+      },
+      "hbm0.hbm_fabric:dram:data:150": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017344,
+        "service_ns": 1120555.0079805802
+      },
+      "hbm0.hbm_fabric:dram:data:151": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017344,
+        "service_ns": 1120555.0079805802
+      },
+      "hbm0.hbm_fabric:dram:data:152": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017216,
+        "service_ns": 1120550.9119805803
+      },
+      "hbm0.hbm_fabric:dram:data:153": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017216,
+        "service_ns": 1120550.9119805803
+      },
+      "hbm0.hbm_fabric:dram:data:154": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017216,
+        "service_ns": 1120550.9119805803
+      },
+      "hbm0.hbm_fabric:dram:data:155": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017216,
+        "service_ns": 1120550.9119805803
+      },
+      "hbm0.hbm_fabric:dram:data:156": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017216,
+        "service_ns": 1120550.9119805803
+      },
+      "hbm0.hbm_fabric:dram:data:157": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017216,
+        "service_ns": 1120550.9119805803
+      },
+      "hbm0.hbm_fabric:dram:data:158": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017216,
+        "service_ns": 1120550.9119805803
+      },
+      "hbm0.hbm_fabric:dram:data:159": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35017216,
+        "service_ns": 1120550.9119805803
+      },
+      "hbm0.hbm_fabric:dram:data:16": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977824,
+        "service_ns": 1119290.36798061
+      },
+      "hbm0.hbm_fabric:dram:data:160": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016832,
+        "service_ns": 1120538.6239805806
+      },
+      "hbm0.hbm_fabric:dram:data:161": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016832,
+        "service_ns": 1120538.6239805806
+      },
+      "hbm0.hbm_fabric:dram:data:162": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016832,
+        "service_ns": 1120538.6239805806
+      },
+      "hbm0.hbm_fabric:dram:data:163": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016832,
+        "service_ns": 1120538.6239805806
+      },
+      "hbm0.hbm_fabric:dram:data:164": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016832,
+        "service_ns": 1120538.6239805806
+      },
+      "hbm0.hbm_fabric:dram:data:165": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016832,
+        "service_ns": 1120538.6239805806
+      },
+      "hbm0.hbm_fabric:dram:data:166": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016832,
+        "service_ns": 1120538.6239805806
+      },
+      "hbm0.hbm_fabric:dram:data:167": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016832,
+        "service_ns": 1120538.6239805806
+      },
+      "hbm0.hbm_fabric:dram:data:168": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016480,
+        "service_ns": 1120527.3599805809
+      },
+      "hbm0.hbm_fabric:dram:data:169": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016480,
+        "service_ns": 1120527.3599805809
+      },
+      "hbm0.hbm_fabric:dram:data:17": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977824,
+        "service_ns": 1119290.36798061
+      },
+      "hbm0.hbm_fabric:dram:data:170": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016448,
+        "service_ns": 1120526.335980581
+      },
+      "hbm0.hbm_fabric:dram:data:171": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016448,
+        "service_ns": 1120526.335980581
+      },
+      "hbm0.hbm_fabric:dram:data:172": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016448,
+        "service_ns": 1120526.335980581
+      },
+      "hbm0.hbm_fabric:dram:data:173": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016448,
+        "service_ns": 1120526.335980581
+      },
+      "hbm0.hbm_fabric:dram:data:174": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016448,
+        "service_ns": 1120526.335980581
+      },
+      "hbm0.hbm_fabric:dram:data:175": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016448,
+        "service_ns": 1120526.335980581
+      },
+      "hbm0.hbm_fabric:dram:data:176": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016288,
+        "service_ns": 1120521.215980581
+      },
+      "hbm0.hbm_fabric:dram:data:177": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016288,
+        "service_ns": 1120521.215980581
+      },
+      "hbm0.hbm_fabric:dram:data:178": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016288,
+        "service_ns": 1120521.215980581
+      },
+      "hbm0.hbm_fabric:dram:data:179": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016288,
+        "service_ns": 1120521.215980581
+      },
+      "hbm0.hbm_fabric:dram:data:18": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977792,
+        "service_ns": 1119289.3439806101
+      },
+      "hbm0.hbm_fabric:dram:data:180": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016288,
+        "service_ns": 1120521.215980581
+      },
+      "hbm0.hbm_fabric:dram:data:181": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016288,
+        "service_ns": 1120521.215980581
+      },
+      "hbm0.hbm_fabric:dram:data:182": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016288,
+        "service_ns": 1120521.215980581
+      },
+      "hbm0.hbm_fabric:dram:data:183": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35016288,
+        "service_ns": 1120521.215980581
+      },
+      "hbm0.hbm_fabric:dram:data:184": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35010240,
+        "service_ns": 1120327.6799805856
+      },
+      "hbm0.hbm_fabric:dram:data:185": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004096,
+        "service_ns": 1120131.0719805902
+      },
+      "hbm0.hbm_fabric:dram:data:186": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004096,
+        "service_ns": 1120131.0719805902
+      },
+      "hbm0.hbm_fabric:dram:data:187": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004096,
+        "service_ns": 1120131.0719805902
+      },
+      "hbm0.hbm_fabric:dram:data:188": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004096,
+        "service_ns": 1120131.0719805902
+      },
+      "hbm0.hbm_fabric:dram:data:189": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004096,
+        "service_ns": 1120131.0719805902
+      },
+      "hbm0.hbm_fabric:dram:data:19": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977792,
+        "service_ns": 1119289.3439806101
+      },
+      "hbm0.hbm_fabric:dram:data:190": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004096,
+        "service_ns": 1120131.0719805902
+      },
+      "hbm0.hbm_fabric:dram:data:191": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004096,
+        "service_ns": 1120131.0719805902
+      },
+      "hbm0.hbm_fabric:dram:data:192": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004896,
+        "service_ns": 1120156.6719805896
+      },
+      "hbm0.hbm_fabric:dram:data:193": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004896,
+        "service_ns": 1120156.6719805896
+      },
+      "hbm0.hbm_fabric:dram:data:194": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004864,
+        "service_ns": 1120155.6479805897
+      },
+      "hbm0.hbm_fabric:dram:data:195": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004864,
+        "service_ns": 1120155.6479805897
+      },
+      "hbm0.hbm_fabric:dram:data:196": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004864,
+        "service_ns": 1120155.6479805897
+      },
+      "hbm0.hbm_fabric:dram:data:197": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004864,
+        "service_ns": 1120155.6479805897
+      },
+      "hbm0.hbm_fabric:dram:data:198": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004864,
+        "service_ns": 1120155.6479805897
+      },
+      "hbm0.hbm_fabric:dram:data:199": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35004352,
+        "service_ns": 1120139.26398059
+      },
+      "hbm0.hbm_fabric:dram:data:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34978208,
+        "service_ns": 1119302.6559806098
+      },
+      "hbm0.hbm_fabric:dram:data:20": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983936,
+        "service_ns": 1119485.9519806055
+      },
+      "hbm0.hbm_fabric:dram:data:200": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003840,
+        "service_ns": 1120122.8799805904
+      },
+      "hbm0.hbm_fabric:dram:data:201": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003840,
+        "service_ns": 1120122.8799805904
+      },
+      "hbm0.hbm_fabric:dram:data:202": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003840,
+        "service_ns": 1120122.8799805904
+      },
+      "hbm0.hbm_fabric:dram:data:203": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003840,
+        "service_ns": 1120122.8799805904
+      },
+      "hbm0.hbm_fabric:dram:data:204": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003840,
+        "service_ns": 1120122.8799805904
+      },
+      "hbm0.hbm_fabric:dram:data:205": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003840,
+        "service_ns": 1120122.8799805904
+      },
+      "hbm0.hbm_fabric:dram:data:206": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003840,
+        "service_ns": 1120122.8799805904
+      },
+      "hbm0.hbm_fabric:dram:data:207": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003840,
+        "service_ns": 1120122.8799805904
+      },
+      "hbm0.hbm_fabric:dram:data:208": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003648,
+        "service_ns": 1120116.7359805906
+      },
+      "hbm0.hbm_fabric:dram:data:209": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003648,
+        "service_ns": 1120116.7359805906
+      },
+      "hbm0.hbm_fabric:dram:data:21": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983936,
+        "service_ns": 1119485.9519806055
+      },
+      "hbm0.hbm_fabric:dram:data:210": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003648,
+        "service_ns": 1120116.7359805906
+      },
+      "hbm0.hbm_fabric:dram:data:211": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35003648,
+        "service_ns": 1120116.7359805906
+      },
+      "hbm0.hbm_fabric:dram:data:212": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009792,
+        "service_ns": 1120313.343980586
+      },
+      "hbm0.hbm_fabric:dram:data:213": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009792,
+        "service_ns": 1120313.343980586
+      },
+      "hbm0.hbm_fabric:dram:data:214": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009792,
+        "service_ns": 1120313.343980586
+      },
+      "hbm0.hbm_fabric:dram:data:215": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009792,
+        "service_ns": 1120313.343980586
+      },
+      "hbm0.hbm_fabric:dram:data:216": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009344,
+        "service_ns": 1120299.0079805863
+      },
+      "hbm0.hbm_fabric:dram:data:217": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009344,
+        "service_ns": 1120299.0079805863
+      },
+      "hbm0.hbm_fabric:dram:data:218": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009312,
+        "service_ns": 1120297.9839805863
+      },
+      "hbm0.hbm_fabric:dram:data:219": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009312,
+        "service_ns": 1120297.9839805863
+      },
+      "hbm0.hbm_fabric:dram:data:22": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983936,
+        "service_ns": 1119485.9519806055
+      },
+      "hbm0.hbm_fabric:dram:data:220": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009312,
+        "service_ns": 1120297.9839805863
+      },
+      "hbm0.hbm_fabric:dram:data:221": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009312,
+        "service_ns": 1120297.9839805863
+      },
+      "hbm0.hbm_fabric:dram:data:222": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009312,
+        "service_ns": 1120297.9839805863
+      },
+      "hbm0.hbm_fabric:dram:data:223": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35009312,
+        "service_ns": 1120297.9839805863
+      },
+      "hbm0.hbm_fabric:dram:data:224": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35008896,
+        "service_ns": 1120284.6719805866
+      },
+      "hbm0.hbm_fabric:dram:data:225": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35008896,
+        "service_ns": 1120284.6719805866
+      },
+      "hbm0.hbm_fabric:dram:data:226": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35002752,
+        "service_ns": 1120088.0639805913
+      },
+      "hbm0.hbm_fabric:dram:data:227": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35002752,
+        "service_ns": 1120088.0639805913
+      },
+      "hbm0.hbm_fabric:dram:data:228": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35002752,
+        "service_ns": 1120088.0639805913
+      },
+      "hbm0.hbm_fabric:dram:data:229": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35002752,
+        "service_ns": 1120088.0639805913
+      },
+      "hbm0.hbm_fabric:dram:data:23": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983936,
+        "service_ns": 1119485.9519806055
+      },
+      "hbm0.hbm_fabric:dram:data:230": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35002752,
+        "service_ns": 1120088.0639805913
+      },
+      "hbm0.hbm_fabric:dram:data:231": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 35002752,
+        "service_ns": 1120088.0639805913
+      },
+      "hbm0.hbm_fabric:dram:data:232": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34990304,
+        "service_ns": 1119689.7279806007
+      },
+      "hbm0.hbm_fabric:dram:data:233": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34990304,
+        "service_ns": 1119689.7279806007
+      },
+      "hbm0.hbm_fabric:dram:data:234": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34990304,
+        "service_ns": 1119689.7279806007
+      },
+      "hbm0.hbm_fabric:dram:data:235": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34990304,
+        "service_ns": 1119689.7279806007
+      },
+      "hbm0.hbm_fabric:dram:data:236": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34990304,
+        "service_ns": 1119689.7279806007
+      },
+      "hbm0.hbm_fabric:dram:data:237": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34990304,
+        "service_ns": 1119689.7279806007
+      },
+      "hbm0.hbm_fabric:dram:data:238": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34990304,
+        "service_ns": 1119689.7279806007
+      },
+      "hbm0.hbm_fabric:dram:data:239": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34990304,
+        "service_ns": 1119689.7279806007
+      },
+      "hbm0.hbm_fabric:dram:data:24": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983616,
+        "service_ns": 1119475.7119806057
+      },
+      "hbm0.hbm_fabric:dram:data:240": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34989920,
+        "service_ns": 1119677.439980601
+      },
+      "hbm0.hbm_fabric:dram:data:241": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34989920,
+        "service_ns": 1119677.439980601
+      },
+      "hbm0.hbm_fabric:dram:data:242": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34989888,
+        "service_ns": 1119676.415980601
+      },
+      "hbm0.hbm_fabric:dram:data:243": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34989888,
+        "service_ns": 1119676.415980601
+      },
+      "hbm0.hbm_fabric:dram:data:244": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34989888,
+        "service_ns": 1119676.415980601
+      },
+      "hbm0.hbm_fabric:dram:data:245": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34989888,
+        "service_ns": 1119676.415980601
+      },
+      "hbm0.hbm_fabric:dram:data:246": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34989888,
+        "service_ns": 1119676.415980601
+      },
+      "hbm0.hbm_fabric:dram:data:247": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34989888,
+        "service_ns": 1119676.415980601
+      },
+      "hbm0.hbm_fabric:dram:data:248": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977920,
+        "service_ns": 1119293.43998061
+      },
+      "hbm0.hbm_fabric:dram:data:249": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977920,
+        "service_ns": 1119293.43998061
+      },
+      "hbm0.hbm_fabric:dram:data:25": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983616,
+        "service_ns": 1119475.7119806057
+      },
+      "hbm0.hbm_fabric:dram:data:250": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977920,
+        "service_ns": 1119293.43998061
+      },
+      "hbm0.hbm_fabric:dram:data:251": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977920,
+        "service_ns": 1119293.43998061
+      },
+      "hbm0.hbm_fabric:dram:data:252": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977920,
+        "service_ns": 1119293.43998061
+      },
+      "hbm0.hbm_fabric:dram:data:253": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977920,
+        "service_ns": 1119293.43998061
+      },
+      "hbm0.hbm_fabric:dram:data:254": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977920,
+        "service_ns": 1119293.43998061
+      },
+      "hbm0.hbm_fabric:dram:data:255": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977920,
+        "service_ns": 1119293.43998061
+      },
+      "hbm0.hbm_fabric:dram:data:26": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983616,
+        "service_ns": 1119475.7119806057
+      },
+      "hbm0.hbm_fabric:dram:data:27": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34983616,
+        "service_ns": 1119475.7119806057
+      },
+      "hbm0.hbm_fabric:dram:data:28": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971328,
+        "service_ns": 1119082.495980615
+      },
+      "hbm0.hbm_fabric:dram:data:29": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971328,
+        "service_ns": 1119082.495980615
+      },
+      "hbm0.hbm_fabric:dram:data:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34978208,
+        "service_ns": 1119302.6559806098
+      },
+      "hbm0.hbm_fabric:dram:data:30": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971328,
+        "service_ns": 1119082.495980615
+      },
+      "hbm0.hbm_fabric:dram:data:31": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971328,
+        "service_ns": 1119082.495980615
+      },
+      "hbm0.hbm_fabric:dram:data:32": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971008,
+        "service_ns": 1119072.2559806153
+      },
+      "hbm0.hbm_fabric:dram:data:33": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971008,
+        "service_ns": 1119072.2559806153
+      },
+      "hbm0.hbm_fabric:dram:data:34": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971008,
+        "service_ns": 1119072.2559806153
+      },
+      "hbm0.hbm_fabric:dram:data:35": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971008,
+        "service_ns": 1119072.2559806153
+      },
+      "hbm0.hbm_fabric:dram:data:36": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971008,
+        "service_ns": 1119072.2559806153
+      },
+      "hbm0.hbm_fabric:dram:data:37": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971008,
+        "service_ns": 1119072.2559806153
+      },
+      "hbm0.hbm_fabric:dram:data:38": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971008,
+        "service_ns": 1119072.2559806153
+      },
+      "hbm0.hbm_fabric:dram:data:39": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34971008,
+        "service_ns": 1119072.2559806153
+      },
+      "hbm0.hbm_fabric:dram:data:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34978208,
+        "service_ns": 1119302.6559806098
+      },
+      "hbm0.hbm_fabric:dram:data:40": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964768,
+        "service_ns": 1118872.57598062
+      },
+      "hbm0.hbm_fabric:dram:data:41": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964768,
+        "service_ns": 1118872.57598062
+      },
+      "hbm0.hbm_fabric:dram:data:42": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964768,
+        "service_ns": 1118872.57598062
+      },
+      "hbm0.hbm_fabric:dram:data:43": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964768,
+        "service_ns": 1118872.57598062
+      },
+      "hbm0.hbm_fabric:dram:data:44": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964768,
+        "service_ns": 1118872.57598062
+      },
+      "hbm0.hbm_fabric:dram:data:45": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964768,
+        "service_ns": 1118872.57598062
+      },
+      "hbm0.hbm_fabric:dram:data:46": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964768,
+        "service_ns": 1118872.57598062
+      },
+      "hbm0.hbm_fabric:dram:data:47": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964768,
+        "service_ns": 1118872.57598062
+      },
+      "hbm0.hbm_fabric:dram:data:48": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964960,
+        "service_ns": 1118878.7199806198
+      },
+      "hbm0.hbm_fabric:dram:data:49": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964960,
+        "service_ns": 1118878.7199806198
+      },
+      "hbm0.hbm_fabric:dram:data:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34978208,
+        "service_ns": 1119302.6559806098
+      },
+      "hbm0.hbm_fabric:dram:data:50": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964960,
+        "service_ns": 1118878.7199806198
+      },
+      "hbm0.hbm_fabric:dram:data:51": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964960,
+        "service_ns": 1118878.7199806198
+      },
+      "hbm0.hbm_fabric:dram:data:52": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964960,
+        "service_ns": 1118878.7199806198
+      },
+      "hbm0.hbm_fabric:dram:data:53": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964960,
+        "service_ns": 1118878.7199806198
+      },
+      "hbm0.hbm_fabric:dram:data:54": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964960,
+        "service_ns": 1118878.7199806198
+      },
+      "hbm0.hbm_fabric:dram:data:55": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34964960,
+        "service_ns": 1118878.7199806198
+      },
+      "hbm0.hbm_fabric:dram:data:56": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34965184,
+        "service_ns": 1118885.8879806197
+      },
+      "hbm0.hbm_fabric:dram:data:57": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34965184,
+        "service_ns": 1118885.8879806197
+      },
+      "hbm0.hbm_fabric:dram:data:58": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34965152,
+        "service_ns": 1118884.8639806197
+      },
+      "hbm0.hbm_fabric:dram:data:59": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34965152,
+        "service_ns": 1118884.8639806197
+      },
+      "hbm0.hbm_fabric:dram:data:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34978208,
+        "service_ns": 1119302.6559806098
+      },
+      "hbm0.hbm_fabric:dram:data:60": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959008,
+        "service_ns": 1118688.2559806244
+      },
+      "hbm0.hbm_fabric:dram:data:61": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959008,
+        "service_ns": 1118688.2559806244
+      },
+      "hbm0.hbm_fabric:dram:data:62": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959008,
+        "service_ns": 1118688.2559806244
+      },
+      "hbm0.hbm_fabric:dram:data:63": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959008,
+        "service_ns": 1118688.2559806244
+      },
+      "hbm0.hbm_fabric:dram:data:64": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959296,
+        "service_ns": 1118697.4719806241
+      },
+      "hbm0.hbm_fabric:dram:data:65": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959296,
+        "service_ns": 1118697.4719806241
+      },
+      "hbm0.hbm_fabric:dram:data:66": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959296,
+        "service_ns": 1118697.4719806241
+      },
+      "hbm0.hbm_fabric:dram:data:67": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959296,
+        "service_ns": 1118697.4719806241
+      },
+      "hbm0.hbm_fabric:dram:data:68": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959296,
+        "service_ns": 1118697.4719806241
+      },
+      "hbm0.hbm_fabric:dram:data:69": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959296,
+        "service_ns": 1118697.4719806241
+      },
+      "hbm0.hbm_fabric:dram:data:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34978176,
+        "service_ns": 1119301.6319806098
+      },
+      "hbm0.hbm_fabric:dram:data:70": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959296,
+        "service_ns": 1118697.4719806241
+      },
+      "hbm0.hbm_fabric:dram:data:71": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959296,
+        "service_ns": 1118697.4719806241
+      },
+      "hbm0.hbm_fabric:dram:data:72": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959136,
+        "service_ns": 1118692.3519806243
+      },
+      "hbm0.hbm_fabric:dram:data:73": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959136,
+        "service_ns": 1118692.3519806243
+      },
+      "hbm0.hbm_fabric:dram:data:74": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959104,
+        "service_ns": 1118691.3279806243
+      },
+      "hbm0.hbm_fabric:dram:data:75": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959104,
+        "service_ns": 1118691.3279806243
+      },
+      "hbm0.hbm_fabric:dram:data:76": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959104,
+        "service_ns": 1118691.3279806243
+      },
+      "hbm0.hbm_fabric:dram:data:77": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959104,
+        "service_ns": 1118691.3279806243
+      },
+      "hbm0.hbm_fabric:dram:data:78": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959104,
+        "service_ns": 1118691.3279806243
+      },
+      "hbm0.hbm_fabric:dram:data:79": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34959104,
+        "service_ns": 1118691.3279806243
+      },
+      "hbm0.hbm_fabric:dram:data:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977856,
+        "service_ns": 1119291.39198061
+      },
+      "hbm0.hbm_fabric:dram:data:80": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958752,
+        "service_ns": 1118680.0639806245
+      },
+      "hbm0.hbm_fabric:dram:data:81": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958752,
+        "service_ns": 1118680.0639806245
+      },
+      "hbm0.hbm_fabric:dram:data:82": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958720,
+        "service_ns": 1118679.0399806246
+      },
+      "hbm0.hbm_fabric:dram:data:83": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958720,
+        "service_ns": 1118679.0399806246
+      },
+      "hbm0.hbm_fabric:dram:data:84": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958720,
+        "service_ns": 1118679.0399806246
+      },
+      "hbm0.hbm_fabric:dram:data:85": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958720,
+        "service_ns": 1118679.0399806246
+      },
+      "hbm0.hbm_fabric:dram:data:86": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958720,
+        "service_ns": 1118679.0399806246
+      },
+      "hbm0.hbm_fabric:dram:data:87": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958720,
+        "service_ns": 1118679.0399806246
+      },
+      "hbm0.hbm_fabric:dram:data:88": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958336,
+        "service_ns": 1118666.7519806249
+      },
+      "hbm0.hbm_fabric:dram:data:89": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958336,
+        "service_ns": 1118666.7519806249
+      },
+      "hbm0.hbm_fabric:dram:data:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34977856,
+        "service_ns": 1119291.39198061
+      },
+      "hbm0.hbm_fabric:dram:data:90": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958336,
+        "service_ns": 1118666.7519806249
+      },
+      "hbm0.hbm_fabric:dram:data:91": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958336,
+        "service_ns": 1118666.7519806249
+      },
+      "hbm0.hbm_fabric:dram:data:92": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958336,
+        "service_ns": 1118666.7519806249
+      },
+      "hbm0.hbm_fabric:dram:data:93": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958336,
+        "service_ns": 1118666.7519806249
+      },
+      "hbm0.hbm_fabric:dram:data:94": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958336,
+        "service_ns": 1118666.7519806249
+      },
+      "hbm0.hbm_fabric:dram:data:95": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958336,
+        "service_ns": 1118666.7519806249
+      },
+      "hbm0.hbm_fabric:dram:data:96": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958240,
+        "service_ns": 1118663.679980625
+      },
+      "hbm0.hbm_fabric:dram:data:97": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958240,
+        "service_ns": 1118663.679980625
+      },
+      "hbm0.hbm_fabric:dram:data:98": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958176,
+        "service_ns": 1118661.631980625
+      },
+      "hbm0.hbm_fabric:dram:data:99": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 34958176,
+        "service_ns": 1118661.631980625
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83656.70399976936
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83656.70399976936
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83623.93599976967
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83623.93599976967
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83587.07199977002
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83587.07199977002
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83582.97599977006
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83582.97599977006
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83656.70399976936
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83656.70399976936
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83615.74399976975
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83615.74399976975
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83615.74399976975
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83615.74399976975
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83619.83999976971
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83619.83999976971
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83546.11199977041
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83546.11199977041
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82812.92799977733
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82812.92799977733
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82847.743999777
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82847.743999777
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82847.743999777
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82847.743999777
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83546.11199977041
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83546.11199977041
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82771.96799977771
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82771.96799977771
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82771.96799977771
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82771.96799977771
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82812.92799977733
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82812.92799977733
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82952.19199977601
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82952.19199977601
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82878.46399977671
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82878.46399977671
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82833.40799977713
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82833.40799977713
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82833.40799977713
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82833.40799977713
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82952.19199977601
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82952.19199977601
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82919.42399977632
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82919.42399977632
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82919.42399977632
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82919.42399977632
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82878.46399977671
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82878.46399977671
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82788.35199977756
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82788.35199977756
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82731.0079997781
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82731.0079997781
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82718.71999977822
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82718.71999977822
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82718.71999977822
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82718.71999977822
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82788.35199977756
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82788.35199977756
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82743.29599977798
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82743.29599977798
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82743.29599977798
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82743.29599977798
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82731.0079997781
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 82731.0079997781
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85903.35999974817
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85860.35199974857
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85839.87199974876
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85839.87199974876
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85829.63199974886
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85829.63199974886
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85141.50399975535
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85141.50399975535
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85860.35199974857
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85860.35199974857
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85884.92799974834
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85884.92799974834
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85884.92799974834
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85883.90399974835
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85839.87199974876
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85839.87199974876
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85098.49599975576
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85098.49599975576
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85805.0559997491
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85805.0559997491
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85819.39199974896
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85819.39199974896
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85819.39199974896
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85819.39199974896
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85098.49599975576
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85098.49599975576
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85067.77599975605
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85067.77599975605
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85067.77599975605
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85067.77599975605
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85805.0559997491
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85805.0559997491
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85968.89599974755
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85968.89599974755
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85174.27199975504
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85174.27199975504
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85149.69599975528
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85145.59999975532
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85145.59999975532
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85145.59999975532
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85968.89599974755
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85968.89599974755
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85915.64799974805
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85915.64799974805
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85915.64799974805
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85915.64799974805
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85895.16799974824
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85895.16799974824
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:0": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85098.49599975576
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:1": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85098.49599975576
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:10": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83490.81599977093
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:11": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83490.81599977093
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:12": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83486.71999977097
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:13": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83486.71999977097
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:14": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83486.71999977097
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:15": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83486.71999977097
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:2": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85098.49599975576
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:3": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 85098.49599975576
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:4": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83511.29599977074
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:5": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83511.29599977074
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:6": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83511.29599977074
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:7": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83511.29599977074
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:8": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83490.81599977093
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:9": {
+        "owner": "hbm0.hbm_fabric",
+        "bytes_moved": 0,
+        "service_ns": 83490.81599977093
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 14.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 14.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 14.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 14.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 14.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 14.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 14.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 14.0
+      },
+      "hostmem0.memory:dram:command:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 98.57142857142864
+      },
+      "hostmem0.memory:dram:data:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 4416,
+        "service_ns": 98.57142857142864
+      }
+    },
+    "owner_ids": [
+      "hbm0.hbm_fabric",
+      "hostmem0.memory"
+    ],
+    "organization_profiles": [],
+    "organization_profile_limit": 32,
+    "service_time_scope": "service_ns sums per-task/owner completion spans, which may overlap; it is neither elapsed wall time nor data-bus busy time. resource_totals contains actual per-resource occupied time and bytes.",
+    "accounting_semantics": "resolved analytical burst bytes and controller waits; null means not fully recorded; empty organization_profiles is not evidence of complete geometry reporting; no device accuracy claim"
+  },
+  "resolved_placement": {
+    "op_to_component": {
+      "embedding": "gpu0",
+      "layer-000.attention": "gpu0",
+      "layer-000.mlp": "gpu0",
+      "layer-000.input_norm.reduce": "gpu0",
+      "layer-000.input_norm.apply": "gpu0",
+      "layer-000.post_attention_norm.reduce": "gpu0",
+      "layer-000.post_attention_norm.apply": "gpu0",
+      "layer-000.attention.q_bias": "gpu0",
+      "layer-000.attention.k_bias": "gpu0",
+      "layer-000.attention.v_bias": "gpu0",
+      "layer-000.attention.rope": "gpu0",
+      "layer-000.attention.qk": "gpu0",
+      "layer-000.attention.pv": "gpu0",
+      "layer-000.attention.softmax.reduce": "gpu0",
+      "layer-000.attention.softmax.normalize": "gpu0",
+      "layer-000.attention.residual": "gpu0",
+      "layer-000.mlp.activation": "gpu0",
+      "layer-000.mlp.residual": "gpu0",
+      "layer-001.attention": "gpu0",
+      "layer-001.mlp": "gpu0",
+      "layer-001.input_norm.reduce": "gpu0",
+      "layer-001.input_norm.apply": "gpu0",
+      "layer-001.post_attention_norm.reduce": "gpu0",
+      "layer-001.post_attention_norm.apply": "gpu0",
+      "layer-001.attention.q_bias": "gpu0",
+      "layer-001.attention.k_bias": "gpu0",
+      "layer-001.attention.v_bias": "gpu0",
+      "layer-001.attention.rope": "gpu0",
+      "layer-001.attention.qk": "gpu0",
+      "layer-001.attention.pv": "gpu0",
+      "layer-001.attention.softmax.reduce": "gpu0",
+      "layer-001.attention.softmax.normalize": "gpu0",
+      "layer-001.attention.residual": "gpu0",
+      "layer-001.mlp.activation": "gpu0",
+      "layer-001.mlp.residual": "gpu0",
+      "layer-002.attention": "gpu0",
+      "layer-002.mlp": "gpu0",
+      "layer-002.input_norm.reduce": "gpu0",
+      "layer-002.input_norm.apply": "gpu0",
+      "layer-002.post_attention_norm.reduce": "gpu0",
+      "layer-002.post_attention_norm.apply": "gpu0",
+      "layer-002.attention.q_bias": "gpu0",
+      "layer-002.attention.k_bias": "gpu0",
+      "layer-002.attention.v_bias": "gpu0",
+      "layer-002.attention.rope": "gpu0",
+      "layer-002.attention.qk": "gpu0",
+      "layer-002.attention.pv": "gpu0",
+      "layer-002.attention.softmax.reduce": "gpu0",
+      "layer-002.attention.softmax.normalize": "gpu0",
+      "layer-002.attention.residual": "gpu0",
+      "layer-002.mlp.activation": "gpu0",
+      "layer-002.mlp.residual": "gpu0",
+      "layer-003.attention": "gpu0",
+      "layer-003.mlp": "gpu0",
+      "layer-003.input_norm.reduce": "gpu0",
+      "layer-003.input_norm.apply": "gpu0",
+      "layer-003.post_attention_norm.reduce": "gpu0",
+      "layer-003.post_attention_norm.apply": "gpu0",
+      "layer-003.attention.q_bias": "gpu0",
+      "layer-003.attention.k_bias": "gpu0",
+      "layer-003.attention.v_bias": "gpu0",
+      "layer-003.attention.rope": "gpu0",
+      "layer-003.attention.qk": "gpu0",
+      "layer-003.attention.pv": "gpu0",
+      "layer-003.attention.softmax.reduce": "gpu0",
+      "layer-003.attention.softmax.normalize": "gpu0",
+      "layer-003.attention.residual": "gpu0",
+      "layer-003.mlp.activation": "gpu0",
+      "layer-003.mlp.residual": "gpu0",
+      "layer-004.attention": "gpu0",
+      "layer-004.mlp": "gpu0",
+      "layer-004.input_norm.reduce": "gpu0",
+      "layer-004.input_norm.apply": "gpu0",
+      "layer-004.post_attention_norm.reduce": "gpu0",
+      "layer-004.post_attention_norm.apply": "gpu0",
+      "layer-004.attention.q_bias": "gpu0",
+      "layer-004.attention.k_bias": "gpu0",
+      "layer-004.attention.v_bias": "gpu0",
+      "layer-004.attention.rope": "gpu0",
+      "layer-004.attention.qk": "gpu0",
+      "layer-004.attention.pv": "gpu0",
+      "layer-004.attention.softmax.reduce": "gpu0",
+      "layer-004.attention.softmax.normalize": "gpu0",
+      "layer-004.attention.residual": "gpu0",
+      "layer-004.mlp.activation": "gpu0",
+      "layer-004.mlp.residual": "gpu0",
+      "layer-005.attention": "gpu0",
+      "layer-005.mlp": "gpu0",
+      "layer-005.input_norm.reduce": "gpu0",
+      "layer-005.input_norm.apply": "gpu0",
+      "layer-005.post_attention_norm.reduce": "gpu0",
+      "layer-005.post_attention_norm.apply": "gpu0",
+      "layer-005.attention.q_bias": "gpu0",
+      "layer-005.attention.k_bias": "gpu0",
+      "layer-005.attention.v_bias": "gpu0",
+      "layer-005.attention.rope": "gpu0",
+      "layer-005.attention.qk": "gpu0",
+      "layer-005.attention.pv": "gpu0",
+      "layer-005.attention.softmax.reduce": "gpu0",
+      "layer-005.attention.softmax.normalize": "gpu0",
+      "layer-005.attention.residual": "gpu0",
+      "layer-005.mlp.activation": "gpu0",
+      "layer-005.mlp.residual": "gpu0",
+      "layer-006.attention": "gpu0",
+      "layer-006.mlp": "gpu0",
+      "layer-006.input_norm.reduce": "gpu0",
+      "layer-006.input_norm.apply": "gpu0",
+      "layer-006.post_attention_norm.reduce": "gpu0",
+      "layer-006.post_attention_norm.apply": "gpu0",
+      "layer-006.attention.q_bias": "gpu0",
+      "layer-006.attention.k_bias": "gpu0",
+      "layer-006.attention.v_bias": "gpu0",
+      "layer-006.attention.rope": "gpu0",
+      "layer-006.attention.qk": "gpu0",
+      "layer-006.attention.pv": "gpu0",
+      "layer-006.attention.softmax.reduce": "gpu0",
+      "layer-006.attention.softmax.normalize": "gpu0",
+      "layer-006.attention.residual": "gpu0",
+      "layer-006.mlp.activation": "gpu0",
+      "layer-006.mlp.residual": "gpu0",
+      "layer-007.attention": "gpu0",
+      "layer-007.mlp": "gpu0",
+      "layer-007.input_norm.reduce": "gpu0",
+      "layer-007.input_norm.apply": "gpu0",
+      "layer-007.post_attention_norm.reduce": "gpu0",
+      "layer-007.post_attention_norm.apply": "gpu0",
+      "layer-007.attention.q_bias": "gpu0",
+      "layer-007.attention.k_bias": "gpu0",
+      "layer-007.attention.v_bias": "gpu0",
+      "layer-007.attention.rope": "gpu0",
+      "layer-007.attention.qk": "gpu0",
+      "layer-007.attention.pv": "gpu0",
+      "layer-007.attention.softmax.reduce": "gpu0",
+      "layer-007.attention.softmax.normalize": "gpu0",
+      "layer-007.attention.residual": "gpu0",
+      "layer-007.mlp.activation": "gpu0",
+      "layer-007.mlp.residual": "gpu0",
+      "layer-008.attention": "gpu0",
+      "layer-008.mlp": "gpu0",
+      "layer-008.input_norm.reduce": "gpu0",
+      "layer-008.input_norm.apply": "gpu0",
+      "layer-008.post_attention_norm.reduce": "gpu0",
+      "layer-008.post_attention_norm.apply": "gpu0",
+      "layer-008.attention.q_bias": "gpu0",
+      "layer-008.attention.k_bias": "gpu0",
+      "layer-008.attention.v_bias": "gpu0",
+      "layer-008.attention.rope": "gpu0",
+      "layer-008.attention.qk": "gpu0",
+      "layer-008.attention.pv": "gpu0",
+      "layer-008.attention.softmax.reduce": "gpu0",
+      "layer-008.attention.softmax.normalize": "gpu0",
+      "layer-008.attention.residual": "gpu0",
+      "layer-008.mlp.activation": "gpu0",
+      "layer-008.mlp.residual": "gpu0",
+      "layer-009.attention": "gpu0",
+      "layer-009.mlp": "gpu0",
+      "layer-009.input_norm.reduce": "gpu0",
+      "layer-009.input_norm.apply": "gpu0",
+      "layer-009.post_attention_norm.reduce": "gpu0",
+      "layer-009.post_attention_norm.apply": "gpu0",
+      "layer-009.attention.q_bias": "gpu0",
+      "layer-009.attention.k_bias": "gpu0",
+      "layer-009.attention.v_bias": "gpu0",
+      "layer-009.attention.rope": "gpu0",
+      "layer-009.attention.qk": "gpu0",
+      "layer-009.attention.pv": "gpu0",
+      "layer-009.attention.softmax.reduce": "gpu0",
+      "layer-009.attention.softmax.normalize": "gpu0",
+      "layer-009.attention.residual": "gpu0",
+      "layer-009.mlp.activation": "gpu0",
+      "layer-009.mlp.residual": "gpu0",
+      "layer-010.attention": "gpu0",
+      "layer-010.mlp": "gpu0",
+      "layer-010.input_norm.reduce": "gpu0",
+      "layer-010.input_norm.apply": "gpu0",
+      "layer-010.post_attention_norm.reduce": "gpu0",
+      "layer-010.post_attention_norm.apply": "gpu0",
+      "layer-010.attention.q_bias": "gpu0",
+      "layer-010.attention.k_bias": "gpu0",
+      "layer-010.attention.v_bias": "gpu0",
+      "layer-010.attention.rope": "gpu0",
+      "layer-010.attention.qk": "gpu0",
+      "layer-010.attention.pv": "gpu0",
+      "layer-010.attention.softmax.reduce": "gpu0",
+      "layer-010.attention.softmax.normalize": "gpu0",
+      "layer-010.attention.residual": "gpu0",
+      "layer-010.mlp.activation": "gpu0",
+      "layer-010.mlp.residual": "gpu0",
+      "layer-011.attention": "gpu0",
+      "layer-011.mlp": "gpu0",
+      "layer-011.input_norm.reduce": "gpu0",
+      "layer-011.input_norm.apply": "gpu0",
+      "layer-011.post_attention_norm.reduce": "gpu0",
+      "layer-011.post_attention_norm.apply": "gpu0",
+      "layer-011.attention.q_bias": "gpu0",
+      "layer-011.attention.k_bias": "gpu0",
+      "layer-011.attention.v_bias": "gpu0",
+      "layer-011.attention.rope": "gpu0",
+      "layer-011.attention.qk": "gpu0",
+      "layer-011.attention.pv": "gpu0",
+      "layer-011.attention.softmax.reduce": "gpu0",
+      "layer-011.attention.softmax.normalize": "gpu0",
+      "layer-011.attention.residual": "gpu0",
+      "layer-011.mlp.activation": "gpu0",
+      "layer-011.mlp.residual": "gpu0",
+      "layer-012.attention": "gpu0",
+      "layer-012.mlp": "gpu0",
+      "layer-012.input_norm.reduce": "gpu0",
+      "layer-012.input_norm.apply": "gpu0",
+      "layer-012.post_attention_norm.reduce": "gpu0",
+      "layer-012.post_attention_norm.apply": "gpu0",
+      "layer-012.attention.q_bias": "gpu0",
+      "layer-012.attention.k_bias": "gpu0",
+      "layer-012.attention.v_bias": "gpu0",
+      "layer-012.attention.rope": "gpu0",
+      "layer-012.attention.qk": "gpu0",
+      "layer-012.attention.pv": "gpu0",
+      "layer-012.attention.softmax.reduce": "gpu0",
+      "layer-012.attention.softmax.normalize": "gpu0",
+      "layer-012.attention.residual": "gpu0",
+      "layer-012.mlp.activation": "gpu0",
+      "layer-012.mlp.residual": "gpu0",
+      "layer-013.attention": "gpu0",
+      "layer-013.mlp": "gpu0",
+      "layer-013.input_norm.reduce": "gpu0",
+      "layer-013.input_norm.apply": "gpu0",
+      "layer-013.post_attention_norm.reduce": "gpu0",
+      "layer-013.post_attention_norm.apply": "gpu0",
+      "layer-013.attention.q_bias": "gpu0",
+      "layer-013.attention.k_bias": "gpu0",
+      "layer-013.attention.v_bias": "gpu0",
+      "layer-013.attention.rope": "gpu0",
+      "layer-013.attention.qk": "gpu0",
+      "layer-013.attention.pv": "gpu0",
+      "layer-013.attention.softmax.reduce": "gpu0",
+      "layer-013.attention.softmax.normalize": "gpu0",
+      "layer-013.attention.residual": "gpu0",
+      "layer-013.mlp.activation": "gpu0",
+      "layer-013.mlp.residual": "gpu0",
+      "layer-014.attention": "gpu0",
+      "layer-014.mlp": "gpu0",
+      "layer-014.input_norm.reduce": "gpu0",
+      "layer-014.input_norm.apply": "gpu0",
+      "layer-014.post_attention_norm.reduce": "gpu0",
+      "layer-014.post_attention_norm.apply": "gpu0",
+      "layer-014.attention.q_bias": "gpu0",
+      "layer-014.attention.k_bias": "gpu0",
+      "layer-014.attention.v_bias": "gpu0",
+      "layer-014.attention.rope": "gpu0",
+      "layer-014.attention.qk": "gpu0",
+      "layer-014.attention.pv": "gpu0",
+      "layer-014.attention.softmax.reduce": "gpu0",
+      "layer-014.attention.softmax.normalize": "gpu0",
+      "layer-014.attention.residual": "gpu0",
+      "layer-014.mlp.activation": "gpu0",
+      "layer-014.mlp.residual": "gpu0",
+      "layer-015.attention": "gpu0",
+      "layer-015.mlp": "gpu0",
+      "layer-015.input_norm.reduce": "gpu0",
+      "layer-015.input_norm.apply": "gpu0",
+      "layer-015.post_attention_norm.reduce": "gpu0",
+      "layer-015.post_attention_norm.apply": "gpu0",
+      "layer-015.attention.q_bias": "gpu0",
+      "layer-015.attention.k_bias": "gpu0",
+      "layer-015.attention.v_bias": "gpu0",
+      "layer-015.attention.rope": "gpu0",
+      "layer-015.attention.qk": "gpu0",
+      "layer-015.attention.pv": "gpu0",
+      "layer-015.attention.softmax.reduce": "gpu0",
+      "layer-015.attention.softmax.normalize": "gpu0",
+      "layer-015.attention.residual": "gpu0",
+      "layer-015.mlp.activation": "gpu0",
+      "layer-015.mlp.residual": "gpu0",
+      "layer-016.attention": "gpu0",
+      "layer-016.mlp": "gpu0",
+      "layer-016.input_norm.reduce": "gpu0",
+      "layer-016.input_norm.apply": "gpu0",
+      "layer-016.post_attention_norm.reduce": "gpu0",
+      "layer-016.post_attention_norm.apply": "gpu0",
+      "layer-016.attention.q_bias": "gpu0",
+      "layer-016.attention.k_bias": "gpu0",
+      "layer-016.attention.v_bias": "gpu0",
+      "layer-016.attention.rope": "gpu0",
+      "layer-016.attention.qk": "gpu0",
+      "layer-016.attention.pv": "gpu0",
+      "layer-016.attention.softmax.reduce": "gpu0",
+      "layer-016.attention.softmax.normalize": "gpu0",
+      "layer-016.attention.residual": "gpu0",
+      "layer-016.mlp.activation": "gpu0",
+      "layer-016.mlp.residual": "gpu0",
+      "layer-017.attention": "gpu0",
+      "layer-017.mlp": "gpu0",
+      "layer-017.input_norm.reduce": "gpu0",
+      "layer-017.input_norm.apply": "gpu0",
+      "layer-017.post_attention_norm.reduce": "gpu0",
+      "layer-017.post_attention_norm.apply": "gpu0",
+      "layer-017.attention.q_bias": "gpu0",
+      "layer-017.attention.k_bias": "gpu0",
+      "layer-017.attention.v_bias": "gpu0",
+      "layer-017.attention.rope": "gpu0",
+      "layer-017.attention.qk": "gpu0",
+      "layer-017.attention.pv": "gpu0",
+      "layer-017.attention.softmax.reduce": "gpu0",
+      "layer-017.attention.softmax.normalize": "gpu0",
+      "layer-017.attention.residual": "gpu0",
+      "layer-017.mlp.activation": "gpu0",
+      "layer-017.mlp.residual": "gpu0",
+      "layer-018.attention": "gpu0",
+      "layer-018.mlp": "gpu0",
+      "layer-018.input_norm.reduce": "gpu0",
+      "layer-018.input_norm.apply": "gpu0",
+      "layer-018.post_attention_norm.reduce": "gpu0",
+      "layer-018.post_attention_norm.apply": "gpu0",
+      "layer-018.attention.q_bias": "gpu0",
+      "layer-018.attention.k_bias": "gpu0",
+      "layer-018.attention.v_bias": "gpu0",
+      "layer-018.attention.rope": "gpu0",
+      "layer-018.attention.qk": "gpu0",
+      "layer-018.attention.pv": "gpu0",
+      "layer-018.attention.softmax.reduce": "gpu0",
+      "layer-018.attention.softmax.normalize": "gpu0",
+      "layer-018.attention.residual": "gpu0",
+      "layer-018.mlp.activation": "gpu0",
+      "layer-018.mlp.residual": "gpu0",
+      "layer-019.attention": "gpu0",
+      "layer-019.mlp": "gpu0",
+      "layer-019.input_norm.reduce": "gpu0",
+      "layer-019.input_norm.apply": "gpu0",
+      "layer-019.post_attention_norm.reduce": "gpu0",
+      "layer-019.post_attention_norm.apply": "gpu0",
+      "layer-019.attention.q_bias": "gpu0",
+      "layer-019.attention.k_bias": "gpu0",
+      "layer-019.attention.v_bias": "gpu0",
+      "layer-019.attention.rope": "gpu0",
+      "layer-019.attention.qk": "gpu0",
+      "layer-019.attention.pv": "gpu0",
+      "layer-019.attention.softmax.reduce": "gpu0",
+      "layer-019.attention.softmax.normalize": "gpu0",
+      "layer-019.attention.residual": "gpu0",
+      "layer-019.mlp.activation": "gpu0",
+      "layer-019.mlp.residual": "gpu0",
+      "layer-020.attention": "gpu0",
+      "layer-020.mlp": "gpu0",
+      "layer-020.input_norm.reduce": "gpu0",
+      "layer-020.input_norm.apply": "gpu0",
+      "layer-020.post_attention_norm.reduce": "gpu0",
+      "layer-020.post_attention_norm.apply": "gpu0",
+      "layer-020.attention.q_bias": "gpu0",
+      "layer-020.attention.k_bias": "gpu0",
+      "layer-020.attention.v_bias": "gpu0",
+      "layer-020.attention.rope": "gpu0",
+      "layer-020.attention.qk": "gpu0",
+      "layer-020.attention.pv": "gpu0",
+      "layer-020.attention.softmax.reduce": "gpu0",
+      "layer-020.attention.softmax.normalize": "gpu0",
+      "layer-020.attention.residual": "gpu0",
+      "layer-020.mlp.activation": "gpu0",
+      "layer-020.mlp.residual": "gpu0",
+      "layer-021.attention": "gpu0",
+      "layer-021.mlp": "gpu0",
+      "layer-021.input_norm.reduce": "gpu0",
+      "layer-021.input_norm.apply": "gpu0",
+      "layer-021.post_attention_norm.reduce": "gpu0",
+      "layer-021.post_attention_norm.apply": "gpu0",
+      "layer-021.attention.q_bias": "gpu0",
+      "layer-021.attention.k_bias": "gpu0",
+      "layer-021.attention.v_bias": "gpu0",
+      "layer-021.attention.rope": "gpu0",
+      "layer-021.attention.qk": "gpu0",
+      "layer-021.attention.pv": "gpu0",
+      "layer-021.attention.softmax.reduce": "gpu0",
+      "layer-021.attention.softmax.normalize": "gpu0",
+      "layer-021.attention.residual": "gpu0",
+      "layer-021.mlp.activation": "gpu0",
+      "layer-021.mlp.residual": "gpu0",
+      "layer-022.attention": "gpu0",
+      "layer-022.mlp": "gpu0",
+      "layer-022.input_norm.reduce": "gpu0",
+      "layer-022.input_norm.apply": "gpu0",
+      "layer-022.post_attention_norm.reduce": "gpu0",
+      "layer-022.post_attention_norm.apply": "gpu0",
+      "layer-022.attention.q_bias": "gpu0",
+      "layer-022.attention.k_bias": "gpu0",
+      "layer-022.attention.v_bias": "gpu0",
+      "layer-022.attention.rope": "gpu0",
+      "layer-022.attention.qk": "gpu0",
+      "layer-022.attention.pv": "gpu0",
+      "layer-022.attention.softmax.reduce": "gpu0",
+      "layer-022.attention.softmax.normalize": "gpu0",
+      "layer-022.attention.residual": "gpu0",
+      "layer-022.mlp.activation": "gpu0",
+      "layer-022.mlp.residual": "gpu0",
+      "layer-023.attention": "gpu0",
+      "layer-023.mlp": "gpu0",
+      "layer-023.input_norm.reduce": "gpu0",
+      "layer-023.input_norm.apply": "gpu0",
+      "layer-023.post_attention_norm.reduce": "gpu0",
+      "layer-023.post_attention_norm.apply": "gpu0",
+      "layer-023.attention.q_bias": "gpu0",
+      "layer-023.attention.k_bias": "gpu0",
+      "layer-023.attention.v_bias": "gpu0",
+      "layer-023.attention.rope": "gpu0",
+      "layer-023.attention.qk": "gpu0",
+      "layer-023.attention.pv": "gpu0",
+      "layer-023.attention.softmax.reduce": "gpu0",
+      "layer-023.attention.softmax.normalize": "gpu0",
+      "layer-023.attention.residual": "gpu0",
+      "layer-023.mlp.activation": "gpu0",
+      "layer-023.mlp.residual": "gpu0",
+      "lm_head": "gpu0"
+    },
+    "tensor_to_component": {
+      "layer-000.attention_weights": "hbm0",
+      "layer-000.mlp_weights": "hbm0",
+      "layer-001.attention_weights": "hbm0",
+      "layer-001.mlp_weights": "hbm0",
+      "layer-002.attention_weights": "hbm0",
+      "layer-002.mlp_weights": "hbm0",
+      "layer-003.attention_weights": "hbm0",
+      "layer-003.mlp_weights": "hbm0",
+      "layer-004.attention_weights": "hbm0",
+      "layer-004.mlp_weights": "hbm0",
+      "layer-005.attention_weights": "hbm0",
+      "layer-005.mlp_weights": "hbm0",
+      "layer-006.attention_weights": "hbm0",
+      "layer-006.mlp_weights": "hbm0",
+      "layer-007.attention_weights": "hbm0",
+      "layer-007.mlp_weights": "hbm0",
+      "layer-008.attention_weights": "hbm0",
+      "layer-008.mlp_weights": "hbm0",
+      "layer-009.attention_weights": "hbm0",
+      "layer-009.mlp_weights": "hbm0",
+      "layer-010.attention_weights": "hbm0",
+      "layer-010.mlp_weights": "hbm0",
+      "layer-011.attention_weights": "hbm0",
+      "layer-011.mlp_weights": "hbm0",
+      "layer-012.attention_weights": "hbm0",
+      "layer-012.mlp_weights": "hbm0",
+      "layer-013.attention_weights": "hbm0",
+      "layer-013.mlp_weights": "hbm0",
+      "layer-014.attention_weights": "hbm0",
+      "layer-014.mlp_weights": "hbm0",
+      "layer-015.attention_weights": "hbm0",
+      "layer-015.mlp_weights": "hbm0",
+      "layer-016.attention_weights": "hbm0",
+      "layer-016.mlp_weights": "hbm0",
+      "layer-017.attention_weights": "hbm0",
+      "layer-017.mlp_weights": "hbm0",
+      "layer-018.attention_weights": "hbm0",
+      "layer-018.mlp_weights": "hbm0",
+      "layer-019.attention_weights": "hbm0",
+      "layer-019.mlp_weights": "hbm0",
+      "layer-020.attention_weights": "hbm0",
+      "layer-020.mlp_weights": "hbm0",
+      "layer-021.attention_weights": "hbm0",
+      "layer-021.mlp_weights": "hbm0",
+      "layer-022.attention_weights": "hbm0",
+      "layer-022.mlp_weights": "hbm0",
+      "layer-023.attention_weights": "hbm0",
+      "layer-023.mlp_weights": "hbm0",
+      "embedding_weights": "hbm0",
+      "kv_cache": "hbm0"
+    },
+    "active_memory": "hbm0",
+    "kv": "hbm0"
+  },
+  "wall_seconds": 16.103056599997217,
+  "cpu_seconds": 20.734375,
+  "finished_at": "2026-10-16T10:46:50.227365+00:00",
+  "python_executable": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\.venv\\Scripts\\python.exe",
+  "gc_thresholds": [
+    7000,
+    100,
+    100
+  ],
+  "cohort_timings": [
+    {
+      "completed": 1,
+      "kind": "prefill",
+      "wall_seconds": 2.8794583000126295,
+      "cpu_seconds": 3.71875,
+      "profiled": false,
+      "simulated_time_ns": 953582.4365714286
+    },
+    {
+      "completed": 2,
+      "kind": "decode",
+      "wall_seconds": 1.568923699989682,
+      "cpu_seconds": 2.0625,
+      "profiled": false,
+      "simulated_time_ns": 1767360.3565714287
+    },
+    {
+      "completed": 3,
+      "kind": "decode",
+      "wall_seconds": 1.54852850001771,
+      "cpu_seconds": 2.046875,
+      "profiled": false,
+      "simulated_time_ns": 2581583.716571429
+    },
+    {
+      "completed": 4,
+      "kind": "decode",
+      "wall_seconds": 1.7633895999751985,
+      "cpu_seconds": 2.15625,
+      "profiled": false,
+      "simulated_time_ns": 3395926.372571429
+    },
+    {
+      "completed": 5,
+      "kind": "decode",
+      "wall_seconds": 1.507437000022037,
+      "cpu_seconds": 2.046875,
+      "profiled": false,
+      "simulated_time_ns": 4210271.076571428
+    },
+    {
+      "completed": 6,
+      "kind": "decode",
+      "wall_seconds": 1.522404799994547,
+      "cpu_seconds": 2.0,
+      "profiled": false,
+      "simulated_time_ns": 5024635.236571428
+    },
+    {
+      "completed": 7,
+      "kind": "decode",
+      "wall_seconds": 1.5424379000032786,
+      "cpu_seconds": 1.921875,
+      "profiled": false,
+      "simulated_time_ns": 5838999.3965714285
+    },
+    {
+      "completed": 8,
+      "kind": "decode",
+      "wall_seconds": 1.5526468000025488,
+      "cpu_seconds": 2.09375,
+      "profiled": false,
+      "simulated_time_ns": 6653384.036571428
+    },
+    {
+      "completed": 9,
+      "kind": "decode",
+      "wall_seconds": 1.5257314999762457,
+      "cpu_seconds": 2.0,
+      "profiled": false,
+      "simulated_time_ns": 7467772.260571429
+    }
+  ],
+  "decode_unprofiled_steps": 8,
+  "decode_unprofiled_wall_seconds": 12.531499799981248,
+  "profiled": false,
+  "purpose": "runtime optimization benchmark; not a formal scan point"
+}

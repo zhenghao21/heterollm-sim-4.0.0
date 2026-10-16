@@ -2,6 +2,8 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.pyd
+*.so
 .pytest_cache/
 
 # Local protocol copies; source references are recorded in code/docs.

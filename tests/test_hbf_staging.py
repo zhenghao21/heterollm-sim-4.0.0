@@ -12,6 +12,32 @@ from heterollm_sim.nand_core import NandCore
 PAGE = 4096
 
 
+@pytest.mark.parametrize("lanes,pages_per_block", [(1, 4), (3, 4), (8, 7)])
+def test_immutable_preload_plan_matches_fragmented_scalar_page_mapping(lanes, pages_per_block):
+    import numpy as np
+    from heterollm_sim.hbf_staging import _Preload, _preload_read_plan
+
+    preload = _Preload(11 * pages_per_block * PAGE - 64,
+                       (range(2, 6), range(17, 24)))
+    for first, stop in ((0, 16), (3, 24), (9, 11 * pages_per_block - 1)):
+        addresses, blocks, inverse = _preload_read_plan(preload, lanes, pages_per_block, first, stop)
+        expected = [preload.page_location(index, lanes, pages_per_block)
+                    for index in range(first, stop)]
+        assert addresses.tolist() == [
+            (block // lanes * pages_per_block * lanes + page * lanes + block % lanes) * PAGE
+            for block, page in expected]
+        assert [blocks[index] for index in inverse] == [block for block, _ in expected]
+        assert _preload_read_plan(preload, lanes, pages_per_block, first, stop)[0] is addresses
+        with pytest.raises(ValueError):
+            addresses.flags.writeable = True
+        ready = np.zeros(len(blocks))
+        completions = np.arange(stop - first, dtype=float)[::-1]  # not monotone by block
+        np.maximum.at(ready, inverse, completions)
+        assert dict(zip(blocks, ready.tolist())) == {
+            block: max(time for (actual, _), time in zip(expected, completions) if actual == block)
+            for block in blocks}
+
+
 def config(**updates):
     values = dict(kind="HBF", protocol_mode="ocp_hbf_0_7", channels=1,
                   blocks_per_plane=8, pages_per_block=4, page_bytes=PAGE,
@@ -64,6 +90,131 @@ class Hardware:
 
     def bytes(self, kind):
         return sum(count for event, _, count, _ in self.events if event == kind)
+
+
+class StreamHardware(Hardware):
+    """Real scalar NAND oracle presented through the numeric stream API."""
+
+    def __init__(self, cfg, host_capacity=3 * PAGE):
+        from types import SimpleNamespace
+        super().__init__(cfg, host_capacity)
+        self.io = SimpleNamespace(**vars(self.io), read_flash_pages=self.read_pages)
+
+    def read_pages(self, addresses, arrivals):
+        import numpy as np
+        if np.isscalar(arrivals):
+            arrivals = [arrivals] * len(addresses)
+        return np.asarray([self.transfer("read_hbf", PAGE,
+            self.read_flash(int(address), PAGE, float(arrival)))
+            for address, arrival in zip(addresses, arrivals)])
+
+
+def test_dense_kv_reads_keep_exact_dependencies_across_tail_growth_and_sparse_append():
+    cfg = config(blocks_per_plane=64)
+    controllers, hardware, completions = [], [], []
+    for hardware_type in (Hardware, StreamHardware):
+        staging, hw = HbfStagingController(cfg, 3 * PAGE), hardware_type(cfg)
+        ends = [staging.write("K", 0, 0, 40 * PAGE, 0., hw.io)]
+        ends.append(staging.read("K", 0, 0, 40 * PAGE, 0., hw.io))
+        for token in range(32):
+            offset = 40 * PAGE + token * 256
+            ends.append(staging.write("K", 0, offset, 256, 0., hw.io))
+            ends.append(staging.read("K", 0, 0, offset + 256, 0., hw.io))
+        if hardware_type is StreamHardware:
+            state = staging._read_states[("K", 0)]
+            assert len(state.plans) <= 4
+            assert all(page.ready_ns == state.ready[index]
+                       for (owner, generation, index), page in staging._pages.items())
+        # Large sparse offsets must not expand a cached dense page array.
+        ends.append(staging.write("K", 0, 100_000 * PAGE, 64, 0., hw.io))
+        assert not staging._read_states
+        controllers.append(staging.snapshot())
+        hardware.append(hw)
+        completions.append(ends)
+    assert completions[0] == completions[1]
+    assert controllers[0] == controllers[1]
+    assert hardware[0].events == hardware[1].events
+
+
+def test_dense_ready_journal_survives_nested_rollback_rebind_and_release():
+    cfg = config(blocks_per_plane=64)
+    staging, hw = HbfStagingController(cfg, 3 * PAGE), StreamHardware(cfg)
+    staging.write("K", 0, 0, 32 * PAGE, 0., hw.io)
+    staging.read("K", 0, 0, 32 * PAGE, 0., hw.io)
+    before = staging.snapshot()
+    outer = staging.begin_transaction()
+    staging.read("K", 0, 0, 32 * PAGE, 0., hw.io)
+    assert len(outer["read_ready"]) == 1 and not outer["page_ready"]
+    after_read = staging.snapshot()
+    inner = staging.begin_transaction()
+    staging.write("K", 0, 32 * PAGE, PAGE, 0., hw.io)  # grow ready vector
+    staging.write("K", 0, 4 * PAGE + 64, 64, 0., hw.io)
+    staging.read("K", 0, 0, 33 * PAGE, 0., hw.io)
+    staging.rollback_transaction(inner)
+    assert staging.snapshot() == after_read
+    staging.read("K", 0, 0, 32 * PAGE, 0., hw.io)  # rebind after rollback
+    staging.release("K", 0)
+    staging.rollback_transaction(outer)
+    assert staging.snapshot() == before
+    saved = staging.snapshot()
+    staging.read("K", 0, 0, 32 * PAGE, 0., hw.io)
+    staging.restore(saved)
+    assert staging.snapshot() == saved
+
+
+def test_dense_validity_checks_holes_before_any_hardware_submission():
+    cfg = config(blocks_per_plane=64)
+    staging, hw = HbfStagingController(cfg, 3 * PAGE), StreamHardware(cfg)
+    staging.write("K", 0, 0, 32 * PAGE, 0., hw.io)
+    staging.write("K", 0, 33 * PAGE, 256, 0., hw.io)
+    staging.read("K", 0, 0, 32 * PAGE, 0., hw.io)
+    before = len(hw.events)
+    with pytest.raises(ValueError, match="uninitialized"):
+        staging.read("K", 0, 0, 33 * PAGE + 256, 0., hw.io)
+    assert len(hw.events) == before
+
+
+def test_scalar_frontier_journal_keeps_nested_delete_order_without_full_copy():
+    from heterollm_sim.hbf_staging import _JournalDict
+    values = _JournalDict({2: 4, 7: 8, 3: 9})
+    outer = values.begin()
+    values[2] = 5
+    values[10] = 1
+    inner = values.begin()
+    values.pop(7)
+    values[2] = 6
+    values.update_max((2, 3, 11), (4.0, 17.0, 3.0))
+    values.rollback(inner)
+    assert tuple(values.items()) == ((2, 5), (7, 8), (3, 9), (10, 1))
+    values.pop(3)
+    values.rollback(outer)
+    assert tuple(values.items()) == ((2, 4), (7, 8), (3, 9))
+
+
+@pytest.mark.parametrize("fragmented", [False, True])
+@pytest.mark.parametrize("dirty_tail", [False, True])
+def test_clean_numeric_release_preserves_partial_blocks_and_all_remaining_state(fragmented, dirty_tail):
+    cfg = config(channels=3, blocks_per_plane=64)
+    staging, hw = HbfStagingController(cfg, 3 * PAGE), StreamHardware(cfg)
+    for index in range(37):
+        if fragmented and index % 3 == 0:
+            staging.write("other", 0, index * PAGE, PAGE, 0., hw.io)
+        staging.write("K", 7, index * PAGE, PAGE, 0., hw.io)
+    if dirty_tail:
+        staging.write("K", 7, 37 * PAGE, 256, 0., hw.io)
+    staging.read("K", 7, 0, 37 * PAGE, 0., hw.io)
+    saved = staging.snapshot()
+    reference = HbfStagingController(cfg, 3 * PAGE)
+    reference.restore(saved)  # No numeric read state: independent scalar release.
+    kept_owner_maps = tuple(staging._owners.items())
+    assert staging._read_states[("K", 7)]
+    assert staging.release("K", 7, 19.) == reference.release("K", 7, 19.)
+    assert staging.snapshot() == reference.snapshot()
+    assert all(staging._owners[block] is owners for block, owners in kept_owner_maps)
+    # Reuse the logical generation after release, with exactly the same
+    # available slots, physical frontiers, and dependency clocks.
+    assert staging._slots == reference._slots
+    assert staging._block_ready == reference._block_ready
 
 
 def test_sixteen_small_kv_writes_reach_flash_only_when_page_is_full():
@@ -360,3 +511,25 @@ def test_preload_cannot_consume_capacity_promised_to_host_resident_pages():
     staging.write("K", 0, 0, 64, 0, hw.io)
     with pytest.raises(MemoryError, match="preload"):
         staging.preload("weights", 0, 3 * PAGE)
+
+
+def test_read_transaction_keeps_free_host_queue_without_copying_it():
+    cfg = config()
+    staging, hw = HbfStagingController(cfg, 3 * PAGE), Hardware(cfg)
+    now = staging.write("K", 0, 0, PAGE, 0, hw.io)
+    before = staging.snapshot()
+    slots = staging._slots
+    outer = staging.begin_transaction()
+    now = staging.read("K", 0, 0, PAGE, now, hw.io)
+    assert "_slots" not in outer["state"]
+    assert staging._slots is slots
+    # A nested mutation must save both transaction boundaries before taking
+    # a slot, even though the outer transaction started with a read.
+    inner = staging.begin_transaction()
+    staging.write("V", 0, 0, 64, now, hw.io)
+    assert outer["state"]["_slots"] == before["_slots"]
+    assert inner["state"]["_slots"] == before["_slots"]
+    assert outer["state"]["_slots"] is not inner["state"]["_slots"]
+    staging.commit_transaction(inner)
+    staging.rollback_transaction(outer)
+    assert staging.snapshot() == before

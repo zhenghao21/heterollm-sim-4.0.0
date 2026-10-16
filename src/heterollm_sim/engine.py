@@ -26,15 +26,7 @@ if TYPE_CHECKING:
 _CONTROL_CHECK_INTERVAL = 256
 
 
-def _resource_release_points(task, demands, start_ns, resource_lanes):
-    """Yield actual per-lane releases, separately from summed resource busy time."""
-    physical_ids = set(task.metadata.get("physical_demands_resource_ids", ()))
-    for resource_id, lane, end_ns in task.metadata.get("physical_resource_lane_completions", ()):
-        yield str(resource_id), int(lane), float(end_ns)
-    for demand in demands:
-        if demand.resource_id not in physical_ids:
-            yield demand.resource_id, int(resource_lanes.get(demand.resource_id, 0)), start_ns + demand.service_ns
-
+from ._resource_ledger import resource_release_points as _resource_release_points
 
 def _task_resource_intervals(
     task: TaskSpec,

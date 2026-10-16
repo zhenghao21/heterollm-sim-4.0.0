@@ -776,6 +776,18 @@ def _validate_acyclic(tasks_by_id: Mapping[str, TaskSpec]) -> None:
         raise ValueError("schedule contains a dependency cycle")
 
 
+def _publish_physical_summary(kernel, task, physical_ids, snapshot, predecessors):
+    """Publish the retained intervals through the ordered resource reducer."""
+    from ._resource_ledger import publish_physical_summary
+
+    return publish_physical_summary(
+        task.task_id, physical_ids, kernel.physical_runtime.timeline.lane_available,
+        snapshot["timeline"]["lane_available"],
+        task.metadata.get("physical_resource_last_intervals", {}),
+        kernel.resource_last_interval, kernel._resource_lane_last_interval,
+        kernel.resource_available, predecessors)
+
+
 class UnifiedEventKernel:
     """Incremental deterministic multi-resource event scheduler.
 
@@ -2539,14 +2551,13 @@ class UnifiedEventKernel:
                 if physical_snapshot is not None:
                     self.physical_runtime.commit_transaction(physical_snapshot)
             demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
-            # Core reservations happened on the shared timeline; publish
-            # their earliest free lane to kernel readiness before the next
-            # task is admitted.
+            # Even a zero-duration reservation can advance a resource's
+            # frontier to its arrival. Such a resource has no positive busy
+            # demand below, but must still be visible to ordinary tasks.
             if is_physical:
-                timeline = self.physical_runtime.timeline
-                for resource_id, lanes in timeline.lane_available.items():
-                    if lanes:
-                        self.resource_available[resource_id] = min(lanes)
+                from ._resource_ledger import publish_timeline_frontiers
+                publish_timeline_frontiers(
+                    self.physical_runtime.timeline.lane_available, self.resource_available)
         elif "stateful_l2" in task.metadata:
             try:
                 l2_owner = str(task.metadata["stateful_l2"]["owner"])
@@ -2587,167 +2598,72 @@ class UnifiedEventKernel:
         self._resource_groups.pop(task_id)
         self._sorted_demands.pop(task_id)
         self._phase_sequence.pop(task_id)
-        resource_predecessors: Dict[str, Dict[str, object]] = {}
-        resource_lanes: Dict[str, int] = {}
-        physical_ids = set(str(item) for item in task.metadata.get("physical_demands_resource_ids", ())) if is_physical else set()
-        end_ns = float(task.metadata["physical_completion_ns"]) if is_physical else start_ns
+        from ._resource_ledger import account_task_demands
+        queue_wait_ns = start_ns - effective_ready_ns
+        end_ns, physical_ids, resource_predecessors, resource_lanes = account_task_demands(
+            self, task, demands, is_physical, start_ns, effective_ready_ns)
         resource_last_interval = self.resource_last_interval
         resource_available = self.resource_available
-        resource_busy_ns = self.resource_busy_ns
-        resource_queue_wait_ns = self.resource_queue_wait_ns
-        resource_task_count = self.resource_task_count
-        resource_busy_ns_get = resource_busy_ns.get
-        queue_wait_ns = start_ns - effective_ready_ns
-        physical_queue_wait_by_owner: Dict[str, float] = {}
-        physical_resource_owners: Dict[str, str] = {}
-        physical_resource_owner_sets: Dict[str, Set[str]] = {}
-        if is_physical:
-            raw_by_owner = task.metadata.get("physical_execution_by_owner")
-            if isinstance(raw_by_owner, Mapping):
-                for raw_owner, raw_execution in raw_by_owner.items():
-                    if isinstance(raw_execution, Mapping):
-                        raw_owners = raw_execution.get("resource_owners", {})
-                        if isinstance(raw_owners, Mapping):
-                            physical_resource_owners.update({
-                                str(resource_id): str(owner)
-                                for resource_id, owner in raw_owners.items()
-                            })
-                            for resource_id in raw_owners:
-                                physical_resource_owner_sets.setdefault(
-                                    str(resource_id), set()
-                                ).add(str(raw_owner))
-                        try:
-                            value = float(raw_execution.get("queue_wait_ns", 0.0))
-                        except (TypeError, ValueError, OverflowError):
-                            value = 0.0
-                        physical_queue_wait_by_owner[str(raw_owner)] = value
-            else:
-                raise ValueError("physical tasks require physical_execution_by_owner")
-        for demand in demands:
-            if is_physical and str(demand.resource_id) in physical_ids:
-                # The core already reserved the real stages. Charging these
-                # durations as another exclusive device demand would both
-                # serialize independent channels and count contention twice.
-                resource_busy_ns[demand.resource_id] = (
-                    resource_busy_ns_get(demand.resource_id, 0.0) + demand.service_ns
-                )
-                owners = physical_resource_owner_sets.get(demand.resource_id)
-                if owners is None:
-                    owners = {physical_resource_owners.get(
-                        demand.resource_id, self._physical_owner(demand.resource_id)
-                    )}
-                # Several devices may use one explicit shared wire. Attribute
-                # each device's host admission wait once, even when its only
-                # positive-duration demand is on that shared resource.
-                owner_wait = sum(physical_queue_wait_by_owner.pop(owner, 0.0)
-                                 for owner in sorted(owners))
-                resource_queue_wait_ns[demand.resource_id] = (
-                    resource_queue_wait_ns.get(demand.resource_id, 0.0)
-                    + owner_wait
-                )
-                resource_task_count[demand.resource_id] = resource_task_count.get(demand.resource_id, 0) + 1
-                self.resource_capacities.setdefault(demand.resource_id, 1)
-                resource_lanes[demand.resource_id] = 0
-                continue
-            demand_end_ns = start_ns + demand.service_ns
-            lanes, lane_index, available_ns = self._select_lane(
-                demand.resource_id
-            )
-            owner_id = self._physical_owner(demand.resource_id)
-            previous_interval = self._resource_lane_last_interval.get(
-                (owner_id, lane_index)
-            )
-            resource_lanes[demand.resource_id] = lane_index
-            if previous_interval is not None and available_ns == start_ns:
-                resource_predecessors[demand.resource_id] = dict(
-                    previous_interval
-                )
-            if demand_end_ns > end_ns:
-                end_ns = demand_end_ns
-            interval: Dict[str, object] = {
-                "task_id": task.task_id,
-                "resource_id": demand.resource_id,
-                "start_ns": start_ns,
-                "end_ns": demand_end_ns,
-            }
-            if len(lanes) > 1:
-                interval["lane"] = lane_index
-            lanes[lane_index] = demand_end_ns
-            available_ns = demand_end_ns if len(lanes) == 1 else min(lanes)
-            resource_available[demand.resource_id] = available_ns
-            resource_available[owner_id] = available_ns
-            for logical_id, physical_id in self.resource_owners.items():
-                if physical_id == owner_id:
-                    resource_available[logical_id] = available_ns
-            resource_last_interval[demand.resource_id] = interval
-            self._resource_lane_last_interval[(owner_id, lane_index)] = interval
-            resource_busy_ns[demand.resource_id] = (
-                resource_busy_ns_get(demand.resource_id, 0.0)
-                + demand.service_ns
-            )
-            resource_queue_wait_ns[demand.resource_id] = (
-                resource_queue_wait_ns.get(demand.resource_id, 0.0)
-                + queue_wait_ns
-            )
-            resource_task_count[demand.resource_id] = (
-                resource_task_count.get(demand.resource_id, 0) + 1
-            )
 
         if is_physical:
-            physical_intervals: Dict[str, List[Dict[str, object]]] = {}
-            physical_lane_completions = []
-            for stage in task.metadata.get("physical_resource_intervals", ()):
-                if stage.resource_id is None:
-                    continue
-                resource_id = stage.resource_id
-                interval = {
-                    "task_id": task_id, "resource_id": resource_id,
-                    "start_ns": stage.start_ns, "end_ns": stage.end_ns,
-                }
-                physical_intervals.setdefault(resource_id, []).append(interval)
-            # Summary execution still retains the final real reservation. It
-            # must publish the same readiness and task predecessor as detailed
-            # execution whenever the lane can be identified unambiguously.
-            for resource_id, (start, end) in task.metadata.get(
-                    "physical_resource_last_intervals", {}).items():
-                physical_intervals.setdefault(resource_id, []).append({
-                    "task_id": task_id, "resource_id": resource_id,
-                    "start_ns": start, "end_ns": end,
-                })
-            for resource_id in physical_ids:
-                lanes = self.physical_runtime.timeline.lane_available.get(resource_id, ())
-                before_lanes = physical_snapshot["timeline"]["lane_available"].get(resource_id, ())
-                intervals = physical_intervals.get(resource_id, ())
-                previous = resource_last_interval.get(resource_id)
-                if (len(lanes) == 1 and previous is not None
-                        and any(previous["end_ns"] == item["start_ns"] for item in intervals)):
-                    resource_predecessors.setdefault(resource_id, dict(previous))
-                if intervals:
-                    last = max(intervals, key=lambda item: item["end_ns"])
-                    if previous is None or last["end_ns"] >= previous["end_ns"]:
-                        resource_last_interval[resource_id] = last
-                for lane_index, end in enumerate(lanes):
-                    before = before_lanes[lane_index] if lane_index < len(before_lanes) else 0.0
-                    if end <= before:
+            if not task.metadata.get("physical_resource_intervals"):
+                physical_lane_completions = _publish_physical_summary(
+                    self, task, physical_ids, physical_snapshot, resource_predecessors)
+            else:
+                physical_intervals: Dict[str, List[Dict[str, object]]] = {}
+                physical_lane_completions = []
+                for stage in task.metadata.get("physical_resource_intervals", ()):
+                    if stage.resource_id is None:
                         continue
-                    physical_lane_completions.append((resource_id, lane_index, end))
-                    matches = [item for item in intervals
-                               if item["end_ns"] == end and item["start_ns"] >= before]
-                    key = (resource_id, lane_index)
-                    if matches:
-                        self._resource_lane_last_interval[key] = {
-                            **max(matches, key=lambda item: item["start_ns"]), "lane": lane_index}
-                    else:
-                        # A truncated trace may omit the interval, but the
-                        # changed lane clock proves this task's release point.
-                        # Do not invent its unknown reservation start time.
-                        self._resource_lane_last_interval[key] = {
-                            "task_id": task_id, "resource_id": resource_id,
-                            "end_ns": end, "lane": lane_index}
-                if lanes:
-                    # The next task may use any free lane. Stage detail is
-                    # history, not a replacement for this calendar authority.
-                    resource_available[resource_id] = min(lanes)
+                    resource_id = stage.resource_id
+                    interval = {
+                        "task_id": task_id, "resource_id": resource_id,
+                        "start_ns": stage.start_ns, "end_ns": stage.end_ns,
+                    }
+                    physical_intervals.setdefault(resource_id, []).append(interval)
+                # Summary execution still retains the final real reservation. It
+                # must publish the same readiness and task predecessor as detailed
+                # execution whenever the lane can be identified unambiguously.
+                for resource_id, (start, end) in task.metadata.get(
+                        "physical_resource_last_intervals", {}).items():
+                    physical_intervals.setdefault(resource_id, []).append({
+                        "task_id": task_id, "resource_id": resource_id,
+                        "start_ns": start, "end_ns": end,
+                    })
+                for resource_id in physical_ids:
+                    lanes = self.physical_runtime.timeline.lane_available.get(resource_id, ())
+                    before_lanes = physical_snapshot["timeline"]["lane_available"].get(resource_id, ())
+                    intervals = physical_intervals.get(resource_id, ())
+                    previous = resource_last_interval.get(resource_id)
+                    if (len(lanes) == 1 and previous is not None
+                            and any(previous["end_ns"] == item["start_ns"] for item in intervals)):
+                        resource_predecessors.setdefault(resource_id, dict(previous))
+                    if intervals:
+                        last = max(intervals, key=lambda item: item["end_ns"])
+                        if previous is None or last["end_ns"] >= previous["end_ns"]:
+                            resource_last_interval[resource_id] = last
+                    for lane_index, end in enumerate(lanes):
+                        before = before_lanes[lane_index] if lane_index < len(before_lanes) else 0.0
+                        if end <= before:
+                            continue
+                        physical_lane_completions.append((resource_id, lane_index, end))
+                        matches = [item for item in intervals
+                                   if item["end_ns"] == end and item["start_ns"] >= before]
+                        key = (resource_id, lane_index)
+                        if matches:
+                            self._resource_lane_last_interval[key] = {
+                                **max(matches, key=lambda item: item["start_ns"]), "lane": lane_index}
+                        else:
+                            # A truncated trace may omit the interval, but the
+                            # changed lane clock proves this task's release point.
+                            # Do not invent its unknown reservation start time.
+                            self._resource_lane_last_interval[key] = {
+                                "task_id": task_id, "resource_id": resource_id,
+                                "end_ns": end, "lane": lane_index}
+                    if lanes:
+                        # The next task may use any free lane. Stage detail is
+                        # history, not a replacement for this calendar authority.
+                        resource_available[resource_id] = min(lanes)
             task = replace(task, metadata={**task.metadata,
                 "physical_resource_lane_completions": tuple(physical_lane_completions)})
 

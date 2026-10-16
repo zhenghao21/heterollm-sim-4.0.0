@@ -106,7 +106,7 @@ def test_runtime_rollback_restores_timeline_queues_and_controller_aliases(fallba
     core.submit(AccessRequest("numeric", "write", 65536, 4096))
     with monkeypatch.context() as patch:
         if fallback:
-            patch.setattr(_compiled_hbm, "_pack_hbm_numeric", lambda *_: None)
+            patch.setattr(_compiled_hbm, "_pack_hbm_numeric", lambda *_, **__: None)
         core.submit(AccessRequest("following", "read", 131072, 1024, 50000.))
     runtime.restore(transaction)
     assert runtime.snapshot() == saved

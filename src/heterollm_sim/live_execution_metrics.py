@@ -103,48 +103,13 @@ class LiveCohortMetrics:
         self._end_paths = {}
         self._resource_paths = {}
         self._resource_busy = {}
+        self._task_bytes = {}
         self._summary_cache = None
 
     def observe(self, event: KernelEvent) -> None:
-        task = event.task
-        if task.task_id in self._names:
-            raise ValueError("live cohort observed a duplicate task: {}".format(task.task_id))
-        start_path = None
-        for dependency_id in sorted(task.dependencies):
-            if dependency_id in self._end_paths:
-                start_path = _better_path(self._end_paths[dependency_id], start_path)
-        for demand in event.demands:
-            info = event.resource_predecessors.get(demand.resource_id)
-            if info is None:
-                continue
-            if info["end_ns"] > event.start_ns:
-                continue  # Internal Core wait is already in this task's span.
-            lane = int(info.get("lane", event.resource_lanes.get(demand.resource_id, 0)))
-            resource_id = info["resource_id"]
-            previous = self._resource_paths.get((resource_id, lane))
-            # Other cohorts can interleave on the same lane. An older task
-            # from this cohort must not replace the actual external predecessor.
-            if previous is not None and info["task_id"] == previous[0]:
-                start_path = _better_path(previous[1], start_path)
-        duration = event.end_ns - event.start_ns
-        self._end_paths[task.task_id] = _extend_path(
-            start_path, duration, task.category, task.task_id)
-        for resource_id, lane, interval_end in _resource_release_points(
-                task, event.demands, event.start_ns, event.resource_lanes):
-            path = _extend_path(start_path, interval_end - event.start_ns,
-                                task.category, "{}@{}".format(task.task_id, resource_id))
-            self._resource_paths[(resource_id, lane)] = (task.task_id, path)
-        for demand in event.demands:
-            # Physical demands already contain core interval busy time. The
-            # event kernel sums this field exactly once, also for zero work.
-            self._resource_busy[demand.resource_id] = (
-                self._resource_busy.get(demand.resource_id, 0.0) + demand.service_ns)
-        self._records.append(TaskExecutionRecord(
-            task_id=task.task_id, start_ns=event.start_ns, end_ns=event.end_ns,
-            category=task.category, dependencies=tuple(task.dependencies),
-            metadata=compact_execution_metadata(task.metadata), demands=event.demands))
-        self._names[task.task_id] = task.name
-        self._summary_cache = None
+        from ._resource_ledger import observe_live_metrics
+        observe_live_metrics(self, event, _better_path, _extend_path,
+                             TaskExecutionRecord, compact_execution_metadata)
 
     def summary(self) -> ScheduleCostResult:
         if self._summary_cache is not None:
@@ -157,7 +122,7 @@ class LiveCohortMetrics:
             duration = record.end_ns - record.start_ns
             metadata = record.metadata
             categories[record.category] = categories.get(record.category, 0.0) + duration
-            task_bytes = sum(demand.bytes_moved for demand in record.demands)
+            task_bytes = self._task_bytes[record.task_id]
             byte_count += task_bytes
             event_kind = str(metadata.get("event_kind", ""))
             if event_kind.startswith("linear_state_"):

@@ -1,0 +1,22 @@
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 0.00605529997847043}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.6820020999875851}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.7048201999859884}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 3.334241899981862}
+{"stage": "serving_cohorts", "completed": 2, "kind": "decode", "wall_seconds": 4.648251799982972}
+{"stage": "serving_cohorts", "completed": 3, "kind": "decode", "wall_seconds": 5.944134599994868}
+{"stage": "serving_cohorts", "completed": 4, "kind": "decode", "wall_seconds": 7.257725999981631}
+{"stage": "serving_cohorts", "completed": 5, "kind": "decode", "wall_seconds": 8.739845299976878}
+{"stage": "serving_cohorts", "completed": 6, "kind": "decode", "wall_seconds": 10.061579899978824}
+{"stage": "serving_cohorts", "completed": 7, "kind": "decode", "wall_seconds": 11.386229199997615}
+{"stage": "serving_cohorts", "completed": 8, "kind": "decode", "wall_seconds": 12.756438899989007}
+{"stage": "serving_cohorts", "completed": 9, "kind": "decode", "wall_seconds": 14.077566699997988}
+{"stage": "serving_cohorts", "completed": 10, "kind": "decode", "wall_seconds": 17.412922999996226}
+{"stage": "serving_cohorts", "completed": 11, "kind": "decode", "wall_seconds": 20.894566699978895}
+{"stage": "serving_cohorts", "completed": 12, "kind": "decode", "wall_seconds": 24.3112073999946}
+{"stage": "serving_cohorts", "completed": 13, "kind": "decode", "wall_seconds": 27.843462899996666}
+{"stage": "serving_cohorts", "completed": 14, "kind": "decode", "wall_seconds": 31.400093099975493}
+{"stage": "serving_cohorts", "completed": 15, "kind": "decode", "wall_seconds": 34.809640799998306}
+{"stage": "serving_cohorts", "completed": 16, "kind": "decode", "wall_seconds": 38.217132999998285}
+{"stage": "serving_cohorts", "completed": 17, "kind": "decode", "wall_seconds": 41.65322369997739}
+{"wall_seconds": 41.73389419997693, "cpu_seconds": 59.125, "ttft_ns": 952663.9085714285, "tpot_ns": 814572.1920000002}

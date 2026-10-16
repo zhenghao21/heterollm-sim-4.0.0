@@ -13,7 +13,12 @@ def b200_memory():
     })
 
 
-def test_b200_column_pack_matches_burst_controller_after_full_bank_materialization():
+def test_b200_column_pack_matches_burst_controller_after_full_bank_materialization(monkeypatch):
+    from heterollm_sim import _hbm_numeric
+
+    # This oracle checks packing bitwise, independently of the explicitly
+    # tested diagnostic summation rounding between channel workers.
+    monkeypatch.setattr(_hbm_numeric, "_CHANNEL_WORKERS", 1)
     config = b200_memory()
     reference = DramCore(config, capture_details=False)
     numeric = DramCore(config, capture_details=False)

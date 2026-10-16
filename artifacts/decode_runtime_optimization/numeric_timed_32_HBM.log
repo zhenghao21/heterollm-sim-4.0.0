@@ -1,0 +1,23 @@
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 0.0010276999964844435}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.6824181000120007}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.7033214000111911}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 3.3432655000069644}
+{"stage": "serving_cohorts", "completed": 2, "kind": "decode", "wall_seconds": 4.675182200007839}
+{"stage": "serving_cohorts", "completed": 3, "kind": "decode", "wall_seconds": 5.994311399990693}
+{"stage": "serving_cohorts", "completed": 4, "kind": "decode", "wall_seconds": 7.2854512000049}
+{"stage": "serving_cohorts", "completed": 5, "kind": "decode", "wall_seconds": 8.687466400006087}
+{"stage": "serving_cohorts", "completed": 6, "kind": "decode", "wall_seconds": 10.049747700017178}
+{"stage": "serving_cohorts", "completed": 7, "kind": "decode", "wall_seconds": 11.375981199991656}
+{"stage": "serving_cohorts", "completed": 8, "kind": "decode", "wall_seconds": 12.733800699992571}
+{"stage": "serving_cohorts", "completed": 9, "kind": "decode", "wall_seconds": 14.097039999993285}
+{"stage": "serving_cohorts", "completed": 10, "kind": "decode", "wall_seconds": 15.529844800010324}
+{"stage": "serving_cohorts", "completed": 11, "kind": "decode", "wall_seconds": 16.870312899991404}
+{"stage": "serving_cohorts", "completed": 12, "kind": "decode", "wall_seconds": 18.168130200007}
+{"stage": "serving_cohorts", "completed": 13, "kind": "decode", "wall_seconds": 19.48350470000878}
+{"stage": "serving_cohorts", "completed": 14, "kind": "decode", "wall_seconds": 20.811599800013937}
+{"stage": "serving_cohorts", "completed": 15, "kind": "decode", "wall_seconds": 22.202276099997107}
+{"stage": "serving_cohorts", "completed": 16, "kind": "decode", "wall_seconds": 23.548208199994406}
+{"stage": "serving_cohorts", "completed": 17, "kind": "decode", "wall_seconds": 24.917164500016952}
+{"wall_seconds": 24.932883100002073, "cpu_seconds": 42.515625, "ttft_ns": 952663.9085714285, "tpot_ns": 814572.1920000002}
+numeric wall 2.016110399737954 calls 8152

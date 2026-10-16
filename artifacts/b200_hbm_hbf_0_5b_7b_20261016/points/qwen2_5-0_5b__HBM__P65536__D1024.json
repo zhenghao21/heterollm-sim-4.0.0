@@ -4,9 +4,10 @@
   "architecture": "HBM",
   "prompt_tokens": 65536,
   "output_tokens": 1024,
-  "started_at": "2026-10-16T07:15:11.020661+00:00",
+  "started_at": "2026-10-16T09:00:10.074259+00:00",
   "ttft_ns": null,
   "tpot_ns": null,
+  "python_executable": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\.venv\\Scripts\\python.exe",
   "model": {
     "name": "Qwen2.5-0.5B",
     "layers": 24,
@@ -50,8 +51,13 @@
       }
     }
   },
+  "gc_thresholds": [
+    7000,
+    100,
+    100
+  ],
   "status": "interrupted",
   "reason": "ExecutionCancelledError: 仿真任务已取消",
-  "finished_at": "2026-10-16T07:46:15.975094+00:00",
-  "wall_seconds": 1864.9530000000086
+  "finished_at": "2026-10-16T09:13:37.565737+00:00",
+  "wall_seconds": 807.484999999986
 }

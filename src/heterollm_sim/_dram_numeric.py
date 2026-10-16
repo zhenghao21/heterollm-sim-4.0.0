@@ -13,6 +13,28 @@ import numpy as np
 
 
 @njit(cache=True, nogil=True, fastmath=False)
+def run_numeric_short(first, stop, arrival, read, geometry, durations, shared,
+                      bankrows, bankready, bankactivation, banktouched, calendar, busy,
+                      moved, directions, last_start, last_end, touched):
+    """Compile small HOST accesses without changing any burst transition."""
+    cursor, completion = first, arrival
+    hits = misses = conflicts = 0
+    row_span = geometry[0] * geometry[1] * geometry[3]
+    while cursor < stop:
+        linear_row = cursor // row_span
+        unit, row = linear_row // geometry[4], linear_row % geometry[4]
+        row_stop = min(stop, (linear_row + 1) * row_span)
+        cursor, completion, h, m, c = _burst_range(
+            cursor, row_stop, row, unit, arrival, read, geometry, durations, shared,
+            bankrows, bankready, bankactivation, banktouched, calendar, busy, moved,
+            directions, last_start, last_end, touched, completion)
+        hits += h
+        misses += m
+        conflicts += c
+    return completion, hits, misses, conflicts, 0
+
+
+@njit(cache=True, nogil=True, fastmath=False)
 def run_numeric_many(firsts, stops, arrivals, reads, max_outstanding, acceptance,
                      inflight, inflight_count, geometry, duration_pairs, shared,
                      bankrows, bankready, bankactivation, banktouched, calendar, busy, moved,
@@ -60,20 +82,10 @@ def run_numeric_many(firsts, stops, arrivals, reads, max_outstanding, acceptance
         else:
             # Small requests normally use the Python burst loop. Preserve its
             # individual transitions and addition order, without row folding.
-            cursor, completion = first, effective
-            hits = misses = conflicts = skipped = 0
-            row_span = geometry[0] * geometry[1] * geometry[3]
-            while cursor < stop:
-                linear_row = cursor // row_span
-                unit, row = linear_row // geometry[4], linear_row % geometry[4]
-                row_stop = min(stop, (linear_row + 1) * row_span)
-                cursor, completion, h, m, c = _burst_range(
-                    cursor, row_stop, row, unit, effective, read, geometry, durations, shared,
-                    bankrows, bankready, bankactivation, banktouched, calendar, busy, moved,
-                    directions, last_start, last_end, touched, completion)
-                hits += h
-                misses += m
-                conflicts += c
+            completion, hits, misses, conflicts, skipped = run_numeric_short(
+                first, stop, effective, read, geometry, durations, shared,
+                bankrows, bankready, bankactivation, banktouched, calendar, busy, moved,
+                directions, last_start, last_end, touched)
         ends[index], waits[index] = completion, effective - arrivals[index]
         counts[index, 0], counts[index, 1], counts[index, 2], counts[index, 3] = hits, misses, conflicts, skipped
         busy_delta[index] = busy - before_busy
@@ -89,16 +101,21 @@ def run_numeric_many(firsts, stops, arrivals, reads, max_outstanding, acceptance
 @njit(cache=True, nogil=True, fastmath=False)
 def _repeat_add(value, increment, count):
     while count:
+        previous = value
         value += increment
         count -= 1
         if not count or not math.isfinite(value):
             break
+        exponent = math.frexp(value)[1]
+        if math.frexp(previous)[1] != exponent:
+            # Crossing into a wider ULP interval can land on an odd mantissa.
+            # One more actual addition resolves ties at the new spacing.
+            continue
         step = (value + increment) - value
         if not math.isfinite(step):
             return value + increment
         if step == 0.0:
             break
-        exponent = math.frexp(value)[1]
         upper = 1.7976931348623157e308 if exponent == 1024 else math.ldexp(1.0, exponent)
         steps = min(count, max(0, int((upper - value) / step) - 1))
         if steps:

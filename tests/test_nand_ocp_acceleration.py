@@ -43,6 +43,135 @@ def _links(timeline, program, arrival):
     return completion, bills
 
 
+def test_numeric_program_cache_observes_route_timing_and_direction_changes(monkeypatch):
+    from heterollm_sim import _compiled_nand
+    configured = replace(resolve_physical_config("hbf_ocp_0_7"), channels=2,
+        host_channels=2, capacity_bytes=None)
+    old, new = (NandCore(configured, capture_details=False) for _ in range(2))
+    cached = _compiled_nand._numeric_program
+    addresses = np.arange(16, dtype=np.int64) * 4096
+    route = [["link", "read", [["wire", .1, 4096], ["credit", .3, 64]]]]
+    for index in range(8):
+        route[0][1] = "read" if index % 2 else "custom-direction"
+        route[0][2][0][1] = .1 + index * .125
+        route[0][2][1][2] = 64 + index
+        for core in (old, new):
+            core.config = replace(core.config, page_read_ns=10. + index * 1.25)
+        with monkeypatch.context() as patch:
+            patch.setattr(_compiled_nand, "_numeric_program", cached.__wrapped__)
+            expected = old.submit_read_pages(addresses, index * .7, link_program=route)
+        actual = new.submit_read_pages(addresses, index * .7, link_program=route)
+        assert np.array_equal(actual[0], expected[0])
+        assert actual[1:] == expected[1:]
+        assert vars(new.timeline) == vars(old.timeline)
+    old._nand_before_reference()
+    new._nand_before_reference()
+    assert vars(new) == vars(old)
+
+
+def test_single_lane_packing_rereads_mutated_calendars_and_preserves_all_counters():
+    from heterollm_sim import _compiled_nand
+
+    config = replace(resolve_physical_config("hbf_ocp_0_7"), channels=2, host_channels=2,
+                     capacity_bytes=None)
+    reference, actual = (NandCore(config, capture_details=False) for _ in range(2))
+    route = (("link", "read", (("wire", .1, 4096), ("credit", .3, 64))),)
+    addresses = np.arange(64, dtype=np.int64) * 4096
+    for core in (reference, actual):
+        core.submit_read_pages(addresses, 0., link_program=route)
+    pack = _compiled_nand._single_lane_timeline_state
+    fast_calls = []
+    def observed(*args):
+        value = pack(*args)
+        fast_calls.append(value is not None)
+        return value
+    for wave in range(5):
+        for core in (reference, actual):
+            timeline = core.timeline
+            timeline.lane_available["wire"][0] += 123.25
+            timeline.ready_ns["wire"] += 19.5
+            timeline.busy_ns["wire"] = 2**53 + 1 if wave == 0 else timeline.busy_ns["wire"] + .1
+            timeline.bytes_moved["credit"] += 123
+            timeline.last_intervals["wire"] = (17.5, 19.25)
+            timeline.directions["wire"] = "write"
+            # One-lane histories are intentionally ignored by ResourceTimeline.
+            timeline.lane_directions["wire"] = ["stale-history"]
+        with patch.object(_compiled_nand, "_single_lane_timeline_state", return_value=None):
+            expected = reference.submit_read_pages(addresses, wave * 100., link_program=route)
+        with patch.object(_compiled_nand, "_single_lane_timeline_state", side_effect=observed):
+            result = actual.submit_read_pages(addresses, wave * 100., link_program=route)
+        assert np.array_equal(result[0], expected[0])
+        assert result[1:] == expected[1:]
+        assert vars(actual.timeline) == vars(reference.timeline)
+    assert fast_calls == [True] * 5
+    for core in (reference, actual):
+        core._nand_before_reference()
+    assert vars(actual) == vars(reference)
+
+
+@pytest.mark.parametrize("unusual", ["shared", "multilane", "custom_direction", "nonfinite"])
+def test_single_lane_packing_leaves_unusual_calendars_to_the_general_path(unusual):
+    from heterollm_sim._compiled_nand import _single_lane_timeline_state
+
+    timeline = ResourceTimeline(lane_available={"a": [0.], "b": [1.]})
+    if unusual == "shared":
+        timeline.lane_available["b"] = timeline.lane_available["a"]
+    elif unusual == "multilane":
+        timeline.lane_available["b"].append(2.)
+    elif unusual == "custom_direction":
+        timeline.directions["a"] = "custom"
+    else:
+        timeline.lane_available["a"][0] = float("inf")
+    before = deepcopy(vars(timeline))
+    assert _single_lane_timeline_state(timeline, ("a", "b"), 2, 4096) is None
+    assert vars(timeline) == before
+
+
+@pytest.mark.parametrize("depth", [1, 3, 32])
+@pytest.mark.parametrize("resident", [False, True])
+def test_admission_queue_preserves_overtaking_mixed_directions_and_submission_order(depth, resident):
+    from random import Random
+
+    config = replace(resolve_physical_config("hbf_ocp_0_7"), max_outstanding_requests=depth)
+    expected, actual = (NandCore(config, capture_details=False) for _ in range(2))
+    actual._nand_numeric_enabled = resident
+    # Start with a non-monotone mixed queue and one slow bank. Later cache
+    # hits can also overtake misses, so both ordered and heap states occur.
+    for core in (expected, actual):
+        core._inflight = [7000., 2000., 5000.]
+        core._inflight_operations = [(7000., Operation.READ), (2000., Operation.WRITE),
+                                     (5000., Operation.READ)]
+        core.timeline.lane_available["nand:array:0"] = [100000.]
+    rng = Random(817)
+    for wave in range(24):
+        operation = Operation.READ if wave % 3 else Operation.WRITE
+        count = rng.randrange(2, 20)
+        addresses = [((rng.randrange(4) * config.pages_per_block * config.channels
+                       + rng.randrange(8)) * 4096) for _ in range(count)]
+        arrivals = [rng.choice((0., 12.5, 4000., 90000.)) for _ in addresses]
+        expected_pages = [_reference_submit(expected, AccessRequest(str(index), operation,
+                          address, 4096, arrival))
+                          for index, (address, arrival) in enumerate(zip(addresses, arrivals))]
+        immutable = np.frombuffer(np.asarray(addresses, dtype=np.int64).tobytes(), dtype=np.int64)
+        completed, bill, _ = getattr(actual, "submit_" + operation.value + "_pages")(immutable, arrivals)
+        assert completed.tolist() == [result.completion_ns for result in expected_pages]
+        assert actual._inflight == expected._inflight
+        assert actual._inflight_operations == expected._inflight_operations
+        for name in ("queue_wait_ns", "host_transfer_bytes", "internal_transfer_bytes"):
+            # Preserve the page machine's left-to-right additions; Python's
+            # compensated sum would itself change floating-point rounding.
+            expected_total = 0
+            for result in expected_pages:
+                expected_total += result.counters[name]
+            assert bill.counters[name] == expected_total
+        for name in ("host_outstanding_at_admission_peak", "host_read_outstanding_at_admission_peak",
+                     "host_write_outstanding_at_admission_peak"):
+            assert bill.counters[name] == max(result.counters[name] for result in expected_pages)
+    actual._nand_before_reference()
+    assert {key: value for key, value in vars(actual).items() if key != "_nand_numeric_enabled"} == {
+        key: value for key, value in vars(expected).items() if key != "_nand_numeric_enabled"}
+
+
 @pytest.mark.parametrize("host_lanes", [1, 3])
 def test_single_page_summary_preserves_cache_writes_admission_and_complete_state(host_lanes):
     config = replace(resolve_physical_config("hbf_ocp_0_7"), max_outstanding_requests=3)

@@ -1,0 +1,118 @@
+{
+  "rows": [
+    {
+      "name": "scalar_a",
+      "decode_seconds": 4.459925400005886,
+      "mean_decode_seconds": 0.5574906750007358,
+      "program": {
+        "attempted_tasks": 3501,
+        "accepted_tasks": 0,
+        "accepted_accesses": 0
+      },
+      "steps": [
+        0.58971,
+        0.54963,
+        0.550507,
+        0.545822,
+        0.542371,
+        0.589304,
+        0.550263,
+        0.542319
+      ],
+      "full_request_wall_seconds": 5.916855400020722
+    },
+    {
+      "name": "program_a",
+      "decode_seconds": 4.560836699994979,
+      "mean_decode_seconds": 0.5701045874993724,
+      "program": {
+        "attempted_tasks": 3501,
+        "accepted_tasks": 768,
+        "accepted_accesses": 2112
+      },
+      "steps": [
+        0.631146,
+        0.546794,
+        0.546891,
+        0.55769,
+        0.555338,
+        0.610309,
+        0.559804,
+        0.552864
+      ],
+      "full_request_wall_seconds": 6.092241599981207
+    },
+    {
+      "name": "program_b",
+      "decode_seconds": 4.533900499984156,
+      "mean_decode_seconds": 0.5667375624980195,
+      "program": {
+        "attempted_tasks": 3501,
+        "accepted_tasks": 768,
+        "accepted_accesses": 2112
+      },
+      "steps": [
+        0.619844,
+        0.545269,
+        0.543113,
+        0.543763,
+        0.567739,
+        0.609714,
+        0.556986,
+        0.547474
+      ],
+      "full_request_wall_seconds": 5.987637200014433
+    },
+    {
+      "name": "scalar_b",
+      "decode_seconds": 4.679561700002523,
+      "mean_decode_seconds": 0.5849452125003154,
+      "program": {
+        "attempted_tasks": 3501,
+        "accepted_tasks": 0,
+        "accepted_accesses": 0
+      },
+      "steps": [
+        0.630016,
+        0.575029,
+        0.569452,
+        0.58323,
+        0.575875,
+        0.629739,
+        0.565875,
+        0.550346
+      ],
+      "full_request_wall_seconds": 6.197874199977377
+    }
+  ],
+  "speedup": 1.0049204170549728,
+  "all_non_wall_fields_equal": true,
+  "all_cohort_simulated_times_equal": true,
+  "method": 1,
+  "name": "HOST task program",
+  "architecture": "HBF",
+  "model": "qwen2_5-0_5b",
+  "prompt_tokens": 32,
+  "output_tokens": 9,
+  "measured_decode_steps_per_run": 8,
+  "order": [
+    "scalar",
+    "program",
+    "program",
+    "scalar"
+  ],
+  "status": "withdrawn",
+  "interpretation": "No clear whole-Decode benefit: 1.00492x is smaller than run-to-run variation.",
+  "targeted_tests": {
+    "passed": 74
+  },
+  "changes_withdrawn": [
+    "HOST program entry and helper",
+    "native link_program and _staging signature branches",
+    "data_motion precomputed-program consumption",
+    "program-specific tests"
+  ],
+  "prior_accepted_optimizations_preserved": true,
+  "repeat_add_binade_fix_preserved": true,
+  "purpose": "Runtime optimization method 1; not a formal scan point"
+}

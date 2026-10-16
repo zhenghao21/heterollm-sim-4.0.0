@@ -7,15 +7,44 @@ links follow NAND completion. This is the normal per-page state machine.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 import numpy as np
 from numba import njit
 
 from .memory_mapping import map_nand_address
 from .memory_transfer import ResourceTimeline
 from .memory_types import Operation, TransactionResult
+from ._nand_pack import pack_single_lane as _single_lane_timeline_state, pack_multi_lane, publish_timeline
 
 
 _GEOMETRY_PLANS = {}
+
+
+@lru_cache(maxsize=128)
+def _numeric_program(geometry, timing, names, link_program, direction_names):
+    """Prepare immutable kernel inputs, separate from every live calendar.
+
+    The complete values form the key, so mutable caller routes, timing
+    metadata and unusual direction labels cannot retain an obsolete plan.
+    Bytes-backed arrays cannot be made writable through a retained view.
+    """
+    lookup = {name: index for index, name in enumerate(names)}
+    directions = {name: index for index, name in enumerate(direction_names)}
+    offsets, ids, durations, payloads, link_directions = [0], [], [], [], []
+    for _, direction, program in link_program:
+        for name, duration, payload in program:
+            if not math.isfinite(duration) or duration < 0 or not isinstance(payload, int) or payload < 0:
+                return None
+            ids.append(lookup[name])
+            durations.append(duration)
+            payloads.append(payload)
+        offsets.append(len(ids))
+        link_directions.append(directions[direction])
+    def frozen(values, dtype):
+        return np.frombuffer(np.asarray(values, dtype=dtype).tobytes(), dtype=dtype)
+    return (frozen(geometry, np.int64), frozen(timing, np.float64),
+            frozen(offsets, np.int64), frozen(ids, np.int64), frozen(durations, np.float64),
+            frozen(payloads, np.int64), frozen(link_directions, np.int64), tuple(offsets), tuple(ids))
 
 
 def _geometry_plan(core, operation, banks, units, per_channel):
@@ -111,6 +140,64 @@ def _transfer_links(end, link_offsets, link_ids, link_durations, link_bytes, lin
 
 
 @njit(cache=True, nogil=True, fastmath=False)
+def _admission_push(times, operations, sequence, size, end, operation, serial):
+    at = size
+    while at:
+        parent = (at - 1) // 2
+        if times[parent] <= end:
+            break
+        times[at], operations[at], sequence[at] = times[parent], operations[parent], sequence[parent]
+        at = parent
+    times[at], operations[at], sequence[at] = end, operation, serial
+    return size + 1
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _admission_pop(times, operations, sequence, size):
+    operation = operations[0]
+    size -= 1
+    if size:
+        end, last_operation, serial = times[size], operations[size], sequence[size]
+        at = 0
+        while 2 * at + 1 < size:
+            child = 2 * at + 1
+            if child + 1 < size and times[child + 1] < times[child]:
+                child += 1
+            if end <= times[child]:
+                break
+            times[at], operations[at], sequence[at] = times[child], operations[child], sequence[child]
+            at = child
+        times[at], operations[at], sequence[at] = end, last_operation, serial
+    return size, operation
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _admission_append(times, operations, sequence, size, ordered, head, end, operation, serial):
+    if ordered:
+        tail = head + size - 1
+        if tail >= len(times):
+            tail -= len(times)
+        if not size or end >= times[tail]:
+            at = head + size
+            if at >= len(times):
+                at -= len(times)
+            times[at], operations[at], sequence[at] = end, operation, serial
+            return size + 1, True, head
+        # A faster page may overtake a queued page. Convert the same live
+        # entries to a heap once; their separate serials preserve output order.
+        old_times, old_ops, old_serials = np.empty(size), np.empty(size, np.int64), np.empty(size, np.int64)
+        for index in range(size):
+            at = head + index
+            if at >= len(times):
+                at -= len(times)
+            old_times[index], old_ops[index], old_serials[index] = times[at], operations[at], sequence[at]
+        for index in range(size):
+            _admission_push(times, operations, sequence, index,
+                            old_times[index], old_ops[index], old_serials[index])
+    return _admission_push(times, operations, sequence, size, end, operation, serial), False, 0
+
+
+@njit(cache=True, nogil=True, fastmath=False)
 def _run(addresses, arrivals, read, geometry, timing, array_ids, channel_ids, host_ids,
          array_ready, buffer_ready, cache_tags, cache_ready, cache_readers, cache_use,
          cache_present, cache_clock, admission, admission_ops, admission_count, acceptance,
@@ -131,38 +218,62 @@ def _run(addresses, arrivals, read, geometry, timing, array_ids, channel_ids, ho
     link_arrivals = np.full(len(link_offsets) - 1, np.inf, dtype=np.float64)
     link_completions = np.zeros(len(link_offsets) - 1, dtype=np.float64)
     link_last = np.zeros((len(link_ids), 2), dtype=np.float64)
+    # Admission needs the earliest completion and directional populations,
+    # not a full request-list scan for every page. Preserve submission order
+    # separately so the published live queue remains exactly the same.
+    sequence = np.arange(len(admission), dtype=np.int64)
+    initial_count = admission_count
+    ordered, head = True, 0
+    read_depth = write_depth = 0
+    for old in range(initial_count):
+        if old and admission[old] < admission[old - 1]:
+            ordered = False
+        read_depth += admission_ops[old] == 1
+        write_depth += admission_ops[old] == 2
+    if not ordered:
+        old_times, old_ops = admission[:admission_count].copy(), admission_ops[:admission_count].copy()
+        for old in range(initial_count):
+            _admission_push(admission, admission_ops, sequence, old, old_times[old], old_ops[old], old)
+    shared_arrival = len(arrivals) == 1
     for index in range(count):
-        touched[:] = False  # A real core submission starts a fresh detail recorder.
-        arrival = arrivals[index]
+        # Only the final page's detail recorder survives a sequence of scalar
+        # submissions. Earlier masks are never read by the page state machine.
+        if index == count - 1:
+            touched[:] = False
+        arrival = arrivals[0] if shared_arrival else arrivals[index]
         if not read:
             arrival = _transfer_links(arrival, link_offsets, link_ids, link_durations, link_bytes, link_directions,
                 starts, lane_counts, lanes, lane_directions, resource_state, moved, directions, touched,
                 link_busy, link_moved, link_arrivals, link_completions, link_last)
-            touched[:] = False  # NAND submission follows the incoming links.
+            if index == count - 1:
+                touched[:] = False  # NAND submission follows the incoming links.
         counters[7] = min(counters[7], arrival)
         effective = max(arrival, acceptance)
-        kept = 0
-        for old in range(admission_count):
-            if admission[old] > effective:
-                admission[kept], admission_ops[kept] = admission[old], admission_ops[old]
-                kept += 1
-        admission_count = kept
+        while admission_count and admission[head] <= effective:
+            if ordered:
+                removed = admission_ops[head]
+                admission_count -= 1
+                head += 1
+                if head == len(admission):
+                    head = 0
+            else:
+                admission_count, removed = _admission_pop(admission, admission_ops, sequence, admission_count)
+            read_depth -= removed == 1
+            write_depth -= removed == 2
         if admission_count >= max_outstanding:
-            earliest = admission[0]
-            for old in range(1, admission_count):
-                earliest = min(earliest, admission[old])
-            effective = max(effective, earliest)
-            kept = 0
-            for old in range(admission_count):
-                if admission[old] > effective:
-                    admission[kept], admission_ops[kept] = admission[old], admission_ops[old]
-                    kept += 1
-            admission_count = kept
-        reads = int(read)
-        writes = int(not read)
-        for old in range(admission_count):
-            reads += admission_ops[old] == 1
-            writes += admission_ops[old] == 2
+            effective = max(effective, admission[head])
+            while admission_count and admission[head] <= effective:
+                if ordered:
+                    removed = admission_ops[head]
+                    admission_count -= 1
+                    head += 1
+                    if head == len(admission):
+                        head = 0
+                else:
+                    admission_count, removed = _admission_pop(admission, admission_ops, sequence, admission_count)
+                read_depth -= removed == 1
+                write_depth -= removed == 2
+        reads, writes = read_depth + int(read), write_depth + int(not read)
         counters[0] += effective - arrival
         counters[1] = max(counters[1], admission_count + 1)
         counters[2] = max(counters[2], reads)
@@ -206,8 +317,9 @@ def _run(addresses, arrivals, read, geometry, timing, array_ids, channel_ids, ho
             nand_bytes[host] += 4096
             end = max(base, end)
             counters[6] = max(counters[6], end)
-            admission[admission_count], admission_ops[admission_count] = end, 2
-            admission_count += 1
+            admission_count, ordered, head = _admission_append(admission, admission_ops, sequence,
+                admission_count, ordered, head, end, 2, initial_count + index)
+            write_depth += 1
             completions[index] = end
             continue
         cache_clock += 1
@@ -225,6 +337,7 @@ def _run(addresses, arrivals, read, geometry, timing, array_ids, channel_ids, ho
                         and cache_use[bank, 1] < cache_use[bank, 0])):
                 slot = 1
         cache_use[bank, slot] = cache_clock
+        cache_present[bank] = True
         banks_touched[bank] = True
         before_host = resource_state[host, 1]
         if hit:
@@ -254,14 +367,74 @@ def _run(addresses, arrivals, read, geometry, timing, array_ids, channel_ids, ho
         nand_bytes[host] += 4096
         end = max(base, end)
         counters[6] = max(counters[6], end)
-        admission[admission_count], admission_ops[admission_count] = end, 1
-        admission_count += 1
+        admission_count, ordered, head = _admission_append(admission, admission_ops, sequence,
+            admission_count, ordered, head, end, 1, initial_count + index)
+        read_depth += 1
         end = _transfer_links(end, link_offsets, link_ids, link_durations, link_bytes, link_directions,
             starts, lane_counts, lanes, lane_directions, resource_state, moved, directions, touched,
             link_busy, link_moved, link_arrivals, link_completions, link_last)
         completions[index] = end
+    if ordered:
+        kept_times, kept_ops = np.empty(admission_count), np.empty(admission_count, np.int64)
+        for index in range(admission_count):
+            at = head + index
+            if at >= len(admission):
+                at -= len(admission)
+            kept_times[index], kept_ops[index] = admission[at], admission_ops[at]
+        admission[:admission_count], admission_ops[:admission_count] = kept_times, kept_ops
+    else:
+        order = np.argsort(sequence[:admission_count])
+        kept_times, kept_ops = admission[:admission_count].copy(), admission_ops[:admission_count].copy()
+        for index in range(admission_count):
+            admission[index], admission_ops[index] = kept_times[order[index]], kept_ops[order[index]]
     return (completions, counters, cache_clock, admission_count, acceptance,
             touched, arrays_touched, banks_touched, link_arrivals, link_completions, link_last)
+
+
+class _NandNumericState:
+    """Exclusive native controller state; fabric calendars remain shared."""
+
+    def __init__(self, layout, arrays):
+        self.layout = layout
+        self.arrays = arrays
+        self.dirty_units = np.zeros(len(arrays[0]), dtype=np.bool_)
+        self.dirty_banks = np.zeros(len(arrays[2]), dtype=np.bool_)
+
+    def checkpoint(self):
+        return (tuple(array.copy() for array in self.arrays),
+                self.dirty_units.copy(), self.dirty_banks.copy())
+
+    def restore(self, checkpoint):
+        arrays, units, banks = checkpoint
+        self.arrays = tuple(array.copy() for array in arrays)
+        self.dirty_units, self.dirty_banks = units.copy(), banks.copy()
+
+    def publish(self, cache, array_frontiers, buffer_frontiers, *, checkpoint=None, core=None):
+        from .nand_core import _ReadCacheSlot
+
+        arrays, units, banks = ((self.arrays, self.dirty_units, self.dirty_banks)
+                               if checkpoint is None else checkpoint)
+        array_ready, buffer_ready, tags, ready, readers, uses, _present = arrays
+        bank_keys, tag_prefixes, array_names, pages_per_block = self.layout
+        array_values, buffer_values = array_ready.tolist(), buffer_ready.tolist()
+        for unit in np.flatnonzero(units).tolist():
+            name = array_names[unit]
+            array_frontiers[name], buffer_frontiers[name] = array_values[unit], buffer_values[unit]
+        tag_values, ready_values = tags.tolist(), ready.tolist()
+        reader_values, use_values = readers.tolist(), uses.tolist()
+        for bank in np.flatnonzero(banks).tolist():
+            key = bank_keys[bank]
+            if core is not None and core._nand_transactions:
+                core._touch_cache_bank(key)
+            slots = cache.get(key)
+            if slots is None:
+                slots = [_ReadCacheSlot(), _ReadCacheSlot()]
+                cache[key] = slots
+            for index, slot in enumerate(slots):
+                page = tag_values[bank][index]
+                slot.page_key = None if page < 0 else (*tag_prefixes[bank], *divmod(page, pages_per_block))
+                slot.ready_ns = ready_values[bank][index]
+                slot.reader_completion_ns, slot.last_use = reader_values[bank][index], use_values[bank][index]
 
 
 def execute_pages(core, addresses, arrival_ns, link_program, *, operation=Operation.READ):
@@ -283,7 +456,7 @@ def execute_pages(core, addresses, arrival_ns, link_program, *, operation=Operat
     if arrivals.dtype.kind not in "iuf" or arrivals.ndim > 1:
         return None
     if arrivals.ndim == 0:
-        arrivals = np.full(count, float(arrivals), dtype=np.float64)
+        arrivals = np.array([float(arrivals)], dtype=np.float64)
     elif len(arrivals) != count:
         return None
     else:
@@ -325,7 +498,6 @@ def execute_pages(core, addresses, arrival_ns, link_program, *, operation=Operat
     names = list(dict.fromkeys([*nand_resources, *link_names]))
     if any(timeline.canonical_resource_id(name) != name for name in names):
         return None
-    lookup = {name: index for index, name in enumerate(names)}
     starts, lane_counts, lanes, lane_directions = [], [], [], []
     direction_names = [None, "read", "write"]
     direction_lookup = {name: index for index, name in enumerate(direction_names)}
@@ -334,136 +506,145 @@ def execute_pages(core, addresses, arrival_ns, link_program, *, operation=Operat
             direction_lookup[value] = len(direction_names)
             direction_names.append(value)
         return direction_lookup[value]
-    state = np.zeros((len(names), 4), dtype=np.float64)
-    moved = np.zeros(len(names), dtype=np.int64)
-    directions = np.zeros(len(names), dtype=np.int64)
-    seen_lanes = set()
-    for index, name in enumerate(names):
-        existing = timeline.lane_available.get(name)
-        if existing is not None:
-            if not existing or id(existing) in seen_lanes:
+    single_lane_state = _single_lane_timeline_state(timeline, names, count, config.transfer_page_bytes)
+    if single_lane_state is not None:
+        starts, lane_counts, lanes, lane_directions, state, moved, directions = single_lane_state
+    else:
+        packed_timeline = pack_multi_lane(timeline, names, count, config.transfer_page_bytes,
+                                         direction_names, direction_lookup)
+        if packed_timeline is None:
+            return None
+        starts, lane_counts, lanes, lane_directions, state, moved, directions = packed_timeline
+    layout = (bank_keys, tag_prefixes, array_names, config.pages_per_block)
+    packed = core._nand_numeric_state
+    if packed is not None and packed.layout != layout:
+        core._nand_publish_numeric()
+        packed = None
+    if packed is None:
+        arrays = np.array([core.__dict__["_array_ready"].get(name, 0.) for name in array_names], dtype=np.float64)
+        buffers = np.array([core.__dict__["_buffer_ready"].get(name, 0.) for name in array_names], dtype=np.float64)
+        tag_values, ready_values, reader_values, use_values = [-1] * (banks * 2), [0.] * (banks * 2), [0.] * (banks * 2), [0] * (banks * 2)
+        present_values = [False] * banks
+        for bank, key in enumerate(bank_keys):
+            slots = core.__dict__["_read_cache"].get(key, ())
+            if len(slots) not in (0, 2):
                 return None
-            seen_lanes.add(id(existing))
-        values = existing if existing is not None else [timeline.ready_ns.get(name, 0.)]
-        if any(not math.isfinite(value) or value < 0 for value in values):
-            return None
-        starts.append(len(lanes)); lane_counts.append(len(values)); lanes.extend(values)
-        previous = timeline.directions.get(name)
-        histories = timeline.lane_directions.get(name)
-        if len(values) == 1 or histories is None or len(histories) != len(values):
-            histories = [previous] * len(values)
-        lane_directions.extend(direction_id(value) for value in histories)
-        state[index] = [timeline.ready_ns.get(name, 0.), timeline.busy_ns.get(name, 0.),
-                        *timeline.last_intervals.get(name, (0., 0.))]
-        byte_count = timeline.bytes_moved.get(name, 0)
-        if not isinstance(byte_count, int) or not 0 <= byte_count <= 2**63 - 1 - count * max(4096, config.transfer_page_bytes):
-            return None
-        moved[index] = byte_count
-        directions[index] = direction_id(previous)
-    arrays = np.array([core._array_ready.get(name, 0.) for name in array_names], dtype=np.float64)
-    buffers = np.array([core._buffer_ready.get(name, 0.) for name in array_names], dtype=np.float64)
-    tags = np.full((banks, 2), -1, dtype=np.int64)
-    ready = np.zeros((banks, 2), dtype=np.float64)
-    readers = np.zeros((banks, 2), dtype=np.float64)
-    uses = np.zeros((banks, 2), dtype=np.int64)
-    cache_present = np.zeros(banks, dtype=np.bool_)
-    for bank, key in enumerate(bank_keys):
-        slots = core._read_cache.get(key, ())
-        if len(slots) not in (0, 2):
-            return None
-        cache_present[bank] = bool(slots)
-        for slot, old in enumerate(slots):
-            if old.page_key is not None:
-                tags[bank, slot] = old.page_key[-2] * config.pages_per_block + old.page_key[-1]
-            ready[bank, slot], readers[bank, slot], uses[bank, slot] = old.ready_ns, old.reader_completion_ns, old.last_use
+            present_values[bank] = bool(slots)
+            for slot, old in enumerate(slots):
+                index = bank * 2 + slot
+                if old.page_key is not None:
+                    tag_values[index] = old.page_key[-2] * config.pages_per_block + old.page_key[-1]
+                ready_values[index], reader_values[index], use_values[index] = old.ready_ns, old.reader_completion_ns, old.last_use
+        tags = np.array(tag_values, dtype=np.int64).reshape(banks, 2)
+        ready = np.array(ready_values, dtype=np.float64).reshape(banks, 2)
+        readers = np.array(reader_values, dtype=np.float64).reshape(banks, 2)
+        uses = np.array(use_values, dtype=np.int64).reshape(banks, 2)
+        cache_present = np.array(present_values, dtype=np.bool_)
+        if core._nand_numeric_enabled:
+            packed = _NandNumericState(layout, (arrays, buffers, tags, ready, readers, uses, cache_present))
+    else:
+        arrays, buffers, tags, ready, readers, uses, cache_present = packed.arrays
     if [end for end, _ in core._inflight_operations] != core._inflight:
         return None
     admission = np.zeros(max(config.max_outstanding_requests, len(core._inflight)) + 1, dtype=np.float64)
     admission_ops = np.zeros(len(admission), dtype=np.int64)
     for index, (end, previous_operation) in enumerate(core._inflight_operations):
         admission[index], admission_ops[index] = end, 1 if previous_operation is Operation.READ else 2
-    link_offsets, link_ids, durations, payloads, link_dirs = [0], [], [], [], []
     for _, direction, program in link_program:
-        for name, duration, payload in program:
-            if not math.isfinite(duration) or duration < 0 or not isinstance(payload, int) or payload < 0:
-                return None
-            link_ids.append(lookup[name]); durations.append(duration); payloads.append(payload)
-        link_offsets.append(len(link_ids))
-        link_dirs.append(direction_id(direction))
-    starts, lane_counts = np.array(starts, dtype=np.int64), np.array(lane_counts, dtype=np.int64)
-    lanes, lane_directions = np.array(lanes, dtype=np.float64), np.array(lane_directions, dtype=np.int64)
-    geometry = np.array([base_units, config.planes_per_lun, config.planes_independent,
-                         per_channel, config.host_channels, config.max_outstanding_requests,
-                         config.pages_per_block], dtype=np.int64)
-    timing = np.array([config.page_read_ns, config.transfer_page_bytes / config.internal_bandwidth_gb_s,
-                       4096 / core._host_bandwidth(operation), config.front_ns, config.transfer_page_bytes,
-                       config.page_program_ns, config.block_erase_ns])
+        direction_id(direction)
+    starts, lane_counts = np.asarray(starts, dtype=np.int64), np.asarray(lane_counts, dtype=np.int64)
+    lanes, lane_directions = np.asarray(lanes, dtype=np.float64), np.asarray(lane_directions, dtype=np.int64)
+    program = _numeric_program(
+        (base_units, config.planes_per_lun, config.planes_independent, per_channel,
+         config.host_channels, config.max_outstanding_requests, config.pages_per_block),
+        (config.page_read_ns, config.transfer_page_bytes / config.internal_bandwidth_gb_s,
+         4096 / core._host_bandwidth(operation), config.front_ns, config.transfer_page_bytes,
+         config.page_program_ns, config.block_erase_ns), tuple(names),
+        tuple((owner, direction, tuple(tuple(demand) for demand in demands))
+              for owner, direction, demands in link_program), tuple(direction_names))
+    if program is None:
+        return None
+    (geometry, timing, numeric_offsets, numeric_ids, durations, payloads,
+     link_dirs, link_offsets, link_ids) = program
     nand_busy = np.zeros(len(names), dtype=np.float64)
     nand_bytes = np.zeros(len(names), dtype=np.int64)
     link_busy = np.zeros(len(link_ids), dtype=np.float64)
     link_moved = np.zeros(len(link_ids), dtype=np.int64)
-    answer = _run(addresses, arrivals, read, geometry, timing, array_ids, channel_ids, host_ids,
-                  arrays, buffers, tags, ready, readers, uses, cache_present, core._cache_use,
-                  admission, admission_ops, len(core._inflight), core._acceptance_ns,
-                  starts, lane_counts, lanes, lane_directions, state, moved, directions,
-                  np.array(link_offsets, dtype=np.int64), np.array(link_ids, dtype=np.int64),
-                  np.array(durations, dtype=np.float64), np.array(payloads, dtype=np.int64),
-                  np.array(link_dirs, dtype=np.int64), nand_busy, nand_bytes, link_busy, link_moved)
-    (completions, counters, cache_clock, admitted_count, acceptance, touched, arrays_touched,
-     banks_touched, link_arrivals, link_completions, link_last) = answer
-    if not np.all(np.isfinite(state)) or not np.all(np.isfinite(completions)):
-        raise ValueError("resource reservation exceeds finite timing range")
-    # Commit only after numeric execution succeeds; no independent shadow state
-    # survives the call, so ordinary snapshots/restores remain authoritative.
-    active_resources = {names[index] for index in range(len(names)) if nand_busy[index] or nand_bytes[index]}
-    active_resources.update(array_resources[index] for index in np.flatnonzero(arrays_touched))
+    resident_before = packed.checkpoint() if packed is core._nand_numeric_state and packed is not None else None
+    if packed is not None:
+        for token in core._nand_transactions:
+            token.capture_numeric(packed)
+    try:
+        answer = _run(addresses, arrivals, read, geometry, timing, array_ids, channel_ids, host_ids,
+                      arrays, buffers, tags, ready, readers, uses, cache_present, core._cache_use,
+                      admission, admission_ops, len(core._inflight), core._acceptance_ns,
+                      starts, lane_counts, lanes, lane_directions, state, moved, directions,
+                      numeric_offsets, numeric_ids, durations, payloads, link_dirs,
+                      nand_busy, nand_bytes, link_busy, link_moved)
+        (completions, counters, cache_clock, admitted_count, acceptance, touched, arrays_touched,
+         banks_touched, link_arrivals, link_completions, link_last) = answer
+        if not np.all(np.isfinite(state)) or not np.all(np.isfinite(completions)):
+            raise ValueError("resource reservation exceeds finite timing range")
+    except BaseException:
+        if resident_before is not None:
+            packed.restore(resident_before)
+        raise
+    if packed is not None:
+        packed.dirty_units |= arrays_touched
+        packed.dirty_banks |= banks_touched
+        core._nand_numeric_state = packed
+    # Shared fabric state is committed after numeric execution succeeds.
+    # Exclusive controller arrays remain resident until a scalar handoff or
+    # public read publishes them; the core transaction owns their undo state.
+    # Convert whole columns in C. Per-element ndarray indexing otherwise
+    # allocates thousands of NumPy scalars for every repeated Decode access.
+    state_values, moved_values, direction_values = state.tolist(), moved.tolist(), directions.tolist()
+    lane_values, lane_direction_values = lanes.tolist(), lane_directions.tolist()
+    start_values, lane_count_values = starts.tolist(), lane_counts.tolist()
+    busy_values, byte_values = nand_busy.tolist(), nand_bytes.tolist()
+    active_units, active_banks = np.flatnonzero(arrays_touched).tolist(), np.flatnonzero(banks_touched).tolist()
+    active_resources = {name for name, busy, size in zip(names, busy_values, byte_values) if busy or size}
+    active_resources.update(array_resources[index] for index in active_units)
     active_resources.update(link_names)
-    for index, name in enumerate(names):
-        if name not in active_resources:
-            continue
-        first, lane_count = starts[index], lane_counts[index]
-        values = lanes[first:first + lane_count].tolist()
-        if name in timeline.lane_available:
-            timeline.lane_available[name][:] = values
-        else:
-            timeline.lane_available[name] = values
-        timeline.ready_ns[name], timeline.busy_ns[name] = float(state[index, 0]), float(state[index, 1])
-        timeline.last_intervals[name] = (float(state[index, 2]), float(state[index, 3]))
-        if name in link_names or nand_bytes[index] or name in timeline.bytes_moved:
-            timeline.bytes_moved[name] = int(moved[index])
-        if directions[index]:
-            timeline.directions[name] = direction_names[directions[index]]
-        if lane_count > 1:
-            timeline.lane_directions[name] = [direction_names[value] for value in lane_directions[first:first + lane_count]]
-        else:
-            timeline.lane_directions.pop(name, None)
-    for unit in np.flatnonzero(arrays_touched):
-        name = array_names[unit]
-        core._array_ready[name], core._buffer_ready[name] = float(arrays[unit]), float(buffers[unit])
-        timeline.ready_ns[name] = float(arrays[unit])
-    for bank in np.flatnonzero(banks_touched):
-        key = bank_keys[bank]
-        slots = core._read_cache.get(key)
-        if slots is None:
-            slots = [_ReadCacheSlot(), _ReadCacheSlot()]
-            core._read_cache[key] = slots
-        for index, slot in enumerate(slots):
-            page = int(tags[bank, index])
-            slot.page_key = None if page < 0 else (*tag_prefixes[bank], *divmod(page, config.pages_per_block))
-            slot.ready_ns, slot.reader_completion_ns, slot.last_use = float(ready[bank, index]), float(readers[bank, index]), int(uses[bank, index])
+    publish_timeline(timeline, names, state_values, moved_values, direction_values,
+                     lane_values, lane_direction_values, start_values, lane_count_values,
+                     active_resources, link_names, byte_values, direction_names,
+                     single_lane_state is not None)
+    array_values = arrays.tolist()
+    for unit in active_units:
+        timeline.ready_ns[array_names[unit]] = array_values[unit]
+    if packed is None:
+        array_values, buffer_values = arrays.tolist(), buffers.tolist()
+        for unit in active_units:
+            name = array_names[unit]
+            core.__dict__["_array_ready"][name], core.__dict__["_buffer_ready"][name] = array_values[unit], buffer_values[unit]
+            timeline.ready_ns[name] = array_values[unit]
+        tag_values, ready_values, reader_values, use_values = tags.tolist(), ready.tolist(), readers.tolist(), uses.tolist()
+        for bank in active_banks:
+            key = bank_keys[bank]
+            if core._nand_transactions:
+                core._touch_cache_bank(key)
+            slots = core.__dict__["_read_cache"].get(key)
+            if slots is None:
+                slots = [_ReadCacheSlot(), _ReadCacheSlot()]
+                core.__dict__["_read_cache"][key] = slots
+            for index, slot in enumerate(slots):
+                page = tag_values[bank][index]
+                slot.page_key = None if page < 0 else (*tag_prefixes[bank], *divmod(page, config.pages_per_block))
+                slot.ready_ns, slot.reader_completion_ns, slot.last_use = ready_values[bank][index], reader_values[bank][index], use_values[bank][index]
     core._cache_use, core._acceptance_ns = int(cache_clock), float(acceptance)
-    core._next_program_page.update(program_frontiers)
+    core._update_program_frontiers(program_frontiers)
     core._inflight = admission[:admitted_count].tolist()
-    core._inflight_operations = [(float(admission[index]), Operation.READ if admission_ops[index] == 1 else Operation.WRITE)
-                                 for index in range(admitted_count)]
+    core._inflight_operations = [(end, Operation.READ if op == 1 else Operation.WRITE)
+                                 for end, op in zip(core._inflight, admission_ops[:admitted_count].tolist())]
     core._observation_events = []
     timeline._intervals, timeline._interval_payloads = {}, {}
     timeline._interval_count = timeline._interval_limit = 0
     timeline._intervals_truncated = True
     timeline._touched = {names[index] for index in np.flatnonzero(touched)}
     misses, hits = int(counters[4]), int(counters[5])
-    busy = {name: float(nand_busy[index]) for index, name in enumerate(names) if nand_busy[index]}
-    byte_counts = {name: int(nand_bytes[index]) for index, name in enumerate(names) if nand_bytes[index]}
+    busy = {name: value for name, value in zip(names, busy_values) if value}
+    byte_counts = {name: value for name, value in zip(names, byte_values) if value}
     last = {name: timeline.last_intervals[name] for name in active_resources - set(link_names)}
     programmed = 0 if read else count
     internal_bytes = (misses + programmed) * config.transfer_page_bytes

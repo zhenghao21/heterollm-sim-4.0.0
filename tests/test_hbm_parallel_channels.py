@@ -15,6 +15,7 @@ from heterollm_sim.memory_types import AccessRequest
 from test_hbm_compiled_control import configuration
 
 
+@pytest.mark.parametrize("size", [128 * 1024, 2 ** 21])
 @pytest.mark.parametrize("channels,mapping,interleave,refresh,clock", [
     (3, "bank_interleaved", 32, False, 1.),
     (5, "bank_interleaved", 128, False, 1.),
@@ -22,7 +23,7 @@ from test_hbm_compiled_control import configuration
     (3, "row_local", None, True, 1.),
     (5, "bank_interleaved", 64, False, 1.28),
 ])
-def test_parallel_request_matches_serial_all_live_arrays(channels, mapping, interleave, refresh, clock, monkeypatch):
+def test_parallel_request_matches_serial_all_live_arrays(channels, mapping, interleave, refresh, clock, size, monkeypatch):
     config = configuration(channels=channels, address_mapping=mapping, interleave_bytes=interleave,
         command_clock_ns=clock, data_rate_mt_s=4000. / clock,
         read_latency_ns=8 * clock, write_latency_ns=4 * clock,
@@ -31,9 +32,9 @@ def test_parallel_request_matches_serial_all_live_arrays(channels, mapping, inte
         activate_same_group_ns=5 * clock, activate_different_group_ns=2 * clock,
         rows_per_bank=128, activated_row_msb=6, refresh_policy="all_bank" if refresh else "disabled",
         refresh_interval_ns=3900. if refresh else 0., refresh_cycle_ns=40. if refresh else 0.)
-    requests = [AccessRequest("read", "read", 193, 2 ** 21 + 37),
-                AccessRequest("write", "write", 8193, 2 ** 21 + 115, 100.),
-                AccessRequest("after-maintenance", "read", 31, 2 ** 21 + 71, 200000.)]
+    requests = [AccessRequest("read", "read", 193, size + 37),
+                AccessRequest("write", "write", 8193, size + 115, 100.),
+                AccessRequest("after-maintenance", "read", 31, size + 71, 200000.)]
     packed = _pack_hbm_numeric(DramCore(config, capture_details=False), requests[0])
     before = tuple(array.copy() for array in packed.arrays)
     for request in requests:
@@ -53,6 +54,43 @@ def test_parallel_request_matches_serial_all_live_arrays(channels, mapping, inte
                 assert math.isclose(actual.counters[key], value, rel_tol=1e-10, abs_tol=1e-8)
             else:
                 assert actual.counters[key] == value
+        for actual, saved in zip(packed.arrays, expected_arrays):
+            assert np.array_equal(actual.view(np.uint8), saved.view(np.uint8))
+        before = expected_arrays
+
+
+@pytest.mark.parametrize("size", [128 * 1024, 256 * 1024, 1024 * 1024])
+@pytest.mark.parametrize("arrival", [0., 4e8])
+def test_b200_decode_sized_parallel_requests_preserve_results_and_state(size, arrival, monkeypatch):
+    from test_hbm_column_pack_equivalence import b200_memory
+
+    requests = (
+        AccessRequest("read", "read", 0, size, arrival),
+        AccessRequest("write", "write", 8192, size, arrival + 100.),
+        AccessRequest("repeat", "read", 0, size, arrival + 1000.),
+    )
+    packed = _pack_hbm_numeric(DramCore(b200_memory(), capture_details=False), requests[0])
+    before = tuple(array.copy() for array in packed.arrays)
+    for request in requests:
+        packed.arrays = tuple(array.copy() for array in before)
+        monkeypatch.setattr(_hbm_numeric, "_CHANNEL_WORKERS", 1)
+        expected = packed.execute(request)
+        expected_arrays = tuple(array.copy() for array in packed.arrays)
+        packed.arrays = tuple(array.copy() for array in before)
+        monkeypatch.setattr(_hbm_numeric, "_CHANNEL_WORKERS", 8)
+        actual = packed.execute(request)
+        if arrival:
+            # At the measured 64K decode clock, even the two diagnostic float
+            # sums are bitwise equal. The cold-clock case keeps the existing
+            # independent-channel summation contract above.
+            assert actual == expected
+        else:
+            assert replace(actual, counters={}) == replace(expected, counters={})
+            for key, value in expected.counters.items():
+                if key in {"row_command_bus_busy_ns", "column_command_bus_busy_ns"}:
+                    assert math.isclose(actual.counters[key], value, rel_tol=1e-10, abs_tol=1e-8)
+                else:
+                    assert actual.counters[key] == value
         for actual, saved in zip(packed.arrays, expected_arrays):
             assert np.array_equal(actual.view(np.uint8), saved.view(np.uint8))
         before = expected_arrays

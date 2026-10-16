@@ -4,17 +4,56 @@ from __future__ import annotations
 import math
 import copy
 from functools import lru_cache
+from operator import itemgetter
 from types import MappingProxyType
 import numpy as np
 
 from .memory_types import Operation, TransactionResult
 from .memory_mapping import map_dram_address
+from ._hbm_pack import (refresh_resource_columns, publish_resource_columns,
+                       can_capture_resource_columns, consume_resource_columns)
 
 
 # Cover the 4 TiB, 64-stack HBM reference without raising the analytical
 # controller's separate limit. The three bank arrays occupy 9 MiB here;
 # batch checkpoints and Python bank mappings require additional memory.
 MAX_HBM_NUMERIC_BANKS = 131_072
+
+
+@lru_cache(maxsize=512)
+def _request_array_selection(lanes, banks, first_lane, lane_count):
+    """Array rows a sparse request may mutate, including channel maintenance.
+
+    Refresh and maximum-active maintenance can change the sibling PC and any
+    bank in the same physical channel.  Other channels share no controller or
+    CA/data resources.  Dense requests use the cheaper contiguous full copy.
+    """
+    channels = lanes // 2
+    if lane_count >= lanes - 1:
+        return None
+    selected = tuple(sorted({((first_lane + offset) % lanes) // 2
+                             for offset in range(lane_count + 1)}))
+    if len(selected) * 2 >= channels:
+        return None
+
+    def rows(width):
+        if selected[-1] - selected[0] + 1 == len(selected):
+            return slice(selected[0] * width, (selected[-1] + 1) * width)
+        indices = np.fromiter((ch * width + offset for ch in selected
+                               for offset in range(width)), dtype=np.intp)
+        indices.flags.writeable = False
+        return indices
+
+    bank_rows, pc_rows, channel_rows = rows(2 * banks), rows(2), rows(1)
+    resources = np.array((*selected, *(channels + ch for ch in selected),
+                          *(2 * channels + 2 * ch + pc for ch in selected for pc in range(2))),
+                         dtype=np.intp)
+    resources.flags.writeable = False
+    # touched is reset globally before every numeric invocation; preserve its
+    # complete previous bitmap even when all other writes are channel-local.
+    return (bank_rows, bank_rows, bank_rows, pc_rows, pc_rows, pc_rows,
+            channel_rows, channel_rows, resources, resources, resources,
+            slice(None), pc_rows, pc_rows)
 
 
 @lru_cache(maxsize=8)
@@ -35,7 +74,7 @@ def _numeric_resource_layout(lanes, banks, channels_per_stack, lanes_per_stack,
             MappingProxyType({key: index for index, key in enumerate(pc_keys)}))
 
 
-def _pack_hbm_numeric(core, request):
+def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     """Return packed state, or None for unsupported acceleration cases.
 
     The detail controller remains the reference for tracing and aliased
@@ -52,6 +91,11 @@ def _pack_hbm_numeric(core, request):
             or c.addressable_stack_count != 1 or c.addressable_die_count != 1
             or c.stack_interface_mode != "independent"
             or request.operation not in (Operation.READ, Operation.WRITE)):
+        return None
+    if any(type(values) is not dict for values in (
+            timeline.lane_available, timeline.ready_ns, timeline.busy_ns,
+            timeline.last_intervals, timeline.lane_directions,
+            timeline.bytes_moved, timeline.directions)):
         return None
     lanes, banks, groups = c.lane_count, c.bank_count, c.bank_groups_per_rank
     if 16 % c.banks_per_group and c.banks_per_group % 16:
@@ -74,6 +118,16 @@ def _pack_hbm_numeric(core, request):
     if (c.address_mapping != "row_local"
             and lanes * ((c.interleave_bytes or c.burst_bytes) // c.burst_bytes) > (1 << 63) - 1):
         return None
+    cached = core._hbm_numeric_state
+    if cached is not None:
+        if c != cached._config:
+            core._hbm_publish_numeric()
+            return _pack_hbm_numeric(core, request, refresh_requests=refresh_requests)
+        if not cached.validate_aliases():
+            return None
+        if cached.refresh_resources(physical, refresh_requests or (request,)):
+            return cached
+        return None
     try:
         from ._hbm_numeric import TIMING_FIELDS, run_hbm_numeric
     except (ImportError, OSError):
@@ -90,15 +144,7 @@ def _pack_hbm_numeric(core, request):
         return None
     # The event kernel also contains ownership aliases for unrelated
     # resources. Only aliases affecting this controller require fallback.
-    if any(timeline.canonical_resource_id(rid) != rid for rid in ids):
-        return None
-    cached = core._hbm_numeric_state
-    if cached is not None:
-        if c != cached._config:
-            core._hbm_publish_numeric()
-            return _pack_hbm_numeric(core, request)
-        if cached.refresh_resources(physical):
-            return cached
+    if timeline.resource_aliases and any(timeline.canonical_resource_id(rid) != rid for rid in ids):
         return None
     state = core.__dict__["_hbm_control_state"]
     rows = np.full(total_banks, -1, dtype=np.int64)
@@ -200,6 +246,15 @@ def _pack_hbm_numeric(core, request):
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.READ),
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.WRITE),
         c.maximum_active_ns, c.four_activate_window_ns], dtype=np.float64)
+    # Column commands are emitted on the clock grid. Restored/authored state
+    # may contain arbitrary timestamps, so prove that invariant before using
+    # the monotone, grouped history reduction in the numeric controller.
+    half_clock = t[0] / 2
+    columns = history[:, :, 1:3]
+    ticks = np.rint(columns / half_clock)
+    grid_history = bool(np.all((columns < 0) | ((np.abs(ticks) < 2. ** 49)
+                                              & (columns == ticks * half_clock))))
+    g = np.append(g, np.int64(grid_history))
     if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t, windows)):
         return None
     packed = _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t,
@@ -222,38 +277,128 @@ class _HBMNumericState:
         self._controller_before = self._copy_controller_arrays()
         self._controller_commits = 0
         self._config = copy.deepcopy(core.config)
+        c = self._config
+        self._request_lane_span = (c.row_bytes * c.bank_count if c.address_mapping == "row_local"
+                                   else c.interleave_bytes or c.burst_bytes)
+        self._dense_request_bytes = max(1, c.lane_count // 4) * self._request_lane_span
+        aliases = core.timeline.resource_aliases
+        self._alias_state = (dict(aliases) if type(aliases) is dict
+                             and all(type(key) is str and type(value) is str
+                                     for key, value in aliases.items()) else None)
+        self._resource_getter = itemgetter(*ids)
+        self._calendar_ids = None
+        # Conversion scratch never owns controller state and is overwritten
+        # before use; it is deliberately absent from transaction checkpoints.
+        self._resource_scratch = np.empty((len(ids), 2), dtype=np.float64)
+        self._resource_lookup = {rid: index for index, rid in enumerate(ids)}
+        self._capture_positions = {}
+        self._refreshed_resource_ids = ids
 
-    def refresh_resources(self, physical):
+    def validate_aliases(self):
+        aliases = self.core.timeline.resource_aliases
+        if type(aliases) is dict and self._alias_state is not None and aliases == self._alias_state:
+            return True
+        if aliases and any(self.core.timeline.canonical_resource_id(rid) != rid for rid in self.ids):
+            return False
+        self._alias_state = (dict(aliases) if type(aliases) is dict
+                             and all(type(key) is str and type(value) is str
+                                     for key, value in aliases.items()) else None)
+        return True
+
+    def refresh_resources(self, physical, requests):
         """External link reservations remain authoritative on the timeline."""
         timeline = self.core.timeline
         resources, moved, directions = self.arrays[8:11]
-        ids = self.ids
-        slots = [timeline.lane_available.get(rid) for rid in ids]
-        present = [slot for slot in slots if slot is not None]
-        if any(len(slot) != 1 for slot in present) or len({id(slot) for slot in present}) != len(present):
+        all_ids = self.ids
+        if type(timeline.lane_available) is dict:
+            try:
+                slots = self._resource_getter(timeline.lane_available)
+            except KeyError:
+                slots = tuple(map(timeline.lane_available.get, all_ids))
+        else:
+            slots = tuple(map(timeline.lane_available.get, all_ids))
+        try:
+            lengths = set(map(len, slots))
+            present = slots
+        except TypeError:
+            present = tuple(slot for slot in slots if slot is not None)
+            lengths = set(map(len, present))
+        if lengths - {1}:
             return False
-        previous_bytes = [timeline.bytes_moved.get(rid, 0) for rid in ids]
-        limit = (1 << 63) - 1 - physical
-        if any(not isinstance(value, (int, np.integer)) or not 0 <= value <= limit for value in previous_bytes):
+        identities = tuple(map(id, present))
+        if identities != self._calendar_ids:
+            if len(set(identities)) != len(identities):
+                return False
+            self._calendar_ids = identities
+        # Only calendar identity uniqueness is cached. Lengths and every live
+        # value are reread, including in-place edits and restored timelines.
+        # Only channels reached by this ordered request set can execute a
+        # command, including tRASmax/refresh maintenance on the other PC.
+        # Refresh those channels from the public timeline every time; this
+        # does not rely on hidden mutation versions or trusted caller state.
+        c = self.core.config
+        lane_span = (c.row_bytes * c.bank_count if c.address_mapping == "row_local"
+                     else c.interleave_bytes or c.burst_bytes)
+        channels = len(self.channel_keys)
+        selected = set()
+        for request in requests:
+            first = request.address // lane_span
+            last = (request.address + request.byte_count - 1) // lane_span
+            if last - first >= c.lane_count - 1:
+                selected = None
+                break
+            selected.update((lane % c.lane_count) // 2 for lane in range(first, last + 1))
+            if len(selected) == channels:
+                selected = None
+                break
+        if selected is None:
+            indices = slice(None)
+            ids = all_ids
+        else:
+            indices = sorted(index for ch in selected
+                             for index in (ch, channels + ch, 2 * channels + 2 * ch,
+                                           2 * channels + 2 * ch + 1))
+            ids = tuple(all_ids[index] for index in indices)
+            slots = [slots[index] for index in indices]
+        if not refresh_resource_columns(resources, moved, directions,
+                None if isinstance(indices, slice) else indices, ids, slots,
+                timeline.ready_ns, timeline.busy_ns, timeline.last_intervals,
+                timeline.bytes_moved, timeline.directions, physical, self._resource_scratch):
             return False
-        # Bulk column conversion avoids four scalar NumPy writes per port.
-        # Alias validation above proves each present calendar has one slot,
-        # so this is exactly ResourceTimeline.available_ns for these ids.
-        resources[:, 0] = np.fromiter((float(slot[0]) if slot is not None else float(timeline.ready_ns.get(rid, 0.))
-                                      for rid, slot in zip(ids, slots)), dtype=np.float64, count=len(ids))
-        resources[:, 1] = np.fromiter((timeline.busy_ns.get(rid, 0.) for rid in ids),
-                                      dtype=np.float64, count=len(ids))
-        resources[:, 2:] = [timeline.last_intervals.get(rid, (0., 0.)) for rid in ids]
-        moved[:] = previous_bytes
-        direction_values = [timeline.directions.get(rid) for rid in ids]
-        directions[:] = [1 if value == "read" else 2 if value == "write" else 3 if value else 0
-                         for value in direction_values]
+        self._refreshed_resource_ids = ids
         return bool(np.isfinite(resources).all())
 
     def _copy_controller_arrays(self):
         # Baseline of the currently published Python objects. A resident core
         # retains it across submissions until that state is exposed publicly.
         return tuple(self.arrays[index].copy() for index in (0, 1, 2, 6, 7))
+
+    def request_selection(self, request):
+        if request.byte_count >= self._dense_request_bytes:
+            return None
+        c = self._config
+        lane_span = self._request_lane_span
+        first_lane = request.address // lane_span
+        last_lane = (request.address + request.byte_count - 1) // lane_span
+        return _request_array_selection(c.lane_count, c.bank_count,
+                                        first_lane % c.lane_count, last_lane - first_lane)
+
+    def checkpoint(self, request):
+        selection = self.request_selection(request)
+        if selection is None:
+            return None, tuple(array.copy() for array in self.arrays)
+        # Advanced indexing already returns an independent array.  Avoid
+        # copying it a second time for the wrapped-channel/resource indices.
+        return selection, tuple(array[index].copy() if isinstance(index, slice) else array[index]
+                                for array, index in zip(self.arrays, selection))
+
+    def restore_checkpoint(self, checkpoint):
+        selection, saved = checkpoint
+        if selection is None:
+            self.arrays = saved
+        else:
+            for array, index, values in zip(self.arrays, selection, saved):
+                array[index] = values
 
     def execute(self, request):
         c = self.core.config
@@ -266,7 +411,7 @@ class _HBMNumericState:
                 or request.address < 0 or request.address + request.byte_count > c.effective_capacity_bytes
                 or physical > (1 << 63) - 1 or stop - first > 2 ** 53
                 or not math.isfinite(request.arrival_ns)
-                or any(int(value) > (1 << 63) - 1 - physical for value in moved)):
+                or int(moved.max()) > (1 << 63) - 1 - physical):
             return None
         touched.fill(False)
         g, t, run_hbm_numeric = self.g, self.t, self.run_numeric
@@ -281,7 +426,15 @@ class _HBMNumericState:
             # private arrays are discarded (or rolled back by the batch
             # caller); the Python controller uses unbounded integer indices.
             return None
-        if not math.isfinite(completion) or not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, windows)):
+        selection = self.request_selection(request)
+        finite_indices = (1, 3, 4, 6, 8, 12)
+        # Packing validates the complete state once.  An accepted numeric
+        # execution only writes the selected channels, so every untouched
+        # floating-point value retains that finite invariant.
+        if not math.isfinite(completion) or not all(
+                np.isfinite(self.arrays[index] if selection is None
+                            else self.arrays[index][selection[index]]).all()
+                for index in finite_indices):
             return None
         counters = dict(activate_commands=int(counts[0]), precharge_commands=int(counts[1]),
                         read_commands=int(counts[2]), write_commands=int(counts[3]),
@@ -385,19 +538,10 @@ class _HBMNumericState:
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
          resources, moved, directions, touched, windows, window_counts) = self.arrays
         indices = np.flatnonzero(touched)
-        values = resources[indices].tolist()
-        transfer_bytes = moved[indices].tolist()
-        for index, resource, byte_count in zip(indices, values, transfer_bytes):
-            rid = ids[index]
-            timeline.lane_available.setdefault(rid, [0.])[0] = resource[0]
-            timeline.ready_ns[rid] = resource[0]
-            timeline.busy_ns[rid] = resource[1]
-            timeline.last_intervals[rid] = (resource[2], resource[3])
-            timeline.lane_directions.pop(rid, None)
-            timeline._touched.add(rid)
-            if index >= 2 * channels:
-                timeline.bytes_moved[rid] = byte_count
-                timeline.directions[rid] = request.operation.value
+        publish_resource_columns(ids, resources, moved, indices,
+            timeline.lane_available, timeline.ready_ns, timeline.busy_ns,
+            timeline.last_intervals, timeline.bytes_moved, timeline.directions,
+            timeline.lane_directions, timeline._touched, channels, request.operation.value)
         timeline._intervals_truncated = True
 
 
@@ -407,12 +551,12 @@ def execute_hbm_numeric(core, request):
     if packed is None:
         return None
     resident = core._hbm_numeric_state is packed
-    before = tuple(array.copy() for array in packed.arrays) if resident else None
+    before = packed.checkpoint(request) if resident else None
     try:
         result = packed.execute(request)
     except BaseException:
         if resident:
-            packed.arrays = before
+            packed.restore_checkpoint(before)
         raise
     if result is not None:
         packed._controller_commits += 1
@@ -420,7 +564,7 @@ def execute_hbm_numeric(core, request):
             packed.commit_controller()
         packed.commit_timeline(request)
     elif resident:
-        packed.arrays = before
+        packed.restore_checkpoint(before)
     return result
 
 
@@ -428,14 +572,54 @@ class _NumericDeclined(Exception):
     pass
 
 
-def execute_hbm_numeric_many(core, requests):
+class _NumericResourceCapture:
+    """Consume each successful request's checkpoint directly into a task bill."""
+
+    def __init__(self, packed, accumulator):
+        self.packed = packed
+        self.accumulator = accumulator
+        self.before = None
+
+    def begin(self):
+        timeline = self.packed.core.timeline
+        timeline._intervals = {}
+        timeline._interval_limit = 0
+        timeline._interval_count = 0
+        timeline._intervals_truncated = False
+        timeline._touched = set()
+        timeline._interval_payloads = {}
+
+    def finish(self):
+        packed, (selection, saved) = self.packed, self.before
+        positions = None
+        if selection is not None:
+            key = id(selection)
+            cached = packed._capture_positions.get(key)
+            if cached is None or cached[0] is not selection:
+                # Keep the selection alive, making identity reuse impossible.
+                positions = {int(index): position for position, index in enumerate(selection[8])}
+                if len(packed._capture_positions) >= 512:
+                    packed._capture_positions.clear()
+                packed._capture_positions[key] = (selection, positions)
+            else:
+                positions = cached[1]
+        timeline = packed.core.timeline
+        consume_resource_columns(self.accumulator, packed._resource_lookup,
+            packed.arrays[8], packed.arrays[9], saved[8], saved[9], positions, timeline)
+        return {"resource_intervals": {}, "resource_interval_payloads": {},
+                "intervals_truncated": timeline._intervals_truncated}
+
+
+def execute_hbm_numeric_many(core, requests, *, resource_accumulator=None):
     """Amortize packing while retaining each request's admission and metrics."""
     if not requests:
         return ()
-    packed = _pack_hbm_numeric(core, requests[0])
+    packed = _pack_hbm_numeric(core, requests[0], refresh_requests=requests)
     if packed is None:
         return None
-
+    capture = (_NumericResourceCapture(packed, resource_accumulator)
+               if resource_accumulator is not None
+               and can_capture_resource_columns(core.timeline, packed._refreshed_resource_ids) else None)
     def execute(request):
         result = packed.execute(request)
         if result is None:
@@ -446,21 +630,28 @@ def execute_hbm_numeric_many(core, requests):
 
     results = []
     for index, request in enumerate(requests):
-        # Numeric buffers are contiguous and cheap to copy. Keep the last
-        # successful state so an exception or decline cannot commit half of
-        # the current request or discard requests already accepted in order.
-        before = tuple(array.copy() for array in packed.arrays)
+        # Keep the last successful state, including both PCs and maintenance
+        # on every reached channel.  A failed request cannot discard earlier
+        # accepted requests or expose half of its own controller mutations.
+        before = packed.checkpoint(request)
         before_commits = packed._controller_commits
+        if capture is not None:
+            capture.before = before
         try:
-            result = core._submit_validated(request, execute=execute)
+            result = core._submit_validated(request, execute=execute,
+                _resource_accumulator=resource_accumulator, _metrics_capture=capture)
         except _NumericDeclined:
-            packed.arrays = before
+            packed.restore_checkpoint(before)
             packed._controller_commits = before_commits
             if results and core._hbm_numeric_state is not packed:
                 packed.commit_controller()
-            return tuple(results) + tuple(core.submit(item) for item in requests[index:])
+            remaining = (tuple(core.submit(item) for item in requests[index:])
+                         if resource_accumulator is None else tuple(
+                             core._submit_validated(item, _resource_accumulator=resource_accumulator)
+                             for item in requests[index:]))
+            return tuple(results) + remaining
         except BaseException:
-            packed.arrays = before
+            packed.restore_checkpoint(before)
             packed._controller_commits = before_commits
             if results and core._hbm_numeric_state is not packed:
                 packed.commit_controller()

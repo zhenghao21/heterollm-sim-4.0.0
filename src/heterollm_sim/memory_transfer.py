@@ -75,6 +75,7 @@ class ResourceTimeline:
     lane_available: Dict[str, list[float]] = field(default_factory=dict, repr=False)
     lane_directions: Dict[str, list[Optional[str]]] = field(default_factory=dict, repr=False)
     resource_aliases: Mapping[str, str] = field(default_factory=dict, repr=False)
+    _metric_key_orders: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def canonical_resource_id(self, resource_id: str) -> str:
         """Resolve a wire name idempotently, rejecting cyclic aliases."""
@@ -119,21 +120,28 @@ class ResourceTimeline:
         histories = self.lane_directions.get(resource_id)
         if len(lanes) == 1 or histories is None or len(histories) != len(lanes):
             histories = [previous] * len(lanes)
-        def eligible(index):
-            ready = _number("lane readiness", lanes[index])
-            if direction and histories[index] and histories[index] != direction:
+        if len(lanes) == 1:
+            ready = _number("lane readiness", lanes[0])
+            if direction and histories[0] and histories[0] != direction:
                 ready += switch_ns
-            return max(earliest_ns, ready)
-        starts = [eligible(index) for index in range(len(lanes))]
-        lane_index = min(range(len(lanes)), key=lambda index: (starts[index], lanes[index], index))
-        start = starts[lane_index]
+            start = max(earliest_ns, ready)
+            lane_index = 0
+        else:
+            def eligible(index):
+                ready = _number("lane readiness", lanes[index])
+                if direction and histories[index] and histories[index] != direction:
+                    ready += switch_ns
+                return max(earliest_ns, ready)
+            starts = [eligible(index) for index in range(len(lanes))]
+            lane_index = min(range(len(lanes)), key=lambda index: (starts[index], lanes[index], index))
+            start = starts[lane_index]
         end = start + duration_ns
         busy = self.busy_ns.get(resource_id, 0.0) + duration_ns
         if not math.isfinite(end) or not math.isfinite(busy):
             raise ValueError("resource reservation exceeds finite timing range")
         self.lane_available[resource_id] = lanes
         lanes[lane_index] = end
-        self.ready_ns[resource_id] = min(lanes)
+        self.ready_ns[resource_id] = end if len(lanes) == 1 else min(lanes)
         self.busy_ns[resource_id] = busy
         self.last_intervals[resource_id] = (start, end)
         self._touched.add(resource_id)
@@ -186,19 +194,37 @@ class ResourceTimeline:
         }
 
     def metrics_delta(self, before: dict) -> dict:
-        busy = {rid: value - before["busy_ns"].get(rid, 0.0)
-                for rid, value in self.busy_ns.items()
-                if value != before["busy_ns"].get(rid, 0.0)}
-        moved = {rid: value - before["bytes_moved"].get(rid, 0)
-                 for rid, value in self.bytes_moved.items()
-                 if value != before["bytes_moved"].get(rid, 0)}
-        intervals = {rid: self.last_intervals[rid] for rid in self._touched}
-        payloads = {rid: tuple(items) for rid, items in self._interval_payloads.items()}
-        return {"resource_busy_ns": busy, "resource_bytes": moved,
-                "resource_last_intervals": intervals,
-                "resource_intervals": {rid: tuple(items) for rid, items in self._intervals.items()},
-                "resource_interval_payloads": payloads,
-                "intervals_truncated": self._intervals_truncated}
+        from ._resource_ledger import timeline_metrics_delta
+        return timeline_metrics_delta(self, before)
+
+    def _core_metrics_delta(self, before: dict) -> dict:
+        """Reduce reservations made by a Core, whose writers mark touched IDs.
+
+        The public reducer still detects arbitrary dictionary edits. Core
+        execution has no caller callback between snapshot and reduction, so
+        unrelated resources cannot change and need no counter lookups.
+        """
+        if (type(self) is not ResourceTimeline or type(self.busy_ns) is not dict
+                or type(self.bytes_moved) is not dict):
+            return self.metrics_delta(before)
+        touched = self._touched
+        if len(touched) * 2 >= len(self.busy_ns):
+            return self.metrics_delta(before)
+        from ._resource_ledger import core_timeline_metrics_delta
+        return core_timeline_metrics_delta(self, before)
+
+    def _ordered_metric_touches(self, name, values, touched):
+        # Constructing the key tuple runs in C. Comparing it on every call
+        # also observes public insertions, deletions and same-size reordering;
+        # cached ordinals never hide a caller's changed dictionary order.
+        keys = tuple(values)
+        cached = self._metric_key_orders.get(name)
+        if cached is None or cached[0] != keys:
+            order = {key: index for index, key in enumerate(keys)}
+            self._metric_key_orders[name] = (keys, order)
+        else:
+            order = cached[1]
+        return sorted((rid for rid in touched if rid in order), key=order.__getitem__)
 
     def snapshot(self) -> dict[str, float]:
         return dict(self.ready_ns)

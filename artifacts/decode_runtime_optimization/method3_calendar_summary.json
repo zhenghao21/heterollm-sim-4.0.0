@@ -1,0 +1,14 @@
+{
+  "method": "compiled calendar length and identity validation",
+  "status": "removed; no end-to-end gain",
+  "model_id": "qwen2_5-0_5b",
+  "architecture": "HBM",
+  "prompt_tokens": 32,
+  "output_tokens": 9,
+  "decode_steps": 8,
+  "order": ["original", "candidate", "candidate", "original"],
+  "decode_seconds": [6.844008699990809, 6.984075999993365, 6.908871299994644, 7.004851899982896],
+  "all_result_fields_equal": true,
+  "all_cohort_simulated_times_equal": true,
+  "note": "Equality assertions passed. Full record export failed on ServingRequestMetrics serialization; raw measurements are retained here. No rerun was needed to reject the candidate."
+}

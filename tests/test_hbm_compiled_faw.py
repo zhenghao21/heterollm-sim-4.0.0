@@ -150,7 +150,7 @@ def test_full_timing_numeric_matches_reference_with_scheduler_and_queue(mapping,
             ("write", 64, 96, 0.), ("read", 65536, 4096, 1.),
             ("write", 0, 129, 10000.), ("read", 0, 1024, 10000.))))
     with monkeypatch.context() as patch:
-        patch.setattr(_compiled_hbm, "_pack_hbm_numeric", lambda *args: None)
+        patch.setattr(_compiled_hbm, "_pack_hbm_numeric", lambda *args, **kwargs: None)
         expected = reference.submit_many(requests)
     actual = numeric.submit_many(requests)
     assert all(row.counters["compiled_hbm_float64"] for row in actual)

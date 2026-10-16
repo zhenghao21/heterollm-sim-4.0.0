@@ -12,6 +12,7 @@ from heterollm_sim.planner import (
     _parallel_plan, _rank_memory_resource, compile_scenario,
 )
 from heterollm_sim.control_plane_planner import plan_runtime_placement
+from heterollm_sim.physical_contract import require_physical_memory_config
 from test_backend_lowering_followup import configured_scenario
 
 
@@ -122,8 +123,8 @@ def test_custom_rank_memory_owners_still_lower_to_dram_core(owners):
     for task in qkv:
         owner = owners[task.metadata["rank"]]
         assert task.metadata.get("physical_owner") == owner
-        assert task.metadata["physical_memory_config"] == scenario.hardware.get_component(
-            "hbm" + str(task.metadata["rank"])).metadata["physical_memory_config"]
+        assert task.metadata["physical_memory_config"] == require_physical_memory_config(
+            scenario.hardware.get_component("hbm" + str(task.metadata["rank"])))
         assert {row["physical_owner"] for row in task.metadata["memory_accesses"]} == {owner}
         event = UnifiedEventKernel.from_closed_graph((replace(task, dependencies=()),)).step()
         assert next(iter(event.task.metadata["physical_execution_by_owner"].values()))["physical_bytes"] > 0

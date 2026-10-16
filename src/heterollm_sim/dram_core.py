@@ -37,16 +37,21 @@ def _repeat_add(value: float, increment: float, count: int) -> float:
     increment, which would drift from serial addition at large timestamps.
     """
     while count:
+        previous = value
         value += increment
         count -= 1
         if not count or not math.isfinite(value):
             break
+        exponent = math.frexp(value)[1]
+        if math.frexp(previous)[1] != exponent:
+            # The first result in a new binade can still be odd. Resolve
+            # its ties-to-even before combining the following ULP steps.
+            continue
         step = (value + increment) - value
         if not math.isfinite(step):
             return value + increment
         if step == 0.0:
             break
-        exponent = math.frexp(value)[1]
         upper = float.fromhex("0x1.fffffffffffffp+1023") if exponent == 1024 else math.ldexp(1.0, exponent)
         steps = min(count, max(0, int((upper - value) / step) - 1))
         if steps:
@@ -127,6 +132,7 @@ class DramCore:
         self._hbm_transactions: list = []
         self._hbm_numeric_state = None
         self._hbm_numeric_enabled = False
+        self._analytical_banks_exposed = False
         self._inflight: list[float] = []
         self._channel_inflight: dict[tuple[int, int], list[float]] = {}
         self._acceptance_ns = 0.0
@@ -152,13 +158,25 @@ class DramCore:
     @property
     def _banks(self):
         self._hbm_publish_numeric()
+        if self.config.control_mode != "jedec_hbm":
+            self._analytical_publish_banks()
         return self.__dict__["_banks"]
 
     @_banks.setter
     def _banks(self, value):
         if "_banks" in self.__dict__:
             self._hbm_publish_numeric()
+            if self.config.control_mode != "jedec_hbm":
+                self._analytical_publish_banks()
         self.__dict__["_banks"] = value
+
+    def _analytical_publish_banks(self):
+        # An external caller can retain a mutable BankState reference. Such
+        # cores keep full transaction copies; internal execution uses the
+        # private mapping and journals only banks it actually changes.
+        self._analytical_banks_exposed = True
+        for token in self._hbm_transactions:
+            token.materialize(self)
 
     @property
     def _hbm_control_state(self):
@@ -192,7 +210,8 @@ class DramCore:
         """Protect bank/controller state; the caller owns queues and timeline."""
         from ._hbm_transaction import HBMTransaction
         token = HBMTransaction(self)
-        if self.capture_details or self.config.control_mode != "jedec_hbm":
+        if self.capture_details or (self.config.control_mode != "jedec_hbm"
+                                    and self._analytical_banks_exposed):
             token.materialize(self)
         self._hbm_transactions.append(token)
         return token
@@ -325,7 +344,7 @@ class DramCore:
             )
         return earliest
 
-    def submit(self, request: AccessRequest) -> TransactionResult:
+    def submit(self, request: AccessRequest, *, _resource_accumulator=None) -> TransactionResult:
         validate_dram_request(request, self.config)
         if self._finite_guard_required(request):
             # Ordinary requests need no extra state copies. At extreme
@@ -345,7 +364,15 @@ class DramCore:
                     or any(not math.isfinite(bank.ready_ns) for bank in shadow._banks.values())
                     or any(not math.isfinite(value) for value in shadow.timeline.busy_ns.values())):
                 raise ValueError("DRAM request exceeds finite timing range")
-        return self._submit_validated(request)
+        if (_resource_accumulator is not None and not self.capture_details
+                and self.config.control_mode == "jedec_hbm"
+                and not self._finite_guard_required(request)):
+            from ._compiled_hbm import execute_hbm_numeric_many
+            results = execute_hbm_numeric_many(self, (request,),
+                resource_accumulator=_resource_accumulator)
+            if results is not None:
+                return results[0]
+        return self._submit_validated(request, _resource_accumulator=_resource_accumulator)
 
     def _finite_guard_required(self, request: AccessRequest) -> bool:
         burst = self.config.burst_bytes
@@ -370,31 +397,36 @@ class DramCore:
                 ready = max(ready, min(active))
         return ready
 
-    def _submit_validated(self, request: AccessRequest, *, execute=None) -> TransactionResult:
+    def _submit_validated(self, request: AccessRequest, *, execute=None,
+                          _resource_accumulator=None, _metrics_capture=None) -> TransactionResult:
         effective_arrival = self._admission_time(request)
         inflight = [end for end in self._inflight if end > effective_arrival]
-        before_metrics = self.timeline.metrics_snapshot(
-            max_intervals=(
-                self.config.max_expanded_segments
-                if self.capture_details
-                else 0
-            )
-        )
+        before_metrics = (self.timeline.metrics_snapshot(
+            max_intervals=self.config.max_expanded_segments if self.capture_details else 0)
+            if _metrics_capture is None else _metrics_capture.begin())
         result = (self._execute_accepted if execute is None else execute)(
             request if effective_arrival == request.arrival_ns
             else replace(request, arrival_ns=effective_arrival)
         )
-        result = replace(result, arrival_ns=request.arrival_ns, counters={
+        counters = {
             **result.counters, "queue_wait_ns": effective_arrival - request.arrival_ns,
             "scheduler_reordered_requests": 0, "scheduler_batches": 0,
             "controller_direction_switches": int(self._scheduler_direction is not None
                 and self._scheduler_direction != request.operation.value),
-            **self.timeline.metrics_delta(before_metrics),
-            **({
+        }
+        metrics = (self.timeline._core_metrics_delta(before_metrics)
+                   if _metrics_capture is None else _metrics_capture.finish())
+        if _resource_accumulator is not None and _metrics_capture is None:
+            _resource_accumulator.consume_metrics(metrics)
+            for field in ("resource_busy_ns", "resource_bytes", "resource_last_intervals"):
+                metrics.pop(field, None)
+        counters.update(metrics)
+        if self.config.bank_group_timing_enabled:
+            counters.update({
                 "bank_group_timing_enabled": True,
                 "bank_group_timing_fallback": self.config.control_mode == "analytical" and not self.capture_details,
-            } if self.config.bank_group_timing_enabled else {}),
-        })
+            })
+        result = replace(result, arrival_ns=request.arrival_ns, counters=counters)
         self._acceptance_ns = effective_arrival
         if self.config.queue_scope == "device":
             self._inflight = [*inflight, result.completion_ns]
@@ -408,7 +440,8 @@ class DramCore:
         self._scheduler_direction = request.operation.value
         return result
 
-    def submit_many(self, requests: Iterable[AccessRequest]) -> tuple[TransactionResult, ...]:
+    def submit_many(self, requests: Iterable[AccessRequest], *,
+                    _resource_accumulator=None) -> tuple[TransactionResult, ...]:
         """Schedule a finite arrived window; return results in input order.
 
         A single submit has no waiting window and cannot reorder requests.
@@ -422,8 +455,19 @@ class DramCore:
         if self.config.scheduler != "fcfs" and len(items) > 1:
             from ._dram_scheduler import schedule_requests
             results = schedule_requests(self, items)
+            if _resource_accumulator is not None:
+                # Scheduling may execute in another order, but physical task
+                # reporting has always reduced the returned input order.
+                consumed = []
+                for result in results:
+                    _resource_accumulator.consume_metrics(result.counters)
+                    counters = dict(result.counters)
+                    for field in ("resource_busy_ns", "resource_bytes", "resource_last_intervals"):
+                        counters.pop(field, None)
+                    consumed.append(replace(result, counters=counters))
+                results = tuple(consumed)
         else:
-            results = self._submit_many_ordered(items)
+            results = self._submit_many_ordered(items, _resource_accumulator=_resource_accumulator)
         tagged = []
         for index, (request, result) in enumerate(zip(items, results)):
             counters = dict(result.counters)
@@ -440,7 +484,7 @@ class DramCore:
             tagged.append(replace(result, counters=counters))
         return tuple(tagged)
 
-    def _submit_many_ordered(self, items):
+    def _submit_many_ordered(self, items, *, _resource_accumulator=None):
         """FCFS execution, amortizing numeric state packing when possible."""
         if (len(items) > 1 and self.config.control_mode == "jedec_hbm" and not self.capture_details
                 and not any(self._finite_guard_required(request) for request in items)):
@@ -449,16 +493,20 @@ class DramCore:
             except (ImportError, OSError):
                 pass
             else:
-                results = execute_hbm_numeric_many(self, items)
+                results = execute_hbm_numeric_many(self, items,
+                    resource_accumulator=_resource_accumulator)
                 if results is not None:
                     return results
-        if (len(items) > 1 and self.config.queue_scope == "device" and self._can_accelerate()
+        if (_resource_accumulator is None and len(items) > 1
+                and self.config.queue_scope == "device" and self._can_accelerate()
                 and not any(self._finite_guard_required(request) for request in items)):
             from ._compiled_dram import execute_compiled_many
             results = execute_compiled_many(self, items)
             if results is not None:
                 return results
-        return tuple(self.submit(request) for request in items)
+        if _resource_accumulator is None:
+            return tuple(self.submit(request) for request in items)
+        return tuple(self.submit(request, _resource_accumulator=_resource_accumulator) for request in items)
 
     def _execute_accepted(self, request: AccessRequest) -> TransactionResult:
         if self.config.control_mode == "jedec_hbm":
@@ -473,12 +521,13 @@ class DramCore:
         segment_count = last - first + 1
         # Even a short row prefix benefits from the summary-only reservation
         # loop, without constructing Segment/StageTiming objects per burst.
-        if segment_count >= 64 and self._can_accelerate():
+        if segment_count >= 4 and not self.capture_details:
             from ._compiled_dram import execute_compiled
             compiled = execute_compiled(self, request)
             if compiled is not None:
                 return compiled
-            return self._execute_accelerated_accepted(request, first, last + 1)
+            if segment_count >= 64 and self._can_accelerate():
+                return self._execute_accelerated_accepted(request, first, last + 1)
         segments = split_dram_request(request, self.config)
         stages = []
         mappings = []
@@ -501,7 +550,8 @@ class DramCore:
             logical += segment.logical_bytes
             physical += segment.transfer_bytes
             bank_id = self._bank_id(m)
-            bank = self._banks.setdefault(bank_id, _BankState())
+            self._hbm_remember_bank(bank_id)
+            bank = self.__dict__["_banks"].setdefault(bank_id, _BankState())
             group_state = (self._bank_group_history(m)
                            if self.config.bank_group_timing_enabled else None)
             dependency = max(request.arrival_ns, bank.activation_ready_ns)
@@ -612,25 +662,37 @@ class DramCore:
                 or config.row_bytes % interleave
                 or type(self.timeline) is not ResourceTimeline):
             return False
+        if self._analytical_banks_exposed:
+            # Public mappings may bind several bank IDs to one mutable state.
+            # Independent numeric slots cannot reproduce those serial updates.
+            # Recheck retained aliases on each call; private banks are distinct.
+            bank_states = set()
+            for state in self.__dict__["_banks"].values():
+                identity = id(state)
+                if identity in bank_states:
+                    return False
+                bank_states.add(identity)
         command = str(config.metadata.get("command_resource_prefix", "dram:command"))
         data = str(config.metadata.get("data_resource_prefix", "dram:data"))
         bank = str(config.metadata.get("bank_resource_prefix", "dram:bank"))
         shared = config.metadata.get("shared_command_resource")
-        external_ids = {f"{prefix}:{lane}" for prefix in (command, data) for lane in range(config.lane_count)}
-        if shared:
-            external_ids.add(str(shared))
-        if any(source != target and (source in external_ids or source.startswith(bank + ":"))
-               for source, target in self.timeline.resource_aliases.items()):
+        from ._compiled_dram import _resource_ids
+        ids = _resource_ids(config.addressable_stack_count, config.addressable_die_count,
+            config.lane_count, config.bank_count, config.bank_groups_per_rank, config.banks_per_group,
+            bank, command, data, str(shared) if shared else None,
+            config.lanes_per_stack if config.stack_interface_mode == "independent" else 0)
+        if any(self.timeline.resource_aliases.get(resource_id, resource_id) != resource_id
+               for resource_id in ids):
             # Folded/native recurrences use unaliased IDs. Only aliases that
             # touch this core's resources require the exact burst fallback.
             return False
-        if any(len(slots) != 1 and (resource_id in external_ids or resource_id.startswith(bank + ":"))
-               for resource_id, slots in self.timeline.lane_available.items()):
-            return False
-        memory_slots = [slots for resource_id, slots in self.timeline.lane_available.items()
-                        if resource_id in external_ids or resource_id.startswith(bank + ":")]
-        if len({id(slots) for slots in memory_slots}) != len(memory_slots):
-            return False
+        memory_slots = set()
+        for resource_id in ids:
+            slots = self.timeline.lane_available.get(resource_id)
+            if slots is not None:
+                if len(slots) != 1 or id(slots) in memory_slots:
+                    return False
+                memory_slots.add(id(slots))
         # Overlapping resource namespaces couple otherwise independent
         # recurrences; leave these unusual custom calendars to the burst loop.
         if command == data or command == bank or data == bank:
@@ -720,10 +782,11 @@ class DramCore:
             nonlocal cursor, completion, hits, misses, conflicts
             while cursor < target:
                 bank_id, command_id, data_id = cycle_table[(cursor % period) // inner]
-                bank = self._banks.get(bank_id)
+                self._hbm_remember_bank(bank_id)
+                bank = self.__dict__["_banks"].get(bank_id)
                 if bank is None:
                     bank = _BankState()
-                    self._banks[bank_id] = bank
+                    self.__dict__["_banks"][bank_id] = bank
                 dependency = max(request.arrival_ns, bank.activation_ready_ns)
                 if bank.open_row == row:
                     hits += 1

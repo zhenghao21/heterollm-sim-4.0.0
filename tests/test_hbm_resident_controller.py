@@ -178,3 +178,42 @@ def test_resident_batch_failure_keeps_earlier_accepted_requests(monkeypatch):
     oracle.submit(first)
     assert core.submit(warm) == oracle.submit(warm)
     assert visible(fast.snapshot()) == visible(reference.snapshot())
+
+
+@pytest.mark.parametrize("mapping", ["bank_interleaved", "row_local"])
+def test_channel_refresh_reads_external_changes_for_wrapped_and_scattered_batches(mapping):
+    from dataclasses import replace
+    from test_hbm_column_pack_equivalence import b200_memory
+
+    config = replace(b200_memory(), address_mapping=mapping,
+                     interleave_bytes=128 if mapping == "bank_interleaved" else None)
+    fast = PhysicalRuntimeContext(config, "hbm", capture_details=False)
+    reference = PhysicalRuntimeContext(config, "hbm", capture_details=False)
+    core, oracle = (runtime.runtimes["hbm"].core for runtime in (fast, reference))
+    oracle._hbm_numeric_enabled = False
+    seed = AccessRequest("seed", "read", 0, config.lane_count * config.bank_count * config.row_bytes)
+    assert core.submit(seed) == oracle.submit(seed)
+    ids = core._hbm_numeric_state.ids
+    channels = config.lane_count // 2
+    for runtime in (fast, reference):
+        for index in (0, channels - 1, channels, 2 * channels - 1,
+                      2 * channels, 4 * channels - 1):
+            rid = ids[index]
+            runtime.timeline.lane_available[rid][0] += 1000.125
+            runtime.timeline.ready_ns[rid] = runtime.timeline.lane_available[rid][0]
+            runtime.timeline.busy_ns[rid] += .125
+            runtime.timeline.last_intervals[rid] = (900., 1000.125)
+            if index >= 2 * channels:
+                runtime.timeline.bytes_moved[rid] += 32
+                runtime.timeline.directions[rid] = "write"
+    span = config.interleave_bytes or config.row_bytes * config.bank_count
+    unrelated = AccessRequest("middle-channel", "read", 20 * span, 32)
+    def physical(result):
+        return replace(result, counters={key: value for key, value in result.counters.items()
+                                         if key != "compiled_hbm_float64"})
+    assert physical(core.submit(unrelated)) == physical(oracle.submit(unrelated))
+    requests = (AccessRequest("zero", "read", 0, 32),
+                AccessRequest("wrap", "read", config.lane_count * span - 17, 65),
+                AccessRequest("another", "write", 7 * span, 32))
+    assert tuple(map(physical, core.submit_many(requests))) == tuple(map(physical, oracle.submit_many(requests)))
+    assert visible(fast.snapshot()) == visible(reference.snapshot())

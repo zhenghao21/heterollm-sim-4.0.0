@@ -19,11 +19,31 @@ from .contracts import EvidenceStatus, ResourceDemand, TaskCategory, TaskSpec
 from .ir import ComponentSpec, LinkSpec, OFFLOAD_STORAGE_COMPONENT_KINDS, default_memory_resource_id
 from .memory_service import (realtime_memory_metrics, DRAM_CONTROL_COUNT_FIELDS,
                              DRAM_CONTROL_TIME_FIELDS, DRAM_OPTIONAL_COUNTER_FIELDS)
+from .nand_core import _copy_nand_read_cache
 
 
 # Ordered request batching retains individual DRAM admission, accesses
 # and results. Keep the switch private for strict serial equivalence tests.
 _USE_COMPILED_DRAM_BATCH = True
+
+_PHYSICAL_ADDITIVE_COUNTERS = frozenset((
+    "burst_count", "row_hits", "row_misses", "row_conflicts",
+    "scheduler_reordered_requests", "scheduler_batches", "controller_direction_switches",
+    "read_write_switches", "queue_wait_ns", "refresh_wait_ns",
+    "turnaround_wait_ns", "pages_read", "pages_programmed",
+    "pages_touched", "media_waves", "erase_operations",
+    "read_operations", "program_operations", "rmw_read_operations",
+    "page_access_payload_bytes", "page_access_capacity_bytes", "host_admission_samples",
+    "host_transfer_bytes", "internal_transfer_bytes",
+    "write_buffer_wait_ns", "write_buffer_bytes", "merge_bytes",
+    "staging_read_hits", "staging_read_merges", "staging_write_pages",
+    "read_cache_hits", "read_cache_misses",
+    "merged_pages", "auto_drain_physical_programs",
+) + DRAM_CONTROL_COUNT_FIELDS + DRAM_CONTROL_TIME_FIELDS)
+_PHYSICAL_PEAK_COUNTERS = frozenset((
+    "write_buffer_peak_bytes", "host_outstanding_at_admission_peak",
+    "host_read_outstanding_at_admission_peak", "host_write_outstanding_at_admission_peak",
+))
 
 
 def _execution_config_cache_key(value):
@@ -186,46 +206,6 @@ def _copy_hbm_history(value, memo):
     return copy.deepcopy(value, memo)
 
 
-def _copy_nand_read_cache(cache):
-    """Copy page buffers directly while retaining extension aliases/cycles."""
-    from .nand_core import _ReadCacheSlot
-
-    if type(cache) is not dict:
-        return copy.deepcopy(cache)
-    result, memo, rows, slots = {}, {}, [], []
-    memo[id(cache)] = result
-    # Register every ordinary list/slot before copying extension attributes:
-    # extensions may refer to a later bank, another slot or the cache itself.
-    for row in cache.values():
-        if type(row) is not list or id(row) in memo:
-            continue
-        cloned = []
-        memo[id(row)] = cloned
-        rows.append((row, cloned))
-        for slot in row:
-            if type(slot) is _ReadCacheSlot and id(slot) not in memo:
-                cloned_slot = object.__new__(_ReadCacheSlot)
-                memo[id(slot)] = cloned_slot
-                memo[id(vars(slot))] = vars(cloned_slot)
-                slots.append((slot, cloned_slot))
-
-    def clone(value):
-        if type(value) in (int, float, str, bool, type(None)):
-            return value
-        if id(value) in memo:
-            return memo[id(value)]
-        if type(value) is tuple and all(type(item) is int for item in value):
-            return value
-        return copy.deepcopy(value, memo)
-
-    for slot, cloned in slots:
-        cloned.__dict__.update((name, clone(value)) for name, value in vars(slot).items())
-    for row, cloned in rows:
-        cloned.extend(clone(slot) for slot in row)
-    result.update((clone(key), clone(row)) for key, row in cache.items())
-    return result
-
-
 @dataclass
 class PhysicalRuntimeContext:
     """State for one simulation run's physical devices.
@@ -247,6 +227,7 @@ class PhysicalRuntimeContext:
     hbf_staging: dict[str, Any] = field(default_factory=dict, repr=False)
     _owner_config_cache: dict[str, Any] = field(default_factory=dict, repr=False)
     _execution_config_cache: dict[Any, Any] = field(default_factory=dict, repr=False)
+    _physical_demand_cache: dict[Any, ResourceDemand] = field(default_factory=dict, repr=False)
 
     def parse_config(self, raw: Any) -> Any:
         """Reuse complete serialized contracts while detecting mutable edits."""
@@ -348,6 +329,9 @@ class PhysicalRuntimeContext:
         if isinstance(core, DramCore):
             core._hbm_numeric_enabled = (not self.capture_details
                                          and config.control_mode == "jedec_hbm")
+        elif isinstance(core, NandCore):
+            core._nand_numeric_enabled = (not self.capture_details
+                                          and config.protocol_mode == "ocp_hbf_0_7")
         capacity = config.effective_capacity_bytes
         if capacity > 0:
             # The direct-backing planner uses burst alignment for DRAM and
@@ -401,6 +385,7 @@ class PhysicalRuntimeContext:
         without a Core submission first replacing it.
         """
         from .dram_core import DramCore, _BankState
+        from .nand_core import NandCore
         from .hbf_staging_runtime import snapshot as snapshot_staging
 
         runtime_state = {}
@@ -411,8 +396,12 @@ class PhysicalRuntimeContext:
                 # its undo state before copying controller objects so callers
                 # can still finish their original token after a restore.
                 core._hbm_before_reference()
+            if not transactional and isinstance(core, NandCore):
+                core._nand_before_reference()
             hbm_transaction = (core.begin_transaction()
                                if transactional and isinstance(core, DramCore) else None)
+            nand_transaction = (core.begin_transaction()
+                                if transactional and isinstance(core, NandCore) else None)
             # Core indexes (DRAM bank rows / NAND array clocks) grow with the
             # physical address stream.  Deep-copying them for every access
             # recreated the original quadratic memory behaviour.  Their
@@ -425,6 +414,11 @@ class PhysicalRuntimeContext:
                     continue
                 if hbm_transaction is not None and key in {
                     "_banks", "_hbm_control_state", "_hbm_transactions", "_hbm_numeric_state"
+                }:
+                    continue
+                if nand_transaction is not None and key in {
+                    "_next_program_page", "_block_wear_state", "_nand_transactions", "_read_cache",
+                    "_array_ready", "_buffer_ready", "_nand_numeric_state"
                 }:
                     continue
                 if key == "_banks" and isinstance(value, dict):
@@ -452,7 +446,7 @@ class PhysicalRuntimeContext:
                     # execution state, so a failed task must not modify its
                     # saved retry point through a nested alias.
                     core_state[key] = copy.deepcopy(value)
-                elif key in {"_inflight", "_inflight_operations", "_write_buffer_pending", "_hbm_transactions"} and isinstance(value, list):
+                elif key in {"_inflight", "_inflight_operations", "_write_buffer_pending", "_hbm_transactions", "_nand_transactions"} and isinstance(value, list):
                     core_state[key] = list(value)
                 elif key == "_read_cache":
                     core_state[key] = _copy_nand_read_cache(value)
@@ -475,6 +469,7 @@ class PhysicalRuntimeContext:
                 "clock_ns": active.clock_ns,
                 "core": core_state,
                 "hbm_transaction": hbm_transaction,
+                "nand_transaction": nand_transaction,
             }
         allocator_state = {
             owner: dict(allocator._allocations)
@@ -522,6 +517,9 @@ class PhysicalRuntimeContext:
             token = state.get("hbm_transaction")
             if token is not None:
                 state["active"].core.commit_transaction(token)
+            nand_token = state.get("nand_transaction")
+            if nand_token is not None:
+                state["active"].core.commit_transaction(nand_token)
         commit(snapshot["hbf_staging"])
 
     def restore(self, snapshot: dict[str, Any]) -> None:
@@ -538,13 +536,19 @@ class PhysicalRuntimeContext:
                 active.core.rollback_transaction(token)
                 journal_state = {key: active.core.__dict__[key] for key in (
                     "_banks", "_hbm_control_state", "_hbm_transactions", "_hbm_numeric_state")}
+            nand_token = state.get("nand_transaction")
+            if nand_token is not None:
+                active.core.rollback_transaction(nand_token)
+                journal_state.update({key: active.core.__dict__[key] for key in (
+                    "_next_program_page", "_block_wear_state", "_nand_transactions", "_read_cache",
+                    "_array_ready", "_buffer_ready", "_nand_numeric_state")})
             active.core.__dict__.clear()
             # Restored live state must not become the rollback point itself.
             # Otherwise another submission mutates the saved bank rows,
             # staged pages or wear state and a second restore is partial.
             active.core.__dict__.update({
                 key: (value if key == "config" else
-                      list(value) if key == "_hbm_transactions" else
+                      list(value) if key in {"_hbm_transactions", "_nand_transactions"} else
                       _copy_hbm_control_state(value) if key == "_hbm_control_state" else
                       _copy_nand_read_cache(value) if key == "_read_cache" else
                       copy.deepcopy(value))
@@ -554,8 +558,7 @@ class PhysicalRuntimeContext:
             active.core.timeline = self.timeline
         for owner, allocations in snapshot["allocator_state"].items():
             allocator = self.allocators[owner]
-            allocator._allocations.clear()
-            allocator._allocations.update(allocations)
+            allocator._restore_allocations(allocations)
         timeline_state = snapshot["timeline"]
         timeline = self.timeline
         for name in ("ready_ns", "directions", "busy_ns", "bytes_moved", "last_intervals"):
@@ -645,13 +648,12 @@ def _physical_allocations(metadata):
     return declarations
 
 
-def lower_physical_allocations(task: TaskSpec) -> TaskSpec:
-    """Compile access and cache descriptors into explicit allocation declarations."""
-    metadata = task.metadata
+def _physical_allocation_metadata(task_id: str, metadata: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Finish one task's allocation contract before its metadata is published."""
     declarations = _physical_allocations(metadata)
     raw_accesses = _memory_accesses(metadata)
     if declarations:
-        return task  # Authored declarations already define the complete allocation boundary.
+        return metadata  # Authored declarations already define the complete allocation boundary.
     derived_declarations = ()
     contract = metadata.get("stateful_l2")
     default_owner = str(metadata.get("physical_owner") or
@@ -686,7 +688,7 @@ def lower_physical_allocations(task: TaskSpec) -> TaskSpec:
         for row in contract.get("accesses", ()):
             buffer_id = row["buffer_id"]
             if buffer_id.startswith("@tasklocal"):
-                buffer_id = task.task_id + buffer_id[10:]
+                buffer_id = task_id + buffer_id[10:]
             key = (str(row.get("physical_owner") or default_owner), buffer_id,
                    row.get("allocation_generation", 0))
             preview = previews.get(key, {})
@@ -781,7 +783,13 @@ def lower_physical_allocations(task: TaskSpec) -> TaskSpec:
             derived[key] = declaration
         derived_declarations = tuple(derived.values())
 
-    return replace(task, metadata={**metadata, "physical_allocations": derived_declarations})
+    return {**metadata, "physical_allocations": derived_declarations}
+
+
+def lower_physical_allocations(task: TaskSpec) -> TaskSpec:
+    """Compile access and cache descriptors into explicit allocation declarations."""
+    metadata = _physical_allocation_metadata(task.task_id, task.metadata)
+    return task if metadata is task.metadata else replace(task, metadata=metadata)
 
 
 def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContext, *, config=None) -> None:
@@ -911,6 +919,25 @@ def _resolve_physical_task(
     runtime: PhysicalRuntimeContext,
     arrival_ns: float,
 ) -> TaskSpec:
+    if not task.metadata.get("hbf_host_staging_by_owner"):
+        return _execute_physical_task(task, runtime, arrival_ns)
+    from . import hbf_staging_runtime
+
+    token = hbf_staging_runtime.begin_task(runtime)
+    success = False
+    try:
+        result = _execute_physical_task(task, runtime, arrival_ns)
+        success = True
+        return result
+    finally:
+        hbf_staging_runtime.end_task(runtime, token, success=success)
+
+
+def _execute_physical_task(
+    task: TaskSpec,
+    runtime: PhysicalRuntimeContext,
+    arrival_ns: float,
+) -> TaskSpec:
     """Commit one physical task at its event-kernel arrival time.
 
     Planner pricing remains a preview.  This function is the single formal
@@ -1001,9 +1028,14 @@ def _resolve_physical_task(
     # keep range-max indexes for all accesses and writes.  Each query and
     # update is O(log n), while submission order and per-access timing stay
     # unchanged.
+    # A read-only task has no RAW/WAR/WAW dependencies at any address. Do not
+    # construct and repeatedly update indexes that can never constrain it.
+    track_overlaps = len(validated) > 1 and any(
+        item[1] is Operation.WRITE for item in validated)
     endpoints_by_owner = {}
-    for _access, _op, address, byte_count, owner, _config in validated:
-        endpoints_by_owner.setdefault(owner, set()).update((address, address + byte_count))
+    if track_overlaps:
+        for _access, _op, address, byte_count, owner, _config in validated:
+            endpoints_by_owner.setdefault(owner, set()).update((address, address + byte_count))
     all_completion = {
         owner: _OverlapCompletionIndex(sorted(endpoints))
         for owner, endpoints in endpoints_by_owner.items()
@@ -1023,14 +1055,24 @@ def _resolve_physical_task(
     physical_results = []
     staging_stats = {}
     resolved_accesses = []
+    resource_accumulator = None
+    if (len(owners) == 1 and not staging_bindings and not runtime.capture_details
+            and all(isinstance(item[5], DramConfig)
+                    and item[5].control_mode == "jedec_hbm"
+                    and item[5].scheduler == "fcfs" for item in validated)):
+        from ._hbm_pack import HBMResourceAccumulator
+        resource_accumulator = HBMResourceAccumulator()
     index = 0
     while index < len(validated):
         access, operation, address, byte_count, owner, access_config = validated[index]
         active = runtime.runtime(access_config, owner)
         if owner in staging_bindings:
-            prior = all_completion[owner] if operation is Operation.WRITE else write_completion[owner]
+            access_arrival = float(arrival_ns)
+            if track_overlaps:
+                prior = all_completion[owner] if operation is Operation.WRITE else write_completion[owner]
+                access_arrival = max(access_arrival, prior.query(address, byte_count))
             request = AccessRequest(f"{task.request_id or task.task_id}:{index}", operation,
-                address, byte_count, max(float(arrival_ns), prior.query(address, byte_count)))
+                address, byte_count, access_arrival)
             result, records = hbf_staging_runtime.submit(runtime, owner, access_config,
                 staging_bindings[owner], access, request)
             results.append(result)
@@ -1041,12 +1083,19 @@ def _resolve_physical_task(
                     stats[key] = value
                 else:
                     stats[key] = stats.get(key, 0) + value
-            all_completion[owner].update(address, byte_count, result.completion_ns)
-            if operation is Operation.WRITE:
-                write_completion[owner].update(address, byte_count, result.completion_ns)
+            if track_overlaps:
+                all_completion[owner].update(address, byte_count, result.completion_ns)
+                if operation is Operation.WRITE:
+                    write_completion[owner].update(address, byte_count, result.completion_ns)
             resolved_accesses.append({**dict(access), "address": address})
             index += 1
             continue
+        # An authored task may mix staged HBF accesses and a direct access
+        # to the same HOST controller. Publish the preceding staged work
+        # before the direct core reads the shared resource calendars.
+        if getattr(runtime, "_hbf_host_task", None) is not None:
+            from .hbf_staging_runtime import flush_task
+            flush_task(runtime)
         stop = index + 1
         scheduled_batch = (isinstance(active.core.config, DramConfig)
                            and active.core.config.scheduler != "fcfs")
@@ -1080,10 +1129,19 @@ def _resolve_physical_task(
         requests = []
         for position in range(index, stop):
             _access, op, addr, count, _owner, _config = validated[position]
-            prior = all_completion[owner] if op is Operation.WRITE else write_completion[owner]
-            access_arrival = max(float(arrival_ns), prior.query(addr, count))
+            access_arrival = float(arrival_ns)
+            if track_overlaps:
+                prior = all_completion[owner] if op is Operation.WRITE else write_completion[owner]
+                access_arrival = max(access_arrival, prior.query(addr, count))
             requests.append(AccessRequest(f"{task.request_id or task.task_id}:{position}", op, addr, count, access_arrival))
-        if scheduled_batch or len(requests) >= 2:
+        if resource_accumulator is not None:
+            if scheduled_batch or len(requests) >= 2:
+                group_results = active.core.submit_many(
+                    requests, _resource_accumulator=resource_accumulator)
+            else:
+                group_results = tuple(active.core.submit(
+                    request, _resource_accumulator=resource_accumulator) for request in requests)
+        elif scheduled_batch or len(requests) >= 2:
             group_results = active.core.submit_many(requests)
         else:
             group_results = tuple(active.core.submit(request) for request in requests)
@@ -1092,112 +1150,53 @@ def _resolve_physical_task(
             active.clock_ns = max(active.clock_ns, result.completion_ns)
             results.append(result)
             physical_results.append((op, owner, access_config, result))
-            all_completion[owner].update(addr, count, result.completion_ns)
-            if op is Operation.WRITE:
-                write_completion[owner].update(addr, count, result.completion_ns)
+            if track_overlaps:
+                all_completion[owner].update(addr, count, result.completion_ns)
+                if op is Operation.WRITE:
+                    write_completion[owner].update(addr, count, result.completion_ns)
             resolved_accesses.append({**dict(access), "address": addr})
         index = stop
     completion_ns = max(item.completion_ns for item in results)
-    resource_busy = {}
-    resource_bytes = {}
-    resource_last = {}
-    for _operation, owner, _config, item in physical_results:
-        for resource_id, value in item.counters.get("resource_busy_ns", {}).items():
-            resource_busy[resource_id] = resource_busy.get(resource_id, 0.0) + value
-        for resource_id, value in item.counters.get("resource_bytes", {}).items():
-            resource_bytes[resource_id] = resource_bytes.get(resource_id, 0) + value
-        _merge_latest_resource_intervals(resource_last, item.counters.get("resource_last_intervals", {}))
-    execution_by_owner = {}
-    operations_by_owner = {}
-    optional_observed_by_owner = {}
-    for operation, owner, access_config, item in physical_results:
-        row = execution_by_owner.get(owner)
-        if row is None:
-            row = {
-                "kind": str(getattr(access_config.kind, "value", access_config.kind)),
-                "operation_count": 0,
-                "logical_bytes": 0,
-                "logical_read_bytes": 0,
-                "logical_write_bytes": 0,
-                "physical_bytes": 0,
-                "physical_read_bytes": 0,
-                "physical_write_bytes": 0,
-                "resource_busy_ns": {},
-                "resource_bytes": {},
-                "resource_owners": {},
-                "resource_intervals": {}, "resource_interval_payloads": {},
-                "resource_last_intervals": {},
-                "details_truncated": False, "intervals_truncated": False,
-                "arrival_ns": float(arrival_ns),
-                "completion_ns": float(arrival_ns),
-            }
-            execution_by_owner[owner] = row
-            operations_by_owner[owner] = set()
-            optional_observed_by_owner[owner] = {key: 0 for key in DRAM_OPTIONAL_COUNTER_FIELDS}
-        operations_by_owner[owner].add(operation.value)
-        operation_count = item.counters.get("physical_operation_count", 1)
-        if type(operation_count) is not int or operation_count <= 0:
-            raise ValueError("physical_operation_count must be a positive integer")
-        row["operation_count"] += operation_count
-        row["logical_bytes"] += item.logical_bytes
-        row["logical_read_bytes" if operation is Operation.READ else "logical_write_bytes"] += item.logical_bytes
-        row["physical_bytes"] += item.transfer_bytes
-        row["physical_read_bytes"] += int(item.counters.get("physical_read_bytes", 0))
-        row["physical_write_bytes"] += int(item.counters.get("physical_write_bytes", 0))
-        row["completion_ns"] = max(row["completion_ns"], item.completion_ns)
-        for key in ("details_truncated", "intervals_truncated"):
-            row[key] = row[key] or bool(item.counters.get(key, False))
-        for key in ("resource_intervals", "resource_interval_payloads"):
-            for resource_id, intervals in item.counters.get(key, {}).items():
-                row[key].setdefault(resource_id, []).extend(intervals)
-        _merge_latest_resource_intervals(row["resource_last_intervals"],
-                                        item.counters.get("resource_last_intervals", {}))
-        if item.counters.get("nand_observations") is not None:
-            row.setdefault("_nand_observations", []).append(item.counters["nand_observations"])
-        for resource_id, value in item.counters.get("resource_bytes", {}).items():
-            row["resource_bytes"][resource_id] = row["resource_bytes"].get(resource_id, 0) + value
-        for resource_id, value in item.counters.get("resource_busy_ns", {}).items():
-            row["resource_busy_ns"][resource_id] = (
-                row["resource_busy_ns"].get(resource_id, 0.0) + value
-            )
-            row["resource_owners"][resource_id] = owner
-        for key in (
-            "burst_count", "row_hits", "row_misses", "row_conflicts",
-            "scheduler_reordered_requests", "scheduler_batches", "controller_direction_switches",
-            "read_write_switches", "queue_wait_ns", "refresh_wait_ns",
-            "turnaround_wait_ns", "pages_read", "pages_programmed",
-            "pages_touched", "media_waves", "erase_operations",
-            "read_operations", "program_operations", "rmw_read_operations",
-            "page_access_payload_bytes", "page_access_capacity_bytes", "host_admission_samples",
-            "host_transfer_bytes", "internal_transfer_bytes",
-            "write_buffer_wait_ns", "write_buffer_bytes", "merge_bytes",
-            "staging_read_hits", "staging_read_merges", "staging_write_pages",
-            "read_cache_hits", "read_cache_misses",
-            "merged_pages", "auto_drain_physical_programs",
-        ) + DRAM_CONTROL_COUNT_FIELDS + DRAM_CONTROL_TIME_FIELDS:
-            value = item.counters.get(key)
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                row[key] = row.get(key, 0) + value
-                if key in optional_observed_by_owner[owner]:
-                    optional_observed_by_owner[owner][key] += operation_count
-        for key in ("write_buffer_peak_bytes", "host_outstanding_at_admission_peak", "host_read_outstanding_at_admission_peak",
-                    "host_write_outstanding_at_admission_peak"):
-            value = item.counters.get(key)
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                row[key] = max(row.get(key, 0), value)
-    for owner, row in execution_by_owner.items():
-        for key, count in optional_observed_by_owner[owner].items():
-            if count != row["operation_count"]:
-                row[key] = None
-        if "_nand_observations" in row:
-            from .nand_core import summarize_nand_observations
-            row["nand_observations"] = summarize_nand_observations(row.pop("_nand_observations"))
-        row["service_ns"] = row["completion_ns"] - float(arrival_ns)
-        operations = operations_by_owner[owner]
-        row["operation"] = next(iter(operations)) if len(operations) == 1 else "read_write"
-    demands = tuple(ResourceDemand(str(resource_id), float(duration),
-                    bytes_moved=int(resource_bytes.get(resource_id, 0)))
-                    for resource_id, duration in sorted(resource_busy.items()) if float(duration) > 0)
+    # Single-owner tasks need only one ordered resource reduction. The owner
+    # bill already performs the same additions below; copying its final maps
+    # preserves independent public ownership without repeating every lookup.
+    sole_physical_owner = physical_results[0][1]
+    single_physical_owner = all(item[1] == sole_physical_owner for item in physical_results)
+    resource_busy, resource_bytes, resource_last = {}, {}, {}
+    if not single_physical_owner:
+        first_counters = physical_results[0][3].counters
+        resource_busy = {rid: 0.0 + value for rid, value in first_counters.get("resource_busy_ns", {}).items()}
+        resource_bytes = {rid: 0 + value for rid, value in first_counters.get("resource_bytes", {}).items()}
+        incoming_last = first_counters.get("resource_last_intervals", {})
+        if type(incoming_last) is dict:
+            resource_last = dict(incoming_last)
+        else:
+            _merge_latest_resource_intervals(resource_last, incoming_last)
+        for _operation, owner, _config, item in physical_results[1:]:
+            for resource_id, value in item.counters.get("resource_busy_ns", {}).items():
+                resource_busy[resource_id] = resource_busy.get(resource_id, 0.0) + value
+            for resource_id, value in item.counters.get("resource_bytes", {}).items():
+                resource_bytes[resource_id] = resource_bytes.get(resource_id, 0) + value
+            _merge_latest_resource_intervals(resource_last, item.counters.get("resource_last_intervals", {}))
+    from ._resource_ledger import reduce_physical_results
+    execution_by_owner = reduce_physical_results(
+        physical_results, arrival_ns, DRAM_OPTIONAL_COUNTER_FIELDS,
+        _PHYSICAL_ADDITIVE_COUNTERS, _PHYSICAL_PEAK_COUNTERS, Operation.READ)
+    if resource_accumulator is not None:
+        owner_bill = execution_by_owner[sole_physical_owner]
+        owner_bill["resource_busy_ns"] = resource_accumulator.resource_busy_ns
+        owner_bill["resource_bytes"] = resource_accumulator.resource_bytes
+        owner_bill["resource_last_intervals"] = resource_accumulator.resource_last_intervals
+        owner_bill["resource_owners"] = dict.fromkeys(resource_accumulator.resource_busy_ns,
+                                                   sole_physical_owner)
+    if single_physical_owner:
+        owner_bill = execution_by_owner[sole_physical_owner]
+        resource_busy = dict(owner_bill["resource_busy_ns"])
+        resource_bytes = dict(owner_bill["resource_bytes"])
+        resource_last = dict(owner_bill["resource_last_intervals"])
+    from ._resource_ledger import physical_demands
+    demands = physical_demands(
+        resource_busy, resource_bytes, runtime._physical_demand_cache, ResourceDemand)
     if not demands and not all(item.operation is Operation.ERASE for item in results):
         raise ValueError("physical memory core returned no resource timing for a positive-byte access")
     metadata.update({
