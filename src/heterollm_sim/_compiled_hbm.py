@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import math
+from functools import lru_cache
+from types import MappingProxyType
 import numpy as np
 
 from .memory_types import Operation, TransactionResult
@@ -14,11 +16,29 @@ from .memory_mapping import map_dram_address
 MAX_HBM_NUMERIC_BANKS = 131_072
 
 
+@lru_cache(maxsize=8)
+def _numeric_resource_layout(lanes, banks, channels_per_stack, lanes_per_stack,
+                             banks_per_group, prefix, row_prefix, col_prefix, data_prefix):
+    """Cache only names derived from geometry, never live controller state."""
+    channel_keys = tuple((ch // channels_per_stack, ch % channels_per_stack)
+                         for ch in range(lanes // 2))
+    pc_keys = tuple((*channel_keys[lane // 2], lane % 2) for lane in range(lanes))
+    ids = (tuple(f"{row_prefix}:{stack}:{channel}" for stack, channel in channel_keys)
+           + tuple(f"{col_prefix}:{stack}:{channel}" for stack, channel in channel_keys)
+           + tuple(f"{data_prefix}:{lane}" for lane in range(lanes)))
+    bank_ids = tuple(
+        f"{prefix}:{lane // lanes_per_stack}:0:{lane}:0:{bank // banks_per_group}:{bank % banks_per_group}"
+        for lane in range(lanes) for bank in range(banks))
+    return (channel_keys, pc_keys, ids, bank_ids,
+            MappingProxyType({rid: index for index, rid in enumerate(bank_ids)}),
+            MappingProxyType({key: index for index, key in enumerate(pc_keys)}))
+
+
 def _pack_hbm_numeric(core, request):
     """Return packed state, or None for unsupported acceleration cases.
 
-    The detail controller remains the reference for tracing, aliased resources,
-    and nonzero tFAW. A decline never selects the analytical DRAM timing model.
+    The detail controller remains the reference for tracing and aliased
+    resources. A decline never selects the analytical DRAM timing model.
     """
     from .dram_core import DramCore
     from .memory_transfer import ResourceTimeline
@@ -26,7 +46,6 @@ def _pack_hbm_numeric(core, request):
     c, timeline = core.config, core.timeline
     if (type(core) is not DramCore or type(timeline) is not ResourceTimeline
             or core.capture_details or timeline._interval_limit > 0
-            or c.four_activate_window_ns > 0
             or c.control_mode != "jedec_hbm" or c.ranks_per_channel != 1
             or c.pseudo_channels_per_channel != 2 or c.subchannels_per_channel != 1
             or c.addressable_stack_count != 1 or c.addressable_die_count != 1
@@ -57,20 +76,15 @@ def _pack_hbm_numeric(core, request):
     row_prefix = str(metadata.get("row_command_resource_prefix", "dram:row_command"))
     col_prefix = str(metadata.get("column_command_resource_prefix", "dram:column_command"))
     data_prefix = str(metadata.get("data_resource_prefix", "dram:data"))
-    channel_keys = [(ch // c.channels, ch % c.channels) for ch in range(channels)]
-    pc_keys = [(*channel_keys[lane // 2], lane % 2) for lane in range(lanes)]
-    ids = ([f"{row_prefix}:{stack}:{channel}" for stack, channel in channel_keys]
-           + [f"{col_prefix}:{stack}:{channel}" for stack, channel in channel_keys]
-           + [f"{data_prefix}:{lane}" for lane in range(lanes)])
+    channel_keys, pc_keys, ids, bank_ids, bank_lookup, pc_lookup = _numeric_resource_layout(
+        lanes, banks, c.channels, c.lanes_per_stack, c.banks_per_group,
+        prefix, row_prefix, col_prefix, data_prefix)
     if len(set(ids)) != len(ids):
         return None
     # The event kernel also contains ownership aliases for unrelated
     # resources. Only aliases affecting this controller require fallback.
     if any(timeline.canonical_resource_id(rid) != rid for rid in ids):
         return None
-    bank_ids = [f"{prefix}:{lane // c.lanes_per_stack}:0:{lane}:0:{bank // c.banks_per_group}:{bank % c.banks_per_group}"
-                for lane in range(lanes) for bank in range(banks)]
-    bank_lookup = {rid: index for index, rid in enumerate(bank_ids)}
     state = core._hbm_control_state
     rows = np.full(total_banks, -1, dtype=np.int64)
     bf = np.zeros((total_banks, 7), dtype=np.float64)
@@ -80,6 +94,13 @@ def _pack_hbm_numeric(core, request):
     pc[:, 0] = -1
     history = np.full((lanes, history_entries, 4), -1., dtype=np.float64)
     pc_seen = np.zeros(lanes, dtype=np.bool_)
+    # At most four unexpired past ACTs plus the existing future reservations.
+    # Pruning uses the monotonic shared row-port frontier, never a speculative
+    # candidate on one bank. No storage is allocated in proportion to bursts.
+    window_capacity = max((len(value["activate_window"])
+                           for value in state.get("pcs", {}).values()), default=0) + 5
+    windows = np.zeros((lanes, window_capacity), dtype=np.float64)
+    window_counts = np.zeros(lanes, dtype=np.int64)
     channel = np.full((channels, 2), -1., dtype=np.float64)
     channel_int = np.full((channels, 2), -1, dtype=np.int64)
     resources = np.zeros((len(ids), 4), dtype=np.float64)
@@ -118,6 +139,11 @@ def _pack_hbm_numeric(core, request):
             if previous is None:
                 continue
             pc_seen[lane] = True
+            calendar = previous["activate_window"]
+            if any(not math.isfinite(value) or value < 0 for value in calendar) or calendar != sorted(calendar):
+                return None
+            window_counts[lane] = len(calendar)
+            windows[lane, :len(calendar)] = calendar
             pc[lane] = [previous["last_precharge"] if previous["last_precharge"] is not None else -1.,
                         previous["blocked_until"], previous["next_data_start"]["read"], previous["next_data_start"]["write"]]
             for group, value in previous["activate"].items():
@@ -138,24 +164,24 @@ def _pack_hbm_numeric(core, request):
                 channel_int[ch, 0] = bank_lookup[last_bank]
             last_pc = previous.get("last_activate_pc")
             if last_pc is not None:
-                channel_int[ch, 1] = pc_keys.index(last_pc)
+                channel_int[ch, 1] = pc_lookup[last_pc]
     except (KeyError, IndexError, TypeError, ValueError, OverflowError):
         return None
     g = np.array([lanes, banks, (c.interleave_bytes or c.burst_bytes) // c.burst_bytes,
                   c.row_bytes // c.burst_bytes, c.banks_per_group, groups,
                   -1 if c.activated_row_msb is None else c.activated_row_msb,
                   c.generation in {"HBM2", "HBM2E"}, c.refresh_policy == "all_bank", c.burst_bytes,
-                  history_stride], dtype=np.int64)
+                  history_stride, c.address_mapping == "row_local"], dtype=np.int64)
     t = np.array([getattr(c, field) for field in TIMING_FIELDS] + [
         c.burst_bytes / c.effective_lane_bandwidth_gb_s,
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.READ),
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.WRITE),
-        c.maximum_active_ns], dtype=np.float64)
-    if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t)):
+        c.maximum_active_ns, c.four_activate_window_ns], dtype=np.float64)
+    if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t, windows)):
         return None
     return _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t,
         run_hbm_numeric, (rows, bf, addresses, pc, history, pc_seen, channel,
-                          channel_int, resources, moved, directions, touched))
+                          channel_int, resources, moved, directions, touched, windows, window_counts))
 
 
 class _HBMNumericState:
@@ -165,6 +191,12 @@ class _HBMNumericState:
         self.core = core
         self.bank_ids, self.pc_keys, self.channel_keys, self.ids = bank_ids, pc_keys, channel_keys, ids
         self.g, self.t, self.run_numeric, self.arrays = g, t, run_numeric, arrays
+        self._controller_before = self._copy_controller_arrays()
+
+    def _copy_controller_arrays(self):
+        # This private baseline lives only within one numeric submission or
+        # batch. Runtime snapshots and Python fallbacks still own normal dicts.
+        return tuple(self.arrays[index].copy() for index in (0, 1, 2, 6, 7))
 
     def execute(self, request):
         c = self.core.config
@@ -172,7 +204,7 @@ class _HBMNumericState:
         stop = (request.address + request.byte_count - 1) // c.burst_bytes + 1
         physical = (stop - first) * c.burst_bytes
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
-         resources, moved, directions, touched) = self.arrays
+         resources, moved, directions, touched, windows, window_counts) = self.arrays
         if (request.operation not in (Operation.READ, Operation.WRITE)
                 or request.address < 0 or request.address + request.byte_count > c.effective_capacity_bytes
                 or physical > (1 << 63) - 1 or stop - first > 2 ** 53
@@ -182,10 +214,17 @@ class _HBMNumericState:
         touched.fill(False)
         g, t, run_hbm_numeric = self.g, self.t, self.run_numeric
         read = request.operation is Operation.READ
-        completion, hits, misses, conflicts, counts = run_hbm_numeric(
-            first, stop, float(request.arrival_ns), read, g, t, rows, bf, addresses,
-            pc, history, pc_seen, channel, channel_int, resources, moved, directions, touched)
-        if not math.isfinite(completion) or not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources)):
+        try:
+            completion, hits, misses, conflicts, counts = run_hbm_numeric(
+                first, stop, float(request.arrival_ns), read, g, t, rows, bf, addresses,
+                pc, history, pc_seen, channel, channel_int, resources, moved, directions, touched,
+                windows, window_counts)
+        except OverflowError:
+            # Integer clock indices exceeded the compiled safe range. These
+            # private arrays are discarded (or rolled back by the batch
+            # caller); the Python controller uses unbounded integer indices.
+            return None
+        if not math.isfinite(completion) or not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, windows)):
             return None
         counters = dict(activate_commands=int(counts[0]), precharge_commands=int(counts[1]),
                         read_commands=int(counts[2]), write_commands=int(counts[3]),
@@ -209,25 +248,47 @@ class _HBMNumericState:
         core, c = self.core, self.core.config
         state = core._hbm_control_state
         bank_ids, pc_keys, channel_keys = self.bank_ids, self.pc_keys, self.channel_keys
-        history_stride = int(self.g[-1])
+        history_stride = int(self.g[10])
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
-         resources, moved, directions, touched) = self.arrays
+         resources, moved, directions, touched, windows, window_counts) = self.arrays
+        old_rows, old_bf, old_addresses, old_channel, old_channel_int = self._controller_before
+        # Compare float bits rather than tolerances, including signed zero.
+        changed_banks = ((rows != old_rows) | (addresses != old_addresses)
+                         | np.any(bf.view(np.uint64) != old_bf.view(np.uint64), axis=1))
+        changed_channels = (np.any(channel.view(np.uint64) != old_channel.view(np.uint64), axis=1)
+                            | np.any(channel_int != old_channel_int, axis=1))
         saved_banks = state.setdefault("banks", {})
         saved_pcs = state.setdefault("pcs", {})
         saved_channels = state.setdefault("channels", {})
+        # Preserve materialization of any pre-existing control-only bank, too.
+        # Normally both dictionaries are populated together by the controller.
         for index in np.flatnonzero(addresses >= 0):
+            if bank_ids[index] not in core._banks:
+                changed_banks[index] = True
+        bank_indices = np.flatnonzero((addresses >= 0) & changed_banks)
+        # Converting the selected rows in C avoids many individual NumPy scalar
+        # conversions while preserving the same Python int/float state values.
+        bank_rows = rows[bank_indices].tolist()
+        bank_times = bf[bank_indices].tolist()
+        for index, row, values in zip(bank_indices, bank_rows, bank_times):
             rid = bank_ids[index]
-            old = core._banks.setdefault(rid, _BankState())
-            old.open_row = int(rows[index]) if rows[index] >= 0 else None
-            old.ready_ns, old.activation_ready_ns = float(bf[index, 5]), float(bf[index, 6])
+            old = core._banks.get(rid)
+            if old is None:
+                old = core._banks.setdefault(rid, _BankState())
+            old.open_row = row if row >= 0 else None
+            old.ready_ns, old.activation_ready_ns = values[5], values[6]
             if rid not in saved_banks:
                 saved_banks[rid] = {"mapping": map_dram_address(c, int(addresses[index]))}
             previous = saved_banks[rid]
-            previous.update(last_activate=float(bf[index, 0]) if bf[index, 0] >= 0 else None,
-                            activate_ready=float(bf[index, 1]), precharge_ready=float(bf[index, 2]),
-                            read_ready=float(bf[index, 3]), write_ready=float(bf[index, 4]))
+            previous.update(last_activate=values[0] if values[0] >= 0 else None,
+                            activate_ready=values[1], precharge_ready=values[2],
+                            read_ready=values[3], write_ready=values[4])
+        # Rebuild every seen PC's nested dictionaries just as the original
+        # controller did. Extension fields may retain aliases to old histories;
+        # skipping an unchanged PC would incorrectly keep those aliases live.
         for lane in np.flatnonzero(pc_seen):
             previous = saved_pcs.setdefault(pc_keys[lane], {"activate_window": []})
+            previous["activate_window"] = windows[lane, :window_counts[lane]].tolist()
             previous.update(activate={int(group): float(history[lane, group, 0])
                                       for group in np.flatnonzero(history[lane, :, 0] >= 0)},
                             column={op: {(int(entry) * history_stride // 16, int(entry) * history_stride // c.banks_per_group): float(history[lane, entry, index])
@@ -238,7 +299,8 @@ class _HBMNumericState:
                             last_precharge=float(pc[lane, 0]) if pc[lane, 0] >= 0 else None,
                             blocked_until=float(pc[lane, 1]),
                             next_data_start={"read": float(pc[lane, 2]), "write": float(pc[lane, 3])})
-        for ch, key in enumerate(channel_keys):
+        for ch in np.flatnonzero(changed_channels):
+            key = channel_keys[ch]
             if channel[ch, 0] >= 0 or channel[ch, 1] >= 0:
                 previous = saved_channels.setdefault(key, {})
                 if channel[ch, 0] >= 0:
@@ -247,12 +309,13 @@ class _HBMNumericState:
                     previous["last_activate_pc"] = pc_keys[channel_int[ch, 1]]
                 if channel[ch, 1] >= 0:
                     previous["next_refresh"] = float(channel[ch, 1])
+        self._controller_before = self._copy_controller_arrays()
 
     def commit_timeline(self, request):
         timeline, ids = self.core.timeline, self.ids
         channels = len(self.channel_keys)
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
-         resources, moved, directions, touched) = self.arrays
+         resources, moved, directions, touched, windows, window_counts) = self.arrays
         for index in np.flatnonzero(touched):
             rid = ids[index]
             timeline.lane_available.setdefault(rid, [0.])[0] = float(resources[index, 0])

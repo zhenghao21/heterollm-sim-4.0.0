@@ -19,7 +19,10 @@ DRAM_CONTROL_COUNT_FIELDS = (
 )
 DRAM_CONTROL_TIME_FIELDS = ("row_command_bus_busy_ns", "column_command_bus_busy_ns")
 DRAM_OPTIONAL_TIME_FIELDS = ("refresh_wait_ns", "turnaround_wait_ns") + DRAM_CONTROL_TIME_FIELDS
-DRAM_OPTIONAL_COUNTER_FIELDS = ("read_write_switches",) + DRAM_OPTIONAL_TIME_FIELDS + DRAM_CONTROL_COUNT_FIELDS
+DRAM_OPTIONAL_COUNTER_FIELDS = (
+    "read_write_switches", "scheduler_reordered_requests", "scheduler_batches",
+    "controller_direction_switches",
+) + DRAM_OPTIONAL_TIME_FIELDS + DRAM_CONTROL_COUNT_FIELDS
 DRAM_SERVICE_TIME_SCOPE = (
     "service_ns sums per-task/owner completion spans, which may overlap; it is neither elapsed wall time "
     "nor data-bus busy time. resource_totals contains actual per-resource occupied time and bytes."

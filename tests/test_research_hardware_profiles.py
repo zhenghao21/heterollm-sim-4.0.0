@@ -55,7 +55,7 @@ def test_serving_uses_hbm3e_reference_geometry_and_explicit_timing_assumptions()
 def test_three_timing_profiles_keep_non_group_physical_variables_identical():
     ids = ("hbm3e_reference_flat", "hbm3e_reference", "hbm3e_reference_synthetic_timing")
     configs = [physical(study.build_study_scenario("A_hbm_only", prompt=4, output=2,
-                       hbm_timing_profile=profile)) for profile in ids]
+                       hbm_timing_profile=profile, hbm_parameter_profile="none")) for profile in ids]
     assert [(c.bank_groups_per_rank, c.banks_per_group) for c in configs] == [(1, 64), (16, 4), (16, 4)]
     assert all(c.bank_group_timing_enabled for c in configs)
     assert [getattr(configs[-1], key) for key in DRAM_BANK_GROUP_TIMING_FIELDS] == [
@@ -87,13 +87,11 @@ def test_undisclosed_hbf_geometry_is_resolved_by_catalog():
     profile = replace(profile, hardware={**profile.hardware, "effective_parallel_units": None},
                       granularity={}, latency={})
     _, hbf, _ = profiles._profile_hardware(profile)
-    expected = resolve_physical_config("published_hbf", overrides={
-        "capacity_bytes": int(profile.hardware["hbf_capacity_gb"] * profiles.GB),
-        "host_bandwidth_gb_s": profile.bandwidth["hbf_read_gb_s"],
-        "host_read_bandwidth_gb_s": profile.bandwidth["hbf_read_gb_s"],
-        "host_write_bandwidth_gb_s": profile.bandwidth["hbf_write_gb_s"],
-        "write_buffer_bytes": 0}, expand_geometry=True)
-    assert hbf.config == expected
+    assert hbf.config.parallel_units == hbf.config.channels == 128
+    assert (hbf.config.page_bytes, hbf.config.host_granularity_bytes) == (4096, 64)
+    assert (hbf.config.host_channels, hbf.config.host_full_duplex,
+            hbf.config.read_cache_pages_per_bank) == (16, True, 2)
+    assert "never inferred" in hbf.config.metadata["parallelism_basis"]
 
 
 def test_hbf_plus_comparator_uses_jedec_hbm4_reference_not_hbm3e_geometry():
@@ -104,9 +102,9 @@ def test_hbf_plus_comparator_uses_jedec_hbm4_reference_not_hbm3e_geometry():
     assert config.generation == "HBM4"
     assert (config.stacks, config.channels, config.pseudo_channels_per_channel,
             config.data_width_bits, config.row_bytes, config.burst_bytes) == (8, 32, 2, 32, 1024, 32)
-    assert (config.bank_groups_per_rank, config.banks_per_group, config.rows_per_bank) == (6, 8, 12288)
+    assert (config.bank_groups_per_rank, config.banks_per_group, config.rows_per_bank) == (8, 8, 16384)
     assert config.capacity_bytes == 288 * profiles.GB
-    assert config.computed_capacity_bytes == 288 * profiles.GIB
+    assert config.computed_capacity_bytes == 512 * profiles.GIB
     assert config.metadata["geometry_status"] == "standard_organization"
     assert config.metadata["unknown_parameters"]
     assert config.metadata["source_device_geometry_known"] is False
@@ -157,7 +155,7 @@ def test_completion_matrix_requires_executed_group_twenty_rows():
     row = next(r for r in experiments.completion_matrix([
         {"id": "20_bank_group_decode", "status": "passed"}]) if r["groups"] == [20])
     assert row["status"] == "本次未完成"
-    assert study.POINT_RESULT_VERSION == 8
+    assert study.POINT_RESULT_VERSION == 10
 
 
 def test_script_directional_budgets_do_not_change_an_explicit_physical_interface():
@@ -176,12 +174,12 @@ def test_script_directional_budgets_do_not_change_an_explicit_physical_interface
         (128., 64.), (64., 32.)]
     inferred = profiles._hbm_physical_config(
         capacity_bytes=1024**2, stacks=1, read_gb_s=128., write_gb_s=64.)
-    assert inferred.physical_interface_bandwidth_gb_s == 128.
-    assert inferred.command_clock_ns == 4.
-    assert inferred.metadata["interface_input_scope"] == "assumed_peak_equals_max_directional_budget"
+    assert inferred.physical_interface_bandwidth_gb_s == 819.2
+    assert inferred.command_clock_ns == 0.625
+    assert inferred.metadata["interface_input_scope"] == "independent_reference_command_clock"
 
 
-@pytest.mark.parametrize("version", [None, 7])
+@pytest.mark.parametrize("version", [None, 7, 8])
 def test_group_reuse_rejects_old_or_unknown_execution_versions_before_running(tmp_path, monkeypatch, capsys, version):
     cached = {"id": "01_ideal", "status": "passed", "rows": []}
     if version is not None:
@@ -197,7 +195,7 @@ def test_group_reuse_rejects_old_or_unknown_execution_versions_before_running(tm
     assert not (tmp_path / "results.json").exists()
 
 
-@pytest.mark.parametrize("version", [None, 7])
+@pytest.mark.parametrize("version", [None, 7, 8])
 def test_sustained_reuse_rejects_old_or_unknown_execution_versions_before_running(monkeypatch, version):
     import hbf_hbm_sustained_study as sustained
     cached = {"id": "old-observation"}

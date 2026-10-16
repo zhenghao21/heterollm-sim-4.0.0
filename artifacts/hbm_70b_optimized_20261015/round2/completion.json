@@ -1,0 +1,26 @@
+{
+  "status": "complete",
+  "completed": [
+    {
+      "id": "llama3_1-70b-128-1-512-reference-B_all_kv_hbf",
+      "tpot_ns": 131024925.20833333,
+      "wall_seconds": 12490.251060800001
+    },
+    {
+      "id": "llama3_1-70b-128-1-512-ramulator2-B_all_kv_hbf",
+      "tpot_ns": 137369695.625,
+      "wall_seconds": 12828.229018700004
+    },
+    {
+      "id": "llama3_1-70b-128-1-512-reference-A_hbm_only",
+      "tpot_ns": 123860511.45833333,
+      "wall_seconds": 13012.7193386
+    },
+    {
+      "id": "llama3_1-70b-128-1-512-ramulator2-A_hbm_only",
+      "tpot_ns": 130189800.0,
+      "wall_seconds": 13242.052903300006
+    }
+  ],
+  "planned_points": 4
+}

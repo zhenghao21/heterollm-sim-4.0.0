@@ -1,0 +1,159 @@
+{
+  "profile": "hbm3e_timing_reference",
+  "capacity_gib": 512,
+  "clock_ns": 0.625,
+  "refresh_policy": "all_bank",
+  "repetitions": 4,
+  "baseline_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_round2_20261015\\_hbm_numeric_baseline.py",
+  "candidate_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_round2_20261015\\_hbm_numeric_cached_candidate.py",
+  "cases": [
+    {
+      "name": "cold_read",
+      "physical_bytes": 134217728,
+      "requests": 1,
+      "numeric_seconds": [
+        1.1205857999884756,
+        1.109937400004128,
+        1.0887301999900956,
+        1.0811968999914825
+      ],
+      "median_seconds": 1.0993337999971118,
+      "numeric_cpu_seconds": [
+        1.109375,
+        1.109375,
+        1.09375,
+        1.078125
+      ],
+      "median_cpu_seconds": 1.1015625,
+      "row_hits": 3596288,
+      "row_misses": 499072,
+      "row_conflicts": 98944,
+      "baseline_seconds": [
+        1.4556549999979325,
+        1.4688529999984894,
+        1.4410461999941617,
+        1.474532199994428
+      ],
+      "speedup": 1.3301273917003666,
+      "baseline_cpu_seconds": [
+        1.453125,
+        1.453125,
+        1.4375,
+        1.46875
+      ],
+      "cpu_speedup": 1.3191489361702127,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "continued_read",
+      "physical_bytes": 134217728,
+      "requests": 1,
+      "numeric_seconds": [
+        1.0978804000042146,
+        1.074435699993046,
+        1.0192213999980595,
+        1.0414644999982556
+      ],
+      "median_seconds": 1.0579500999956508,
+      "numeric_cpu_seconds": [
+        1.09375,
+        1.0625,
+        1.015625,
+        1.046875
+      ],
+      "median_cpu_seconds": 1.0546875,
+      "row_hits": 3593856,
+      "row_misses": 500352,
+      "row_conflicts": 100096,
+      "baseline_seconds": [
+        1.4774694999941858,
+        1.4014620999951148,
+        1.438055799997528,
+        1.4455730999907246
+      ],
+      "speedup": 1.362837859744097,
+      "baseline_cpu_seconds": [
+        1.46875,
+        1.40625,
+        1.421875,
+        1.4375
+      ],
+      "cpu_speedup": 1.3555555555555556,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "cold_write",
+      "physical_bytes": 134217728,
+      "requests": 1,
+      "numeric_seconds": [
+        1.0188106999994488,
+        1.0096258999983547,
+        1.0331922000041232,
+        1.0462752000021283
+      ],
+      "median_seconds": 1.026001450001786,
+      "numeric_cpu_seconds": [
+        1.03125,
+        1.0,
+        1.03125,
+        1.03125
+      ],
+      "median_cpu_seconds": 1.03125,
+      "row_hits": 3591296,
+      "row_misses": 504448,
+      "row_conflicts": 98560,
+      "baseline_seconds": [
+        1.4514968000003137,
+        1.4820360000012442,
+        1.4522523999912664,
+        1.4510522000055062
+      ],
+      "speedup": 1.4150804562637438,
+      "baseline_cpu_seconds": [
+        1.4375,
+        1.484375,
+        1.453125,
+        1.4375
+      ],
+      "cpu_speedup": 1.4015151515151516,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "continued_write",
+      "physical_bytes": 134217728,
+      "requests": 1,
+      "numeric_seconds": [
+        1.0790733999892836,
+        1.086474099996849,
+        1.0216173000080744,
+        1.0156562000047415
+      ],
+      "median_seconds": 1.050345349998679,
+      "numeric_cpu_seconds": [
+        1.0625,
+        1.0625,
+        1.03125,
+        1.015625
+      ],
+      "median_cpu_seconds": 1.046875,
+      "row_hits": 3600512,
+      "row_misses": 494976,
+      "row_conflicts": 98816,
+      "baseline_seconds": [
+        1.4612358000013046,
+        1.4230878999951528,
+        1.447823000009521,
+        1.445094099995913
+      ],
+      "speedup": 1.3771266279272205,
+      "baseline_cpu_seconds": [
+        1.46875,
+        1.421875,
+        1.4375,
+        1.4375
+      ],
+      "cpu_speedup": 1.373134328358209,
+      "exact_request_results_and_all_arrays": true
+    }
+  ]
+}

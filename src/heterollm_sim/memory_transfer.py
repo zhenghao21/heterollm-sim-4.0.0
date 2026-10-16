@@ -244,6 +244,8 @@ def summarize_batch(results, *, bandwidth_ceiling_gb_s: float = 0.0) -> BatchRes
         "pages_read": sum(item.pages_read for item in items),
         "pages_programmed": sum(item.pages_programmed for item in items),
         "erase_operations": sum(item.erase_operations for item in items),
+        "read_cache_hits": sum(item.counters.get("read_cache_hits", 0) for item in items),
+        "read_cache_misses": sum(item.counters.get("read_cache_misses", 0) for item in items),
         "queue_wait_ns": sum(item.queue_wait_ns for item in items),
         "write_buffer_wait_ns": sum(item.write_buffer_wait_ns for item in items),
         "write_buffer_bytes": sum(item.write_buffer_bytes for item in items),

@@ -382,7 +382,7 @@ def make_hbm_geometry_config(
         timing_validation="not_a_vendor_speed_bin",
         unconfigured_timing_parameters=inactive + ([] if refresh_ns is not None else ["refresh_cycle_ns"]),
         control_limitations=["training, parity/ECC transport, auto-precharge and per-bank refresh are not implemented",
-                             "FCFS open-page controller and bandwidth-cap pacing are model policies, not JEDEC scheduling requirements",
+                             "address mapping, request scheduling, queue scope, open-page behavior and bandwidth-cap pacing are model policies, not JEDEC scheduling requirements",
                              "electrical PHY turnaround offsets and unspecified array timing gates require vendor inputs"],
         accounting_basis="command bus occupancy, DQ busy time and dependency wait are separate; one full 32B DQ burst is charged once; WR recovery limits PRE and is not a write-completion tail",
         directional_cap_basis="independent read/write start pacing; DQ remains half-duplex at physical 2CK per burst; interleaved directions may together exceed either directional cap but never the physical interface",

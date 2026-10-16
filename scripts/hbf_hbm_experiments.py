@@ -35,7 +35,7 @@ from heterollm_sim.planner import ScenarioValidationError
 
 GIB = 1024 ** 3
 MIB = 1024 ** 2
-PAGE = 16384
+PAGE = 4096
 
 
 def group(identifier, title, rows, checks, supported, limitations, **extra):
@@ -60,15 +60,23 @@ def percentiles(values):
 
 def synthetic_profile():
     return profiles.CalibratedProfile(
-        profile_id="synthetic_equal_read", paper="Explicit synthetic assumptions", source_url="",
-        source_version="local experiment v1", hardware={"hbm_capacity_gb": 32,
-        "hbf_capacity_gb": 512, "hbm_stacks": 1, "hbf_stacks": 1,
-        "effective_parallel_units": 64},
+        profile_id="synthetic_interface_budget", paper="Explicit analytical assumptions", source_url="",
+        source_version="local experiment v2", hardware={"hbm_capacity_gb": 512 * GIB / 1e9,
+        "hbf_capacity_gb": 512, "hbm_stacks": 8, "hbf_stacks": 1,
+        "effective_parallel_units": 64,
+        "effective_parallel_units_source": "fixed sensitivity assumption, not inferred from interface bandwidth or disclosed by a vendor",
+        "hbf_host_channels": 16, "hbf_host_full_duplex": True},
         bandwidth={"hbm_read_gb_s": 1600., "hbm_write_gb_s": 1600.,
+        "hbm_command_clock_ns": profiles.HBM_REFERENCE_CLOCK_NS,
         "hbf_read_gb_s": 1600., "hbf_write_gb_s": 16.,
         "interconnect_bandwidth_gbps": 1600. * 8., "interconnect_latency_ns": 100.},
         latency={"hbf_read_us": 4., "hbf_write_us": 75.},
-        granularity={"page_bytes": PAGE}, buffering={}, slo={}, workload={})
+        granularity={"page_bytes": PAGE, "read_bytes": 64},
+        buffering={"read_cache_pages_per_bank": 2}, slo={}, workload={},
+        calibration_notes=(
+            "HBM uses a fixed 0.625 ns analytical clock and 64 GiB reference stacks; directional service budgets are independent of physical interface peak.",
+            "HBF is generic analytical page service for logical model buffers, not OCP physical sequential-write execution; no FTL cost is invented.",
+            "HBF 64 units x 4 KiB / 4 us gives a 65.536 GB/s ideal cold-array read ceiling; 75 us program gives 3.495253 GB/s, below the 1600/16 GB/s interface budgets.",))
 
 
 def scenario(*, hbf=False, prompt=128, count=4, output=8, slots=None,
@@ -103,9 +111,10 @@ def scenario(*, hbf=False, prompt=128, count=4, output=8, slots=None,
             reconfigure_physical_config(physical,
                 overrides={"capacity_bytes":kv_budget},expand_geometry=True) if hbf else
             profiles._hbm_physical_config(capacity_bytes=kv_budget,
+                stacks=physical.stacks,
                 read_gb_s=physical.directional_bandwidth_gb_s("read"),
                 write_gb_s=physical.directional_bandwidth_gb_s("write"),
-                interface_gb_s=physical.physical_interface_bandwidth_gb_s,
+                clock_ns=physical.command_clock_ns,
                 interface_input_scope=physical.metadata.get("interface_input_scope"),
                 profile_id=hbm_timing_profile))
         if not hbf:
@@ -186,6 +195,7 @@ def serving_row(s, row_id, *, placement=None, result_observer=None):
         "id": row_id, "mode": "full_operator_serving", "model": s.model.name,
         "point_result_version": POINT_RESULT_VERSION,
         "core_execution_audit": core_execution_audit,
+        "hbf_service": profiles.hbf_service_summary(actual_hbf) if actual_hbf else None,
         "hbm_protocol": {owner: profiles.hbm_protocol_summary(item["physical_config"])
                          for owner, item in core_execution_audit.get("executed_physical_configurations", {}).items()
                          if item["physical_config"].get("kind") == "HBM"},

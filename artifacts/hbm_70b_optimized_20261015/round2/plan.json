@@ -1,0 +1,38 @@
+{
+  "points": [
+    [
+      "reference",
+      "A_hbm_only",
+      "llama3_1-70b",
+      128,
+      1,
+      4
+    ],
+    [
+      "reference",
+      "B_all_kv_hbf",
+      "llama3_1-70b",
+      128,
+      1,
+      4
+    ],
+    [
+      "ramulator2",
+      "A_hbm_only",
+      "llama3_1-70b",
+      128,
+      1,
+      4
+    ],
+    [
+      "ramulator2",
+      "B_all_kv_hbf",
+      "llama3_1-70b",
+      128,
+      1,
+      4
+    ]
+  ],
+  "workers": 4,
+  "heartbeat_seconds": 10.0
+}

@@ -361,7 +361,10 @@ def _authored_timing_fields(payload, previous, explicit, provenance):
     return explicit
 
 
-def _finish_timing_validation(result, meta, provenance, unknown):
+def _finish_timing_validation(result, meta, provenance, unknown, profile_context=None):
+    if profile_context is not None:
+        from .hbm_timing_profiles import finish_timing_profile
+        finish_timing_profile(result, meta, provenance, profile_context)
     validate_hbm_timing_constraints(result)
     unknown.update(VENDOR_TIMING_FIELDS | {"vendor_speed_bin", "phy_turnaround_parameters"})
     vendor_unknown = VENDOR_TIMING_FIELDS | ({"refresh_cycle_ns"} if _organization_refresh(result) is None else set())
@@ -412,6 +415,8 @@ def normalize_hbm_dependencies(payload: Mapping, *, previous: Mapping | None = N
     if any(not isinstance(entry, Mapping) for entry in provenance.values()):
         name = next(name for name, entry in provenance.items() if not isinstance(entry, Mapping))
         _input_error(result, f"metadata.parameter_provenance.{name}", "HBM parameter provenance entries must be mappings", "每项参数来源记录都必须是键值对象。", "把该参数的来源记录改为对象，并如实填写来源；未知值不能标为已验证。", value=provenance[name])
+    from .hbm_timing_profiles import prepare_timing_profile
+    profile_context = prepare_timing_profile(result, prior, explicit)
     explicit = _authored_timing_fields(result, previous, explicit, provenance)
     managed = meta.get("geometry_status") in {"standard_organization", "explicit_assumption"} and (
         bool(provenance) or meta.get("organization_source") or meta.get("jedec_standard"))
@@ -445,7 +450,7 @@ def normalize_hbm_dependencies(payload: Mapping, *, previous: Mapping | None = N
             result["activate_cycle_ns"] = result["minimum_active_ns"] + result["precharge_to_activate_ns"]
         if "maximum_active_ns" not in explicit and "refresh_interval_ns" in explicit and _positive(result.get("refresh_interval_ns")):
             result["maximum_active_ns"] = 9 * result["refresh_interval_ns"]
-        return _finish_timing_validation(result, meta, provenance, unknown)
+        return _finish_timing_validation(result, meta, provenance, unknown, profile_context)
 
     for name in ("channels", "subchannels_per_channel", "pseudo_channels_per_channel",
                  "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank",
@@ -739,4 +744,4 @@ def normalize_hbm_dependencies(payload: Mapping, *, previous: Mapping | None = N
     meta.update(parameter_provenance=provenance, unknown_parameters=sorted(unknown),
                 unconfigured_timing_parameters=sorted(name for name in ARRAY_UNKNOWN | {"refresh_cycle_ns"} if not result.get(name)),
                 timing_validation="not_a_vendor_speed_bin")
-    return _finish_timing_validation(result, meta, provenance, unknown)
+    return _finish_timing_validation(result, meta, provenance, unknown, profile_context)

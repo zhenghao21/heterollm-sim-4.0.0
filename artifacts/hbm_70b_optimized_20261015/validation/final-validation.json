@@ -1,0 +1,40 @@
+{
+  "accepted_second_round_numeric_optimizations": [],
+  "canonical_implementation": "First-round validated numeric/packing/commit/state-copy optimizations; all second-round numeric candidates removed.",
+  "complete_small_serving_groups": [
+    {
+      "profile": "reference",
+      "architecture": "A_hbm_only",
+      "all_result_fields_exact": true,
+      "previous_repeats_compared": 3
+    },
+    {
+      "profile": "reference",
+      "architecture": "B_all_kv_hbf",
+      "all_result_fields_exact": true,
+      "previous_repeats_compared": 3
+    },
+    {
+      "profile": "ramulator2",
+      "architecture": "A_hbm_only",
+      "all_result_fields_exact": true,
+      "previous_repeats_compared": 3
+    },
+    {
+      "profile": "ramulator2",
+      "architecture": "B_all_kv_hbf",
+      "all_result_fields_exact": true,
+      "previous_repeats_compared": 3
+    }
+  ],
+  "excluded_simulation_fields": [
+    "wall_seconds"
+  ],
+  "float_comparison": "IEEE754 binary64 bit equality",
+  "regression": {
+    "passed": 595,
+    "subtests_passed": 33,
+    "seconds": 16.67
+  },
+  "performance_note": "This final Small run verifies equivalence only; background load differs from earlier measurements."
+}

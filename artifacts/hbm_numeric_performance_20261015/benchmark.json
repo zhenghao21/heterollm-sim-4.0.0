@@ -1,0 +1,235 @@
+{
+  "profile": "hbm3e_timing_reference",
+  "capacity_gib": 512,
+  "clock_ns": 0.625,
+  "refresh_policy": "all_bank",
+  "repetitions": 6,
+  "baseline_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_performance_20261015\\_hbm_numeric_baseline.py",
+  "cases": [
+    {
+      "name": "cold_read",
+      "physical_bytes": 134217728,
+      "requests": 1,
+      "numeric_seconds": [
+        1.3881971000009798,
+        1.3821452999982284,
+        1.4982841000019107,
+        1.489410100002715,
+        1.4315204000013182,
+        1.4372029000005568
+      ],
+      "median_seconds": 1.4343616500009375,
+      "numeric_cpu_seconds": [
+        1.390625,
+        1.390625,
+        1.5,
+        1.5,
+        1.4375,
+        1.4375
+      ],
+      "median_cpu_seconds": 1.4375,
+      "row_hits": 3596288,
+      "row_misses": 499072,
+      "row_conflicts": 98944,
+      "baseline_seconds": [
+        1.6899334999980056,
+        1.6389319000008982,
+        1.6535431000011158,
+        1.6843489000020782,
+        1.7470774999965215,
+        1.5537318999995477
+      ],
+      "speedup": 1.1635461670357028,
+      "baseline_cpu_seconds": [
+        1.6875,
+        1.625,
+        1.640625,
+        1.671875,
+        1.734375,
+        1.546875
+      ],
+      "cpu_speedup": 1.1521739130434783,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "continued_read",
+      "physical_bytes": 134217728,
+      "requests": 1,
+      "numeric_seconds": [
+        1.5025660000028438,
+        1.4068002999993041,
+        1.3910268000036012,
+        1.4415816999971867,
+        1.423599000001559,
+        1.4159129000036046
+      ],
+      "median_seconds": 1.4197559500025818,
+      "numeric_cpu_seconds": [
+        1.5,
+        1.40625,
+        1.390625,
+        1.421875,
+        1.40625,
+        1.40625
+      ],
+      "median_cpu_seconds": 1.40625,
+      "row_hits": 3593856,
+      "row_misses": 500352,
+      "row_conflicts": 100096,
+      "baseline_seconds": [
+        1.6958416000052239,
+        1.6936702999955742,
+        1.640879300000961,
+        1.6037957000007736,
+        1.606058999997913,
+        1.6309722000005422
+      ],
+      "speedup": 1.1522584215954697,
+      "baseline_cpu_seconds": [
+        1.671875,
+        1.703125,
+        1.640625,
+        1.59375,
+        1.609375,
+        1.640625
+      ],
+      "cpu_speedup": 1.1666666666666667,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "cold_write",
+      "physical_bytes": 134217728,
+      "requests": 1,
+      "numeric_seconds": [
+        1.4582459999946877,
+        1.4690566999997827,
+        1.5013838000013493,
+        1.4775758999967366,
+        1.4761734999992768,
+        1.450880899996264
+      ],
+      "median_seconds": 1.4726150999995298,
+      "numeric_cpu_seconds": [
+        1.4375,
+        1.453125,
+        1.5,
+        1.453125,
+        1.484375,
+        1.4375
+      ],
+      "median_cpu_seconds": 1.453125,
+      "row_hits": 3591296,
+      "row_misses": 504448,
+      "row_conflicts": 98560,
+      "baseline_seconds": [
+        1.767402999998012,
+        1.7667817999972613,
+        1.689188299998932,
+        1.7474313999991864,
+        1.7002578000028734,
+        1.6762798999989172
+      ],
+      "speedup": 1.1706009262037176,
+      "baseline_cpu_seconds": [
+        1.765625,
+        1.78125,
+        1.6875,
+        1.75,
+        1.6875,
+        1.65625
+      ],
+      "cpu_speedup": 1.1827956989247312,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "continued_write",
+      "physical_bytes": 134217728,
+      "requests": 1,
+      "numeric_seconds": [
+        1.4149001999976463,
+        1.4433181999993394,
+        1.460205200004566,
+        1.4387736999997287,
+        1.4661840999979177,
+        1.511803499997768
+      ],
+      "median_seconds": 1.4517617000019527,
+      "numeric_cpu_seconds": [
+        1.40625,
+        1.4375,
+        1.453125,
+        1.4375,
+        1.46875,
+        1.5
+      ],
+      "median_cpu_seconds": 1.4453125,
+      "row_hits": 3600512,
+      "row_misses": 494976,
+      "row_conflicts": 98816,
+      "baseline_seconds": [
+        1.7843210999999428,
+        1.7718636999998125,
+        1.6409591999981785,
+        1.6867194000005838,
+        1.7112389999965671,
+        1.7440267000056338
+      ],
+      "speedup": 1.1900250915827142,
+      "baseline_cpu_seconds": [
+        1.78125,
+        1.765625,
+        1.640625,
+        1.6875,
+        1.71875,
+        1.75
+      ],
+      "cpu_speedup": 1.2,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "alternating_row_conflicts",
+      "physical_bytes": 2097152,
+      "requests": 65536,
+      "numeric_seconds": [
+        0.6917721999998321,
+        0.7453868000011425,
+        0.6805752000000211,
+        0.7688105999986874,
+        0.7622699999992619,
+        0.6710528999974485
+      ],
+      "median_seconds": 0.7185795000004873,
+      "numeric_cpu_seconds": [
+        0.6875,
+        0.75,
+        0.65625,
+        0.765625,
+        0.75,
+        0.671875
+      ],
+      "median_cpu_seconds": 0.71875,
+      "row_hits": 0,
+      "row_misses": 964,
+      "row_conflicts": 64572,
+      "baseline_seconds": [
+        0.8182603999957792,
+        0.77097369999683,
+        0.7953882000001613,
+        0.8009093000000576,
+        0.7386027000029571,
+        0.7837551999982679
+      ],
+      "speedup": 1.0987951924577297,
+      "baseline_cpu_seconds": [
+        0.8125,
+        0.78125,
+        0.78125,
+        0.796875,
+        0.734375,
+        0.78125
+      ],
+      "cpu_speedup": 1.0869565217391304,
+      "exact_request_results_and_all_arrays": true
+    }
+  ]
+}

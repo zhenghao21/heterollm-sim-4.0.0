@@ -1,0 +1,111 @@
+{
+  "profile": "hbm3e_timing_reference",
+  "capacity_gib": 512,
+  "clock_ns": 0.625,
+  "refresh_policy": "all_bank",
+  "repetitions": 3,
+  "arrival_ns": 1000000000.0,
+  "baseline_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_round2_20261015\\_hbm_numeric_baseline.py",
+  "candidate_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_round2_20261015\\_hbm_numeric_deadline_fixed.py",
+  "cases": [
+    {
+      "name": "cold_read",
+      "physical_bytes": 469762048,
+      "requests": 1,
+      "numeric_seconds": [
+        4.568707899990841,
+        4.609171199990669,
+        4.5758904999966035
+      ],
+      "median_seconds": 4.5758904999966035,
+      "numeric_cpu_seconds": [
+        4.546875,
+        4.578125,
+        4.546875
+      ],
+      "median_cpu_seconds": 4.546875,
+      "row_hits": 12574208,
+      "row_misses": 1744256,
+      "row_conflicts": 361600,
+      "baseline_seconds": [
+        4.399380599992583,
+        4.390114800000447,
+        4.437675900000613
+      ],
+      "speedup": 0.9614261092995665,
+      "baseline_cpu_seconds": [
+        4.375,
+        4.390625,
+        4.40625
+      ],
+      "cpu_speedup": 0.9656357388316151,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "continued_read",
+      "physical_bytes": 469762048,
+      "requests": 1,
+      "numeric_seconds": [
+        4.626860100004706,
+        4.571111900004325,
+        4.615904399994179
+      ],
+      "median_seconds": 4.615904399994179,
+      "numeric_cpu_seconds": [
+        4.578125,
+        4.5625,
+        4.609375
+      ],
+      "median_cpu_seconds": 4.578125,
+      "row_hits": 12578048,
+      "row_misses": 1736704,
+      "row_conflicts": 365312,
+      "baseline_seconds": [
+        4.379827400000067,
+        4.423247200000333,
+        4.346756800005096
+      ],
+      "speedup": 0.9488557432007455,
+      "baseline_cpu_seconds": [
+        4.375,
+        4.40625,
+        4.296875
+      ],
+      "cpu_speedup": 0.9556313993174061,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "alternating_row_conflicts",
+      "physical_bytes": 2097152,
+      "requests": 65536,
+      "numeric_seconds": [
+        0.5649104999902193,
+        0.574660699989181,
+        0.579536300007021
+      ],
+      "median_seconds": 0.574660699989181,
+      "numeric_cpu_seconds": [
+        0.546875,
+        0.578125,
+        0.578125
+      ],
+      "median_cpu_seconds": 0.578125,
+      "row_hits": 0,
+      "row_misses": 964,
+      "row_conflicts": 64572,
+      "baseline_seconds": [
+        0.7092061999865109,
+        0.6760243000026094,
+        0.6710587999987183
+      ],
+      "speedup": 1.176388606381708,
+      "baseline_cpu_seconds": [
+        0.71875,
+        0.65625,
+        0.671875
+      ],
+      "cpu_speedup": 1.162162162162162,
+      "exact_request_results_and_all_arrays": true
+    }
+  ]
+}

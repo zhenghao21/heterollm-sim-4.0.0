@@ -18048,6 +18048,23 @@ def _compile_parallel_embedding(
             allow_padding=plan.allow_padding,
         )
         rank_weight_bytes = weight_shard.local_size
+        decision = _control_plane_decision_metadata(scenario)
+        if "rank_weight_shards" in decision:
+            physical_shards = tuple(
+                shard
+                for shard in decision["rank_weight_shards"].get(
+                    _canonical_weight_tensor_id(scenario, weight_tensor_id), ()
+                )
+                if shard["rank_id"] == rank.rank
+            )
+            if len(physical_shards) != 1:
+                raise ValueError(
+                    "embedding weight tensor {} requires exactly one physical "
+                    "shard for rank {}".format(weight_tensor_id, rank.rank)
+                )
+            rank_weight_bytes = _gddr_non_negative_int(
+                physical_shards[0]["physical_bytes"], "embedding rank physical_bytes"
+            )
         weight_source, source_tensor, logical_tensor = _weight_source_for_tensor(
             scenario,
             weight_tensor_id,
@@ -18120,6 +18137,10 @@ def _compile_parallel_embedding(
             "native_get_rows_storage": gather,
             **weight_read_decision.audit_metadata(invocation_id),
         }
+        # Indexed reads vary with the cohort, but the resident table's
+        # allocation remains the complete rank-local weight shard. Qualified
+        # gathers have already checked this capacity against their GGUF binding.
+        operation_metadata["weight_buffer_size_bytes"] = rank_weight_bytes
         if declared_f32_storage or source_get_rows:
             operation_metadata.update(
                 runtime_output_storage_bits=32,
@@ -29131,6 +29152,7 @@ def _summarize_nand_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
     fields = ("logical_bytes", "logical_read_bytes", "logical_write_bytes",
               "host_transfer_bytes", "internal_transfer_bytes", "physical_bytes",
               "physical_read_bytes", "physical_write_bytes", "pages_read", "pages_programmed",
+              "read_cache_hits", "read_cache_misses",
               "pages_touched", "read_operations", "program_operations", "rmw_read_operations",
               "page_access_payload_bytes", "page_access_capacity_bytes", "host_admission_samples",
               "erase_operations", "queue_wait_ns", "service_ns", "media_waves", "host_queue_wait_ns", "media_queue_wait_ns")
@@ -29144,6 +29166,7 @@ def _summarize_nand_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=N
     measured_observed = {key: 0 for key in (
         "logical_read_bytes", "logical_write_bytes", "internal_transfer_bytes",
         "pages_read", "pages_programmed", "pages_touched", "media_waves",
+        "read_cache_hits", "read_cache_misses",
         "read_operations", "program_operations", "rmw_read_operations",
         "page_access_payload_bytes", "page_access_capacity_bytes", "host_admission_samples",
         "host_queue_wait_ns", "media_queue_wait_ns")}

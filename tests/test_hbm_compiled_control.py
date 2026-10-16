@@ -161,13 +161,10 @@ def test_compiled_reuses_saved_bank_mappings(monkeypatch):
         assert len(mapped_addresses) == len(numeric._hbm_control_state["banks"])
 
 
-def test_numeric_declines_nonzero_faw_without_mutation():
+def test_numeric_accepts_nonzero_faw_and_preserves_controller_state():
     c = configuration(four_activate_window_ns=20.)
-    core = DramCore(c, capture_details=False)
-    assert execute_hbm_numeric(core, AccessRequest("a", "read", 0, 4096)) is None
-    assert not core._hbm_control_state
-    assert not core._banks
-    assert not core.timeline.ready_ns
+    reference, numeric = DramCore(c, capture_details=False), DramCore(c, capture_details=False)
+    assert_same(reference, numeric, AccessRequest("a", "read", 0, 4096))
 
 
 def test_flat_bank_group_keeps_separate_sid_histories():
@@ -255,6 +252,14 @@ def assert_core_state_equal(actual, expected):
     assert vars(actual.timeline) == vars(expected.timeline)
 
 
+def assert_batch_matches_scalar(actual, expected):
+    # The scheduler now reports the submit_many boundary; service and every
+    # per-request observation must still equal the ordered scalar execution.
+    assert [row.counters["scheduler_batches"] for row in actual] == [1] + [0] * (len(actual) - 1)
+    assert tuple(replace(row, counters={**row.counters, "scheduler_batches": 0})
+                 for row in actual) == expected
+
+
 @pytest.mark.parametrize("refresh", [False, True])
 def test_four_tib_profile_uses_compiled_hbm_at_last_bank(refresh):
     from heterollm_sim.memory_mapping import map_dram_address
@@ -280,7 +285,8 @@ def test_four_tib_profile_uses_compiled_hbm_at_last_bank(refresh):
             ("read", 0, 1, 0.), ("read", last_bank + 3, 29, 0.),
             ("write", end - 1, 1, 1.), ("read", end - 65, 65, 40000.))):
         request = AccessRequest(str(index), op, address, size, arrival)
-        actual = numeric.submit(request)
+        actual = numeric._submit_validated(request,
+            execute=lambda accepted: execute_hbm_numeric(numeric, accepted))
         assert actual.counters["compiled_hbm_float64"] is True
         expected = reference._submit_validated(request,
             execute=lambda accepted: _Controller(reference, accepted).execute())
@@ -318,7 +324,7 @@ def test_compiled_batch_preserves_each_request_and_following_submission(queue_de
             ("read", 0, 129, 2.))))
     expected = tuple(sequential.submit(request) for request in requests)
     actual = batch.submit_many(requests)
-    assert actual == expected
+    assert_batch_matches_scalar(actual, expected)
     assert any(result.counters["queue_wait_ns"] > 0 for result in actual)
     assert all(result.counters["compiled_hbm_float64"] for result in actual)
     assert_core_state_equal(batch, sequential)
@@ -328,17 +334,18 @@ def test_compiled_batch_preserves_each_request_and_following_submission(queue_de
 
 
 @pytest.mark.parametrize("details,faw", [(True, 0.), (False, 20.)])
-def test_compiled_batch_declines_to_authoritative_controller(details, faw):
+def test_compiled_batch_preserves_detail_and_nonzero_faw_modes(details, faw):
     c = configuration(four_activate_window_ns=faw)
     sequential, batch = DramCore(c, capture_details=details), DramCore(c, capture_details=details)
     requests = (AccessRequest("read", "read", 3, 129), AccessRequest("write", "write", 32, 97))
-    assert batch.submit_many(requests) == tuple(sequential.submit(request) for request in requests)
+    assert_batch_matches_scalar(batch.submit_many(requests), tuple(sequential.submit(request) for request in requests))
     assert_core_state_equal(batch, sequential)
 
 
 @pytest.mark.parametrize("failure", [False, True])
-def test_compiled_batch_keeps_successful_prefix_when_numeric_stops(failure, monkeypatch):
-    c = configuration(max_outstanding_requests=1)
+@pytest.mark.parametrize("faw", [0., 31.])
+def test_compiled_batch_keeps_successful_prefix_when_numeric_stops(failure, faw, monkeypatch):
+    c = configuration(max_outstanding_requests=1, four_activate_window_ns=faw)
     sequential, batch = DramCore(c, capture_details=False), DramCore(c, capture_details=False)
     requests = tuple(AccessRequest(str(i), "write" if i % 2 else "read", i * 67, 97) for i in range(4))
     original = _compiled_hbm._HBMNumericState.execute
@@ -360,8 +367,8 @@ def test_compiled_batch_keeps_successful_prefix_when_numeric_stops(failure, monk
                 batch.submit_many(requests)
         else:
             expected = tuple(sequential.submit(request) for request in requests)
-            assert batch.submit_many(requests) == expected
+            assert_batch_matches_scalar(batch.submit_many(requests), expected)
         assert_core_state_equal(batch, sequential)
     if failure:
-        assert batch.submit_many(requests[2:]) == tuple(sequential.submit(request) for request in requests[2:])
+        assert_batch_matches_scalar(batch.submit_many(requests[2:]), tuple(sequential.submit(request) for request in requests[2:]))
         assert_core_state_equal(batch, sequential)

@@ -24,7 +24,7 @@ ARCHITECTURES = ("A_hbm_only", "B_all_kv_hbf")
 OUTPUT_TOKENS = 64
 # Share the serving hardware/execution revision so a geometry change also
 # invalidates Decode points and their capacity control.
-EXECUTION_CONTRACT = f"physical_core_unified_hardware_catalog_v3/serving-points-v{POINT_RESULT_VERSION}"
+EXECUTION_CONTRACT = f"physical_core_unified_hardware_catalog_v4/serving-points-v{POINT_RESULT_VERSION}"
 CAPACITY_BASELINE_CONTRACT = EXECUTION_CONTRACT + "/capacity-baseline-v1"
 CAPACITY_BASELINE_FILENAME = "capacity-baseline-70b-1m-512gib.json"
 CAPACITY_BASELINE_HBM_BYTES = 512 * 1024 ** 3
@@ -220,7 +220,7 @@ def summarize_decode(rows, *, models=MODELS, contexts=CONTEXTS, output=OUTPUT_TO
         ["GPU计算与发射仍使用现有聚合简化模型；HBM/HBF内存完成时间来自各自Core。",
          "参考GPU的单token attention按MMA矩阵块扩展计量，并允许计算与物理访存重叠；模型间的Decode倍率差异受这些假设影响，不是HBF对大模型影响普遍更小的规律。",
          "128K加输出略超原生上下文，1M为架构压力外推，不代表模型语义有效性。",
-         "70B/1M的A/B共同使用1TiB HBM容纳真实KV与prefill工作空间；其余点为512GiB。统一入口按标准参考组织选择覆盖容量的堆叠与密度；聚合带宽与显式阵列延迟保持不变，各通路带宽和派生突发间隔随几何变化，实际值见Core配置。",
+         "70B/1M的A/B共同使用1TiB HBM容纳真实KV与prefill工作空间；其余点为512GiB。固定16H×32Gbit组织与0.625ns命令时钟，容量增加只增加stack数；方向预算保持1600GB/s，物理接口总速率与并行度随stack数增加。未知厂商时序与刷新值没有补造，实际假设见Core配置。",
          "每点一个请求、固定输出长度；TBT分位数是本次样本统计，不是生产尾延迟保证。"],
         comparisons=comparisons,models=list(models),contexts=list(contexts),output_tokens=output,
         execution_contract="HBM always DramCore; HBF NandCore; GPU compute/launch approximation retained")

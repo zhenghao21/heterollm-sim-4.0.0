@@ -81,6 +81,7 @@ class CoreExecutionAudit:
                 "physical_read_bytes": 0, "physical_write_bytes": 0,
                 "transfer_bytes": 0, "burst_count": 0, "pages_read": 0,
                 "pages_programmed": 0, "erase_operations": 0,
+                "read_cache_hits": 0, "read_cache_misses": 0,
                 "bank_group_timing_transactions": 0,
                 "bank_group_exact_fallback_transactions": 0,
                 "jedec_control_transactions": 0,
@@ -112,7 +113,8 @@ class CoreExecutionAudit:
                 sample["logical_" + request.operation.value + "_bytes"] += result.logical_bytes
             sample["transfer_bytes"] += result.transfer_bytes
             for key in ("physical_read_bytes", "physical_write_bytes", "burst_count",
-                        "pages_read", "pages_programmed", "erase_operations"):
+                        "pages_read", "pages_programmed", "erase_operations",
+                        "read_cache_hits", "read_cache_misses"):
                 sample[key] += int(result.counters.get(key, 0))
         key = (owner, type(core).__name__)
         self._merge(self._rows.setdefault(key, self._empty_row(core, owner)), sample)

@@ -27,23 +27,26 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
     per_stack = per_die * config.addressable_die_count
     stack, stack_local = divmod(address, per_stack)
     die, local = divmod(stack_local, per_die)
-    interleave_bursts = interleave // config.burst_bytes
-    interleave_block, inner_burst = divmod(
-        local // config.burst_bytes, interleave_bursts
-    )
-    lane = interleave_block % config.lane_count
+    bursts_per_row = config.row_bytes // config.burst_bytes
+    if config.address_mapping == "row_local":
+        # Column, bank, lane, row; division admits non-power-of-two geometry.
+        stripe, column = divmod(local // config.burst_bytes, bursts_per_row)
+        stripe, bank = divmod(stripe, config.bank_count)
+        row, lane = divmod(stripe, config.lane_count)
+    else:
+        interleave_bursts = interleave // config.burst_bytes
+        interleave_block, inner_burst = divmod(
+            local // config.burst_bytes, interleave_bursts
+        )
+        lane = interleave_block % config.lane_count
+        bank_linear = interleave_block // config.lane_count
+        bank = bank_linear % config.bank_count
+        bank_local = bank_linear // config.bank_count
+        row_column = bank_local * interleave_bursts + inner_burst
+        column = row_column % bursts_per_row
+        row = row_column // bursts_per_row
     if config.stack_interface_mode == "independent":
         stack = lane // config.lanes_per_stack
-    bank_linear = interleave_block // config.lane_count
-    bank = bank_linear % config.bank_count
-    # ``bank_linear`` contains both the bank coordinate and the index inside
-    # that bank.  Remove the bank dimension before decoding row/column; using
-    # it directly aliases addresses once there is more than one bank.
-    bank_local = bank_linear // config.bank_count
-    row_column = bank_local * interleave_bursts + inner_burst
-    bursts_per_row = config.row_bytes // config.burst_bytes
-    column = row_column % bursts_per_row
-    row = row_column // bursts_per_row
     # Decode the flat lane while allowing data_lanes to describe an arbitrary
     # package connection.  Coordinates are descriptive; lane remains the
     # authoritative data resource id.
@@ -64,6 +67,29 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
         pseudo_channel=pseudo, rank=rank, bank_group=bank_group,
         bank=bank_id, row=row, column=column,
     )
+
+
+def dram_request_channels(config: DramConfig, request: AccessRequest) -> tuple[tuple[int, int], ...]:
+    """Channels touched by a range, in O(lane_count), not O(byte_count).
+
+    An aggregate occupies one credit in each touched channel until its whole
+    completion. Shared stacks use the same external lane/channel credits.
+    """
+    lane_count = config.lane_count
+    block_bytes = (config.row_bytes * config.bank_count
+                   if config.address_mapping == "row_local"
+                   else config.interleave_bytes or config.burst_bytes)
+    start = request.address // block_bytes
+    stop = (request.address + request.byte_count - 1) // block_bytes + 1
+    lanes = (range(lane_count) if stop - start >= lane_count
+             else (index % lane_count for index in range(start, stop)))
+    channels = set()
+    for lane in lanes:
+        stack = lane // config.lanes_per_stack if config.stack_interface_mode == "independent" else 0
+        channel = ((lane % config.lanes_per_stack) // config.pseudo_channels_per_channel
+                   // config.subchannels_per_channel) % config.channels
+        channels.add((stack, channel))
+    return tuple(sorted(channels))
 
 
 def map_nand_address(config: NandConfig, address: int) -> AddressMapping:
@@ -141,6 +167,14 @@ def validate_nand_request(request: AccessRequest, config: NandConfig) -> None:
     _check_address(start, config.effective_capacity_bytes)
     if end > config.effective_capacity_bytes:
         raise ValueError("request extends beyond modeled NAND capacity")
+    if config.protocol_mode == "ocp_hbf_0_7":
+        if request.operation is Operation.ERASE:
+            raise ValueError("ocp_hbf_0_7 ordinary IO erases automatically on page-0 writes; explicit ERASE is unsupported")
+        if start % 64 or request.byte_count % 64:
+            raise ValueError("ocp_hbf_0_7 IO must be 64-byte aligned")
+        if (request.operation is Operation.WRITE
+                and (start % 4096 or request.byte_count % 4096)):
+            raise ValueError("ocp_hbf_0_7 submit requires complete aligned 4 KiB write units; fragment accumulation/pending responses are unsupported")
     if (request.operation is Operation.WRITE and config.partial_page_policy == "reject"
             and (start % config.page_bytes or request.byte_count % config.page_bytes)):
         raise ValueError("partial NAND page write rejected by configuration")

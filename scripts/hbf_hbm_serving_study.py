@@ -19,9 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-# Version 8 requires JEDEC timing limits for every HBM input, including fixed
-# experiment values. Earlier results cannot establish this execution contract.
-POINT_RESULT_VERSION = 8
+# Version 9 separates clock, directional budgets and fixed stack geometry;
+# HBF uses 4 KiB pages, 64 B host transfers and explicit host/cache resources.
+# Older execution results cannot establish this contract.
+POINT_RESULT_VERSION = 10
 
 from heterollm_sim.config import model_from_dict
 from heterollm_sim.control_plane_planner import _derive_requirements
@@ -29,6 +30,7 @@ from heterollm_sim.ir import (KVCachePolicy, RequestSpec, LinkSpec, PortSpec,
     MTPPolicy, MTPBranchSpec, build_model_graph_from_layer_specs, model_graph_execution_layers)
 from heterollm_sim.physical_contract import reconfigure_physical_config, parse_execution_physical_config
 from heterollm_sim.physical_presets import resolve_physical_config
+from heterollm_sim.hbm_timing_profiles import timing_profile_catalog
 from heterollm_sim.memory_allocator import AllocationError
 from heterollm_sim.model_presets import materialize_model_payload, list_model_presets, get_model_preset
 from heterollm_sim.planner import ScenarioValidationError
@@ -50,6 +52,10 @@ def build_study_scenario(architecture: str, *, model_id: str = "small",
                          hbf_capacity_bytes: int = 1024 * GIB,
                          hbf_page_read_ns: float | None = None,
                          hbm_timing_profile: str = "hbm3e_reference",
+                         hbm_parameter_profile: str | None = None,
+                         hbm_timing_overrides: dict | None = None,
+                         hbm_controller: dict | None = None,
+                         hbm_clock_ns: float | None = None,
                          slo_ttft_ns: float = 10e9, slo_tbt_ns: float = 100e6):
     """Build a real serving scenario, retaining identical device inventory.
 
@@ -60,6 +66,14 @@ agent-session API or a static hot-hit probability.
     """
     if architecture not in ARCHITECTURES + OFFLOAD_BASELINES:
         raise ValueError(f"unknown architecture: {architecture}")
+    if hbm_timing_overrides is not None:
+        allowed_timings = {field for pack in timing_profile_catalog().values()
+                           for field in pack.get("parameters", {})}
+        if not isinstance(hbm_timing_overrides, dict):
+            raise ValueError("HBM timing overrides must be a dictionary of timing fields")
+        unknown = set(hbm_timing_overrides) - allowed_timings
+        if unknown:
+            raise ValueError("unknown HBM timing fields: " + ", ".join(sorted(unknown)))
     tiered = architecture in {"C_hot_cold", "F_nvme"}
     cold_owner = "hostmem0" if architecture == "E_host_dram" else "hbf0"
     import hbf_hbm_experiments as experiments
@@ -113,9 +127,19 @@ agent-session API or a static hot-hit probability.
                 physical = experiments.profiles._hbm_physical_config(
                     capacity_bytes=capacity, read_gb_s=source.directional_bandwidth_gb_s("read"),
                     write_gb_s=source.directional_bandwidth_gb_s("write"),
-                    interface_gb_s=source.physical_interface_bandwidth_gb_s,
+                    clock_ns=source.command_clock_ns if hbm_clock_ns is None else hbm_clock_ns,
                     interface_input_scope=source.metadata.get("interface_input_scope"),
+                    parameter_profile=hbm_parameter_profile,
                     profile_id=hbm_timing_profile)
+                if hbm_timing_overrides:
+                    physical = reconfigure_physical_config(physical, overrides=hbm_timing_overrides)
+                if hbm_controller:
+                    allowed = {"address_mapping", "scheduler", "scheduler_window", "queue_scope",
+                               "max_outstanding_requests", "interleave_bytes"}
+                    unknown = set(hbm_controller) - allowed
+                    if unknown:
+                        raise ValueError("unknown HBM controller fields: " + ", ".join(sorted(unknown)))
+                    physical = reconfigure_physical_config(physical, overrides=hbm_controller)
             else:
                 physical = reconfigure_physical_config(metadata["physical_memory_config"],
                     overrides=overrides, expand_geometry=True)
@@ -124,6 +148,10 @@ agent-session API or a static hot-hit probability.
                 metadata["access_mode"] = "remote_flash" if tiered else "memory"
                 metadata["write_buffer_bytes"] = physical.write_buffer_bytes
             c = replace(c, capacity_bytes=capacity, metadata=metadata)
+            if c.component_id == "hbm0":
+                interface_gbps = physical.physical_interface_bandwidth_gb_s * 8.0
+                c = replace(c, bandwidth_gbps=interface_gbps,
+                    ports=tuple(replace(port, bandwidth_gbps=interface_gbps) for port in c.ports))
             if c.component_id == "hbf0" and tiered:
                 c = replace(c, cost_profile_id=None)
             if c.component_id == "hbf0" and architecture == "F_nvme":
@@ -141,6 +169,16 @@ agent-session API or a static hot-hit probability.
     hardware = replace(s.hardware, components=tuple(components), links=tuple(
         l for l in s.hardware.links
         if l.source_component in component_ids and l.target_component in component_ids))
+    hbm_interface_gbps = hardware.get_component("hbm0").bandwidth_gbps
+    hbm_links = tuple(replace(link, bandwidth_gbps=hbm_interface_gbps)
+        if "hbm0" in (link.source_component, link.target_component) else link
+        for link in hardware.links)
+    gpu_hbm_ports = {link.source_port if link.source_component == "gpu0" else link.target_port
+                    for link in hbm_links if {link.source_component, link.target_component} == {"gpu0", "hbm0"}}
+    hardware = replace(hardware, links=hbm_links, components=tuple(
+        replace(component, ports=tuple(replace(port, bandwidth_gbps=hbm_interface_gbps)
+            if port.port_id in gpu_hbm_ports else port for port in component.ports))
+        if component.component_id == "gpu0" else component for component in hardware.components))
     if architecture == "F_nvme":
         hardware = replace(hardware,links=tuple(replace(l,protocol="PCIe",version="5.0",lanes=16,
             bandwidth_gbps=56.,latency_ns=800.) if "hbf0" in (l.source_component,l.target_component) else l
@@ -190,7 +228,11 @@ agent-session API or a static hot-hit probability.
     hbm_config = parse_execution_physical_config(hbm_component.metadata["physical_memory_config"])
     component_profiles = {kind:dict(registry) for kind,registry in s.component_profiles.items()}
     component_profiles["hbm"][hbm_component.cost_profile_id] = replace(
-        s.resolve_component_profile("hbm0"), parallel_lanes=hbm_config.lane_count,
+        s.resolve_component_profile("hbm0"),
+        bandwidth_gb_s=hbm_config.physical_interface_bandwidth_gb_s,
+        read_bandwidth_gb_s=hbm_config.directional_bandwidth_gb_s("read"),
+        write_bandwidth_gb_s=hbm_config.directional_bandwidth_gb_s("write"),
+        parallel_lanes=hbm_config.lane_count,
         transaction_bytes=hbm_config.burst_bytes,
         max_outstanding_requests=hbm_config.max_outstanding_requests)
     scenario = replace(s, name=f"study-{architecture}-{model_id}", hardware=hardware, model=model,

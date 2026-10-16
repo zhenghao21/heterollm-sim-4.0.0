@@ -4,6 +4,18 @@ from __future__ import annotations
 import html
 import json
 
+from hbf_hbm_serving_study import POINT_RESULT_VERSION
+
+
+def uses_current_execution(report):
+    """A current envelope cannot turn historical groups or points into new data."""
+    return (report.get('point_result_version') == POINT_RESULT_VERSION
+        and all(g.get('point_result_version') == POINT_RESULT_VERSION
+                for g in report.get('groups', []))
+        and all(r.get('point_result_version') == POINT_RESULT_VERSION
+                for g in report.get('groups', []) for r in g.get('rows', [])
+                if r.get('mode') == 'full_operator_serving'))
+
 
 def esc(value):
     return html.escape(str(value))
@@ -177,6 +189,14 @@ def extension_tables(group):
 
 
 def render_report(report):
+    if not uses_current_execution(report):
+        return ('<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
+            '<title>历史 HBM/HBF 仿真结果</title><main><h1>历史结果：未按当前模型重跑</h1>'
+            '<p>载入执行版本 '+esc(report.get('point_result_version', '未记录'))+
+            '；当前版本 '+str(POINT_RESULT_VERSION)+'。本页不使用当前默认配置重新解释旧数据。'
+            '旧结果和旧图不能证明当前 HBM/HBF 模型的性能或协议行为。</p>'
+            '<p>'+esc(report.get('artifact_note', ''))+'</p>'
+            '<p><a href="results.json">查看原始历史 JSON</a>。重新运行所需实验后，再生成当前报告和图表。</p></main></html>')
     groups=report['groups']
     output_dir=esc(report.get('output_directory','artifacts/hbf_hbm'))
     service=[r for g in groups for r in g.get('rows',[]) if r.get('mode')=='full_operator_serving']
@@ -199,6 +219,14 @@ def render_report(report):
         'HBM统一交给DRAM Core处理地址、行/Bank、命令和数据通道、排队与完成时间；HBF交给NAND Core处理页读取与编程。'
         'KV迁移按源内存读取、链路传输、目标内存写入的依赖顺序执行。调度器组合这些依赖与重叠，不再额外叠加HBM聚合带宽耗时。</p>')
     parts.append('<p>标准参考几何不等于完整JEDEC协议仿真。jedec_hbm 路径执行共享行/列命令接口、PC/SID与激活页状态，以及已配置的刷新约束；已知时序硬下限对手动实验值同样生效。初始化、训练及完整PHY行为仍不在普通读写子集内。具体执行范围、刷新是否启用、约束检查状态和未知参数以每点保存的Core配置为准，不能据此推断已验证某个厂商速度档。</p>')
+    parts.append('<p>主实验 HBF 是逻辑页服务分析：4 KiB 页、64 B 主机计费、16 个全双工主机通道、每 bank 两页读缓存；逻辑写可使用 RMW，未模拟主机重映射和 OCP 物理顺序写。独立 hbf_ocp_0_7 预设用于严格物理协议微测，不能把逻辑模型的结果改称 OCP 设备性能。接口预算与冷阵列服务上限分别列出，后者也不包含传输、命令、RMW、擦除和排队；缓存命中不受冷阵列上限约束。</p>')
+    hbf_records = {r['id']: r['hbf_service'] for r in service if r.get('hbf_service')}
+    parts.append(table(('点ID','抽象层 / 协议','接口读/写 GB/s','冷阵列读/编程上限 GB/s','页/主机粒度 B','有效并行单元'),[
+        (key, value['model_abstraction']+' / '+value['protocol_mode'],
+         str(value['interface_read_cap_gb_s'])+'/'+str(value['interface_write_cap_gb_s']),
+         number(value['ideal_cold_array_read_ceiling_gb_s'])+'/'+number(value['ideal_array_program_ceiling_gb_s']),
+         str(value['page_bytes'])+'/'+str(value['host_granularity_bytes']),value['effective_parallel_units'])
+        for key,value in hbf_records.items()]))
     if core.get('all_full_serving_hbm_verified'):
         parts.append('<p><strong>本报告 '+str(core['verified_hbm_dram_core_rows'])+' / '+str(core['full_serving_rows'])+
             ' 个完整服务点均记录到实际HBM DRAM Core执行。</strong>证据来自持久在线服务运行时的实际提交，排除规划预演、隔离重放与服务启动前初始化。'
@@ -281,7 +309,7 @@ def render_report(report):
             f'<p>统一batch=1、每请求输出{output_tokens} token。每点先真实执行完整prefill，首token产生后，单独统计余下{measured_tokens}个token的完成窗口。'
             f'<strong>Decode TPS = {measured_tokens} / 该窗口秒数</strong>；TPOT为首token之后的平均输出间隔。'
             'A/B使用相同硬件配置和工作量。128K加输出略超原生上下文，1M属于架构压力外推。</p>'
-            '<p>70B/1M的A/B共同使用1TiB HBM；其余Decode点为512GiB。原512GiB配置在prefill工作空间的连续地址分配时被拒绝，不能据此认定总容量必然不足；失败结果另行保留。扩展容量不改变HBM带宽或时序参数。</p>'
+            '<p>70B/1M的A/B共同使用1TiB HBM；其余Decode点为512GiB。原512GiB配置在prefill工作空间的连续地址分配时被拒绝，不能据此认定总容量必然不足；失败结果另行保留。扩容时保持命令时钟和方向预算，stack数、并行度与物理接口总速率相应增加。</p>'
             '<p>旧“命名模型随上下文变化的TPS”图按整个请求窗口计算，长prefill会稀释Decode差异。该旧指标继续保留用于衡量端到端输出速率；下表和独立Decode图专门回答生成阶段的影响。</p>')
         parts.append(table(('模型','上下文','A Decode TPS','B Decode TPS','Decode B/A','A TPOT ms','B TPOT ms','TPOT变化','全请求TPS B/A'),[
             (p['model_id'],p['prompt_tokens'],number(p['A_decode_tps'],3),number(p['B_decode_tps'],3),
@@ -317,7 +345,9 @@ def render_report(report):
             table(('点ID','内存 / Core','事务数','逻辑读 GiB','逻辑写 GiB','TBT样本数'),core_rows)+
             '<p>以上只合计decode cohort；完整请求、迁移及物理传输字节见逐点JSON。HBF物理页放大不等于逻辑流量。</p></details>')
     manifest=report.get('figure_manifest',{})
-    if manifest.get('status')=='complete':
+    if manifest and manifest.get('point_result_version') != POINT_RESULT_VERSION:
+        parts.append('<p class="bad">已忽略历史或版本未记录的图表清单；请用本次结果重新生成图表。</p>')
+    elif manifest.get('status')=='complete':
         parts.append('<h2 id="figures">主要结果图</h2><p>'+esc(manifest.get('global_caption_zh',''))+'</p>')
         for fig in manifest.get('figures',[]):
             paths=fig.get('report_relative_files',{})
@@ -331,7 +361,7 @@ def render_report(report):
         '<p>A=HBM 权重与 KV；B=全部 KV 在 HBF；C=HBM 活跃 KV/HBF 冷 KV；D=HBF 权重/HBM KV。具体目标与控制面实际放置分别保存在结果中。对照约束见每个场景；相同 GPU 或相同槽数不代表相同购置成本和面积。</p>',
         '<p>补充对照 E=主机DRAM中的KV，F=NVMe SSD冷KV，G=CXL连接DRAM中的KV。第9组G是单GPU本地对照，第15组另建多GPU共享池和机架网络变体，路径假设分别保存。</p>',
         '<p>当前未提供真实 token-ID 轨迹；解析 embedding 的远端读取若超过权重表大小，使用明确的循环地址假设保留重复读流量，不扩大权重表驻留容量。不能据此声称复现了真实 token 局部性。</p>',
-        '<p>组 02：1 层 hidden=256、4 Q 头/2 KV 头、INT8 小 Dense，每请求 4 输出 token。HBM/HBF 端口峰值同为 1600 GB/s，HBM完成时间由DRAM Core计算，不再额外乘聚合效率系数；HBF 默认 4µs 读、75µs program、16KiB 页、64 个有效并行单元、16GB/s 写。内部通道按非瓶颈参数假设，3TB/s 端口扫描仍受 1.6TB/s 互联限制。named 模型和研究扩展使用各行实际参数，不能套用此小模型说明。</p>'])
+        '<p>组 02：1 层 hidden=256、4 Q 头/2 KV 头、INT8 小 Dense，每请求 4 输出 token。主实验 HBM 固定0.625ns命令时钟，方向预算1600GB/s；物理接口速率随stack数增加。HBF 的1600/16GB/s是接口读/写预算，4µs/75µs、4KiB页和64个有效单元给出的理想冷阵列读/编程上限仅65.536/3.495253GB/s，实际服务还受传输和队列限制。并行度与内部通道速率均为显式分析假设。named模型、文献探针和研究扩展以每行实际配置为准。</p>'])
     parts.append(table(('ID / 架构','模型','输入/输出','请求数','完成/拒绝','并发上限/实际batch','TPS','初始化后TPS','合格TPS','prefill token/s','decode token/s','初始化µs'),[
         (r['id']+' / '+r['placement'],r['model'],str(r['prompt_tokens'])+'/'+str(r['output_tokens_per_request']),r['request_count'],str(r['completed_requests'])+'/'+str(r['rejected_requests']),str(r['requested_concurrency'])+'/'+str(r['max_observed_batch_requests']),number(r['node_tps'],2),number(r.get('runtime_tps'),2),number(r['goodput_tps'],2),number(r.get('phase_service_rates',{}).get('prefill',{}).get('wall_clock_tokens_per_second'),2),number(r.get('phase_service_rates',{}).get('decode',{}).get('wall_clock_tokens_per_second'),2),number(r.get('measurement_windows',{}).get('initialization_ns',0)/1000)) for r in service]))
     pairs=[]
@@ -397,7 +427,7 @@ def render_report(report):
         elif n==5:
             chosen=[r for r in rows if r['append_bytes']==4096 and r['program_ns']==75000 and r['gc_write_amplification']==1]
             parts.append('<p>以下是固定逻辑写量、4KiB append、75µs program、无额外 GC 放大的代表点；完整组合见 JSON。GC 系数是分析工作量叠加，不是完整 FTL 回收模拟。</p>')
-            parts.append(table(('page KiB','缓冲KiB','确认µs','介质排空µs','介质写KiB','缓冲等待µs'),[(r.get('page_bytes',16384)/1024,r['write_buffer_capacity_bytes']/1024,number(r['host_ack_completion_ns']/1000),number(r['media_drain_completion_ns']/1000),number(r['media_write_bytes']/1024),number(r['write_buffer_blocking_ns']/1000)) for r in chosen]))
+            parts.append(table(('page KiB','缓冲KiB','确认µs','介质排空µs','介质写KiB','缓冲等待µs'),[(r['page_bytes']/1024,r['write_buffer_capacity_bytes']/1024,number(r['host_ack_completion_ns']/1000),number(r['media_drain_completion_ns']/1000),number(r['media_write_bytes']/1024),number(r['write_buffer_blocking_ns']/1000)) for r in chosen]))
         elif n==6:
             parts.append('<p>direct=4GB/s，relay 两跳各8GB/s。这里验证实际传输及共享资源；不能据此宣称同等链路预算的拓扑优势。1.5MiB 扫描指迁移块，物理 NAND page 单独配置。</p>')
             parts.append(table(('路径','完成µs','有效GB/s','链路KiB','relay读写KiB'),[(r['path'],number(r['completion_ns']/1000),number(r['useful_bandwidth_gb_s']),r['link_bytes']/1024,r['relay_bytes']/1024) for r in rows]))

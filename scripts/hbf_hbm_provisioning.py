@@ -26,7 +26,8 @@ def build_package_scenario(hbm_packages, hbf_packages, architecture, *, model_id
         raise ValueError("the requested placement requires at least one HBF package")
     s = build_study_scenario(architecture, model_id=model_id, prompt=2048, batch=1, output=output,
                              hbm_capacity_bytes=HBM_CAPACITY*hbm_packages,
-                             hbf_capacity_bytes=HBF_CAPACITY*max(1,hbf_packages))
+                             hbf_capacity_bytes=HBF_CAPACITY*max(1,hbf_packages),
+                             hbm_clock_ns=0.32)
     counts={"hbm0":hbm_packages,"hbf0":hbf_packages}
     components=[]
     package_profiles={}
@@ -43,7 +44,7 @@ def build_package_scenario(hbm_packages, hbf_packages, architecture, *, model_id
             physical = _hbm_physical_config(capacity_bytes=c.capacity_bytes,
                 read_gb_s=physical.directional_bandwidth_gb_s("read")*count,
                 write_gb_s=physical.directional_bandwidth_gb_s("write")*count,
-                interface_gb_s=physical.physical_interface_bandwidth_gb_s*count,
+                clock_ns=physical.command_clock_ns,
                 interface_input_scope=physical.metadata.get("interface_input_scope"),
                 stacks=count, profile_id=physical.metadata["physical_config_profile_id"])
             physical=reconfigure_physical_config(physical,
@@ -54,6 +55,7 @@ def build_package_scenario(hbm_packages, hbf_packages, architecture, *, model_id
         else:
             physical=reconfigure_physical_config(physical, overrides={
                 "channels": physical.channels*count, "parallel_units": physical.parallel_units*count,
+                "host_channels": physical.host_channels*count,
                 "host_bandwidth_gb_s": physical.host_bandwidth_gb_s*count,
                 "host_read_bandwidth_gb_s": physical.host_bandwidth_for("read")*count,
                 "host_write_bandwidth_gb_s": physical.host_bandwidth_for("write")*count,

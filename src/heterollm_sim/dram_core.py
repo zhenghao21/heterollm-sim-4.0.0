@@ -7,7 +7,7 @@ from functools import lru_cache
 import math
 from typing import Dict, Iterable, Optional
 
-from .memory_mapping import map_dram_address, split_dram_request, validate_dram_request
+from .memory_mapping import map_dram_address, split_dram_request, validate_dram_request, dram_request_channels
 from .memory_transfer import ResourceTimeline
 from .memory_types import AccessRequest, DramConfig, Operation, StageTiming, TransactionResult
 
@@ -95,7 +95,8 @@ class DramCore:
     explicit periodic all-bank refresh policy is supported. Its configured
     timing inputs do not establish a vendor speed
     grade or support for training or the full standard.
-    Both modes keep request submission order; neither implements FR-FCFS.
+    submit executes immediately. submit_many optionally selects whole arrived
+    requests from a finite window; this is not a per-command FR-FCFS model.
     """
 
     def __init__(
@@ -124,7 +125,10 @@ class DramCore:
         self._bank_group_state: Dict[tuple[int, int, int, int], dict] = {}
         self._hbm_control_state: dict = {}
         self._inflight: list[float] = []
+        self._channel_inflight: dict[tuple[int, int], list[float]] = {}
         self._acceptance_ns = 0.0
+        self._scheduler_direction = None
+        self._scheduler_streak = 0
         self._largest_stage_ns = max(
             config.open_ns, config.close_ns, config.read_latency_ns,
             config.write_latency_ns, config.burst_interval_ns,
@@ -172,31 +176,42 @@ class DramCore:
         return state
 
     @staticmethod
-    def _group_history_ready(history, group, same_ns, different_ns, earliest):
+    def _group_history_ready(history, group, same_ns, different_ns, earliest, *, clock_quantum=None):
         for previous_group, timestamp in history.items():
             gap = same_ns if previous_group == group else different_ns
             # Each zero-valued timing is individually disabled. In
             # particular, enabling ACT/column gates must not silently add
             # WRITE-data-end -> READ-command ordering when WTR is zero.
             if gap > 0:
-                earliest = max(earliest, timestamp + gap)
+                if clock_quantum is None:
+                    end = timestamp + gap
+                else:
+                    from ._hbm_clock import clock_after
+                    end = clock_after(timestamp, gap, clock_quantum)
+                earliest = max(earliest, end)
         return earliest
 
-    def _bank_group_activate_ready(self, state, group, earliest, arrival_ns=0.0):
+    def _bank_group_activate_ready(self, state, group, earliest, arrival_ns=0.0, *, clock_quantum=None):
         config = self.config
         earliest = self._group_history_ready(
             state["activate"], group, config.activate_same_group_ns,
-            config.activate_different_group_ns, earliest,
+            config.activate_different_group_ns, earliest, clock_quantum=clock_quantum,
         )
         width = config.four_activate_window_ns
         if width <= 0:
             return earliest
+        def window_end(start):
+            if clock_quantum is None:
+                return start + width
+            from ._hbm_clock import clock_after
+            return clock_after(start, width, clock_quantum)
+
         calendar = state["activate_window"]
         # A reservation on one bank may be far in the future while another
         # bank remains free now. Only monotonic admission time, not that
         # future ACT, proves old starts can no longer constrain an insertion.
         expired = 0
-        while expired < len(calendar) and calendar[expired] + width <= arrival_ns:
+        while expired < len(calendar) and window_end(calendar[expired]) <= arrival_ns:
             expired += 1
         del calendar[:expired]
         while True:
@@ -209,14 +224,14 @@ class DramCore:
             # can have become invalid. Existing windows were already legal.
             for offset in range(max(0, candidate - 4), min(candidate, len(neighbors) - 5) + 1):
                 window = neighbors[offset:offset + 5]
-                if window[-1] < window[0] + width:
+                if window[-1] < window_end(window[0]):
                     # To repair this violating window without moving before
                     # the lower bound, pass the oldest of its other four ACTs
                     # by a full window. Compare deadlines by addition so
                     # float64 rounding cannot cause a zero-progress loop.
                     other_starts = [value for index, value in enumerate(window)
                                     if index != candidate - offset]
-                    next_start = max(next_start, min(other_starts) + width)
+                    next_start = max(next_start, window_end(min(other_starts)))
             if next_start == earliest:
                 return earliest
             earliest = next_start
@@ -267,12 +282,21 @@ class DramCore:
         except OverflowError:
             return True
 
+    def _admission_time(self, request, earliest=0.0):
+        """Read-only queue eligibility, also used by the bounded scheduler."""
+        ready = max(request.arrival_ns, self._acceptance_ns, earliest)
+        calendars = ([self._inflight] if self.config.queue_scope == "device" else
+                     [self._channel_inflight.get(channel, ())
+                      for channel in dram_request_channels(self.config, request)])
+        for calendar in calendars:
+            active = [end for end in calendar if end > ready]
+            if len(active) >= self.config.max_outstanding_requests:
+                ready = max(ready, min(active))
+        return ready
+
     def _submit_validated(self, request: AccessRequest, *, execute=None) -> TransactionResult:
-        effective_arrival = max(request.arrival_ns, self._acceptance_ns)
+        effective_arrival = self._admission_time(request)
         inflight = [end for end in self._inflight if end > effective_arrival]
-        if len(inflight) >= self.config.max_outstanding_requests:
-            effective_arrival = max(effective_arrival, min(inflight))
-            inflight = [end for end in inflight if end > effective_arrival]
         before_metrics = self.timeline.metrics_snapshot(
             max_intervals=(
                 self.config.max_expanded_segments
@@ -286,6 +310,9 @@ class DramCore:
         )
         result = replace(result, arrival_ns=request.arrival_ns, counters={
             **result.counters, "queue_wait_ns": effective_arrival - request.arrival_ns,
+            "scheduler_reordered_requests": 0, "scheduler_batches": 0,
+            "controller_direction_switches": int(self._scheduler_direction is not None
+                and self._scheduler_direction != request.operation.value),
             **self.timeline.metrics_delta(before_metrics),
             **({
                 "bank_group_timing_enabled": True,
@@ -293,14 +320,52 @@ class DramCore:
             } if self.config.bank_group_timing_enabled else {}),
         })
         self._acceptance_ns = effective_arrival
-        self._inflight = [*inflight, result.completion_ns]
+        if self.config.queue_scope == "device":
+            self._inflight = [*inflight, result.completion_ns]
+        else:
+            for channel in dram_request_channels(self.config, request):
+                self._channel_inflight[channel] = [
+                    end for end in self._channel_inflight.get(channel, ()) if end > effective_arrival
+                ] + [result.completion_ns]
+        self._scheduler_streak = (self._scheduler_streak + 1
+                                 if self._scheduler_direction == request.operation.value else 1)
+        self._scheduler_direction = request.operation.value
         return result
 
     def submit_many(self, requests: Iterable[AccessRequest]) -> tuple[TransactionResult, ...]:
-        """Execute the same ordered requests, amortizing numeric state packing."""
+        """Schedule a finite arrived window; return results in input order.
+
+        A single submit has no waiting window and cannot reorder requests.
+        Whole-request credits are held until the aggregate completion, even
+        when the request spans several channels or thousands of bursts.
+        """
         items = tuple(requests)
         for request in items:
             validate_dram_request(request, self.config)
+        previous_direction = self._scheduler_direction
+        if self.config.scheduler != "fcfs" and len(items) > 1:
+            from ._dram_scheduler import schedule_requests
+            results = schedule_requests(self, items)
+        else:
+            results = self._submit_many_ordered(items)
+        tagged = []
+        for index, (request, result) in enumerate(zip(items, results)):
+            counters = dict(result.counters)
+            counters["scheduler_batches"] = int(index == 0)
+            counters.setdefault("scheduler_reordered_requests", 0)
+            # The generic compiled FCFS batch performs admission internally.
+            if "controller_direction_switches" not in counters:
+                counters["controller_direction_switches"] = int(previous_direction is not None
+                    and previous_direction != request.operation.value)
+                self._scheduler_streak = (self._scheduler_streak + 1
+                    if previous_direction == request.operation.value else 1)
+                self._scheduler_direction = request.operation.value
+            previous_direction = request.operation.value
+            tagged.append(replace(result, counters=counters))
+        return tuple(tagged)
+
+    def _submit_many_ordered(self, items):
+        """FCFS execution, amortizing numeric state packing when possible."""
         if (len(items) > 1 and self.config.control_mode == "jedec_hbm" and not self.capture_details
                 and not any(self._finite_guard_required(request) for request in items)):
             try:
@@ -311,7 +376,7 @@ class DramCore:
                 results = execute_hbm_numeric_many(self, items)
                 if results is not None:
                     return results
-        if (len(items) > 1 and self._can_accelerate()
+        if (len(items) > 1 and self.config.queue_scope == "device" and self._can_accelerate()
                 and not any(self._finite_guard_required(request) for request in items)):
             from ._compiled_dram import execute_compiled_many
             results = execute_compiled_many(self, items)
@@ -463,7 +528,8 @@ class DramCore:
         """Use the closed form only for a single-slot, row-periodic calendar."""
         config = self.config
         interleave = config.interleave_bytes or config.burst_bytes
-        if (config.control_mode == "jedec_hbm" or self.capture_details or config.bank_group_timing_enabled
+        if (config.control_mode == "jedec_hbm" or config.address_mapping != "bank_interleaved"
+                or self.capture_details or config.bank_group_timing_enabled
                 or config.addressable_stack_count * config.addressable_die_count
                 * config.lane_count * config.bank_count > MAX_ACCELERATED_BANKS
                 or interleave > config.row_bytes

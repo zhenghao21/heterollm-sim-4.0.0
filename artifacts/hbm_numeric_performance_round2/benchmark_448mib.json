@@ -1,0 +1,86 @@
+{
+  "profile": "hbm3e_timing_reference",
+  "capacity_gib": 512,
+  "clock_ns": 0.625,
+  "refresh_policy": "all_bank",
+  "repetitions": 4,
+  "arrival_ns": 1000000000.0,
+  "baseline_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_round2_20261015\\_hbm_numeric_deadline_only.py",
+  "candidate_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_round2_20261015\\_hbm_numeric_cached_candidate.py",
+  "cases": [
+    {
+      "name": "cold_read",
+      "physical_bytes": 469762048,
+      "requests": 1,
+      "numeric_seconds": [
+        4.551083900005324,
+        4.550564500008477,
+        4.587962700010394,
+        4.480159400001867
+      ],
+      "median_seconds": 4.5508242000069,
+      "numeric_cpu_seconds": [
+        4.546875,
+        4.5,
+        4.578125,
+        4.46875
+      ],
+      "median_cpu_seconds": 4.5234375,
+      "row_hits": 12574208,
+      "row_misses": 1744256,
+      "row_conflicts": 361600,
+      "baseline_seconds": [
+        4.155315099997097,
+        4.214657000004081,
+        4.134944899997208,
+        4.177485800013528
+      ],
+      "speedup": 0.9155265654953217,
+      "baseline_cpu_seconds": [
+        4.15625,
+        4.171875,
+        4.078125,
+        4.171875
+      ],
+      "cpu_speedup": 0.9205526770293609,
+      "exact_request_results_and_all_arrays": true
+    },
+    {
+      "name": "continued_read",
+      "physical_bytes": 469762048,
+      "requests": 1,
+      "numeric_seconds": [
+        4.5418983999988995,
+        4.521655100004864,
+        4.490532299998449,
+        4.527225500001805
+      ],
+      "median_seconds": 4.524440300003334,
+      "numeric_cpu_seconds": [
+        4.515625,
+        4.484375,
+        4.484375,
+        4.515625
+      ],
+      "median_cpu_seconds": 4.5,
+      "row_hits": 12578048,
+      "row_misses": 1736704,
+      "row_conflicts": 365312,
+      "baseline_seconds": [
+        4.218974200004595,
+        4.158674100006465,
+        4.153512899996713,
+        4.167226999998093
+      ],
+      "speedup": 0.9201028799074243,
+      "baseline_cpu_seconds": [
+        4.203125,
+        4.140625,
+        4.140625,
+        4.109375
+      ],
+      "cpu_speedup": 0.9201388888888888,
+      "exact_request_results_and_all_arrays": true
+    }
+  ]
+}

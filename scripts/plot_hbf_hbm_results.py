@@ -26,6 +26,8 @@ from matplotlib.ticker import FuncFormatter
 
 
 ROOT = Path(__file__).resolve().parents[1]
+from hbf_hbm_report import uses_current_execution
+from hbf_hbm_serving_study import POINT_RESULT_VERSION
 A, B = "A_hbm_only", "B_all_kv_hbf"
 COLORS = {A: "#2364AA", B: "#E07632"}
 MARKERS = {A: "o", B: "s"}
@@ -522,8 +524,8 @@ def decode_figure(groups,output):
         for ax in axes[i]:
             if ax.axison:
                 ax.set_xticks(range(len(contexts)),labels);ax.set_xlabel(tr('输入上下文','Prompt context'));style(ax)
-    fig.text(.07,.045,tr(f'先真实执行全部prefill，再统计首token之后的{measured_tokens}个token。Decode TPS={measured_tokens}/生成窗口秒数；TPOT=该窗口/{measured_tokens}。\n右列低于1表示HBF KV的吞吐低于HBM KV；全请求窗口含prefill，可能掩盖生成阶段差异。\n70B/1M的A/B共同使用1TiB HBM，其余512GiB；带宽/时序不变，原配置连续地址分配失败另存为负对照。\n* 128K加输出略超原生上下文；1M为架构压力外推。数值来自仿真假设，不是实测设备性能。',
-        f'Real prefill executes first. Decode TPS={measured_tokens} / post-first-token window; TPOT=window / {measured_tokens}.\nRight: below 1 means lower throughput with HBF KV; prefill in the whole-request window can obscure decode impact.\n70B/1M uses 1 TiB HBM for BOTH A/B; other points use 512 GiB. Bandwidth/timing unchanged; original capacity failure retained.\n* 128K plus outputs exceeds native context slightly; 1M is an architecture stress case. Simulation, not hardware measurements.'),fontsize=9)
+    fig.text(.07,.045,tr(f'先真实执行全部prefill，再统计首token之后的{measured_tokens}个token。Decode TPS={measured_tokens}/生成窗口秒数；TPOT=该窗口/{measured_tokens}。\n右列低于1表示HBF KV的吞吐低于HBM KV；全请求窗口含prefill，可能掩盖生成阶段差异。\n70B/1M的A/B共同使用1TiB HBM，其余512GiB；固定命令时钟与方向预算，物理接口/并行度随stack数增加；原容量失败另存为负对照。\n* 128K加输出略超原生上下文；1M为架构压力外推。数值来自仿真假设，不是实测设备性能。',
+        f'Real prefill executes first. Decode TPS={measured_tokens} / post-first-token window; TPOT=window / {measured_tokens}.\nRight: below 1 means lower throughput with HBF KV; prefill in the whole-request window can obscure decode impact.\n70B/1M uses 1 TiB HBM for BOTH A/B; other points use 512 GiB. Fixed command clock and directional budgets; physical interface/parallelism grow with stack count; original capacity failure retained.\n* 128K plus outputs exceeds native context slightly; 1M is an architecture stress case. Simulation, not hardware measurements.'),fontsize=9)
     return save(fig,output,'09_decode_physical',title='固定输出下的独立Decode TPS、TPOT及A/B倍率',
         caption=f'统一{output_tokens}输出，真实prefill后测量{measured_tokens}个Decode token。HBM与HBF均执行对应物理Core；GPU计算和启动继续采用原有简化模型。',
         rows=rows,status='complete' if decode_matrix_complete([group] if group else []) else 'partial_data',observations=group.get('comparisons',[]))
@@ -580,6 +582,8 @@ def main():
                         help="When all figures are complete, attach their manifest to results and refresh report.html")
     args = parser.parse_args()
     payload = json.loads(args.input.read_text(encoding="utf-8-sig"))
+    if not uses_current_execution(payload):
+        parser.error('historical or mixed execution versions cannot produce current figures; rerun the selected experiments with the current model')
     groups = {group["id"]: group for group in payload.get("groups", ())}
     args.output.mkdir(parents=True, exist_ok=True)
     font = setup_font()
@@ -597,7 +601,8 @@ def main():
     for figure in figures:
         figure["report_relative_files"] = {extension: report_path(path) for extension, path in figure["files"].items()}
     complete = all(figure["status"] == "complete" for figure in figures)
-    manifest = {"schema_version": 1, "status": "complete" if complete else "partial_data",
+    manifest = {"schema_version": 1, "point_result_version": POINT_RESULT_VERSION,
+        "status": "complete" if complete else "partial_data",
         "input_results": str(args.input.resolve()), "input_selected_checks_passed": payload.get("all_selected_checks_passed"),
         "output_directory_relative_to_results": report_path(args.output),
         "plotting_python": sys.executable, "matplotlib_version": matplotlib.__version__, **font,

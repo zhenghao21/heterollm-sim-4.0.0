@@ -30,10 +30,25 @@ class _StagedPage:
     ranges: tuple[tuple[int, int], ...] = ()
 
 
+@dataclass
+class _ReadCacheSlot:
+    """A physical page buffer, including scheduled fills and live readers."""
+
+    page_key: Optional[tuple[int, ...]] = None
+    ready_ns: float = 0.0
+    reader_completion_ns: float = 0.0
+    last_use: int = 0
+
+
 class NandCore:
     """Page read/program/erase with optional explicit erase wear.
 
     There is no FTL, garbage collector or cell-content validity model.
+    ``ocp_hbf_0_7`` models complete 4 KiB write units, page order and page-0
+    automatic erase. It does not expose AXI fragments/pending responses,
+    IDs/error packets, ECC, retention, scratchpad or wear-level remapping.
+    Read-cache banks are the mapped channel/target/die/LUN/plane coordinates;
+    replacement is deterministic LRU, an explicit controller policy choice.
     """
 
     def __init__(
@@ -71,6 +86,9 @@ class NandCore:
         self._buffer_merge_bytes = 0
         self._media_drain_completion_ns = 0.0
         self._block_wear_state: Dict[str, dict] = {}
+        self._read_cache: Dict[tuple[int, ...], list[_ReadCacheSlot]] = {}
+        self._cache_use = 0
+        self._next_program_page: Dict[tuple[int, ...], int] = {}
         self._observation_events: list[dict] = []
         self._observe_media = bool(config.detailed_observability or config.wear_model)
 
@@ -117,14 +135,71 @@ class NandCore:
         prefix = str(self.config.metadata.get("channel_resource_prefix", "nand:channel"))
         return self.timeline.canonical_resource_id(f"{prefix}:{mapping.channel}")
 
-    def _host_id(self) -> str:
-        return self.timeline.canonical_resource_id(str(self.config.metadata.get("host_resource_id", "nand:host")))
+    def _host_id(self, mapping=None, operation=None) -> str:
+        prefix = str(self.config.metadata.get("host_resource_id", "nand:host"))
+        if self.config.host_channels > 1:
+            if mapping is None:
+                raise ValueError("a physical mapping is required for a multi-channel host transfer")
+            prefix += ":" + str(mapping.channel % self.config.host_channels)
+        if self.config.host_full_duplex:
+            if operation is None:
+                raise ValueError("a transfer direction is required for a full-duplex host interface")
+            prefix += ":" + Operation(operation).value
+        return self.timeline.canonical_resource_id(prefix)
+
+    def _host_bandwidth(self, operation) -> float:
+        """Configured rates are device aggregates, divided among host channels."""
+        return self.config.host_bandwidth_for(operation) / self.config.host_channels
+
+    @staticmethod
+    def _bank_key(mapping) -> tuple[int, ...]:
+        return (mapping.channel, mapping.target, mapping.die, mapping.lun, mapping.plane)
+
+    def _block_key(self, mapping) -> tuple[int, ...]:
+        return (*self._bank_key(mapping), mapping.block)
+
+    def _cache_slot(self, mapping) -> tuple[Optional[_ReadCacheSlot], bool]:
+        count = self.config.read_cache_pages_per_bank
+        if not count:
+            return None, False
+        slots = self._read_cache.setdefault(self._bank_key(mapping),
+                                           [_ReadCacheSlot() for _ in range(count)])
+        key = self._staged_key(mapping)
+        slot = next((slot for slot in slots if slot.page_key == key), None)
+        hit = slot is not None
+        if slot is None:
+            slot = min(slots, key=lambda candidate: (candidate.page_key is not None, candidate.last_use))
+        self._cache_use += 1
+        slot.last_use = self._cache_use
+        return slot, hit
+
+    def _invalidate_cache(self, mapping, *, block=False) -> None:
+        for slot in self._read_cache.get(self._bank_key(mapping), ()):
+            key = slot.page_key
+            if key is not None and (key == self._staged_key(mapping)
+                                    or (block and key[-2] == mapping.block)):
+                # Invalidate the tag, not the physical buffer's outstanding
+                # read lifetime. Its next fill must still wait for all readers.
+                slot.page_key = None
+
+    def _validate_program_order(self, request, expected=None) -> None:
+        if self.config.protocol_mode != "ocp_hbf_0_7" or request.operation is not Operation.WRITE:
+            return
+        expected = {} if expected is None else expected
+        for segment in split_nand_request(request, self.config):
+            mapping = segment.mapping
+            block = self._block_key(mapping)
+            next_page = expected.get(block, self._next_program_page.get(block, 0))
+            if mapping.page != 0 and mapping.page != next_page:
+                raise ValueError("ocp_hbf_0_7 write order violation: block {} requires page {}, received {}"
+                                 .format(block, next_page, mapping.page))
+            expected[block] = mapping.page + 1
 
     def _bandwidth_ceiling_gb_s(self, operation: Optional[Operation | str] = None) -> float:
         """Return the end-to-end payload ceiling for the NAND data path.
 
-        The device has one host link and independent internal channels. The
-        smaller of host and summed channel bandwidth is the transfer ceiling;
+        The configured host rates aggregate all independent host channels.
+        The smaller of host and summed internal bandwidth is the transfer ceiling;
         a request touching fewer channels or paying array latency can be slower.
         The reservation timeline still models each leg separately; this helper
         only fixes the derived bottleneck/utilization metric.
@@ -216,9 +291,10 @@ class NandCore:
             for segment in split_nand_request(request, self.config)
         )
 
-    def _validate_request(self, request: AccessRequest) -> None:
+    def _validate_request(self, request: AccessRequest, *, program_order=None) -> None:
         """Reject invalid geometry or admission size before mutating calendars."""
         validate_nand_request(request, self.config)
+        self._validate_program_order(request, program_order)
         payload_bytes = self._write_buffer_payload_bytes(request)
         if payload_bytes > self.config.write_buffer_bytes:
             raise ValueError(
@@ -428,6 +504,7 @@ class NandCore:
         host_bytes = 0
         for staged in tuple(self._staged_pages.values()):
             m = staged.mapping
+            self._invalidate_cache(m)
             array_id = self._array_id(m)
             array_resource = self._array_resource_id(m)
             dependency = max(earliest_ns, staged.ready_ns, self._array_ready.get(array_id, 0.0), self._buffer_ready.get(array_id, 0.0))
@@ -568,6 +645,10 @@ class NandCore:
         if (
             not self.capture_details
             and not self._observe_media
+            and self.config.protocol_mode == "generic_nand"
+            and self.config.host_channels == 1
+            and not self.config.host_full_duplex
+            and not self.config.read_cache_pages_per_bank
             and request.operation is not Operation.ERASE
             and page_count >= 128
             and not self._staged_pages
@@ -599,6 +680,7 @@ class NandCore:
         staging_write_pages = 0
         staging_read_hits = 0
         staging_read_merges = 0
+        read_cache_hits = read_cache_misses = 0
         for segment in segments:
             segment_count += 1
             if segment_count > self.config.max_expanded_segments and not details_truncated:
@@ -613,6 +695,7 @@ class NandCore:
             buffer_ready = self._buffer_ready.get(array_id, 0.0)
             dependency = max(request.arrival_ns + self.config.front_ns, array_ready, buffer_ready)
             if request.operation is Operation.ERASE:
+                self._invalidate_cache(m, block=True)
                 stage = self._media_stage("BLOCK_ERASE", m, dependency, self.config.block_erase_ns,
                                           eligible_ns=request.arrival_ns+self.config.front_ns)
                 record(stage)
@@ -625,6 +708,8 @@ class NandCore:
             host_bytes += segment.host_transfer_bytes
             internal_bytes += segment.internal_transfer_bytes
             partial = segment.logical_bytes != self.config.page_bytes
+            if request.operation is Operation.WRITE:
+                self._invalidate_cache(m)
             if (
                 request.operation is Operation.WRITE
                 and self._buffered_write_mode
@@ -635,9 +720,9 @@ class NandCore:
                 # page program for each distinct dirty page.
                 internal_bytes -= segment.internal_transfer_bytes
                 host = self.timeline.transfer(
-                    self._host_id(), segment.host_transfer_bytes,
+                    self._host_id(m, Operation.WRITE), segment.host_transfer_bytes,
                     request.arrival_ns + self.config.front_ns,
-                    self.config.host_bandwidth_for(Operation.WRITE),
+                    self._host_bandwidth(Operation.WRITE),
                     direction="write",
                 )
                 record(StageTiming("HOST_TRANSFER", host.start_ns, host.end_ns, host.resource_id, host.bytes))
@@ -674,9 +759,9 @@ class NandCore:
                     # not charge a stale PAGE_READ or internal NAND transfer.
                     internal_bytes -= segment.internal_transfer_bytes
                     host = self.timeline.transfer(
-                        self._host_id(), segment.host_transfer_bytes,
+                        self._host_id(m, Operation.READ), segment.host_transfer_bytes,
                         max(request.arrival_ns + self.config.front_ns, staged.ready_ns),
-                        self.config.host_bandwidth_for(Operation.READ),
+                        self._host_bandwidth(Operation.READ),
                         direction="read",
                     )
                     record(StageTiming("STAGING_READ", host.start_ns, host.end_ns, host.resource_id, host.bytes))
@@ -684,6 +769,26 @@ class NandCore:
                     completion = max(completion, host.end_ns)
                     staging_read_hits += 1
                     continue
+                cache_slot, cache_hit = self._cache_slot(m)
+                staging_overlay = staged is not None and any(left < logical_end and logical_start < right
+                                                             for left, right in staged.ranges)
+                if cache_hit:
+                    internal_bytes -= segment.internal_transfer_bytes
+                    host_ready = max(request.arrival_ns + self.config.front_ns, cache_slot.ready_ns)
+                    if staging_overlay:
+                        host_ready = max(host_ready, staged.ready_ns)
+                        staging_read_merges += 1
+                    host = self.timeline.transfer(
+                        self._host_id(m, Operation.READ), segment.host_transfer_bytes,
+                        host_ready, self._host_bandwidth(Operation.READ), direction="read")
+                    record(StageTiming("CACHE_READ", host.start_ns, host.end_ns, host.resource_id, host.bytes))
+                    cache_slot.reader_completion_ns = max(cache_slot.reader_completion_ns, host.end_ns)
+                    if staging_overlay:
+                        staged.reader_completion_ns = max(staged.reader_completion_ns, host.end_ns)
+                    read_cache_hits += 1
+                    completion = max(completion, host.end_ns)
+                    continue
+                read_cache_misses += int(cache_slot is not None)
                 read = self._media_stage("PAGE_READ", m, dependency, self.config.page_read_ns,
                                          eligible_ns=request.arrival_ns+self.config.front_ns)
                 record(read)
@@ -691,13 +796,12 @@ class NandCore:
                 dependency = read.end_ns
                 internal = self.timeline.transfer(
                     self._channel_id(m), segment.internal_transfer_bytes,
-                    dependency, self.config.internal_bandwidth_gb_s,
+                    max(dependency, cache_slot.reader_completion_ns if cache_slot is not None else 0.0),
+                    self.config.internal_bandwidth_gb_s,
                     direction="read",
                 )
                 record(StageTiming("INTERNAL_TRANSFER", internal.start_ns, internal.end_ns, internal.resource_id, internal.bytes))
                 host_ready = internal.end_ns
-                staging_overlay = staged is not None and any(left < logical_end and logical_start < right
-                                                             for left, right in staged.ranges)
                 if staging_overlay:
                     # A partial staging hit still reads old media for the
                     # untouched bytes, then overlays dirty host bytes. With
@@ -706,22 +810,34 @@ class NandCore:
                     host_ready = max(host_ready, staged.ready_ns)
                     staging_read_merges += 1
                 host = self.timeline.transfer(
-                    self._host_id(), segment.host_transfer_bytes,
-                    host_ready, self.config.host_bandwidth_for(Operation.READ),
+                    self._host_id(m, Operation.READ), segment.host_transfer_bytes,
+                    host_ready, self._host_bandwidth(Operation.READ),
                     direction="read",
                 )
                 record(StageTiming("HOST_TRANSFER", host.start_ns, host.end_ns, host.resource_id, host.bytes))
                 if staging_overlay:
                     staged.reader_completion_ns = max(staged.reader_completion_ns, host.end_ns)
+                if cache_slot is not None:
+                    cache_slot.page_key = self._staged_key(m)
+                    cache_slot.ready_ns = internal.end_ns
+                    cache_slot.reader_completion_ns = host.end_ns
                 completion = max(completion, host.end_ns)
                 self._array_ready[array_id] = read.end_ns
                 self._buffer_ready[array_id] = internal.end_ns
                 self.timeline.ready_ns[array_id] = read.end_ns
             else:
+                if self.config.protocol_mode == "ocp_hbf_0_7" and m.page == 0:
+                    self._invalidate_cache(m, block=True)
+                    erase = self._media_stage("BLOCK_ERASE", m, dependency, self.config.block_erase_ns,
+                                              eligible_ns=request.arrival_ns + self.config.front_ns)
+                    record(erase)
+                    self._array_ready[array_id] = erase.end_ns
+                    self.timeline.ready_ns[array_id] = erase.end_ns
+                    erases += 1
                 host = self.timeline.transfer(
-                    self._host_id(), segment.host_transfer_bytes,
+                    self._host_id(m, Operation.WRITE), segment.host_transfer_bytes,
                     request.arrival_ns + self.config.front_ns,
-                    self.config.host_bandwidth_for(Operation.WRITE),
+                    self._host_bandwidth(Operation.WRITE),
                     direction="write",
                 )
                 record(StageTiming("HOST_TRANSFER", host.start_ns, host.end_ns, host.resource_id, host.bytes))
@@ -742,6 +858,8 @@ class NandCore:
                 self._array_ready[array_id] = program.end_ns
                 self._buffer_ready[array_id] = program.end_ns
                 self.timeline.ready_ns[array_id] = program.end_ns
+                if self.config.protocol_mode == "ocp_hbf_0_7":
+                    self._next_program_page[self._block_key(m)] = m.page + 1
         return TransactionResult(
             request_id=request.request_id, operation=request.operation,
             arrival_ns=request.arrival_ns, completion_ns=completion,
@@ -760,17 +878,19 @@ class NandCore:
                 "staging_write_pages": staging_write_pages,
                 "staging_read_hits": staging_read_hits,
                 "staging_read_merges": staging_read_merges,
+                "read_cache_hits": read_cache_hits,
+                "read_cache_misses": read_cache_misses,
                 "erase_operations": erases,
                 "page_count": segment_count,
                 "details_truncated": details_truncated,
                 "bandwidth_ceiling_gb_s": (
                     self.config.host_bandwidth_for(request.operation)
-                    if staging_write_pages or staging_read_hits
+                    if staging_write_pages or staging_read_hits or read_cache_hits
                     else self._bandwidth_ceiling_gb_s(request.operation)
                 ),
                 "bandwidth_ceiling_scope": (
-                    "directional host upper bound for transactions using staging; host acknowledgement is not media drain"
-                    if staging_write_pages or staging_read_hits
+                    "directional host upper bound for transactions using cached/staged data; host acknowledgement is not media drain"
+                    if staging_write_pages or staging_read_hits or read_cache_hits
                     else "device transfer upper bound: min(directional host, summed independent channels); excludes array latency"
                 ),
                 "array_units": self.config.array_units,
@@ -847,8 +967,9 @@ class NandCore:
         # Match scalar submission's pre-admission validation for the whole
         # public batch. Unexpected execution failures still require the owning
         # PhysicalRuntimeContext transaction for rollback.
+        program_order = dict(self._next_program_page)
         for request in requests:
-            self._validate_request(request)
+            self._validate_request(request, program_order=program_order)
         return tuple(self.submit(request) for request in requests)
 
     def run(self, requests: Iterable[AccessRequest]):

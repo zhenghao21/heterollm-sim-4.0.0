@@ -212,15 +212,15 @@ class PhysicalConfigCatalogTests(unittest.TestCase):
         self.assertEqual(grown.capacity_bytes, capacity)
         self.assertEqual(grown.parallel_units, base.parallel_units)
 
-    def test_published_hbf_derived_geometry_and_internal_leg_are_central(self):
+    def test_published_hbf_parallelism_is_fixed_not_fitted_to_interface(self):
         config = resolve_physical_config("published_hbf", overrides={
             "capacity_bytes": 128 * 1024 ** 2, "host_bandwidth_gb_s": 100.0,
             "host_read_bandwidth_gb_s": 100.0, "host_write_bandwidth_gb_s": 10.0,
             "page_read_ns": 4000.0, "page_bytes": 4096})
-        self.assertEqual(config.parallel_units, 98)
-        self.assertEqual(config.channels, 98)
-        self.assertEqual(config.blocks_per_plane, 2)
-        self.assertEqual(config.host_granularity_bytes, 4096)
+        self.assertEqual(config.parallel_units, 128)
+        self.assertEqual(config.channels, 128)
+        self.assertEqual(config.blocks_per_plane, 1)
+        self.assertEqual(config.host_granularity_bytes, 64)
         self.assertEqual(config.internal_bandwidth_gb_s, 100000.0)
         self.assertEqual(config.front_ns, 0.0)
 
@@ -236,7 +236,7 @@ class PhysicalConfigCatalogTests(unittest.TestCase):
     def test_bad_derived_inputs_raise_validation_errors(self):
         for updates in ({"page_bytes": 0}, {"page_bytes": True}, {"page_read_ns": float("inf")},
                         {"page_read_ns": "4000"}, {"parallel_units": 0}, {"parallel_units": True},
-                        {"host_read_bandwidth_gb_s": 1e308, "page_read_ns": 1e308}):
+                        {"host_read_bandwidth_gb_s": float("inf")}):
             with self.subTest(updates=updates):
                 with self.assertRaises(ValueError):
                     resolve_physical_config("published_hbf", overrides=updates)

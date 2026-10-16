@@ -1,0 +1,124 @@
+{
+  "status": "complete",
+  "round": "round2",
+  "model": "Llama 3.1 70B",
+  "prompt_tokens": 128,
+  "batch": 1,
+  "output_tokens": 4,
+  "hbm_capacity_gib": 512,
+  "completed_points": 4,
+  "rows": [
+    {
+      "id": "llama3_1-70b-128-1-512-reference-A_hbm_only",
+      "profile": "reference",
+      "placement": "A_hbm_only",
+      "ttft_ms": 533.901044375,
+      "tpot_ms": 123.86051145833333,
+      "decode_tokens_per_second": 8.073598180937594,
+      "end_to_end_tokens_per_second": 4.417533913818549,
+      "wall_seconds": 13012.7193386,
+      "completed_at_utc": "2026-10-15T19:39:47.969295+00:00",
+      "hbm_committed_transfer_bytes": 560095255136,
+      "hbm_committed_bursts": 17502976723,
+      "numeric_wall_percent": 89.26899237565466,
+      "checks_passed": true
+    },
+    {
+      "id": "llama3_1-70b-128-1-512-reference-B_all_kv_hbf",
+      "profile": "reference",
+      "placement": "B_all_kv_hbf",
+      "ttft_ms": 546.80658125,
+      "tpot_ms": 131.02492520833331,
+      "decode_tokens_per_second": 7.632135629232161,
+      "end_to_end_tokens_per_second": 4.255856306480587,
+      "wall_seconds": 12490.251060800001,
+      "completed_at_utc": "2026-10-15T19:31:05.493524+00:00",
+      "hbm_committed_transfer_bytes": 559882590816,
+      "hbm_committed_bursts": 17496330963,
+      "numeric_wall_percent": 89.52857243299228,
+      "checks_passed": true
+    },
+    {
+      "id": "llama3_1-70b-128-1-512-ramulator2-A_hbm_only",
+      "profile": "ramulator2",
+      "placement": "A_hbm_only",
+      "ttft_ms": 534.104153125,
+      "tpot_ms": 130.1898,
+      "decode_tokens_per_second": 7.681093296095393,
+      "end_to_end_tokens_per_second": 4.325850984362768,
+      "wall_seconds": 13242.052903300006,
+      "completed_at_utc": "2026-10-15T19:43:37.282224+00:00",
+      "hbm_committed_transfer_bytes": 560095255136,
+      "hbm_committed_bursts": 17502976723,
+      "numeric_wall_percent": 89.29275410848804,
+      "checks_passed": true
+    },
+    {
+      "id": "llama3_1-70b-128-1-512-ramulator2-B_all_kv_hbf",
+      "profile": "ramulator2",
+      "placement": "B_all_kv_hbf",
+      "ttft_ms": 546.908638125,
+      "tpot_ms": 137.369695625,
+      "decode_tokens_per_second": 7.279625942608621,
+      "end_to_end_tokens_per_second": 4.170934379758205,
+      "wall_seconds": 12828.229018700004,
+      "completed_at_utc": "2026-10-15T19:36:43.501928+00:00",
+      "hbm_committed_transfer_bytes": 559882590816,
+      "hbm_committed_bursts": 17496330963,
+      "numeric_wall_percent": 89.71182416888752,
+      "checks_passed": true
+    }
+  ],
+  "comparisons": [
+    {
+      "comparison": "ramulator2 vs reference / A_hbm_only",
+      "ttft_ms_change_percent": 0.03804239608442561,
+      "tpot_ms_change_percent": 5.110013245662914,
+      "decode_tokens_per_second_change_percent": -4.861585578644922,
+      "end_to_end_tokens_per_second_change_percent": -2.0754323847743783
+    },
+    {
+      "comparison": "ramulator2 vs reference / B_all_kv_hbf",
+      "ttft_ms_change_percent": 0.018664163618287155,
+      "tpot_ms_change_percent": 4.84241483563399,
+      "decode_tokens_per_second_change_percent": -4.618755532506247,
+      "end_to_end_tokens_per_second_change_percent": -1.9954133929067974
+    },
+    {
+      "comparison": "B vs A / reference",
+      "ttft_ms_change_percent": 2.417215139578466,
+      "tpot_ms_change_percent": 5.784259781948409,
+      "decode_tokens_per_second_change_percent": -5.467977744393582,
+      "end_to_end_tokens_per_second_change_percent": -3.6599064204626996
+    },
+    {
+      "comparison": "B vs A / ramulator2",
+      "ttft_ms_change_percent": 2.397376040811894,
+      "tpot_ms_change_percent": 5.514944815185219,
+      "decode_tokens_per_second_change_percent": -5.226695445697227,
+      "end_to_end_tokens_per_second_change_percent": -3.5811821804440536
+    }
+  ],
+  "validation": {
+    "configuration_and_execution_checks": true,
+    "independent_four_point_review": true,
+    "regression_passed": 595,
+    "subtests_passed": 33,
+    "small_full_result_groups_exact": 4,
+    "large_prefix_requests_exact": 256
+  },
+  "speedup_boundary": {
+    "full_70b_before_after_speedup_measured": false,
+    "small_measured_wall_reduction_percent": [
+      23.366585445260256,
+      25.797497875747776
+    ],
+    "second_round_numeric_candidates_adopted": 0
+  },
+  "limitations": [
+    "One request and three post-first-token samples; no tail-latency or steady-state throughput claim.",
+    "Engineering timing inputs, not vendor-calibrated.",
+    "HBF uses generic_nand / analytical_page_service; not complete OCP 0.7.0 protocol execution.",
+    "Original 70B/235B eight-process run had no completed baseline; runtime comparisons across concurrency are not controlled speedup measurements."
+  ]
+}

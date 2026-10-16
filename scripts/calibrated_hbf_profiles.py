@@ -53,7 +53,9 @@ GB = 1_000_000_000
 GIB = 1024 ** 3
 US = 1_000.0
 MS = 1_000_000.0
-PAGE = 16_384
+PAGE = 4096
+HBM_REFERENCE_CLOCK_NS = 0.625
+HBM_REFERENCE_STACK_BYTES = 64 * GIB
 
 
 @dataclass(frozen=True)
@@ -242,6 +244,8 @@ def _profile_specs() -> tuple[CalibratedProfile, ...]:
             bandwidth={
                 "hbm_read_gb_s": 1600,
                 "hbm_write_gb_s": 1600,
+                "hbm_interface_gb_s": 1600,
+                "hbm_interface_source": "explicit aggregate interface assumption for this paper probe; not a disclosed pin speed",
                 "hbf_read_gb_s": 11200,
                 "hbf_write_gb_s": 112,
                 "source": "Table I; HBF write is aggregate modeled bandwidth",
@@ -293,6 +297,8 @@ def _profile_specs() -> tuple[CalibratedProfile, ...]:
             bandwidth={
                 "hbm_read_gb_s": 4000,
                 "hbm_write_gb_s": 4000,
+                "hbm_interface_gb_s": 4000,
+                "hbm_interface_source": "explicit aggregate interface assumption for this paper probe; not a disclosed pin speed",
                 "hbf_read_gb_s": 1200,
                 "hbf_write_gb_s": 1200,
             },
@@ -349,6 +355,8 @@ def _profile_specs() -> tuple[CalibratedProfile, ...]:
             bandwidth={
                 "hbm_read_gb_s": 8000,
                 "hbm_write_gb_s": 8000,
+                "hbm_interface_gb_s": 8000,
+                "hbm_interface_source": "explicit aggregate interface assumption for this paper probe; not a disclosed pin speed",
                 "hbf_read_gb_s": 8000,
                 "hbf_write_gb_s": None,
                 "hbf_bandwidth_basis": "matching HBM; write bandwidth not separately disclosed",
@@ -407,7 +415,9 @@ def _profile_by_id(profile_id: str) -> CalibratedProfile:
 def _hbm_physical_config(*, capacity_bytes: int, read_gb_s: float, write_gb_s: float,
                          stacks: Optional[int] = None,
                          interface_gb_s: Optional[float] = None,
+                         clock_ns: Optional[float] = None,
                          interface_input_scope: Optional[str] = None,
+                         parameter_profile: Optional[str] = None,
                          profile_id: str = "hbm3e_reference"):
     """Apply a paper/user capacity budget to an explicitly selected reference.
 
@@ -415,44 +425,74 @@ def _hbm_physical_config(*, capacity_bytes: int, read_gb_s: float, write_gb_s: f
     die density, stack height or timings. Preserve their declared units and
     let the shared catalog select and label a covering reference organization.
     """
+    if interface_gb_s is not None and clock_ns is not None:
+        raise ValueError("choose an independent HBM clock or physical interface bandwidth, not both")
+    selected_stacks = (stacks if stacks is not None else
+                       max(1, (capacity_bytes + HBM_REFERENCE_STACK_BYTES - 1) // HBM_REFERENCE_STACK_BYTES))
     overrides = {"capacity_bytes": capacity_bytes,
-        "interface_bandwidth_gb_s": (max(read_gb_s, write_gb_s)
-                                      if interface_gb_s is None else interface_gb_s),
+        "stacks": selected_stacks, "dies_per_stack": 16, "die_density_gbits": 32,
+        "interface_bandwidth_gb_s": interface_gb_s,
         "read_bandwidth_gb_s": read_gb_s, "write_bandwidth_gb_s": write_gb_s,
         "metadata": {
+            "model_abstraction": "analytical_capacity_bandwidth_comparison",
+            "target_hardware_calibrated": False,
+            "stack_organization_assumption": "fixed 16H x 32 Gbit, 64 GiB per stack; capacity changes select stack count, not density or frequency",
             "capacity_input_scope": "paper_or_user_usable_capacity_budget",
             "capacity_input_units": "GB inputs use 10^9 bytes; GiB inputs use 2^30 bytes; neither identifies a physical DRAM part",
             "source_stack_count": stacks,
             "source_stack_count_status": "declared_input" if stacks is not None else "unknown_reference_selected",
             "source_device_geometry_known": False,
             "interface_input_scope": interface_input_scope or (
-                "assumed_peak_equals_max_directional_budget"
+                "independent_reference_command_clock"
                 if interface_gb_s is None else "declared_physical_interface_budget"),
         }}
-    if stacks is not None:
-        overrides["stacks"] = stacks
-    return resolve_physical_config(profile_id, overrides=overrides)
+    if interface_gb_s is None:
+        overrides.update(bandwidth_input_mode="data_rate",
+                         command_clock_ns=HBM_REFERENCE_CLOCK_NS if clock_ns is None else clock_ns)
+        overrides["metadata"]["clock_assumption"] = (
+            "0.625 ns default is an explicit analytical reference, not a vendor speed-bin guarantee; directional budgets do not set the clock"
+            if clock_ns is None else "explicit independent command clock; not a vendor calibration")
+    config = resolve_physical_config(profile_id, overrides=overrides)
+    # The normal HBM3 service reference includes all ordinary-access gates.
+    # Other authored geometry/timing controls keep their separate research
+    # meaning unless the caller explicitly selects a parameter pack.
+    selected_parameters = (parameter_profile if parameter_profile is not None else
+        "reference" if profile_id == "hbm3e_reference" else "none")
+    from heterollm_sim.hbm_timing_profiles import apply_hbm_timing_profile
+    return apply_hbm_timing_profile(config, selected_parameters)
 
 
 def _hbm_core(*, capacity_bytes: int, read_gb_s: float, write_gb_s: float,
               stacks: Optional[int] = None,
               interface_gb_s: Optional[float] = None,
+              clock_ns: Optional[float] = None,
+              parameter_profile: Optional[str] = None,
               profile_id: str = "hbm3e_reference") -> DramCore:
     return DramCore(_hbm_physical_config(capacity_bytes=capacity_bytes,
         read_gb_s=read_gb_s, write_gb_s=write_gb_s, stacks=stacks,
-        interface_gb_s=interface_gb_s, profile_id=profile_id), capture_details=False)
+        interface_gb_s=interface_gb_s, clock_ns=clock_ns, profile_id=profile_id,
+        parameter_profile=parameter_profile), capture_details=False)
 
 
 def _hbf_core(*, capacity_bytes: int, read_gb_s: float, write_gb_s: float,
               page_bytes: Optional[int] = None, read_latency_ns: Optional[float] = None,
               program_ns: Optional[float] = None, parallel_units: Optional[int] = None,
-              host_granularity_bytes: Optional[int] = None) -> NandCore:
+              host_granularity_bytes: Optional[int] = None,
+              host_channels: int = 1, host_full_duplex: bool = False,
+              read_cache_pages_per_bank: int = 0) -> NandCore:
     """Resolve unspecified geometry and timing in the shared catalog."""
     overrides = {"capacity_bytes": capacity_bytes,
         "host_bandwidth_gb_s": max(read_gb_s, write_gb_s),
         "host_read_bandwidth_gb_s": read_gb_s,
         "host_write_bandwidth_gb_s": write_gb_s,
-        "write_buffer_bytes": 0}
+        "write_buffer_bytes": 0, "protocol_mode": "generic_nand",
+        "host_channels": host_channels, "host_full_duplex": host_full_duplex,
+        "read_cache_pages_per_bank": read_cache_pages_per_bank,
+        "metadata": {"model_abstraction": "analytical_page_service",
+            "model_scope": "logical model buffers with RMW; no OCP physical write-order claim or invented FTL cost",
+            "target_hardware_calibrated": False,
+            "address_scope": "logical model buffers mapped directly to equivalent page services; no FTL or physical OCP write-order claim",
+            "parallelism_basis": "explicit effective service units or the catalog's fixed sensitivity assumption; never inferred from desired interface throughput"}}
     overrides.update({key: value for key, value in {
         "page_bytes": page_bytes, "page_read_ns": read_latency_ns,
         "page_program_ns": program_ns, "parallel_units": parallel_units,
@@ -460,6 +500,29 @@ def _hbf_core(*, capacity_bytes: int, read_gb_s: float, write_gb_s: float,
     config = resolve_physical_config("published_hbf", overrides=overrides,
         expand_geometry=True)
     return NandCore(config, capture_details=False)
+
+
+def hbf_service_summary(config) -> dict[str, Any]:
+    """Separate interface budgets from ideal cold-array service ceilings."""
+    units = config.array_units
+    def ceiling(latency):
+        return units * config.page_bytes / latency if latency > 0 else None
+    return {
+        "model_abstraction": "analytical_page_service" if config.protocol_mode == "generic_nand" else "ocp_physical_protocol_subset",
+        "protocol_mode": config.protocol_mode,
+        "host_channels": config.host_channels,
+        "host_full_duplex": config.host_full_duplex,
+        "read_cache_pages_per_bank": config.read_cache_pages_per_bank,
+        "interface_read_cap_gb_s": config.host_bandwidth_for("read"),
+        "interface_write_cap_gb_s": config.host_bandwidth_for("write"),
+        "ideal_cold_array_read_ceiling_gb_s": ceiling(config.page_read_ns),
+        "ideal_array_program_ceiling_gb_s": ceiling(config.page_program_ns),
+        "effective_parallel_units": units,
+        "page_bytes": config.page_bytes, "host_granularity_bytes": config.host_granularity_bytes,
+        "page_read_ns": config.page_read_ns, "page_program_ns": config.page_program_ns,
+        "ceiling_scope": "units * page bytes / array latency; excludes transfer, commands, erase, RMW and queueing; read cache hits do not use this cold-array ceiling",
+        "calibrated_to_silicon": False,
+    }
 
 
 def hbm_protocol_summary(config) -> dict[str, Any]:
@@ -474,11 +537,15 @@ def hbm_protocol_summary(config) -> dict[str, Any]:
             "read_latency_ns", "write_latency_ns", "refresh_policy",
             "refresh_interval_ns", "refresh_cycle_ns", "bandwidth_input_mode",
             "interface_bandwidth_gb_s", "data_rate_mt_s", "effective_pin_data_rate_gbps",
-            "read_bandwidth_gb_s", "write_bandwidth_gb_s")},
+            "read_bandwidth_gb_s", "write_bandwidth_gb_s",
+            "address_mapping", "scheduler", "scheduler_window", "queue_scope", "max_outstanding_requests",
+            "activate_same_group_ns", "activate_different_group_ns", "four_activate_window_ns",
+            "read_to_precharge_ns", "write_to_read_same_group_ns", "write_to_read_different_group_ns",
+            "read_to_write_command_ns")},
         **{key: metadata.get(key) for key in (
             "geometry_status", "control_status", "timing_validation", "timing_constraint_validation", "timing_basis",
             "unknown_parameters", "unconfigured_timing_parameters", "control_limitations", "accounting_basis",
-            "interface_input_scope", "operating_point_basis", "directional_cap_basis")},
+            "interface_input_scope", "operating_point_basis", "directional_cap_basis", "hbm_parameter_profile")},
     }
 
 
@@ -584,6 +651,7 @@ def _profile_hardware(profile: CalibratedProfile, *,
             read_gb_s=hbm_read,
             write_gb_s=hbm_write or hbm_read,
             interface_gb_s=bw.get("hbm_interface_gb_s"),
+            clock_ns=bw.get("hbm_command_clock_ns"),
             stacks=int(p.hardware["hbm_stacks"]) if p.hardware.get("hbm_stacks") else None,
         )
     hbf_cap = p.hardware.get("hbf_capacity_gb")
@@ -620,6 +688,9 @@ def _profile_hardware(profile: CalibratedProfile, *,
             program_ns=program_ns,
             parallel_units=parallel_units,
             host_granularity_bytes=host_granularity,
+            host_channels=p.hardware.get("hbf_host_channels", 1),
+            host_full_duplex=p.hardware.get("hbf_host_full_duplex", False),
+            read_cache_pages_per_bank=p.buffering.get("read_cache_pages_per_bank", 0),
         )
     return hbm, hbf, {
         "bandwidth_variant": applied,
@@ -635,6 +706,7 @@ def _profile_hardware(profile: CalibratedProfile, *,
         "hbf_host_granularity_bytes": hbf.config.host_granularity_bytes if hbf else None,
         "hbf_read_latency_ns": hbf.config.page_read_ns if hbf else None,
         "hbf_program_ns": hbf.config.page_program_ns if hbf else None,
+        "hbf_service": hbf_service_summary(hbf.config) if hbf else None,
     }
 
 
@@ -697,6 +769,7 @@ def _full_backend_scenario(
     physical_hbm = _hbm_physical_config(capacity_bytes=hbm_capacity,
         read_gb_s=hbm_read, write_gb_s=hbm_write, stacks=hbm_stacks,
         interface_gb_s=bw.get("hbm_interface_gb_s"),
+        clock_ns=bw.get("hbm_command_clock_ns"),
         profile_id=hbm_timing_profile or (
             "hbm4_reference" if profile.profile_id == "son_hbf_plus" else "hbm3e_reference"))
     hbm0 = base.hardware.get_component("hbm0")

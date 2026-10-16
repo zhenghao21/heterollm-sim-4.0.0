@@ -4,5 +4,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Local JEDEC protocol copies; source references are recorded in code/docs.
-.refs/jedec/
+# Local protocol copies; source references are recorded in code/docs.
+.refs/
+
+# Temporary source backups and rendered reference pages.
+tmp/

@@ -32,7 +32,7 @@ def run_point(point):
     measured = {}
     row = run_case(architecture, row_id=f"bank-group/{profile}/{context}/{architecture}",
         model_id="small", prompt=context, batch=1, output=output,
-        hbm_timing_profile=profile,
+        hbm_timing_profile=profile, hbm_parameter_profile="none",
         result_observer=lambda result: measured.update(decode_measurement(result.serving)))
     if not row.get("executed_serving"):
         raise RuntimeError("Bank-group point was rejected: " + str(row))

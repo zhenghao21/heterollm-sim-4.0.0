@@ -78,7 +78,10 @@ class ServingStudyTests(unittest.TestCase):
 
     def test_capacity_rejection_is_not_reported_as_executed_throughput(self):
         import hbf_hbm_experiments as experiments
-        parameters = dict(prompt=8, output=2, hbm_capacity_bytes=study.GIB)
+        # Two reference stacks provide 1638.4 GB/s, enough for the fixed
+        # 1600 GB/s direction budget. The mocked allocator below, not an
+        # invalid one-stack interface, must trigger the capacity rejection.
+        parameters = dict(prompt=8, output=2, hbm_capacity_bytes=128 * study.GIB)
         with mock.patch.object(experiments, 'serving_row', side_effect=self._raise_capacity_failure):
             row = study.run_case('A_hbm_only', row_id='capacity/rejected', **parameters)
         self.assertEqual(row['id'], 'capacity/rejected')
@@ -88,7 +91,7 @@ class ServingStudyTests(unittest.TestCase):
         self.assertTrue(row['attempted_serving'])
         self.assertIsNone(row['node_tps'])
         self.assertIsNone(row['goodput_tps'])
-        self.assertEqual(row['fixed_inventory']['hbm0']['capacity_bytes'], study.GIB)
+        self.assertEqual(row['fixed_inventory']['hbm0']['capacity_bytes'], 128 * study.GIB)
         self.assertGreater(row['model_structure']['weight_bytes'], 0)
         self.assertEqual(row['capacity_failure']['largest_free_extent_bytes'], 192)
         self.assertNotIn('completed_requests', row)

@@ -1,0 +1,28 @@
+{
+  "variant": "row_hit_first",
+  "workload": "hot_row_conflicts",
+  "requests": 256,
+  "logical_bytes": 8192,
+  "duration_ns": 1723.75,
+  "effective_gb_s": 4.752429296591733,
+  "request_latency_ns": {
+    "p50": 863.125,
+    "p95": 1622.5,
+    "p99": 1706.875
+  },
+  "counters": {
+    "activate_commands": 10,
+    "precharge_commands": 9,
+    "read_commands": 256,
+    "write_commands": 0,
+    "refresh_commands": 0,
+    "row_hits": 246,
+    "row_misses": 1,
+    "row_conflicts": 9,
+    "queue_wait_ns": 126721.875,
+    "scheduler_reordered_requests": 123,
+    "scheduler_batches": 1
+  },
+  "wall_seconds": 0.07430400000157533,
+  "compiled_requests": 0
+}

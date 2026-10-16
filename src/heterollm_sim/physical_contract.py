@@ -12,7 +12,7 @@ from ._hbm_dependencies import normalize_hbm_dependencies
 from ._hbm_errors import HBMConfigError
 
 from .memory_types import (
-    DRAM_BANK_GROUP_TIMING_FIELDS, HBM_CONTROL_TIMING_FIELDS,
+    DRAM_BANK_GROUP_TIMING_FIELDS, HBM_CONTROL_TIMING_FIELDS, DRAM_CONTROLLER_FIELDS,
     DramConfig, NandConfig, Operation, parse_physical_memory_config,
 )
 
@@ -33,6 +33,7 @@ _DRAM_REQUIRED = frozenset({
     "read_to_write_ns", "write_to_read_ns", "max_outstanding_requests",
     "control_mode", "bank_geometry_scope", "stack_interface_mode",
     *DRAM_BANK_GROUP_TIMING_FIELDS,
+    *DRAM_CONTROLLER_FIELDS,
 })
 _NAND_REQUIRED = frozenset({
     "kind", "channels", "targets_per_channel", "dies_per_target", "luns_per_die",
@@ -41,6 +42,7 @@ _NAND_REQUIRED = frozenset({
     "host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s",
     "page_read_ns", "page_program_ns", "block_erase_ns", "front_ns",
     "planes_independent", "partial_page_policy", "max_outstanding_requests",
+    "protocol_mode", "host_channels", "host_full_duplex", "read_cache_pages_per_bank",
 })
 
 

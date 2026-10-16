@@ -1,0 +1,45 @@
+{
+  "profile": "hbm3e_timing_reference",
+  "capacity_gib": 512,
+  "clock_ns": 0.625,
+  "refresh_policy": "all_bank",
+  "repetitions": 3,
+  "arrival_ns": 0.0,
+  "baseline_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_round2_20261015\\_hbm_numeric_baseline.py",
+  "candidate_source": "C:\\Users\\A\\AppData\\Local\\Temp\\heterollm_numeric_round2_20261015\\_hbm_numeric_deadline_fixed.py",
+  "cases": [
+    {
+      "name": "alternating_row_conflicts",
+      "physical_bytes": 2097152,
+      "requests": 65536,
+      "numeric_seconds": [
+        0.8585088000108954,
+        0.8892117999930633,
+        0.8669632999954047
+      ],
+      "median_seconds": 0.8669632999954047,
+      "numeric_cpu_seconds": [
+        0.859375,
+        0.859375,
+        0.875
+      ],
+      "median_cpu_seconds": 0.859375,
+      "row_hits": 0,
+      "row_misses": 964,
+      "row_conflicts": 64572,
+      "baseline_seconds": [
+        0.7106972000037786,
+        0.6873405999940587,
+        0.7511047000007238
+      ],
+      "speedup": 0.819754653983099,
+      "baseline_cpu_seconds": [
+        0.71875,
+        0.6875,
+        0.75
+      ],
+      "cpu_speedup": 0.8363636363636363,
+      "exact_request_results_and_all_arrays": true
+    }
+  ]
+}

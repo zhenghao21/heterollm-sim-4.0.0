@@ -26,6 +26,12 @@ def full_page_period(config):
 def execute_full_pages(core, request, first_page, page_count):
     """Return a scalar result, or None when ordinary page execution is needed."""
     config, timeline = core.config, core.timeline
+    # This affine program has no page-tag, cache-reader, or OCP page-order
+    # state. Those configurations execute the same detailed NAND state
+    # machine; never skip their protocol/cache transitions.
+    if (config.protocol_mode != "generic_nand" or config.host_channels != 1
+            or config.host_full_duplex or config.read_cache_pages_per_bank):
+        return None
     period = full_page_period(config)
     # Bound compilation independently of unusual user-defined geometry.
     if type(timeline) is not ResourceTimeline or period > 4096 or page_count < 3 * period:

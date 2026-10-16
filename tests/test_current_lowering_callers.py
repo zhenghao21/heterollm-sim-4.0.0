@@ -78,3 +78,100 @@ def test_cold_cim_shared_backing_is_compiled_from_the_current_shard_ledger():
         assert replica.physical_bytes == row["physical_bytes"]
         assert replica.component_id == row["storage_component_id"]
     assert not validate_scenario(scenario).errors
+
+
+@pytest.mark.parametrize("native_gather", [False, True])
+def test_remote_embedding_keeps_one_table_allocation_across_cohorts(tmp_path, native_gather):
+    from hbf_hbm_ablation_paths import build_path_scenario
+    from heterollm_sim.config import model_from_dict
+    from heterollm_sim.data_motion import PhysicalRuntimeContext, register_physical_allocations
+    from heterollm_sim.gguf_model_catalog import GGUFModelCatalog
+    from heterollm_sim.llama_tensor_storage import apply_llama_tensor_storage_contract
+    from heterollm_sim.planner import compile_serving_cohort_schedule
+    from heterollm_sim.serving import BatchCohort, BatchItem
+
+    scenario, _ = build_path_scenario("direct", prompt=32, output=12)
+    prefill_rows, row_bytes = 32, 256
+    if native_gather:
+        payload = GGUFModelCatalog(tmp_path).derive(
+            "qwen3-0_6b", "embedding-allocation", {"layer_count": 1}, save=False)["model"]
+        model = model_from_dict(payload)
+        placement = replace(scenario.placement, model_name=model.name,
+            op_to_component={}, tensor_to_component={}, tensor_bytes={},
+            parallel=replace(scenario.placement.parallel, layer_to_stage={}),
+            metadata={"llama_backend_memory": scenario.placement.metadata["llama_backend_memory"]})
+        scenario = replace(scenario, model=model, placement=placement,
+                           workload=replace(scenario.workload, mtp=None))
+        scenario = apply_llama_tensor_storage_contract(
+            scenario, model.metadata["llama_cpp_tensor_storage_contract"])
+        policy = PlacementPolicy(weight_tensor_targets={"embedding_weights": "hbf_weights"},
+                                 operator_targets={"embedding": "gpu0"})
+        scenario = plan_runtime_placement(scenario, policy).apply(scenario)
+        prefill_rows, row_bytes = 2, 2048
+    else:
+        scenario = plan_runtime_placement(scenario).apply(scenario)
+    assert "embedding_weights" not in scenario.placement.tensor_bytes
+    shard, = shard_rows(scenario)["embedding_weights"]
+    capacity = shard["physical_bytes"]
+    runtime = PhysicalRuntimeContext(capture_details=False)
+    first_allocation = None
+    for phase, rows, context in (("prefill", prefill_rows, 0), ("decode", 1, prefill_rows)):
+        item = BatchItem("embedding-request", phase, rows, context, main_tokens=rows,
+            draft_tokens=0, verifier_tokens=rows, committed_tokens=rows, logit_tokens=1)
+        schedule = compile_serving_cohort_schedule(
+            scenario, BatchCohort(phase, phase, 0., (item,)))
+        task, = (task for task in schedule.tasks if task.metadata.get("event_kind") == "embedding"
+                 and task.metadata.get("phase") == "gpu_memory")
+        accesses = [row for row in task.metadata["memory_accesses"]
+                    if "embedding_weights" in row["buffer_id"]]
+        declaration, = (row for row in task.metadata["physical_allocations"]
+                        if "embedding_weights" in row["buffer_id"])
+        assert declaration["size_bytes"] == capacity
+        assert sum(row["byte_count"] for row in accesses) == rows * row_bytes
+        assert all(row["allocation_size_bytes"] == capacity for row in accesses)
+        register_physical_allocations(task, runtime)
+        allocation = runtime.allocators[declaration["physical_owner"]].get_allocation(
+            declaration["buffer_id"], declaration["generation"])
+        assert allocation.size_bytes == capacity
+        if first_allocation is None:
+            first_allocation = allocation
+        else:
+            assert allocation == first_allocation
+        if native_gather:
+            assert task.metadata["native_get_rows_storage"]["qualified"]
+            assert task.metadata["lookup_read_bytes"] == rows * 2048
+            assert task.metadata["lookup_index_read_bytes"] == rows * 4
+            assert task.metadata["lookup_write_bytes"] == rows * 1024 * 4
+
+
+@pytest.mark.parametrize("table_bytes", [524288, 524289])
+def test_embedding_allocation_capacity_is_the_rank_shard_not_the_whole_table(table_bytes):
+    scenario = configured_scenario(tp=2)
+    graph = replace(scenario.model.graph, tensors=tuple(
+        replace(tensor, logical_bytes=table_bytes)
+        if tensor.tensor_id == "embedding_weights" else tensor
+        for tensor in scenario.model.graph.tensors))
+    scenario = replace(scenario, model=replace(scenario.model, graph=graph),
+        placement=replace(scenario.placement, metadata={**scenario.placement.metadata,
+            "llama_backend_memory": {"hbf0": {"device_ids": ["gpu0", "gpu1"],
+                "buffer_kind": "HBF", "access": "direct"}}}))
+    scenario = plan_runtime_placement(scenario, PlacementPolicy(
+        weight_tensor_targets={"embedding_weights": "hbf0"})).apply(scenario)
+    capacities = {row["rank_id"]: row["physical_bytes"]
+                  for row in shard_rows(scenario)["embedding_weights"]}
+    assert capacities == {0: (table_bytes + 1) // 2, 1: table_bytes // 2}
+    tasks = [task for task in compile_scenario(scenario).tasks
+             if task.metadata.get("event_kind") == "embedding"
+             and task.metadata.get("phase") == "gpu_memory"]
+    assert {task.metadata["rank"] for task in tasks} == set(capacities)
+    for task in tasks:
+        capacity = capacities[task.metadata["rank"]]
+        assert task.metadata["weight_buffer_size_bytes"] == capacity
+        declaration, = (row for row in task.metadata["physical_allocations"]
+                        if "embedding_weights" in row["buffer_id"])
+        assert declaration["size_bytes"] == capacity
+        accesses = [row for row in task.metadata["memory_accesses"]
+                    if "embedding_weights" in row["buffer_id"]]
+        assert accesses
+        assert all(row["allocation_size_bytes"] == capacity for row in accesses)
+        assert sum(row["byte_count"] for row in accesses) == 256

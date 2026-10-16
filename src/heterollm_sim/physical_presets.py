@@ -12,11 +12,12 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict
-from math import ceil, isfinite
+from math import isfinite
 from typing import Any, Dict, Mapping
 
 from .memory_types import DramConfig, NandConfig, DRAM_BANK_GROUP_TIMING_FIELDS, HBM_CONTROL_TIMING_FIELDS
 from .hbm_geometry import make_hbm_geometry_config, normalize_hbm_generation
+from .hbm_timing_profiles import apply_hbm_timing_profile
 from .physical_contract import parse_execution_physical_config, reconfigure_physical_config
 
 
@@ -29,6 +30,8 @@ _DRAM_RESEARCH_BASE = {
     "stacks": 1, "dies_per_stack": 1, "ranks_per_channel": 1,
     "bank_geometry_scope": "per_die", "stack_interface_mode": "shared",
     "control_mode": "analytical", "activated_row_msb": None, "refresh_policy": "disabled",
+    "address_mapping": "bank_interleaved", "scheduler": "fcfs", "scheduler_window": 16,
+    "queue_scope": "device",
     **{name: 0.0 for name in HBM_CONTROL_TIMING_FIELDS},
     "bank_groups_per_rank": 1, "banks_per_group": 8,
     "rows_per_bank": 524288, "row_bytes": 8192, "burst_bytes": 64,
@@ -56,6 +59,8 @@ _DRAM_RESEARCH_BASE = {
 }
 _NAND_RESEARCH_BASE = {
     "kind": "HBF", "generation": "", "channels": 1,
+    "protocol_mode": "generic_nand", "host_channels": 1,
+    "host_full_duplex": False, "read_cache_pages_per_bank": 0,
     "targets_per_channel": 1, "dies_per_target": 1, "luns_per_die": 1,
     "planes_per_lun": 1, "planes_independent": False, "parallel_units": None,
     "blocks_per_plane": 2048, "pages_per_block": 256, "page_bytes": 16384,
@@ -111,10 +116,25 @@ _PHYSICAL_CONFIG_CATALOG = {
 }
 _PHYSICAL_CONFIG_CATALOG["published_hbf"] = _preset(
     _NAND_RESEARCH_BASE, channels=128, parallel_units=128, capacity_bytes=512 * 1024 ** 3,
+    blocks_per_plane=4096, page_bytes=4096, host_granularity_bytes=64,
     front_ns=0.0, internal_bandwidth_gb_s=488000.0,
     metadata={"published_input_scope": "capacity, read/write bandwidth, page size and page latency are caller-selected published inputs; undisclosed geometry is an equivalent analytical mapping",
               "bandwidth_mapping": "effective shared tier on host leg; internal leg is 1000 times shared host bandwidth",
-              "parallelism_mapping": "explicit effective units, otherwise ceil(read bandwidth * page read latency / page bytes); channels map one-to-one to effective units"})
+              "model_abstraction": "analytical_page_service",
+              "model_scope": "logical buffers served by equivalent NAND pages; no FTL or OCP physical write-order guarantee",
+              "parallelism_mapping": "explicit effective units, otherwise a fixed 128-unit sensitivity assumption; never derived to meet an interface throughput target; internal channels map one-to-one to effective units"})
+_PHYSICAL_CONFIG_CATALOG["hbf_ocp_0_7"] = _preset(
+    _NAND_RESEARCH_BASE, protocol_mode="ocp_hbf_0_7",
+    channels=64, parallel_units=64, host_channels=16, host_full_duplex=True,
+    read_cache_pages_per_bank=2, page_bytes=4096, host_granularity_bytes=64,
+    blocks_per_plane=8192, capacity_bytes=512 * 1024 ** 3,
+    host_bandwidth_gb_s=1600.0, host_read_bandwidth_gb_s=1600.0,
+    host_write_bandwidth_gb_s=16.0, internal_bandwidth_gb_s=1600000.0, front_ns=0.0,
+    metadata={"model_abstraction": "ocp_physical_protocol_subset",
+              "model_scope": "strict OCP physical read/write subset; not a complete device implementation",
+              "protocol_basis": "OCP HBF v0.7.0 physical full-page writes, sequential block programming and page-0 erase; 64-byte reads; not a complete UCIe/AXI or vendor device model",
+              "timing_basis": "4 us read, 75 us program and 3 ms erase are explicit analytical assumptions, not OCP mandated latencies",
+              "parallelism_mapping": "64 explicit equivalent array units across 16 host channels; not a disclosed vendor geometry"})
 _PHYSICAL_CONFIG_CATALOG["study_nvme_baseline"] = _preset(
     _PHYSICAL_CONFIG_CATALOG["ssd_synthetic"], channels=32, blocks_per_plane=8192,
     host_bandwidth_gb_s=7.0, host_read_bandwidth_gb_s=7.0, host_write_bandwidth_gb_s=4.0)
@@ -187,6 +207,12 @@ _HBM_MICRO_REFERENCE_DEFAULTS = {
     "research_hbm_path_relay": {"capacity_bytes": 16777216, "interface_bandwidth_gb_s": 128.0},
 }
 # These standard-organization research references do not identify a GPU part.
+_HBM_TIMING_PROFILES = {
+    "hbm3e_timing_fast": "fast",
+    "hbm3e_timing_reference": "reference",
+    "hbm3e_timing_slow": "slow",
+    "hbm3e_timing_ramulator2": "ramulator2",
+}
 _HBM_REFERENCE_PROFILES = {
     "hbm3e_reference": "standard",
     "hbm3e_reference_flat": "flat",
@@ -194,6 +220,7 @@ _HBM_REFERENCE_PROFILES = {
     "hbm4_reference": "standard",
     "hbm4_reference_flat": "flat",
     "hbm4_reference_synthetic_timing": "timed",
+    **{profile_id: "standard" for profile_id in _HBM_TIMING_PROFILES},
     **{profile_id: "standard" for profile_id in _HBM_MICRO_REFERENCE_DEFAULTS},
 }
 
@@ -203,7 +230,10 @@ def _hbm_reference(profile_id, updates, expand_geometry=False):
         raise ValueError("physical config profile kind cannot be changed by overrides")
     requested_fields = sorted(updates)
     micro_reference = profile_id in _HBM_MICRO_REFERENCE_DEFAULTS
+    timing_profile = _HBM_TIMING_PROFILES.get(profile_id)
     values = {}
+    if timing_profile is not None:
+        values.update(generation="HBM3E", dies_per_stack=16, die_density_gbits=32)
     if micro_reference:
         values.update(deepcopy(_HBM_MICRO_TIMING_AND_QUEUE))
         values.update(deepcopy(_HBM_MICRO_REFERENCE_DEFAULTS[profile_id]))
@@ -216,13 +246,16 @@ def _hbm_reference(profile_id, updates, expand_geometry=False):
     if stacks is None:
         max_stack_bytes = (16 if generation in {"HBM2", "HBM2E"} else 64) * 1024 ** 3
         stacks = max(8, (capacity + max_stack_bytes - 1) // max_stack_bytes)
-    interface = values.pop("interface_bandwidth_gb_s", 4000.0)
+    # Timing packs start at CK=.625 ns (6.4 Gb/s per pin), independently of
+    # visible capacity. Explicit operating-point changes are applied below.
+    default_interface = stacks * 819.2 if timing_profile is not None else 4000.0
+    interface = values.pop("interface_bandwidth_gb_s", default_interface)
     # A rate-mode caller may clear the bandwidth input. The seed only
     # establishes a complete organization; the public contract applies the
     # explicit None and rate/clock together below.
     if interface is None:
         interface = _HBM_MICRO_REFERENCE_DEFAULTS.get(profile_id, {}).get(
-            "interface_bandwidth_gb_s", 4000.0)
+            "interface_bandwidth_gb_s", default_interface)
     values.pop("read_bandwidth_gb_s", None)
     values.pop("write_bandwidth_gb_s", None)
     channels = values.pop("channels", None)
@@ -275,6 +308,11 @@ def _hbm_reference(profile_id, updates, expand_geometry=False):
             capacity_input_scope="microbenchmark visible capacity budget over a covering standard HBM organization",
             parameter_provenance=provenance,
         )
+    if timing_profile is not None:
+        # Pack inputs precede authored overrides: an explicit zero-valued
+        # ablation or timing input must not be replaced by the selected pack.
+        payload = apply_hbm_timing_profile(parse_execution_physical_config(payload), timing_profile)
+        changes["metadata"]["hbm_parameter_profile"] = deepcopy(payload.metadata["hbm_parameter_profile"])
     result = reconfigure_physical_config(payload, overrides=changes, expand_geometry=expand_geometry)
     if mode == "timed":
         # Unknown array timings remain fixed ns assumptions. Column spacing
@@ -315,8 +353,8 @@ def resolve_physical_config(profile_id, *, overrides=None, expand_geometry=False
 
     The catalog supplies every physical field. Caller overrides use native
     config names (GB/s, ns and bytes); they are recorded in metadata. Published
-    HBF profiles centrally derive their equivalent parallelism and internal
-    leg, keeping this physical mapping out of experiment scripts.
+    HBF profiles retain explicit equivalent parallelism and derive only their
+    covering capacity and non-bottleneck internal transfer assumption.
     """
     if profile_id not in _PHYSICAL_CONFIG_CATALOG:
         raise ValueError("unknown physical config profile: " + str(profile_id))
@@ -341,14 +379,11 @@ def resolve_physical_config(profile_id, *, overrides=None, expand_geometry=False
                     or not isfinite(value) or value < 0):
                 raise ValueError(name + " must be a finite non-negative number")
         if updates.get("parallel_units") is None:
-            product = read_bw * values["page_read_ns"] / page_bytes
-            if not isfinite(product):
-                raise ValueError("derived published HBF parallelism must be finite")
-            updates["parallel_units"] = max(1, ceil(product))
+            updates["parallel_units"] = authored["parallel_units"]
         if "channels" not in updates:
             updates["channels"] = updates["parallel_units"]
         if "host_granularity_bytes" not in updates:
-            updates["host_granularity_bytes"] = min(4096, page_bytes)
+            updates["host_granularity_bytes"] = min(64, page_bytes)
         if "internal_bandwidth_gb_s" not in updates:
             updates["internal_bandwidth_gb_s"] = values["host_bandwidth_gb_s"] * 1000.0
         if "blocks_per_plane" not in updates:

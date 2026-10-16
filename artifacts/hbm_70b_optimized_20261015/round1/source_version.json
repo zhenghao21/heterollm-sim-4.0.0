@@ -1,0 +1,28 @@
+{
+  "started_at": "2026-10-15T15:30:45.932697+00:00",
+  "description": "Restarted after canonical restoration confirmed by parent; validated packing/controller commit/state-copy plus earliest-active-deadline numeric cache. 84 regressions and 960-request/24-overflow exact comparison passed. No deadline-removal cache candidate included. Observational all-invocation monitor; preview/initialization/live retained.",
+  "git_head": "c8648904ea7c071e14759a9071c7f8cabd141f44",
+  "working_tree_files": {
+    "src/heterollm_sim/_hbm_numeric.py": {
+      "modified_at": "2026-10-15T15:19:02.053930+00:00",
+      "size_bytes": 25286
+    },
+    "src/heterollm_sim/_compiled_hbm.py": {
+      "modified_at": "2026-10-15T13:56:50.307642+00:00",
+      "size_bytes": 21924
+    },
+    "src/heterollm_sim/data_motion.py": {
+      "modified_at": "2026-10-15T13:48:27.058788+00:00",
+      "size_bytes": 102259
+    },
+    "scripts/hbm_ramulator2_study.py": {
+      "modified_at": "2026-10-15T15:22:52.933284+00:00",
+      "size_bytes": 35920
+    },
+    "scripts/run_hbm_monitored.py": {
+      "modified_at": "2026-10-15T15:26:07.959205+00:00",
+      "size_bytes": 13457
+    }
+  },
+  "scope": "Version notes for this run; source may include uncommitted changes. No content digest or frozen source copy."
+}

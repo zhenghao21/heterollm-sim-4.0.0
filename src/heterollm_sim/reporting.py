@@ -562,6 +562,7 @@ def _sum_batch_storage_traffic(
     optional = {key: 0 for key in (
         "logical_read_bytes", "logical_write_bytes", "internal_transfer_bytes",
         "pages_read", "pages_programmed", "pages_touched", "media_waves",
+        "read_cache_hits", "read_cache_misses",
         "read_operations", "program_operations", "rmw_read_operations",
         "page_access_payload_bytes", "page_access_capacity_bytes", "host_admission_samples")}
     optional.update(host_queue_wait_ns=0.0, media_queue_wait_ns=0.0)

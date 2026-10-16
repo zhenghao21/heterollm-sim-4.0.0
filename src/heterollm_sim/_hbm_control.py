@@ -10,9 +10,11 @@ owned by the configuration builder rather than inferred here.
 from __future__ import annotations
 
 import math
+from bisect import insort
 
 from .memory_mapping import split_dram_request
 from .memory_types import Operation, StageTiming, TransactionResult
+from ._hbm_clock import align_clock, clock_after
 
 
 class _Controller:
@@ -76,13 +78,27 @@ class _Controller:
         prefix = self.config.metadata.get(kind + "_command_resource_prefix", "dram:" + kind + "_command")
         return self.timeline.canonical_resource_id(f"{prefix}:{key[0]}:{key[1]}")
 
-    @staticmethod
-    def align(value, quantum):
-        # Division can round an already represented clock tick just above
-        # its integer index. Preserve that exact grid point on repeated use.
-        if value == round(value / quantum) * quantum:
-            return value
-        return max(value, math.ceil(value / quantum) * quantum)
+    align = staticmethod(align_clock)
+
+    def after(self, value, delay):
+        return clock_after(value, delay, self.clock / 2)
+
+    def reserve_clock(self, rid, start, duration, *, direction=None, byte_count=0):
+        """Keep clock-defined endpoints canonical in the shared calendar."""
+        start = max(start, self.timeline.available_ns(rid))
+        end = self.after(start, duration)
+        previous_busy = self.timeline.busy_ns.get(rid, 0.0)
+        reservation = self.timeline.reserve(rid, start, end - start, direction=direction)
+        # Occupancy is the configured duration, independent of subtracting
+        # two large represented endpoints to communicate with the calendar.
+        self.timeline.busy_ns[rid] = previous_busy + duration
+        if byte_count:
+            self.timeline.bytes_moved[rid] = self.timeline.bytes_moved.get(rid, 0) + byte_count
+            if (self.timeline._intervals.get(rid)
+                    and self.timeline._intervals[rid][-1] == (reservation.start_ns, reservation.end_ns)):
+                self.timeline._interval_payloads.setdefault(rid, []).append(
+                    (reservation.start_ns, reservation.end_ns, byte_count))
+        return reservation
 
     def command(self, key, kind, earliest, cycles, name, *, rising=False):
         rid = self.bus_id(key, kind)
@@ -91,27 +107,27 @@ class _Controller:
             raise ValueError("JEDEC HBM command buses require one execution slot")
         quantum = self.clock if rising or kind == "column" else self.row_step
         start = self.align(max(earliest, self.timeline.available_ns(rid)), quantum)
-        transfer = self.timeline.reserve(rid, start, cycles * self.clock)
+        transfer = self.reserve_clock(rid, start, cycles * self.clock)
         self.counts[kind + "_command_bus_busy_ns"] += transfer.duration_ns
         self.record(name, transfer.start_ns, transfer.end_ns, transfer.resource_id)
         return transfer
 
     def precharge_ready(self, key, earliest):
         previous = self.pc(key)["last_precharge"]
-        return max(earliest, previous + self.config.precharge_to_precharge_ns) if previous is not None else earliest
+        return max(earliest, self.after(previous, self.config.precharge_to_precharge_ns)) if previous is not None else earliest
 
     def precharge(self, mapping, old, bank, earliest):
         key = self._pc_key(mapping)
         ready = self.precharge_ready(key, max(earliest, bank["precharge_ready"], self.pc(key)["blocked_until"]))
         channel = self.channels.get(key[:2], {})
         if channel.get("last_activate_bank") == self.core._bank_id(mapping):
-            ready = max(ready, channel["last_activate_start"] + 2 * self.clock)
+            ready = max(ready, self.after(channel["last_activate_start"], 2 * self.clock))
         command = self.command(key, "row", ready, self.config.precharge_command_cycles, "PRECHARGE")
         self.counts["precharge_commands"] += 1
         self.pc(key)["last_precharge"] = command.start_ns
         old.open_row = None
         self._active_deadlines.pop(key[:2], None)
-        bank["activate_ready"] = command.start_ns + self.config.precharge_to_activate_ns
+        bank["activate_ready"] = self.after(command.start_ns, self.config.precharge_to_activate_ns)
         old.ready_ns = bank["activate_ready"]
         self.record("PRECHARGE_RECOVERY", command.start_ns, bank["activate_ready"])
 
@@ -121,30 +137,44 @@ class _Controller:
         ready = max(earliest, bank["activate_ready"], pc["blocked_until"],
                     self.timeline.available_ns(self.bus_id(key, "row")))
         if bank["last_activate"] is not None:
-            ready = max(ready, bank["last_activate"] + config.activate_cycle_ns - self.clock)
+            ready = max(ready, self.after(self.after(bank["last_activate"], config.activate_cycle_ns), -self.clock))
         # ACT array timings are anchored at the second rising CK edge.
-        anchor = self.core._bank_group_activate_ready(pc, mapping.bank_group, ready + self.clock,
-                                                      self.request.arrival_ns)
-        return self.align(anchor - self.clock, self.clock)
+        # Align the external/request constraint before shifting its anchor;
+        # adding and subtracting a CK must never erase a late arrival's ULP.
+        anchor = self.after(self.align(ready, self.clock), self.clock)
+        # Unlike an arbitrary bank-ready time, the shared row-port frontier
+        # proves that no later HBM ACT can be inserted before it. Pruning at
+        # this frontier bounds the live tFAW calendar even inside a huge request.
+        frontier = max(self.request.arrival_ns, self.timeline.available_ns(self.bus_id(key, "row")))
+        while True:
+            anchor = self.core._bank_group_activate_ready(pc, mapping.bank_group, anchor,
+                                                          frontier, clock_quantum=self.clock / 2)
+            start = self.align(self.after(anchor, -self.clock), self.clock)
+            aligned = self.after(start, self.clock)
+            # Rounding a candidate can enter a window of previously reserved
+            # future ACTs. Recheck the aligned anchor before committing it.
+            if config.four_activate_window_ns <= 0 or aligned == anchor:
+                return start
+            anchor = aligned
 
     def activate(self, mapping, old, bank, row, earliest):
         key = self._pc_key(mapping)
         start = self.activate_start(mapping, bank, earliest)
         command = self.command(key, "row", start, self.config.activate_command_cycles, "ACTIVATE", rising=True)
-        anchor = command.start_ns + self.clock
+        anchor = self.after(command.start_ns, self.clock)
         pc = self.pc(key)
         pc["activate"][mapping.bank_group] = anchor
         if self.config.four_activate_window_ns > 0:
-            pc["activate_window"].append(anchor)
+            insort(pc["activate_window"], anchor)
         self.channels.setdefault(key[:2], {}).update(last_activate_start=command.start_ns,
             last_activate_bank=self.core._bank_id(mapping), last_activate_pc=key)
         bank["last_activate"] = anchor
         if key[:2] in self._active_deadlines:
             self._active_deadlines[key[:2]] = min(self._active_deadlines[key[:2]],
-                                                 anchor + self.config.maximum_active_ns)
-        bank["read_ready"] = anchor + self.config.activate_to_read_ns
-        bank["write_ready"] = anchor + self.config.activate_to_write_ns
-        bank["precharge_ready"] = anchor + self.config.minimum_active_ns
+                                                 self.after(anchor, self.config.maximum_active_ns))
+        bank["read_ready"] = self.after(anchor, self.config.activate_to_read_ns)
+        bank["write_ready"] = self.after(anchor, self.config.activate_to_write_ns)
+        bank["precharge_ready"] = self.after(anchor, self.config.minimum_active_ns)
         old.open_row = row
         old.activation_ready_ns = min(bank["read_ready"], bank["write_ready"])
         old.ready_ns = bank["precharge_ready"]
@@ -161,15 +191,15 @@ class _Controller:
                    else config.column_different_group_ns)
             if op is Operation.READ and previous_sid != sid:
                 gap = config.column_different_sid_ns
-            ready = max(ready, previous + gap)
+            ready = max(ready, self.after(previous, gap))
         if op is Operation.READ:
             for (_sid, group), end in pc["write_end"].items():
                 gap = (config.write_to_read_same_group_ns if group == mapping.bank_group
                        else config.write_to_read_different_group_ns)
-                ready = max(ready, end + gap)
+                ready = max(ready, self.after(end, gap))
         else:
             for previous in pc["column"]["read"].values():
-                ready = max(ready, previous + config.read_to_write_command_ns)
+                ready = max(ready, self.after(previous, config.read_to_write_command_ns))
         latency = config.read_latency_ns if op is Operation.READ else config.write_latency_ns
         data_id = self.core._data_id(mapping)
         slots = self.timeline.lane_available.get(data_id)
@@ -178,10 +208,15 @@ class _Controller:
         data_ready = self.timeline.available_ns(data_id)
         previous_direction = self.timeline.directions.get(data_id)
         if previous_direction and previous_direction != op.value:
-            data_ready += config.write_to_read_ns if op is Operation.READ else config.read_to_write_ns
+            data_ready = self.after(data_ready, config.write_to_read_ns if op is Operation.READ else config.read_to_write_ns)
         data_ready = max(data_ready, pc["next_data_start"][op.value])
         # Issue only when the fixed RL/WL pipeline can meet its DQ slot.
-        return self.align(max(ready, data_ready - latency), self.clock)
+        start = self.align(max(ready, self.after(data_ready, -latency)), self.clock)
+        # Subtraction from an externally reserved DQ time can lose a ULP.
+        # Check the actual fixed-latency endpoint before accepting the edge.
+        if self.after(start, latency) < data_ready:
+            start = self.after(start, self.clock)
+        return start
 
     def estimate_access(self, mapping, old, bank, row, activate_not_before):
         earliest = self.request.arrival_ns
@@ -192,11 +227,11 @@ class _Controller:
                                      self.timeline.available_ns(self.bus_id(key, "row"))), self.row_step)
                 channel = self.channels.get(key[:2], {})
                 if channel.get("last_activate_bank") == self.core._bank_id(mapping):
-                    pre = max(pre, channel["last_activate_start"] + 2 * self.clock)
-                earliest = pre + max(self.config.precharge_to_activate_ns,
-                                     self.config.precharge_command_cycles * self.clock)
-            anchor = self.activate_start(mapping, bank, max(earliest, activate_not_before)) + self.clock
-            bank_ready = anchor + (self.config.activate_to_read_ns if self.request.operation is Operation.READ
+                    pre = max(pre, self.after(channel["last_activate_start"], 2 * self.clock))
+                earliest = self.after(pre, max(self.config.precharge_to_activate_ns,
+                                     self.config.precharge_command_cycles * self.clock))
+            anchor = self.after(self.activate_start(mapping, bank, max(earliest, activate_not_before)), self.clock)
+            bank_ready = self.after(anchor, self.config.activate_to_read_ns if self.request.operation is Operation.READ
                                    else self.config.activate_to_write_ns)
         else:
             anchor = bank["last_activate"]
@@ -209,17 +244,17 @@ class _Controller:
             return []
         channel = self._pc_key(mapping)[:2]
         if channel not in self._active_deadlines:
-            self._active_deadlines[channel] = min((bank["last_activate"] + maximum
+            self._active_deadlines[channel] = min((self.after(bank["last_activate"], maximum)
                 for rid, bank in self.banks.items()
                 if self.core._banks[rid].open_row is not None
                 and self._pc_key(bank["mapping"])[:2] == channel), default=math.inf)
         if self._active_deadlines[channel] > horizon:
             return []
-        pending = [(bank["last_activate"] + maximum, rid, bank)
+        pending = [(self.after(bank["last_activate"], maximum), rid, bank)
                    for rid, bank in self.banks.items()
                    if self.core._banks[rid].open_row is not None
                    and self._pc_key(bank["mapping"])[:2] == channel
-                   and bank["last_activate"] + maximum <= horizon]
+                   and self.after(bank["last_activate"], maximum) <= horizon]
         return sorted(pending, key=lambda item: item[0])
 
     def close_expiring_rows(self, pending):
@@ -233,19 +268,19 @@ class _Controller:
         for deadline, rid, bank in reversed(pending):
             mapping = bank["mapping"]
             key = self._pc_key(mapping)
-            latest = min(deadline, next_start - duration,
-                         next_pc.get(key, math.inf) - self.config.precharge_to_precharge_ns)
+            latest = min(deadline, self.after(next_start, -duration),
+                         self.after(next_pc.get(key, math.inf), -self.config.precharge_to_precharge_ns))
             start = math.floor(latest / self.row_step) * self.row_step
             # Use the same upward-alignment arithmetic as command() even
             # for operating points whose CK is not exactly binary-float.
             while self.align(start, self.row_step) > latest:
-                start -= self.row_step
+                start = self.after(start, -self.row_step)
             start = self.align(start, self.row_step)
             earliest = self.precharge_ready(key, max(bank["precharge_ready"],
                 self.pc(key)["blocked_until"], self.timeline.available_ns(self.bus_id(key, "row"))))
             channel = self.channels.get(key[:2], {})
             if channel.get("last_activate_bank") == rid:
-                earliest = max(earliest, channel["last_activate_start"] + 2 * self.clock)
+                earliest = max(earliest, self.after(channel["last_activate_start"], 2 * self.clock))
             if start < earliest:
                 raise ValueError("HBM tRASmax deadline cannot be met by a legal PRE command")
             planned.append((mapping, rid, bank, start))
@@ -272,17 +307,17 @@ class _Controller:
             earliest = self.precharge_ready(key, max(earliest, *(bank["precharge_ready"] for _, bank in opened)))
             channel = self.channels.get(key[:2], {})
             if channel.get("last_activate_pc") == key:
-                earliest = max(earliest, channel["last_activate_start"] + 2 * self.clock)
+                earliest = max(earliest, self.after(channel["last_activate_start"], 2 * self.clock))
             pre_start = self.align(max(earliest, self.timeline.available_ns(self.bus_id(key, "row"))),
                                    self.row_step)
             if (self.config.maximum_active_ns > 0 and any(
-                    pre_start > bank["last_activate"] + self.config.maximum_active_ns
+                    pre_start > self.after(bank["last_activate"], self.config.maximum_active_ns)
                     for _, bank in opened)):
                 raise ValueError("HBM tRASmax deadline cannot be met by the refresh PRE command")
             pre = self.command(key, "row", earliest, self.config.precharge_command_cycles, "PRECHARGE_ALL")
             self.counts["precharge_commands"] += 1
             pc["last_precharge"] = pre.start_ns
-            earliest = pre.start_ns + self.config.precharge_to_activate_ns
+            earliest = self.after(pre.start_ns, self.config.precharge_to_activate_ns)
             for old, bank in opened:
                 old.open_row = None
                 bank["activate_ready"] = earliest
@@ -291,7 +326,7 @@ class _Controller:
         last_act = self.channels.get(key[:2], {}).get("last_activate_start")
         if last_act is not None:
             # The final half of ACT's second CK only admits restricted PRE.
-            earliest = max(earliest, last_act + 2 * self.clock)
+            earliest = max(earliest, self.after(last_act, 2 * self.clock))
         if self.hbm2:
             earliest = max(earliest, self.timeline.available_ns(self.bus_id(key, "column")))
         ref = self.command(key, "row", earliest, self.config.precharge_command_cycles, "REFRESH_ALL", rising=True)
@@ -299,7 +334,7 @@ class _Controller:
             self.command(key, "column", ref.start_ns, 1.0, "REFRESH_CNOP")
         if ref.start_ns > due + 8 * self.config.refresh_interval_ns:
             raise ValueError("HBM periodic refresh missed the maximum eight postponed intervals")
-        pc["blocked_until"] = ref.start_ns + self.config.refresh_cycle_ns
+        pc["blocked_until"] = self.after(ref.start_ns, self.config.refresh_cycle_ns)
         self._active_deadlines.pop(key[:2], None)
         for old, bank in selected:
             old.open_row = None
@@ -323,7 +358,7 @@ class _Controller:
             due = channel["next_refresh"]
             for pseudo_channel in range(self.config.pseudo_channels_per_channel):
                 self.refresh_pc((*key[:2], pseudo_channel), due)
-            channel["next_refresh"] += interval
+            channel["next_refresh"] = self.after(channel["next_refresh"], interval)
             refreshed = True
         return refreshed
 
@@ -410,9 +445,10 @@ class _Controller:
             for _ in range(2 * config.bank_count + 16):
                 command_start, anchor = self.estimate_access(mapping, old, bank, row, activate_not_before)
                 recovery = (config.read_to_precharge_ns if request.operation is Operation.READ else
-                            config.write_latency_ns + segment.transfer_bytes / config.effective_lane_bandwidth_gb_s
-                            + config.write_to_precharge_ns)
-                horizon = command_start + recovery
+                            self.after(self.after(config.write_latency_ns,
+                                segment.transfer_bytes / config.effective_lane_bandwidth_gb_s),
+                                config.write_to_precharge_ns))
+                horizon = self.after(command_start, recovery)
                 pending = self.maximum_active_pending(mapping, horizon)
                 if pending:
                     if config.refresh_policy == "all_bank" and self.next_refresh_due(mapping) <= pending[0][0]:
@@ -423,15 +459,15 @@ class _Controller:
                 if self.refresh_until(mapping, command_start):
                     continue
                 if (config.maximum_active_ns > 0 and old.open_row != row
-                        and horizon > anchor + config.maximum_active_ns):
+                        and horizon > self.after(anchor, config.maximum_active_ns)):
                     rcd = config.activate_to_read_ns if request.operation is Operation.READ else config.activate_to_write_ns
-                    if rcd + recovery > config.maximum_active_ns:
+                    if self.after(rcd, recovery) > config.maximum_active_ns:
                         raise ValueError("HBM access recovery exceeds the tRASmax activation window")
                     # A fixed DQ reservation or direction cap can postpone
                     # the column command. Keep the row closed during that
                     # wait instead of opening it for longer than tRASmax.
-                    activate_not_before = self.align(max(activate_not_before + self.clock,
-                        horizon - config.maximum_active_ns - self.clock), self.clock)
+                    activate_not_before = self.align(max(self.after(activate_not_before, self.clock),
+                        self.after(self.after(horizon, -config.maximum_active_ns), -self.clock)), self.clock)
                     continue
                 break
             else:
@@ -454,17 +490,18 @@ class _Controller:
             sid = (mapping.bank_group * config.banks_per_group + mapping.bank) // 16
             self.pc(key)["column"][request.operation.value][(sid, mapping.bank_group)] = command.start_ns
             latency = config.read_latency_ns if read else config.write_latency_ns
-            data_ready = command.start_ns + latency
+            data_ready = self.after(command.start_ns, latency)
             self.record("READ_PIPELINE" if read else "WRITE_PIPELINE", command.start_ns, data_ready)
-            data = self.timeline.transfer(self.core._data_id(mapping), segment.transfer_bytes, data_ready,
-                config.effective_lane_bandwidth_gb_s, direction=request.operation.value)
+            data = self.reserve_clock(self.core._data_id(mapping), data_ready,
+                segment.transfer_bytes / config.effective_lane_bandwidth_gb_s,
+                direction=request.operation.value, byte_count=segment.transfer_bytes)
             self.pc(key)["next_data_start"][request.operation.value] = (
-                data.start_ns + segment.transfer_bytes / config.directional_lane_bandwidth_gb_s(request.operation))
+                self.after(data.start_ns, segment.transfer_bytes / config.directional_lane_bandwidth_gb_s(request.operation)))
             self.record("BURST_TRANSFER", data.start_ns, data.end_ns, data.resource_id, segment.transfer_bytes)
             if read:
-                bank["precharge_ready"] = max(bank["precharge_ready"], command.start_ns + config.read_to_precharge_ns)
+                bank["precharge_ready"] = max(bank["precharge_ready"], self.after(command.start_ns, config.read_to_precharge_ns))
             else:
-                bank["precharge_ready"] = max(bank["precharge_ready"], data.end_ns + config.write_to_precharge_ns)
+                bank["precharge_ready"] = max(bank["precharge_ready"], self.after(data.end_ns, config.write_to_precharge_ns))
                 self.pc(key)["write_end"][(sid, mapping.bank_group)] = data.end_ns
             old.ready_ns = bank["precharge_ready"]
             completion = max(completion, data.end_ns)
@@ -483,7 +520,14 @@ class _Controller:
 
 
 def execute_hbm(core, request):
-    if not core.capture_details:
+    c = core.config
+    count = (request.address + request.byte_count - 1) // c.burst_bytes - request.address // c.burst_bytes + 1
+    # Single-request numeric packing scans every physical bank. For a few
+    # bursts on a large device, the same reference controller costs less.
+    # Bound Python work to 16 bursts and require 256 packed banks per burst;
+    # batches still pack once and large requests still use the numeric loop.
+    tiny_request = count <= min(16, c.lane_count * c.bank_count // 256)
+    if not core.capture_details and not tiny_request:
         try:
             from ._compiled_hbm import execute_hbm_numeric
         except (ImportError, OSError):

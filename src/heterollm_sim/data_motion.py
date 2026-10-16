@@ -104,7 +104,8 @@ def _copy_hbm_control_state(state: dict[str, Any]) -> dict[str, Any]:
     Every visited HBM bank holds scalar clocks and a frozen AddressMapping.
     Rebuilding those mappings via deepcopy dominates per-task snapshots on
     large stacks. Copy bank dictionaries directly, sharing only immutable
-    values; retain deepcopy for nested histories and any extension fields.
+    values; copy ordinary history containers without deepcopy's per-scalar
+    dispatch, retaining its behavior for extension objects.
     The memo also preserves aliases within the saved state without sharing
     mutable objects with the live controller.
     """
@@ -124,16 +125,53 @@ def _copy_hbm_control_state(state: dict[str, Any]) -> dict[str, Any]:
     immutable_types = (int, float, str, bool, type(None), AddressMapping)
     for name, row in banks.items():
         if type(row) is not dict:
-            bank_copies[name] = copy.deepcopy(row, memo)
+            bank_copies[name] = _copy_hbm_history(row, memo)
             continue
         for field_name, value in row.items():
             if type(value) in immutable_types:
                 if type(value) is AddressMapping:
                     memo[id(value)] = value
             else:
-                bank_copies[name][field_name] = copy.deepcopy(value, memo)
-    result.update({name: copy.deepcopy(value, memo) for name, value in state.items()})
+                bank_copies[name][field_name] = _copy_hbm_history(value, memo)
+    result.update({name: _copy_hbm_history(value, memo) for name, value in state.items()})
     return result
+
+
+def _copy_hbm_history(value, memo):
+    """Copy clock histories while preserving deepcopy's aliases and cycles.
+
+    The normal histories contain exact builtin dicts/lists, scalar clocks
+    and tuple keys of integers. Sharing these immutable keys avoids walking
+    every SID/group tuple through deepcopy before each physical task. Custom
+    containers and extension objects still use their own deepcopy protocol.
+    """
+    atomic = (int, float, str, bool, type(None))
+    if type(value) in atomic:
+        return memo.get(id(value), value)
+    identity = id(value)
+    if identity in memo:
+        return memo[identity]
+    if type(value) is dict:
+        result = {}
+        memo[identity] = result
+        for key, item in value.items():
+            cloned = memo.get(id(item), item) if type(item) in atomic else _copy_hbm_history(item, memo)
+            if type(key) in atomic:
+                key = memo.get(id(key), key)
+            elif type(key) is tuple and id(key) in memo:
+                key = memo[id(key)]
+            elif not (type(key) is tuple and all(type(part) in atomic
+                       and memo.get(id(part), part) is part for part in key)):
+                key = copy.deepcopy(key, memo)
+            result[key] = cloned
+        return result
+    if type(value) is list:
+        result = []
+        memo[identity] = result
+        result.extend(memo.get(id(item), item) if type(item) in atomic
+                      else _copy_hbm_history(item, memo) for item in value)
+        return result
+    return copy.deepcopy(value, memo)
 
 
 @dataclass
@@ -293,13 +331,13 @@ class PhysicalRuntimeContext:
                                if type(bank) is _BankState else copy.copy(bank))
                         for name, bank in value.items()
                     }
-                elif key in {"_array_ready", "_buffer_ready"} and isinstance(value, dict):
+                elif key in {"_array_ready", "_buffer_ready", "_next_program_page"} and isinstance(value, dict):
                     # NAND readiness values are scalars, so a shallow dict
                     # copy is sufficient and avoids copying timeline history.
                     core_state[key] = dict(value)
                 elif key == "_hbm_control_state":
                     core_state[key] = _copy_hbm_control_state(value)
-                elif key == "_bank_group_state":
+                elif key in {"_bank_group_state", "_channel_inflight"}:
                     # Group command/activation histories contain mutable
                     # per-group clocks and activation windows. They are live
                     # execution state, so a failed task must not modify its
@@ -307,10 +345,10 @@ class PhysicalRuntimeContext:
                     core_state[key] = copy.deepcopy(value)
                 elif key in {"_inflight", "_inflight_operations", "_write_buffer_pending"} and isinstance(value, list):
                     core_state[key] = list(value)
-                elif key == "_staged_pages":
+                elif key in {"_staged_pages", "_read_cache"}:
                     # Buffered NAND pages are mutable admission state, not
                     # immutable timeline history. Failed transfers must not
-                    # leak staged ranges or host acknowledgement timestamps.
+                    # leak staged ranges, cache tags or fill/reader clocks.
                     core_state[key] = copy.deepcopy(value)
                 elif key == "_block_wear_state":
                     # Feedback dictionaries contain per-plane/block scalars.
@@ -721,6 +759,15 @@ def resolve_physical_task(
         raise
 
 
+def _merge_latest_resource_intervals(target, incoming):
+    # Scheduled results retain input order, which need not be execution order.
+    # Select by interval time so a prior row hit cannot replace the final use.
+    for resource_id, interval in incoming.items():
+        previous = target.get(resource_id)
+        if previous is None or (interval[1], interval[0]) > (previous[1], previous[0]):
+            target[resource_id] = interval
+
+
 def _resolve_physical_task(
     task: TaskSpec,
     runtime: PhysicalRuntimeContext,
@@ -832,7 +879,19 @@ def _resolve_physical_task(
         access, operation, address, byte_count, owner, access_config = validated[index]
         active = runtime.runtime(access_config, owner)
         stop = index + 1
-        if (_USE_COMPILED_DRAM_BATCH and not runtime.capture_details
+        scheduled_batch = (isinstance(active.core.config, DramConfig)
+                           and active.core.config.scheduler != "fcfs")
+        if scheduled_batch:
+            # A controller can choose only among accesses in this task's
+            # current owner batch. The core enforces arrival visibility and
+            # overlapping read/write dependencies inside its finite window.
+            while stop < min(len(validated), index + 1024):
+                _a, next_op, _addr, _count, next_owner, next_config = validated[stop]
+                if (next_owner != owner or next_config != access_config
+                        or next_op not in (Operation.READ, Operation.WRITE)):
+                    break
+                stop += 1
+        elif (_USE_COMPILED_DRAM_BATCH and not runtime.capture_details
                 and isinstance(active.core.config, DramConfig)
                 and operation in (Operation.READ, Operation.WRITE)
                 and (address + byte_count - 1) // active.core.config.burst_bytes
@@ -859,7 +918,7 @@ def _resolve_physical_task(
             prior = all_completion[owner] if op is Operation.WRITE else write_completion[owner]
             access_arrival = max(float(arrival_ns), prior.query(addr, count))
             requests.append(AccessRequest(f"{task.request_id or task.task_id}:{position}", op, addr, count, access_arrival))
-        if len(requests) >= 16:
+        if scheduled_batch or len(requests) >= 16:
             group_results = active.core.submit_many(requests)
         else:
             group_results = tuple(active.core.submit(request) for request in requests)
@@ -881,7 +940,7 @@ def _resolve_physical_task(
             resource_busy[resource_id] = resource_busy.get(resource_id, 0.0) + value
         for resource_id, value in item.counters.get("resource_bytes", {}).items():
             resource_bytes[resource_id] = resource_bytes.get(resource_id, 0) + value
-        resource_last.update(item.counters.get("resource_last_intervals", {}))
+        _merge_latest_resource_intervals(resource_last, item.counters.get("resource_last_intervals", {}))
     execution_by_owner = {}
     operations_by_owner = {}
     optional_observed_by_owner = {}
@@ -922,7 +981,8 @@ def _resolve_physical_task(
         for key in ("resource_intervals", "resource_interval_payloads"):
             for resource_id, intervals in item.counters.get(key, {}).items():
                 row[key].setdefault(resource_id, []).extend(intervals)
-        row["resource_last_intervals"].update(item.counters.get("resource_last_intervals", {}))
+        _merge_latest_resource_intervals(row["resource_last_intervals"],
+                                        item.counters.get("resource_last_intervals", {}))
         if item.counters.get("nand_observations") is not None:
             row.setdefault("_nand_observations", []).append(item.counters["nand_observations"])
         for resource_id, value in item.counters.get("resource_bytes", {}).items():
@@ -934,6 +994,7 @@ def _resolve_physical_task(
             row["resource_owners"][resource_id] = owner
         for key in (
             "burst_count", "row_hits", "row_misses", "row_conflicts",
+            "scheduler_reordered_requests", "scheduler_batches", "controller_direction_switches",
             "read_write_switches", "queue_wait_ns", "refresh_wait_ns",
             "turnaround_wait_ns", "pages_read", "pages_programmed",
             "pages_touched", "media_waves", "erase_operations",
@@ -942,6 +1003,7 @@ def _resolve_physical_task(
             "host_transfer_bytes", "internal_transfer_bytes",
             "write_buffer_wait_ns", "write_buffer_bytes", "merge_bytes",
             "staging_read_hits", "staging_read_merges", "staging_write_pages",
+            "read_cache_hits", "read_cache_misses",
             "merged_pages", "auto_drain_physical_programs",
         ) + DRAM_CONTROL_COUNT_FIELDS + DRAM_CONTROL_TIME_FIELDS:
             value = item.counters.get(key)
@@ -1516,6 +1578,8 @@ class PhysicalService:
             "pages_read": batch.pages_read,
             "pages_programmed": batch.pages_programmed,
             "erase_operations": batch.erase_operations,
+            "read_cache_hits": batch.counters.get("read_cache_hits", 0),
+            "read_cache_misses": batch.counters.get("read_cache_misses", 0),
             "queue_wait_ns": batch.queue_wait_ns,
             "write_buffer_wait_ns": batch.write_buffer_wait_ns,
             "write_buffer_bytes": batch.write_buffer_bytes,

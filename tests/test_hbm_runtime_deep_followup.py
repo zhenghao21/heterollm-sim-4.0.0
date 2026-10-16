@@ -178,6 +178,71 @@ def test_hbm_snapshot_isolates_all_mutable_histories_and_repeated_restore(detail
     assert outcomes[0] == outcomes[1]
 
 
+def test_hbm_history_copy_preserves_cycles_and_cross_container_aliases():
+    from heterollm_sim.data_motion import _copy_hbm_control_state
+
+    samples = [1.]
+    samples.append((samples,))
+    bank = {"last_activate": 2., "extension": samples}
+    state = {"banks": {"first": bank, "alias": bank},
+             "pcs": {(0, 0, 0): {"activate_window": samples}}, "extension": samples}
+    state["self"] = state
+    cloned = _copy_hbm_control_state(state)
+    assert cloned is not state
+    assert cloned["self"] is cloned
+    assert cloned["banks"]["first"] is cloned["banks"]["alias"]
+    copied = cloned["extension"]
+    assert copied is not samples
+    assert copied[1][0] is copied
+    assert cloned["banks"]["first"]["extension"] is copied
+    assert cloned["pcs"][(0, 0, 0)]["activate_window"] is copied
+    copied.append(99.)
+    assert len(samples) == 2
+
+
+def test_hbm_history_copy_keeps_extension_deepcopy_protocol_and_order():
+    from heterollm_sim.data_motion import _copy_hbm_control_state
+
+    calls = []
+
+    class Extension:
+        def __init__(self, label):
+            self.label = label
+
+        def __deepcopy__(self, memo):
+            calls.append(self.label)
+            return Extension(self.label)
+
+    key, value = Extension("key"), Extension("value")
+    state = {"banks": {}, "extension": {key: value}, "alias": value}
+    cloned = _copy_hbm_control_state(state)
+    # deepcopy(dict) evaluates the value before the key and invokes an
+    # extension object's protocol only once, even across shared references.
+    assert calls == ["value", "key"]
+    copied_key, copied_value = next(iter(cloned["extension"].items()))
+    assert copied_key is not key and copied_value is not value
+    assert copied_key.label == "key" and copied_value.label == "value"
+    assert cloned["alias"] is copied_value
+
+
+def test_hbm_history_copy_honors_extension_memo_entries_for_scalars_and_tuple_keys():
+    from heterollm_sim.data_motion import _copy_hbm_control_state
+
+    scalar = int("12345")
+
+    class MemoExtension:
+        def __deepcopy__(self, memo):
+            memo[id(scalar)] = "replacement"
+            return "copied extension"
+
+    state = {"banks": {}, "extension": MemoExtension(),
+             "history": {(scalar, 2): [scalar], "scalar": scalar, scalar: scalar}}
+    cloned = _copy_hbm_control_state(state)
+    assert cloned["extension"] == "copied extension"
+    assert cloned["history"] == {("replacement", 2): ["replacement"],
+                                 "scalar": "replacement", "replacement": "replacement"}
+
+
 @pytest.mark.parametrize("details", [False, True])
 def test_failed_hbm_execution_restores_control_state_before_retry(details, monkeypatch):
     from heterollm_sim.data_motion import PhysicalRuntimeContext, resolve_physical_task

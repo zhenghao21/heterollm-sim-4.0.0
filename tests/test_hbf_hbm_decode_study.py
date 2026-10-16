@@ -88,6 +88,7 @@ def test_failed_point_does_not_discard_other_completed_points(monkeypatch,tmp_pa
 @pytest.mark.parametrize('stale_contract', [
     'physical_core_unified_hardware_catalog_v2',
     'physical_core_unified_hardware_catalog_v3/serving-points-v4',
+    'physical_core_unified_hardware_catalog_v3/serving-points-v8',
 ])
 def test_geometry_revision_invalidates_decode_resume(monkeypatch, tmp_path, stale_contract):
     import json

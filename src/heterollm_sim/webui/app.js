@@ -5048,6 +5048,7 @@ const PHYSICAL_MEMORY_COMPONENT_KINDS = new Set([
 const PHYSICAL_MEMORY_KINDS = new Set(["DDR", "LPDDR", "HBM", "GDDR", "SSD", "HBF"]);
 const DRAM_PHYSICAL_REQUIRED_FIELDS = [
   "control_mode", "bank_geometry_scope", "stack_interface_mode",
+  "address_mapping", "scheduler", "scheduler_window", "queue_scope",
   "channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack",
   "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes",
   "open_ns", "close_ns", "read_latency_ns", "write_latency_ns", "burst_interval_ns",
@@ -5067,6 +5068,7 @@ const NAND_PHYSICAL_REQUIRED_FIELDS = [
   "blocks_per_plane", "pages_per_block", "page_bytes", "host_granularity_bytes",
   "host_bandwidth_gb_s", "host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns",
   "block_erase_ns", "front_ns", "planes_independent", "partial_page_policy", "max_outstanding_requests",
+  "protocol_mode", "host_channels", "host_full_duplex", "read_cache_pages_per_bank",
 ];
 
 function physicalMemoryConfigForComponent(component) {
@@ -5112,7 +5114,7 @@ function validatePhysicalMemoryConfig(value, component) {
     }
   });
   const integerFields = nand
-    ? ["channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun", "blocks_per_plane", "pages_per_block", "page_bytes", "host_granularity_bytes", "max_outstanding_requests"]
+    ? ["channels", "host_channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun", "blocks_per_plane", "pages_per_block", "page_bytes", "host_granularity_bytes", "max_outstanding_requests"]
     : ["channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes", "max_outstanding_requests"];
   integerFields.forEach((field) => {
     if (!Number.isSafeInteger(Number(value[field])) || Number(value[field]) <= 0) {
@@ -5132,11 +5134,45 @@ function validatePhysicalMemoryConfig(value, component) {
       throw new Error(`physical_memory_config.${field} 必须是非负有限数，并满足当前配置的协议下限。`);
     }
   });
+  if (!nand) {
+    if (!["bank_interleaved", "row_local"].includes(value.address_mapping)
+        || !["fcfs", "row_hit_first", "read_write_batch"].includes(value.scheduler)
+        || !["device", "channel"].includes(value.queue_scope)) {
+      throw new Error("请选择有效的地址映射、请求调度和队列范围。");
+    }
+    if (!Number.isSafeInteger(value.scheduler_window) || value.scheduler_window < 1) {
+      throw new Error("调度窗口必须是正整数。");
+    }
+    if (value.address_mapping === "row_local" && value.interleave_bytes != null) {
+      throw new Error("行内连续映射不使用交织粒度，请将 interleave_bytes 设为 null。");
+    }
+  }
   if (nand && typeof value.planes_independent !== "boolean") {
     throw new Error("physical_memory_config.planes_independent 必须是布尔值。");
   }
   if (nand && !["read_modify_write", "reject"].includes(String(value.partial_page_policy))) {
     throw new Error("physical_memory_config.partial_page_policy 必须是 read_modify_write 或 reject。");
+  }
+  if (nand) {
+    if (!["generic_nand", "ocp_hbf_0_7"].includes(value.protocol_mode)) {
+      throw new Error("请选择逻辑页服务或 OCP HBF 0.7 完整页事务模式。");
+    }
+    if (typeof value.host_full_duplex !== "boolean") {
+      throw new Error("主机全双工设置必须是布尔值。");
+    }
+    if (!Number.isSafeInteger(value.read_cache_pages_per_bank) || value.read_cache_pages_per_bank < 0) {
+      throw new Error("每个 bank 的读缓存页数必须是非负整数。");
+    }
+    if (Number(value.channels) % Number(value.host_channels) !== 0) {
+      throw new Error("内部通道数必须能被主机通道数整除。");
+    }
+    if (value.protocol_mode === "ocp_hbf_0_7" && (
+      kind !== "HBF" || Number(value.page_bytes) !== 4096 || Number(value.host_granularity_bytes) !== 64
+      || value.host_full_duplex !== true || value.read_cache_pages_per_bank !== 2
+      || Number(value.host_channels) > 16 || Number(value.write_buffer_bytes) !== 0
+    )) {
+      throw new Error("OCP HBF 0.7 模式要求 4 KiB 页、64 B 读粒度、最多 16 个全双工主机通道、每 bank 两页读缓存，并关闭主机早确认缓冲。");
+    }
   }
   if (!nand && !(
     Number(value.interface_bandwidth_gb_s) > 0
@@ -5192,6 +5228,8 @@ function hbmGeometryMarkup(config) {
     ${metadata.activated_page_bytes ? `<p class="muted">${escapeHtml(metadata.jedec_standard || "JEDEC")}：有效寻址页 ${escapeHtml(formatBytes(config.row_bytes))}，一次激活页 ${escapeHtml(formatBytes(metadata.activated_page_bytes))}。${config.control_mode === "jedec_hbm" ? "行地址最高位选择的两个半页共享激活状态。" : "此旧控制模型未实现两个半页共享激活。"}</p>` : ""}
     ${config.control_mode === "jedec_hbm" ? `<p class="muted">按 JEDEC 执行激活、预充电和读写命令；每个物理通道共享行、列命令口，每伪通道独立传输。命令等待和数据占用分别计量，写恢复只约束后续预充电。${config.refresh_policy === "all_bank" ? "已启用周期刷新。" : "自动刷新未配置，结果不包含刷新开销。"}读写延迟采用合法时钟编码；参考时序尚未通过具体厂商速度档验证。</p>` : ""}
     ${raw ? `<p class="muted">原始阵列容量：${escapeHtml(formatBytes(raw))}；可用容量：${escapeHtml(formatBytes(config.capacity_bytes))}。</p>` : ""}
+    <p class="muted">地址映射：${escapeHtml(config.address_mapping)}；请求调度：${escapeHtml(config.scheduler)}；调度窗口：${escapeHtml(config.scheduler_window)}；队列范围：${escapeHtml(config.queue_scope)}。这些是控制器假设，并非 JEDEC 指定算法。</p>
+    ${metadata.hbm_parameter_profile ? `<p class="muted">时序参数组：${escapeHtml(metadata.hbm_parameter_profile.name)}。参数范围用于敏感性分析，尚未标定具体厂商器件。</p>` : ""}
     <p class="muted">${standard ? "标准组织不等于已验证的厂商器件，时序假设与几何来源分别记录。" : "这些参数不能作为 JEDEC 或厂商真实规格。"}${unknown.length ? ` 未确认：${escapeHtml(unknown.join("、"))}。` : ""}</p>
   </div>`;
 }
@@ -7289,7 +7327,7 @@ function addComponent(kind) {
     gpu: { capacity_bytes: 0, peak_ops_per_s: 120e12, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", supported_gddr_generations: ["GDDR6", "GDDR6X", "GDDR7"], read_latency_ns: 0, write_latency_ns: 0, transfer_granularity_bytes: 0, dma_latency_ns: 0 } },
     cpu: { capacity_bytes: 0, peak_ops_per_s: 100e9, read_bandwidth_gbps: 0, write_bandwidth_gbps: 0, metadata: { evidence_status: "analytical", source: "editable-reference-default" } },
     hbm: { capacity_bytes: 16 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 4096, write_bandwidth_gbps: 4096, metadata: { evidence_status: "analytical", read_latency_ns: 40, write_latency_ns: 40, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
-    gddr: { capacity_bytes: gddrDefaultCapacityBytes, peak_ops_per_s: 0, read_bandwidth_gbps: 5120, write_bandwidth_gbps: 5120, metadata: { evidence_status: "analytical", node_scope: "equivalent_gpu_memory_subsystem", capacity_unit: gddrDefaultCapacityUnit, read_latency_ns: 35, write_latency_ns: 35, transfer_granularity_bytes: 256, max_outstanding_requests: 64, dma_latency_ns: 0, physical_memory_config: { kind: "GDDR", generation: "GDDR6", control_mode: "analytical", bank_geometry_scope: "per_die", stack_interface_mode: "shared", subchannels_per_channel: 1, pseudo_channels_per_channel: 1, read_recovery_ns: 0, write_recovery_ns: 15, read_to_write_ns: 0, write_to_read_ns: 0, column_same_group_ns: 0, column_different_group_ns: 0, activate_same_group_ns: 0, activate_different_group_ns: 0, four_activate_window_ns: 0, write_to_read_same_group_ns: 0, write_to_read_different_group_ns: 0, channels: 1, data_lanes: 8, data_width_bits: 32, effective_pin_data_rate_gbps: 20, bandwidth_input_mode: "data_rate", stacks: 1, dies_per_stack: 1, ranks_per_channel: 1, bank_groups_per_rank: 4, banks_per_group: 4, rows_per_bank: 131072, row_bytes: 8192, burst_bytes: 64, interleave_bytes: 64, open_ns: 14, close_ns: 14, read_latency_ns: 35, write_latency_ns: 35, burst_interval_ns: 0.8, max_outstanding_requests: 64, capacity_bytes: gddrDefaultCapacityBytes, metadata: { capacity_unit: gddrDefaultCapacityUnit, command_interval_model: "per_lane_burst_payload_budget" } } } },
+    gddr: { capacity_bytes: gddrDefaultCapacityBytes, peak_ops_per_s: 0, read_bandwidth_gbps: 5120, write_bandwidth_gbps: 5120, metadata: { evidence_status: "analytical", node_scope: "equivalent_gpu_memory_subsystem", capacity_unit: gddrDefaultCapacityUnit, read_latency_ns: 35, write_latency_ns: 35, transfer_granularity_bytes: 256, max_outstanding_requests: 64, dma_latency_ns: 0, physical_memory_config: { kind: "GDDR", generation: "GDDR6", control_mode: "analytical", address_mapping: "bank_interleaved", scheduler: "fcfs", scheduler_window: 16, queue_scope: "device", bank_geometry_scope: "per_die", stack_interface_mode: "shared", subchannels_per_channel: 1, pseudo_channels_per_channel: 1, read_recovery_ns: 0, write_recovery_ns: 15, read_to_write_ns: 0, write_to_read_ns: 0, column_same_group_ns: 0, column_different_group_ns: 0, activate_same_group_ns: 0, activate_different_group_ns: 0, four_activate_window_ns: 0, write_to_read_same_group_ns: 0, write_to_read_different_group_ns: 0, channels: 1, data_lanes: 8, data_width_bits: 32, effective_pin_data_rate_gbps: 20, bandwidth_input_mode: "data_rate", stacks: 1, dies_per_stack: 1, ranks_per_channel: 1, bank_groups_per_rank: 4, banks_per_group: 4, rows_per_bank: 131072, row_bytes: 8192, burst_bytes: 64, interleave_bytes: 64, open_ns: 14, close_ns: 14, read_latency_ns: 35, write_latency_ns: 35, burst_interval_ns: 0.8, max_outstanding_requests: 64, capacity_bytes: gddrDefaultCapacityBytes, metadata: { capacity_unit: gddrDefaultCapacityUnit, command_interval_model: "per_lane_burst_payload_budget" } } } },
     dram: { capacity_bytes: 32 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 2048, write_bandwidth_gbps: 2048, metadata: { evidence_status: "analytical", read_latency_ns: 60, write_latency_ns: 60, transfer_granularity_bytes: 256, dma_latency_ns: 0 } },
     host_memory: { capacity_bytes: 128 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 1600, write_bandwidth_gbps: 1600, metadata: { evidence_status: "analytical", source: "editable-reference-default", read_latency_ns: 100, write_latency_ns: 100, transfer_granularity_bytes: 64, dma_latency_ns: 0 } },
     hbf: { capacity_bytes: 512 * 1024 ** 3, peak_ops_per_s: 0, read_bandwidth_gbps: 3904, write_bandwidth_gbps: 217.6, metadata: { evidence_status: "analytical_user_configured", source: "user-configured-hbf-coordinates", dma_parameter_basis: "editable analytical assumption bounded by the HBF logical path", reference_capacity: "512 GB", reference_read_bandwidth: "488 GB/s", reference_write_bandwidth: "27.2 GB/s", writable: true, access_mode: "memory", write_buffer_bytes: 0, read_latency_ns: 4000, write_latency_ns: 75000, transfer_granularity_bytes: 4096, max_outstanding_requests: 32, dma_bandwidth_gbps: 3904, dma_latency_ns: 800 } },

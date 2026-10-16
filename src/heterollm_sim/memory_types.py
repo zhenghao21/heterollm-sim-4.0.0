@@ -69,6 +69,11 @@ DRAM_BANK_GROUP_TIMING_FIELDS = (
     "write_to_read_same_group_ns", "write_to_read_different_group_ns",
 )
 
+# Controller research choices, separate from JEDEC device requirements.
+DRAM_CONTROLLER_FIELDS = (
+    "address_mapping", "scheduler", "scheduler_window", "queue_scope",
+)
+
 # HBM command occupancy and array constraints are separate quantities. These
 # fields are unused by the analytical DRAM model; the JEDEC HBM command
 # mode requires an explicitly authored clock and command format.
@@ -189,6 +194,10 @@ class DramConfig:
     write_bandwidth_gb_s: Optional[float] = None
     data_lanes: Optional[int] = None
     interleave_bytes: Optional[int] = None
+    address_mapping: str = field(default="bank_interleaved", kw_only=True)
+    scheduler: str = field(default="fcfs", kw_only=True)
+    scheduler_window: int = field(default=16, kw_only=True)
+    queue_scope: str = field(default="device", kw_only=True)
     open_ns: float = 14.0
     close_ns: float = 14.0
     read_latency_ns: float = 14.0
@@ -275,6 +284,15 @@ class DramConfig:
             raise ValueError("stack_interface_mode must be shared or independent")
         if self.control_mode not in {"analytical", "jedec_hbm"}:
             raise ValueError("control_mode must be analytical or jedec_hbm")
+        if self.address_mapping not in {"bank_interleaved", "row_local"}:
+            raise ValueError("address_mapping must be bank_interleaved or row_local")
+        if self.address_mapping == "row_local" and self.interleave_bytes is not None:
+            raise ValueError("row_local address_mapping requires interleave_bytes=None")
+        if self.scheduler not in {"fcfs", "row_hit_first", "read_write_batch"}:
+            raise ValueError("scheduler must be fcfs, row_hit_first or read_write_batch")
+        _positive_int("scheduler_window", self.scheduler_window)
+        if self.queue_scope not in {"device", "channel"}:
+            raise ValueError("queue_scope must be device or channel")
         if self.refresh_policy not in {"disabled", "all_bank"}:
             raise ValueError("refresh_policy must be disabled or all_bank")
         for name in HBM_CONTROL_TIMING_FIELDS:
@@ -565,9 +583,19 @@ class NandWearConfig:
 
 @dataclass(frozen=True)
 class NandConfig:
-    """Parameterized page NAND organization for SSD or HBF."""
+    """Parameterized page NAND organization for SSD or HBF.
+
+    Host bandwidths are aggregate per direction. Internal channels are
+    distributed evenly across host channels; full duplex separates their
+    read/write calendars. OCP mode covers complete-unit IO, not AXI packets.
+    """
 
     kind: MemoryKind | str = MemoryKind.SSD
+    # Explicit execution contracts, not automatic device-name dispatch.
+    protocol_mode: str = field(default="generic_nand", kw_only=True)
+    host_channels: int = field(default=1, kw_only=True)
+    host_full_duplex: bool = field(default=False, kw_only=True)
+    read_cache_pages_per_bank: int = field(default=0, kw_only=True)
     generation: str = ""
     channels: int = 1
     targets_per_channel: int = 1
@@ -630,6 +658,28 @@ class NandConfig:
             _positive_int("internal_transfer_bytes", self.internal_transfer_bytes)
         if not isinstance(self.planes_independent, bool):
             raise ValueError("planes_independent must be a boolean")
+        if self.protocol_mode not in {"generic_nand", "ocp_hbf_0_7"}:
+            raise ValueError("protocol_mode must be generic_nand or ocp_hbf_0_7")
+        _positive_int("host_channels", self.host_channels)
+        if self.host_channels > self.channels or self.channels % self.host_channels:
+            raise ValueError("internal channels must divide evenly among host_channels")
+        if not isinstance(self.host_full_duplex, bool):
+            raise ValueError("host_full_duplex must be a boolean")
+        if (isinstance(self.read_cache_pages_per_bank, bool)
+                or not isinstance(self.read_cache_pages_per_bank, int)
+                or self.read_cache_pages_per_bank < 0):
+            raise ValueError("read_cache_pages_per_bank must be a non-negative integer")
+        if self.protocol_mode == "ocp_hbf_0_7":
+            if kind is not MemoryKind.HBF:
+                raise ValueError("ocp_hbf_0_7 requires kind=HBF")
+            if self.page_bytes != 4096 or self.host_granularity_bytes != 64:
+                raise ValueError("ocp_hbf_0_7 requires 4096-byte pages and 64-byte host granularity")
+            if self.host_channels > 16 or not self.host_full_duplex:
+                raise ValueError("ocp_hbf_0_7 requires at most 16 full-duplex host channels")
+            if self.read_cache_pages_per_bank != 2:
+                raise ValueError("ocp_hbf_0_7 requires two read-cache pages per bank")
+            if self.write_buffer_bytes != 0:
+                raise ValueError("ocp_hbf_0_7 ordinary writes complete on media; host-ack write buffering is unsupported")
         if self.capacity_bytes is not None:
             _positive_int("capacity_bytes", self.capacity_bytes)
             if self.capacity_bytes % self.page_bytes:
@@ -985,7 +1035,7 @@ def make_hbf_config(**kwargs: Any) -> NandConfig:
 
 __all__ = [
     "AccessRequest", "AddressMapping", "BatchResult", "DramConfig", "MemoryKind", "NandConfig",
-    "DRAM_BANK_GROUP_TIMING_FIELDS",
+    "DRAM_BANK_GROUP_TIMING_FIELDS", "DRAM_CONTROLLER_FIELDS",
     "NandWearConfig",
     "Operation", "Segment", "StageTiming", "TransactionResult",
     "make_ddr_config", "make_lpddr_config", "make_hbm_config", "make_gddr_config",

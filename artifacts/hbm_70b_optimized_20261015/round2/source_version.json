@@ -1,0 +1,28 @@
+{
+  "started_at": "2026-10-15T16:02:54.378816+00:00",
+  "description": "Stable canonical source restored after final validation: 595 tests plus 33 subtests; Small four-group complete results bit-exact against previous references. No round2 deadline optimization adopted. Previously validated packing, controller commit, state-copy and row-hit optimizations retained. Observational all-invocation monitor; isolated cohort, initialization and live execution preserved.",
+  "git_head": "c8648904ea7c071e14759a9071c7f8cabd141f44",
+  "working_tree_files": {
+    "src/heterollm_sim/_hbm_numeric.py": {
+      "modified_at": "2026-10-15T13:35:58.474632+00:00",
+      "size_bytes": 24730
+    },
+    "src/heterollm_sim/_compiled_hbm.py": {
+      "modified_at": "2026-10-15T13:56:50.307642+00:00",
+      "size_bytes": 21924
+    },
+    "src/heterollm_sim/data_motion.py": {
+      "modified_at": "2026-10-15T13:48:27.058788+00:00",
+      "size_bytes": 102259
+    },
+    "scripts/hbm_ramulator2_study.py": {
+      "modified_at": "2026-10-15T15:22:52.933284+00:00",
+      "size_bytes": 35920
+    },
+    "scripts/run_hbm_monitored.py": {
+      "modified_at": "2026-10-15T15:57:52.645497+00:00",
+      "size_bytes": 13820
+    }
+  },
+  "scope": "Version notes for this run; source may include uncommitted changes. No content digest or frozen source copy."
+}
