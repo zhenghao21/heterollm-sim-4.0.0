@@ -1,0 +1,1887 @@
+{
+  "architecture": "HBF",
+  "model_id": "qwen2_5-0_5b",
+  "prompt_tokens": 2048,
+  "output_tokens": 3,
+  "status": "completed",
+  "ttft_ns": 1975363655.595559,
+  "tpot_ns": 104577431.81112492,
+  "request_metrics": {
+    "request_id": "scan-request",
+    "status": "finished",
+    "arrival_ns": 0.0,
+    "start_ns": 14379.146666666666,
+    "first_token_ns": 1975363655.595559,
+    "finish_ns": 2184518519.2178087,
+    "queue_delay_ns": 14379.146666666666,
+    "ttft_ns": 1975363655.595559,
+    "tpot_ns": 104577431.81112492,
+    "prompt_tokens": 2048,
+    "requested_output_tokens": 3,
+    "visible_output_tokens": 3,
+    "proposed_tokens": 3,
+    "accepted_tokens": 3,
+    "preemptions": 0,
+    "swaps": 0,
+    "recomputes": 0,
+    "deadline_met": null,
+    "rejection_reason": null,
+    "engine_start_ns": null
+  },
+  "batch_count": 3,
+  "physical_execution_scope": "persistent_live_kernel",
+  "resource_busy_ns": {
+    "component.hbf0.dma": 2433.15625,
+    "cpu0.control_cache": 36.0,
+    "cpu0.h2d_dma": 2587.5,
+    "cpu0.iommu": 750.0,
+    "cpu0.l1d": 10.525333333333332,
+    "cpu0.l2": 31.050666666666665,
+    "cpu0.l3": 110.72,
+    "cpu0.pack": 24600.0,
+    "cpu0.pipeline": 25081.38888888889,
+    "cpu0.scheduler": 3091.6666666666665,
+    "gpu0.command_processor": 15000.0,
+    "gpu0.command_queue": 750.0,
+    "gpu0.frontend": 1188000.0,
+    "gpu0.l1_shared": 361127.40266666596,
+    "gpu0.l2": 725244.8853333336,
+    "gpu0.mmu_tlb": 18000.0,
+    "gpu0.scalar": 345511.2135339412,
+    "gpu0.sfu": 453110.76753757236,
+    "gpu0.tensor_core": 1359892.0463058832,
+    "hbf0.memory:nand:channel:0": 73.87136000003784,
+    "hbf0.memory:nand:channel:1": 73.76896000003774,
+    "hbf0.memory:nand:channel:10": 71.7388800000357,
+    "hbf0.memory:nand:channel:11": 73.54880000003752,
+    "hbf0.memory:nand:channel:12": 71.74656000003571,
+    "hbf0.memory:nand:channel:13": 73.56672000003753,
+    "hbf0.memory:nand:channel:14": 71.76448000003573,
+    "hbf0.memory:nand:channel:15": 73.55648000003752,
+    "hbf0.memory:nand:channel:16": 71.74400000003571,
+    "hbf0.memory:nand:channel:17": 73.55392000003752,
+    "hbf0.memory:nand:channel:18": 71.76192000003573,
+    "hbf0.memory:nand:channel:19": 73.56672000003753,
+    "hbf0.memory:nand:channel:2": 74.18880000003816,
+    "hbf0.memory:nand:channel:20": 71.75936000003573,
+    "hbf0.memory:nand:channel:21": 73.67168000003764,
+    "hbf0.memory:nand:channel:22": 71.87456000003584,
+    "hbf0.memory:nand:channel:23": 73.78432000003775,
+    "hbf0.memory:nand:channel:24": 71.98464000003595,
+    "hbf0.memory:nand:channel:25": 73.90464000003787,
+    "hbf0.memory:nand:channel:26": 72.10240000003607,
+    "hbf0.memory:nand:channel:27": 74.00704000003797,
+    "hbf0.memory:nand:channel:28": 71.95136000003592,
+    "hbf0.memory:nand:channel:29": 73.87136000003784,
+    "hbf0.memory:nand:channel:3": 74.09152000003806,
+    "hbf0.memory:nand:channel:30": 73.76896000003774,
+    "hbf0.memory:nand:channel:31": 75.68128000003965,
+    "hbf0.memory:nand:channel:32": 73.76640000003773,
+    "hbf0.memory:nand:channel:33": 74.17088000003814,
+    "hbf0.memory:nand:channel:34": 74.05568000003802,
+    "hbf0.memory:nand:channel:35": 74.04288000003801,
+    "hbf0.memory:nand:channel:36": 73.92256000003789,
+    "hbf0.memory:nand:channel:37": 74.037760000038,
+    "hbf0.memory:nand:channel:38": 73.9328000000379,
+    "hbf0.memory:nand:channel:39": 72.12288000003609,
+    "hbf0.memory:nand:channel:4": 76.02432000003999,
+    "hbf0.memory:nand:channel:40": 72.028160000036,
+    "hbf0.memory:nand:channel:41": 70.2361600000342,
+    "hbf0.memory:nand:channel:42": 71.6262400000356,
+    "hbf0.memory:nand:channel:43": 69.82144000003379,
+    "hbf0.memory:nand:channel:44": 71.6313600000356,
+    "hbf0.memory:nand:channel:45": 69.81888000003379,
+    "hbf0.memory:nand:channel:46": 71.6339200000356,
+    "hbf0.memory:nand:channel:47": 69.84192000003381,
+    "hbf0.memory:nand:channel:48": 71.66464000003563,
+    "hbf0.memory:nand:channel:49": 69.84704000003381,
+    "hbf0.memory:nand:channel:5": 75.91936000003989,
+    "hbf0.memory:nand:channel:50": 71.64672000003561,
+    "hbf0.memory:nand:channel:51": 69.84960000003382,
+    "hbf0.memory:nand:channel:52": 71.75424000003572,
+    "hbf0.memory:nand:channel:53": 69.94432000003391,
+    "hbf0.memory:nand:channel:54": 71.84896000003582,
+    "hbf0.memory:nand:channel:55": 70.036480000034,
+    "hbf0.memory:nand:channel:56": 71.95136000003592,
+    "hbf0.memory:nand:channel:57": 70.14144000003411,
+    "hbf0.memory:nand:channel:58": 72.04608000003601,
+    "hbf0.memory:nand:channel:59": 70.24640000003421,
+    "hbf0.memory:nand:channel:6": 74.10176000003807,
+    "hbf0.memory:nand:channel:60": 72.16128000003613,
+    "hbf0.memory:nand:channel:61": 70.1286400000341,
+    "hbf0.memory:nand:channel:62": 72.04096000003601,
+    "hbf0.memory:nand:channel:63": 71.94112000003591,
+    "hbf0.memory:nand:channel:7": 73.98400000003795,
+    "hbf0.memory:nand:channel:8": 72.16128000003613,
+    "hbf0.memory:nand:channel:9": 73.54880000003752,
+    "hbf0.memory:nand:host:0:read": 3024946.5599978436,
+    "hbf0.memory:nand:host:0:write": 163119104.0,
+    "hbf0.memory:nand:host:10:read": 2968259.199997895,
+    "hbf0.memory:nand:host:10:write": 163123200.0,
+    "hbf0.memory:nand:host:11:read": 2969863.6799978935,
+    "hbf0.memory:nand:host:11:write": 163119104.0,
+    "hbf0.memory:nand:host:12:read": 2967903.9999978957,
+    "hbf0.memory:nand:host:12:write": 163119104.0,
+    "hbf0.memory:nand:host:13:read": 2966225.919997897,
+    "hbf0.memory:nand:host:13:write": 163119104.0,
+    "hbf0.memory:nand:host:14:read": 2995414.399997871,
+    "hbf0.memory:nand:host:14:write": 163119104.0,
+    "hbf0.memory:nand:host:15:read": 3024507.519997844,
+    "hbf0.memory:nand:host:15:write": 163119104.0,
+    "hbf0.memory:nand:host:1:read": 3029738.239997839,
+    "hbf0.memory:nand:host:1:write": 163119104.0,
+    "hbf0.memory:nand:host:2:read": 3034836.4799978347,
+    "hbf0.memory:nand:host:2:write": 163119104.0,
+    "hbf0.memory:nand:host:3:read": 3033095.6799978362,
+    "hbf0.memory:nand:host:3:write": 163123200.0,
+    "hbf0.memory:nand:host:4:read": 3063774.719997808,
+    "hbf0.memory:nand:host:4:write": 163123200.0,
+    "hbf0.memory:nand:host:5:read": 3065348.4799978067,
+    "hbf0.memory:nand:host:5:write": 163123200.0,
+    "hbf0.memory:nand:host:6:read": 3036330.879997833,
+    "hbf0.memory:nand:host:6:write": 163123200.0,
+    "hbf0.memory:nand:host:7:read": 3006968.95999786,
+    "hbf0.memory:nand:host:7:write": 163123200.0,
+    "hbf0.memory:nand:host:8:read": 2978048.6399978865,
+    "hbf0.memory:nand:host:8:write": 163123200.0,
+    "hbf0.memory:nand:host:9:read": 2973180.159997891,
+    "hbf0.memory:nand:host:9:write": 163123200.0,
+    "hbf0.memory:nand:parallel:0": 939300000.0,
+    "hbf0.memory:nand:parallel:1": 939140000.0,
+    "hbf0.memory:nand:parallel:10": 935968000.0,
+    "hbf0.memory:nand:parallel:11": 938796000.0,
+    "hbf0.memory:nand:parallel:12": 935980000.0,
+    "hbf0.memory:nand:parallel:13": 938824000.0,
+    "hbf0.memory:nand:parallel:14": 936008000.0,
+    "hbf0.memory:nand:parallel:15": 938808000.0,
+    "hbf0.memory:nand:parallel:16": 935976000.0,
+    "hbf0.memory:nand:parallel:17": 938804000.0,
+    "hbf0.memory:nand:parallel:18": 936004000.0,
+    "hbf0.memory:nand:parallel:19": 938895000.0,
+    "hbf0.memory:nand:parallel:2": 939796000.0,
+    "hbf0.memory:nand:parallel:20": 936071000.0,
+    "hbf0.memory:nand:parallel:21": 939059000.0,
+    "hbf0.memory:nand:parallel:22": 936251000.0,
+    "hbf0.memory:nand:parallel:23": 939235000.0,
+    "hbf0.memory:nand:parallel:24": 936423000.0,
+    "hbf0.memory:nand:parallel:25": 939423000.0,
+    "hbf0.memory:nand:parallel:26": 936607000.0,
+    "hbf0.memory:nand:parallel:27": 939512000.0,
+    "hbf0.memory:nand:parallel:28": 936300000.0,
+    "hbf0.memory:nand:parallel:29": 939300000.0,
+    "hbf0.memory:nand:parallel:3": 939644000.0,
+    "hbf0.memory:nand:parallel:30": 939140000.0,
+    "hbf0.memory:nand:parallel:31": 942128000.0,
+    "hbf0.memory:nand:parallel:32": 939136000.0,
+    "hbf0.memory:nand:parallel:33": 939768000.0,
+    "hbf0.memory:nand:parallel:34": 939588000.0,
+    "hbf0.memory:nand:parallel:35": 939568000.0,
+    "hbf0.memory:nand:parallel:36": 939380000.0,
+    "hbf0.memory:nand:parallel:37": 939560000.0,
+    "hbf0.memory:nand:parallel:38": 939396000.0,
+    "hbf0.memory:nand:parallel:39": 936568000.0,
+    "hbf0.memory:nand:parallel:4": 942664000.0,
+    "hbf0.memory:nand:parallel:40": 936420000.0,
+    "hbf0.memory:nand:parallel:41": 933620000.0,
+    "hbf0.memory:nand:parallel:42": 935792000.0,
+    "hbf0.memory:nand:parallel:43": 932972000.0,
+    "hbf0.memory:nand:parallel:44": 935800000.0,
+    "hbf0.memory:nand:parallel:45": 932968000.0,
+    "hbf0.memory:nand:parallel:46": 935804000.0,
+    "hbf0.memory:nand:parallel:47": 933004000.0,
+    "hbf0.memory:nand:parallel:48": 935852000.0,
+    "hbf0.memory:nand:parallel:49": 933012000.0,
+    "hbf0.memory:nand:parallel:5": 942500000.0,
+    "hbf0.memory:nand:parallel:50": 935824000.0,
+    "hbf0.memory:nand:parallel:51": 933016000.0,
+    "hbf0.memory:nand:parallel:52": 935992000.0,
+    "hbf0.memory:nand:parallel:53": 933164000.0,
+    "hbf0.memory:nand:parallel:54": 936140000.0,
+    "hbf0.memory:nand:parallel:55": 933308000.0,
+    "hbf0.memory:nand:parallel:56": 936300000.0,
+    "hbf0.memory:nand:parallel:57": 933472000.0,
+    "hbf0.memory:nand:parallel:58": 936448000.0,
+    "hbf0.memory:nand:parallel:59": 933636000.0,
+    "hbf0.memory:nand:parallel:6": 939660000.0,
+    "hbf0.memory:nand:parallel:60": 936628000.0,
+    "hbf0.memory:nand:parallel:61": 933452000.0,
+    "hbf0.memory:nand:parallel:62": 936440000.0,
+    "hbf0.memory:nand:parallel:63": 936284000.0,
+    "hbf0.memory:nand:parallel:7": 939476000.0,
+    "hbf0.memory:nand:parallel:8": 936628000.0,
+    "hbf0.memory:nand:parallel:9": 938796000.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:0": 3234.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:1": 3094.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:2": 3094.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:3": 3094.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:0": 4074.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:1": 4074.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:2": 4074.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:3": 3458.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:2:0": 742.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:2:1": 742.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:2:2": 742.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:2:3": 742.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:3:0": 742.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:3:1": 742.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:3:2": 742.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:3:3": 742.0,
+    "hostmem0.memory:dram:command:0": 44824.28571430243,
+    "hostmem0.memory:dram:data:0": 44824.28571430243,
+    "interrupt": 0.0,
+    "link.cpu_gpu_pcie.cpu0->gpu0": 15112.515869140625,
+    "link.cpu_gpu_pcie.cpu0->gpu0.inflight": 831112.5158691406,
+    "link.cpu_gpu_pcie.gpu0->cpu0": 16365.36865234375,
+    "link.cpu_gpu_pcie.gpu0->cpu0.inflight": 639565.3686523438,
+    "link.cpu_hostmem_ddr.cpu0->hostmem0": 23019.419642857152,
+    "link.cpu_hostmem_ddr.cpu0->hostmem0.inflight": 85339.4196428571,
+    "link.cpu_hostmem_ddr.hostmem0->cpu0": 21257.16517857142,
+    "link.cpu_hostmem_ddr.hostmem0->cpu0.inflight": 102857.16517857136,
+    "link.gpu_hbf0.gpu0->hbf0": 1631211.5200000685,
+    "link.gpu_hbf0.gpu0->hbf0.inflight": 65350411.520005055,
+    "link.gpu_hbf0.hbf0->gpu0": 3008652.7199996472,
+    "link.gpu_hbf0.hbf0->gpu0.inflight": 120559452.71997285
+  },
+  "storage_traffic": {
+    "schema_version": "heterollm.nand-traffic/v1",
+    "task_count": 897,
+    "logical_bytes": 7423782784,
+    "host_transfer_bytes": 7423782784,
+    "physical_bytes": 7424815104,
+    "physical_read_bytes": 4814876672,
+    "physical_write_bytes": 2609938432,
+    "queue_wait_ns": 6029310262780.764,
+    "erase_operations": 2496,
+    "service_ns": 2326339526.8124495,
+    "logical_read_bytes": 4813844352,
+    "logical_write_bytes": 2609938432,
+    "internal_transfer_bytes": 7424815104,
+    "pages_read": 1175507,
+    "pages_programmed": 637192,
+    "pages_touched": 1812700,
+    "media_waves": null,
+    "read_cache_hits": 1,
+    "read_cache_misses": 1175507,
+    "read_operations": 1175507,
+    "program_operations": 637192,
+    "rmw_read_operations": 0,
+    "page_access_payload_bytes": 7423782784,
+    "page_access_capacity_bytes": 7424819200,
+    "host_admission_samples": 1812700,
+    "host_queue_wait_ns": null,
+    "media_queue_wait_ns": null,
+    "host_outstanding_at_admission_peak": 32,
+    "host_read_outstanding_at_admission_peak": 32,
+    "host_write_outstanding_at_admission_peak": 32,
+    "page_access_payload_utilization": 0.9998604119545429,
+    "nand_observations": null,
+    "nand_read_queue_depth": null,
+    "nand_program_queue_depth": null,
+    "queue_depth_scope": "max per-device outstanding host requests sampled at admission, including the new request; buffered writes end at host acknowledgement; not NAND page/program queues",
+    "page_utilization_scope": "logical payload / sum of per-access page-rounded spans; repeated accesses count again; not unique resident capacity utilization",
+    "metric_availability": {
+      "nand_read_queue_depth": {
+        "status": "not_recorded",
+        "reason": "page-level observation is opt-in; host requests are separate"
+      },
+      "nand_program_queue_depth": {
+        "status": "not_recorded",
+        "reason": "page-level observation is opt-in; host writes are separate"
+      },
+      "logical_read_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "logical_write_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "internal_transfer_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "pages_read": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "pages_programmed": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "pages_touched": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "media_waves": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "read_cache_hits": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "read_cache_misses": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "read_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "program_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "rmw_read_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "page_access_payload_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "page_access_capacity_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "host_admission_samples": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "host_queue_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "media_queue_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "host_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "host_read_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "host_write_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "organization_profiles": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      }
+    },
+    "operation_counts": {
+      "read": 388,
+      "read_write": 436,
+      "write": 73
+    },
+    "resource_totals": {
+      "hbf0.memory:nand:channel:0": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118194176,
+        "service_ns": 73.87136000003784
+      },
+      "hbf0.memory:nand:channel:1": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118030336,
+        "service_ns": 73.76896000003774
+      },
+      "hbf0.memory:nand:channel:10": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114782208,
+        "service_ns": 71.7388800000357
+      },
+      "hbf0.memory:nand:channel:11": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 117678080,
+        "service_ns": 73.54880000003752
+      },
+      "hbf0.memory:nand:channel:12": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114794496,
+        "service_ns": 71.74656000003571
+      },
+      "hbf0.memory:nand:channel:13": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 117706752,
+        "service_ns": 73.56672000003753
+      },
+      "hbf0.memory:nand:channel:14": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114823168,
+        "service_ns": 71.76448000003573
+      },
+      "hbf0.memory:nand:channel:15": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 117690368,
+        "service_ns": 73.55648000003752
+      },
+      "hbf0.memory:nand:channel:16": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114790400,
+        "service_ns": 71.74400000003571
+      },
+      "hbf0.memory:nand:channel:17": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 117686272,
+        "service_ns": 73.55392000003752
+      },
+      "hbf0.memory:nand:channel:18": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114819072,
+        "service_ns": 71.76192000003573
+      },
+      "hbf0.memory:nand:channel:19": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 117706752,
+        "service_ns": 73.56672000003753
+      },
+      "hbf0.memory:nand:channel:2": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118702080,
+        "service_ns": 74.18880000003816
+      },
+      "hbf0.memory:nand:channel:20": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114814976,
+        "service_ns": 71.75936000003573
+      },
+      "hbf0.memory:nand:channel:21": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 117874688,
+        "service_ns": 73.67168000003764
+      },
+      "hbf0.memory:nand:channel:22": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114999296,
+        "service_ns": 71.87456000003584
+      },
+      "hbf0.memory:nand:channel:23": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118054912,
+        "service_ns": 73.78432000003775
+      },
+      "hbf0.memory:nand:channel:24": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115175424,
+        "service_ns": 71.98464000003595
+      },
+      "hbf0.memory:nand:channel:25": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118247424,
+        "service_ns": 73.90464000003787
+      },
+      "hbf0.memory:nand:channel:26": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115363840,
+        "service_ns": 72.10240000003607
+      },
+      "hbf0.memory:nand:channel:27": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118411264,
+        "service_ns": 74.00704000003797
+      },
+      "hbf0.memory:nand:channel:28": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115122176,
+        "service_ns": 71.95136000003592
+      },
+      "hbf0.memory:nand:channel:29": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118194176,
+        "service_ns": 73.87136000003784
+      },
+      "hbf0.memory:nand:channel:3": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118546432,
+        "service_ns": 74.09152000003806
+      },
+      "hbf0.memory:nand:channel:30": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118030336,
+        "service_ns": 73.76896000003774
+      },
+      "hbf0.memory:nand:channel:31": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 121090048,
+        "service_ns": 75.68128000003965
+      },
+      "hbf0.memory:nand:channel:32": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118026240,
+        "service_ns": 73.76640000003773
+      },
+      "hbf0.memory:nand:channel:33": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118673408,
+        "service_ns": 74.17088000003814
+      },
+      "hbf0.memory:nand:channel:34": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118489088,
+        "service_ns": 74.05568000003802
+      },
+      "hbf0.memory:nand:channel:35": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118468608,
+        "service_ns": 74.04288000003801
+      },
+      "hbf0.memory:nand:channel:36": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118276096,
+        "service_ns": 73.92256000003789
+      },
+      "hbf0.memory:nand:channel:37": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118460416,
+        "service_ns": 74.037760000038
+      },
+      "hbf0.memory:nand:channel:38": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118292480,
+        "service_ns": 73.9328000000379
+      },
+      "hbf0.memory:nand:channel:39": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115396608,
+        "service_ns": 72.12288000003609
+      },
+      "hbf0.memory:nand:channel:4": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 121638912,
+        "service_ns": 76.02432000003999
+      },
+      "hbf0.memory:nand:channel:40": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115245056,
+        "service_ns": 72.028160000036
+      },
+      "hbf0.memory:nand:channel:41": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 112377856,
+        "service_ns": 70.2361600000342
+      },
+      "hbf0.memory:nand:channel:42": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114601984,
+        "service_ns": 71.6262400000356
+      },
+      "hbf0.memory:nand:channel:43": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 111714304,
+        "service_ns": 69.82144000003379
+      },
+      "hbf0.memory:nand:channel:44": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114610176,
+        "service_ns": 71.6313600000356
+      },
+      "hbf0.memory:nand:channel:45": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 111710208,
+        "service_ns": 69.81888000003379
+      },
+      "hbf0.memory:nand:channel:46": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114614272,
+        "service_ns": 71.6339200000356
+      },
+      "hbf0.memory:nand:channel:47": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 111747072,
+        "service_ns": 69.84192000003381
+      },
+      "hbf0.memory:nand:channel:48": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114663424,
+        "service_ns": 71.66464000003563
+      },
+      "hbf0.memory:nand:channel:49": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 111755264,
+        "service_ns": 69.84704000003381
+      },
+      "hbf0.memory:nand:channel:5": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 121470976,
+        "service_ns": 75.91936000003989
+      },
+      "hbf0.memory:nand:channel:50": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114634752,
+        "service_ns": 71.64672000003561
+      },
+      "hbf0.memory:nand:channel:51": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 111759360,
+        "service_ns": 69.84960000003382
+      },
+      "hbf0.memory:nand:channel:52": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114806784,
+        "service_ns": 71.75424000003572
+      },
+      "hbf0.memory:nand:channel:53": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 111910912,
+        "service_ns": 69.94432000003391
+      },
+      "hbf0.memory:nand:channel:54": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 114958336,
+        "service_ns": 71.84896000003582
+      },
+      "hbf0.memory:nand:channel:55": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 112058368,
+        "service_ns": 70.036480000034
+      },
+      "hbf0.memory:nand:channel:56": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115122176,
+        "service_ns": 71.95136000003592
+      },
+      "hbf0.memory:nand:channel:57": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 112226304,
+        "service_ns": 70.14144000003411
+      },
+      "hbf0.memory:nand:channel:58": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115273728,
+        "service_ns": 72.04608000003601
+      },
+      "hbf0.memory:nand:channel:59": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 112394240,
+        "service_ns": 70.24640000003421
+      },
+      "hbf0.memory:nand:channel:6": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118562816,
+        "service_ns": 74.10176000003807
+      },
+      "hbf0.memory:nand:channel:60": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115458048,
+        "service_ns": 72.16128000003613
+      },
+      "hbf0.memory:nand:channel:61": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 112205824,
+        "service_ns": 70.1286400000341
+      },
+      "hbf0.memory:nand:channel:62": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115265536,
+        "service_ns": 72.04096000003601
+      },
+      "hbf0.memory:nand:channel:63": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115105792,
+        "service_ns": 71.94112000003591
+      },
+      "hbf0.memory:nand:channel:7": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 118374400,
+        "service_ns": 73.98400000003795
+      },
+      "hbf0.memory:nand:channel:8": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 115458048,
+        "service_ns": 72.16128000003613
+      },
+      "hbf0.memory:nand:channel:9": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 117678080,
+        "service_ns": 73.54880000003752
+      },
+      "hbf0.memory:nand:host:0:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 302494656,
+        "service_ns": 3024946.5599978436
+      },
+      "hbf0.memory:nand:host:0:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163119104,
+        "service_ns": 163119104.0
+      },
+      "hbf0.memory:nand:host:10:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 296825920,
+        "service_ns": 2968259.199997895
+      },
+      "hbf0.memory:nand:host:10:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163123200,
+        "service_ns": 163123200.0
+      },
+      "hbf0.memory:nand:host:11:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 296986368,
+        "service_ns": 2969863.6799978935
+      },
+      "hbf0.memory:nand:host:11:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163119104,
+        "service_ns": 163119104.0
+      },
+      "hbf0.memory:nand:host:12:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 296790400,
+        "service_ns": 2967903.9999978957
+      },
+      "hbf0.memory:nand:host:12:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163119104,
+        "service_ns": 163119104.0
+      },
+      "hbf0.memory:nand:host:13:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 296622592,
+        "service_ns": 2966225.919997897
+      },
+      "hbf0.memory:nand:host:13:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163119104,
+        "service_ns": 163119104.0
+      },
+      "hbf0.memory:nand:host:14:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 299541440,
+        "service_ns": 2995414.399997871
+      },
+      "hbf0.memory:nand:host:14:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163119104,
+        "service_ns": 163119104.0
+      },
+      "hbf0.memory:nand:host:15:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 302450752,
+        "service_ns": 3024507.519997844
+      },
+      "hbf0.memory:nand:host:15:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163119104,
+        "service_ns": 163119104.0
+      },
+      "hbf0.memory:nand:host:1:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 302973824,
+        "service_ns": 3029738.239997839
+      },
+      "hbf0.memory:nand:host:1:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163119104,
+        "service_ns": 163119104.0
+      },
+      "hbf0.memory:nand:host:2:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 303483648,
+        "service_ns": 3034836.4799978347
+      },
+      "hbf0.memory:nand:host:2:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163119104,
+        "service_ns": 163119104.0
+      },
+      "hbf0.memory:nand:host:3:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 303309568,
+        "service_ns": 3033095.6799978362
+      },
+      "hbf0.memory:nand:host:3:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163123200,
+        "service_ns": 163123200.0
+      },
+      "hbf0.memory:nand:host:4:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 306377472,
+        "service_ns": 3063774.719997808
+      },
+      "hbf0.memory:nand:host:4:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163123200,
+        "service_ns": 163123200.0
+      },
+      "hbf0.memory:nand:host:5:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 306534848,
+        "service_ns": 3065348.4799978067
+      },
+      "hbf0.memory:nand:host:5:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163123200,
+        "service_ns": 163123200.0
+      },
+      "hbf0.memory:nand:host:6:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 303633088,
+        "service_ns": 3036330.879997833
+      },
+      "hbf0.memory:nand:host:6:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163123200,
+        "service_ns": 163123200.0
+      },
+      "hbf0.memory:nand:host:7:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 300696896,
+        "service_ns": 3006968.95999786
+      },
+      "hbf0.memory:nand:host:7:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163123200,
+        "service_ns": 163123200.0
+      },
+      "hbf0.memory:nand:host:8:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 297804864,
+        "service_ns": 2978048.6399978865
+      },
+      "hbf0.memory:nand:host:8:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163123200,
+        "service_ns": 163123200.0
+      },
+      "hbf0.memory:nand:host:9:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 297318016,
+        "service_ns": 2973180.159997891
+      },
+      "hbf0.memory:nand:host:9:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 163123200,
+        "service_ns": 163123200.0
+      },
+      "hbf0.memory:nand:parallel:0": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939300000.0
+      },
+      "hbf0.memory:nand:parallel:1": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939140000.0
+      },
+      "hbf0.memory:nand:parallel:10": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935968000.0
+      },
+      "hbf0.memory:nand:parallel:11": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 938796000.0
+      },
+      "hbf0.memory:nand:parallel:12": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935980000.0
+      },
+      "hbf0.memory:nand:parallel:13": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 938824000.0
+      },
+      "hbf0.memory:nand:parallel:14": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936008000.0
+      },
+      "hbf0.memory:nand:parallel:15": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 938808000.0
+      },
+      "hbf0.memory:nand:parallel:16": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935976000.0
+      },
+      "hbf0.memory:nand:parallel:17": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 938804000.0
+      },
+      "hbf0.memory:nand:parallel:18": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936004000.0
+      },
+      "hbf0.memory:nand:parallel:19": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 938895000.0
+      },
+      "hbf0.memory:nand:parallel:2": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939796000.0
+      },
+      "hbf0.memory:nand:parallel:20": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936071000.0
+      },
+      "hbf0.memory:nand:parallel:21": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939059000.0
+      },
+      "hbf0.memory:nand:parallel:22": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936251000.0
+      },
+      "hbf0.memory:nand:parallel:23": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939235000.0
+      },
+      "hbf0.memory:nand:parallel:24": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936423000.0
+      },
+      "hbf0.memory:nand:parallel:25": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939423000.0
+      },
+      "hbf0.memory:nand:parallel:26": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936607000.0
+      },
+      "hbf0.memory:nand:parallel:27": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939512000.0
+      },
+      "hbf0.memory:nand:parallel:28": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936300000.0
+      },
+      "hbf0.memory:nand:parallel:29": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939300000.0
+      },
+      "hbf0.memory:nand:parallel:3": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939644000.0
+      },
+      "hbf0.memory:nand:parallel:30": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939140000.0
+      },
+      "hbf0.memory:nand:parallel:31": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 942128000.0
+      },
+      "hbf0.memory:nand:parallel:32": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939136000.0
+      },
+      "hbf0.memory:nand:parallel:33": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939768000.0
+      },
+      "hbf0.memory:nand:parallel:34": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939588000.0
+      },
+      "hbf0.memory:nand:parallel:35": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939568000.0
+      },
+      "hbf0.memory:nand:parallel:36": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939380000.0
+      },
+      "hbf0.memory:nand:parallel:37": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939560000.0
+      },
+      "hbf0.memory:nand:parallel:38": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939396000.0
+      },
+      "hbf0.memory:nand:parallel:39": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936568000.0
+      },
+      "hbf0.memory:nand:parallel:4": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 942664000.0
+      },
+      "hbf0.memory:nand:parallel:40": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936420000.0
+      },
+      "hbf0.memory:nand:parallel:41": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933620000.0
+      },
+      "hbf0.memory:nand:parallel:42": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935792000.0
+      },
+      "hbf0.memory:nand:parallel:43": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 932972000.0
+      },
+      "hbf0.memory:nand:parallel:44": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935800000.0
+      },
+      "hbf0.memory:nand:parallel:45": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 932968000.0
+      },
+      "hbf0.memory:nand:parallel:46": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935804000.0
+      },
+      "hbf0.memory:nand:parallel:47": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933004000.0
+      },
+      "hbf0.memory:nand:parallel:48": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935852000.0
+      },
+      "hbf0.memory:nand:parallel:49": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933012000.0
+      },
+      "hbf0.memory:nand:parallel:5": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 942500000.0
+      },
+      "hbf0.memory:nand:parallel:50": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935824000.0
+      },
+      "hbf0.memory:nand:parallel:51": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933016000.0
+      },
+      "hbf0.memory:nand:parallel:52": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935992000.0
+      },
+      "hbf0.memory:nand:parallel:53": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933164000.0
+      },
+      "hbf0.memory:nand:parallel:54": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936140000.0
+      },
+      "hbf0.memory:nand:parallel:55": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933308000.0
+      },
+      "hbf0.memory:nand:parallel:56": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936300000.0
+      },
+      "hbf0.memory:nand:parallel:57": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933472000.0
+      },
+      "hbf0.memory:nand:parallel:58": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936448000.0
+      },
+      "hbf0.memory:nand:parallel:59": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933636000.0
+      },
+      "hbf0.memory:nand:parallel:6": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939660000.0
+      },
+      "hbf0.memory:nand:parallel:60": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936628000.0
+      },
+      "hbf0.memory:nand:parallel:61": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 933452000.0
+      },
+      "hbf0.memory:nand:parallel:62": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936440000.0
+      },
+      "hbf0.memory:nand:parallel:63": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936284000.0
+      },
+      "hbf0.memory:nand:parallel:7": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 939476000.0
+      },
+      "hbf0.memory:nand:parallel:8": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 936628000.0
+      },
+      "hbf0.memory:nand:parallel:9": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 938796000.0
+      }
+    },
+    "owner_ids": [
+      "hbf0.memory"
+    ],
+    "profile_evidence": [],
+    "background_work": [],
+    "organization_profiles": [],
+    "organization_profile_limit": 32,
+    "accounting_semantics": "host_transfer_bytes is logical host payload; physical_* and pages_read/pages_programmed are NAND media accounting; null means not fully recorded; operation_counts classifies task-owner ledgers, not media operations; service_ns is analytical"
+  },
+  "dram_traffic": {
+    "schema_version": "heterollm.dram-traffic/v1",
+    "task_count": 743,
+    "logical_read_bytes": 961105,
+    "logical_write_bytes": 1040066,
+    "physical_read_bytes": 964544,
+    "physical_write_bytes": 1043584,
+    "physical_bytes": 2008128,
+    "logical_bytes": 2001171,
+    "burst_count": 31377,
+    "row_hits": 30150,
+    "row_misses": 16,
+    "row_conflicts": 1211,
+    "queue_wait_ns": 0.0,
+    "service_ns": 1062795.7213046546,
+    "read_write_switches": null,
+    "scheduler_reordered_requests": 0,
+    "scheduler_batches": 0,
+    "controller_direction_switches": 1467,
+    "refresh_wait_ns": null,
+    "turnaround_wait_ns": null,
+    "row_command_bus_busy_ns": null,
+    "column_command_bus_busy_ns": null,
+    "activate_commands": null,
+    "precharge_commands": null,
+    "read_commands": null,
+    "write_commands": null,
+    "refresh_commands": null,
+    "metric_availability": {
+      "read_write_switches": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "scheduler_reordered_requests": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "scheduler_batches": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "controller_direction_switches": {
+        "status": "recorded",
+        "recorded_batch_count": 3,
+        "physical_batch_count": 3
+      },
+      "refresh_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "turnaround_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "row_command_bus_busy_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "column_command_bus_busy_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "activate_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "precharge_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "read_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "write_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "refresh_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      },
+      "organization_profiles": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 3
+      }
+    },
+    "resource_totals": {
+      "hostmem0.memory:dram:bank:0:0:0:0:0:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 3234.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 3094.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 3094.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 3094.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 4074.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 4074.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 4074.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 3458.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 742.0
+      },
+      "hostmem0.memory:dram:command:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 44824.28571430243
+      },
+      "hostmem0.memory:dram:data:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 2008128,
+        "service_ns": 44824.28571430243
+      }
+    },
+    "owner_ids": [
+      "hostmem0.memory"
+    ],
+    "organization_profiles": [],
+    "organization_profile_limit": 32,
+    "service_time_scope": "service_ns sums per-task/owner completion spans, which may overlap; it is neither elapsed wall time nor data-bus busy time. resource_totals contains actual per-resource occupied time and bytes.",
+    "accounting_semantics": "resolved analytical burst bytes and controller waits; null means not fully recorded; empty organization_profiles is not evidence of complete geometry reporting; no device accuracy claim"
+  },
+  "resolved_placement": {
+    "op_to_component": {
+      "embedding": "gpu0",
+      "layer-000.attention": "gpu0",
+      "layer-000.mlp": "gpu0",
+      "layer-000.input_norm.reduce": "gpu0",
+      "layer-000.input_norm.apply": "gpu0",
+      "layer-000.post_attention_norm.reduce": "gpu0",
+      "layer-000.post_attention_norm.apply": "gpu0",
+      "layer-000.attention.q_bias": "gpu0",
+      "layer-000.attention.k_bias": "gpu0",
+      "layer-000.attention.v_bias": "gpu0",
+      "layer-000.attention.rope": "gpu0",
+      "layer-000.attention.qk": "gpu0",
+      "layer-000.attention.pv": "gpu0",
+      "layer-000.attention.softmax.reduce": "gpu0",
+      "layer-000.attention.softmax.normalize": "gpu0",
+      "layer-000.attention.residual": "gpu0",
+      "layer-000.mlp.activation": "gpu0",
+      "layer-000.mlp.residual": "gpu0",
+      "layer-001.attention": "gpu0",
+      "layer-001.mlp": "gpu0",
+      "layer-001.input_norm.reduce": "gpu0",
+      "layer-001.input_norm.apply": "gpu0",
+      "layer-001.post_attention_norm.reduce": "gpu0",
+      "layer-001.post_attention_norm.apply": "gpu0",
+      "layer-001.attention.q_bias": "gpu0",
+      "layer-001.attention.k_bias": "gpu0",
+      "layer-001.attention.v_bias": "gpu0",
+      "layer-001.attention.rope": "gpu0",
+      "layer-001.attention.qk": "gpu0",
+      "layer-001.attention.pv": "gpu0",
+      "layer-001.attention.softmax.reduce": "gpu0",
+      "layer-001.attention.softmax.normalize": "gpu0",
+      "layer-001.attention.residual": "gpu0",
+      "layer-001.mlp.activation": "gpu0",
+      "layer-001.mlp.residual": "gpu0",
+      "layer-002.attention": "gpu0",
+      "layer-002.mlp": "gpu0",
+      "layer-002.input_norm.reduce": "gpu0",
+      "layer-002.input_norm.apply": "gpu0",
+      "layer-002.post_attention_norm.reduce": "gpu0",
+      "layer-002.post_attention_norm.apply": "gpu0",
+      "layer-002.attention.q_bias": "gpu0",
+      "layer-002.attention.k_bias": "gpu0",
+      "layer-002.attention.v_bias": "gpu0",
+      "layer-002.attention.rope": "gpu0",
+      "layer-002.attention.qk": "gpu0",
+      "layer-002.attention.pv": "gpu0",
+      "layer-002.attention.softmax.reduce": "gpu0",
+      "layer-002.attention.softmax.normalize": "gpu0",
+      "layer-002.attention.residual": "gpu0",
+      "layer-002.mlp.activation": "gpu0",
+      "layer-002.mlp.residual": "gpu0",
+      "layer-003.attention": "gpu0",
+      "layer-003.mlp": "gpu0",
+      "layer-003.input_norm.reduce": "gpu0",
+      "layer-003.input_norm.apply": "gpu0",
+      "layer-003.post_attention_norm.reduce": "gpu0",
+      "layer-003.post_attention_norm.apply": "gpu0",
+      "layer-003.attention.q_bias": "gpu0",
+      "layer-003.attention.k_bias": "gpu0",
+      "layer-003.attention.v_bias": "gpu0",
+      "layer-003.attention.rope": "gpu0",
+      "layer-003.attention.qk": "gpu0",
+      "layer-003.attention.pv": "gpu0",
+      "layer-003.attention.softmax.reduce": "gpu0",
+      "layer-003.attention.softmax.normalize": "gpu0",
+      "layer-003.attention.residual": "gpu0",
+      "layer-003.mlp.activation": "gpu0",
+      "layer-003.mlp.residual": "gpu0",
+      "layer-004.attention": "gpu0",
+      "layer-004.mlp": "gpu0",
+      "layer-004.input_norm.reduce": "gpu0",
+      "layer-004.input_norm.apply": "gpu0",
+      "layer-004.post_attention_norm.reduce": "gpu0",
+      "layer-004.post_attention_norm.apply": "gpu0",
+      "layer-004.attention.q_bias": "gpu0",
+      "layer-004.attention.k_bias": "gpu0",
+      "layer-004.attention.v_bias": "gpu0",
+      "layer-004.attention.rope": "gpu0",
+      "layer-004.attention.qk": "gpu0",
+      "layer-004.attention.pv": "gpu0",
+      "layer-004.attention.softmax.reduce": "gpu0",
+      "layer-004.attention.softmax.normalize": "gpu0",
+      "layer-004.attention.residual": "gpu0",
+      "layer-004.mlp.activation": "gpu0",
+      "layer-004.mlp.residual": "gpu0",
+      "layer-005.attention": "gpu0",
+      "layer-005.mlp": "gpu0",
+      "layer-005.input_norm.reduce": "gpu0",
+      "layer-005.input_norm.apply": "gpu0",
+      "layer-005.post_attention_norm.reduce": "gpu0",
+      "layer-005.post_attention_norm.apply": "gpu0",
+      "layer-005.attention.q_bias": "gpu0",
+      "layer-005.attention.k_bias": "gpu0",
+      "layer-005.attention.v_bias": "gpu0",
+      "layer-005.attention.rope": "gpu0",
+      "layer-005.attention.qk": "gpu0",
+      "layer-005.attention.pv": "gpu0",
+      "layer-005.attention.softmax.reduce": "gpu0",
+      "layer-005.attention.softmax.normalize": "gpu0",
+      "layer-005.attention.residual": "gpu0",
+      "layer-005.mlp.activation": "gpu0",
+      "layer-005.mlp.residual": "gpu0",
+      "layer-006.attention": "gpu0",
+      "layer-006.mlp": "gpu0",
+      "layer-006.input_norm.reduce": "gpu0",
+      "layer-006.input_norm.apply": "gpu0",
+      "layer-006.post_attention_norm.reduce": "gpu0",
+      "layer-006.post_attention_norm.apply": "gpu0",
+      "layer-006.attention.q_bias": "gpu0",
+      "layer-006.attention.k_bias": "gpu0",
+      "layer-006.attention.v_bias": "gpu0",
+      "layer-006.attention.rope": "gpu0",
+      "layer-006.attention.qk": "gpu0",
+      "layer-006.attention.pv": "gpu0",
+      "layer-006.attention.softmax.reduce": "gpu0",
+      "layer-006.attention.softmax.normalize": "gpu0",
+      "layer-006.attention.residual": "gpu0",
+      "layer-006.mlp.activation": "gpu0",
+      "layer-006.mlp.residual": "gpu0",
+      "layer-007.attention": "gpu0",
+      "layer-007.mlp": "gpu0",
+      "layer-007.input_norm.reduce": "gpu0",
+      "layer-007.input_norm.apply": "gpu0",
+      "layer-007.post_attention_norm.reduce": "gpu0",
+      "layer-007.post_attention_norm.apply": "gpu0",
+      "layer-007.attention.q_bias": "gpu0",
+      "layer-007.attention.k_bias": "gpu0",
+      "layer-007.attention.v_bias": "gpu0",
+      "layer-007.attention.rope": "gpu0",
+      "layer-007.attention.qk": "gpu0",
+      "layer-007.attention.pv": "gpu0",
+      "layer-007.attention.softmax.reduce": "gpu0",
+      "layer-007.attention.softmax.normalize": "gpu0",
+      "layer-007.attention.residual": "gpu0",
+      "layer-007.mlp.activation": "gpu0",
+      "layer-007.mlp.residual": "gpu0",
+      "layer-008.attention": "gpu0",
+      "layer-008.mlp": "gpu0",
+      "layer-008.input_norm.reduce": "gpu0",
+      "layer-008.input_norm.apply": "gpu0",
+      "layer-008.post_attention_norm.reduce": "gpu0",
+      "layer-008.post_attention_norm.apply": "gpu0",
+      "layer-008.attention.q_bias": "gpu0",
+      "layer-008.attention.k_bias": "gpu0",
+      "layer-008.attention.v_bias": "gpu0",
+      "layer-008.attention.rope": "gpu0",
+      "layer-008.attention.qk": "gpu0",
+      "layer-008.attention.pv": "gpu0",
+      "layer-008.attention.softmax.reduce": "gpu0",
+      "layer-008.attention.softmax.normalize": "gpu0",
+      "layer-008.attention.residual": "gpu0",
+      "layer-008.mlp.activation": "gpu0",
+      "layer-008.mlp.residual": "gpu0",
+      "layer-009.attention": "gpu0",
+      "layer-009.mlp": "gpu0",
+      "layer-009.input_norm.reduce": "gpu0",
+      "layer-009.input_norm.apply": "gpu0",
+      "layer-009.post_attention_norm.reduce": "gpu0",
+      "layer-009.post_attention_norm.apply": "gpu0",
+      "layer-009.attention.q_bias": "gpu0",
+      "layer-009.attention.k_bias": "gpu0",
+      "layer-009.attention.v_bias": "gpu0",
+      "layer-009.attention.rope": "gpu0",
+      "layer-009.attention.qk": "gpu0",
+      "layer-009.attention.pv": "gpu0",
+      "layer-009.attention.softmax.reduce": "gpu0",
+      "layer-009.attention.softmax.normalize": "gpu0",
+      "layer-009.attention.residual": "gpu0",
+      "layer-009.mlp.activation": "gpu0",
+      "layer-009.mlp.residual": "gpu0",
+      "layer-010.attention": "gpu0",
+      "layer-010.mlp": "gpu0",
+      "layer-010.input_norm.reduce": "gpu0",
+      "layer-010.input_norm.apply": "gpu0",
+      "layer-010.post_attention_norm.reduce": "gpu0",
+      "layer-010.post_attention_norm.apply": "gpu0",
+      "layer-010.attention.q_bias": "gpu0",
+      "layer-010.attention.k_bias": "gpu0",
+      "layer-010.attention.v_bias": "gpu0",
+      "layer-010.attention.rope": "gpu0",
+      "layer-010.attention.qk": "gpu0",
+      "layer-010.attention.pv": "gpu0",
+      "layer-010.attention.softmax.reduce": "gpu0",
+      "layer-010.attention.softmax.normalize": "gpu0",
+      "layer-010.attention.residual": "gpu0",
+      "layer-010.mlp.activation": "gpu0",
+      "layer-010.mlp.residual": "gpu0",
+      "layer-011.attention": "gpu0",
+      "layer-011.mlp": "gpu0",
+      "layer-011.input_norm.reduce": "gpu0",
+      "layer-011.input_norm.apply": "gpu0",
+      "layer-011.post_attention_norm.reduce": "gpu0",
+      "layer-011.post_attention_norm.apply": "gpu0",
+      "layer-011.attention.q_bias": "gpu0",
+      "layer-011.attention.k_bias": "gpu0",
+      "layer-011.attention.v_bias": "gpu0",
+      "layer-011.attention.rope": "gpu0",
+      "layer-011.attention.qk": "gpu0",
+      "layer-011.attention.pv": "gpu0",
+      "layer-011.attention.softmax.reduce": "gpu0",
+      "layer-011.attention.softmax.normalize": "gpu0",
+      "layer-011.attention.residual": "gpu0",
+      "layer-011.mlp.activation": "gpu0",
+      "layer-011.mlp.residual": "gpu0",
+      "layer-012.attention": "gpu0",
+      "layer-012.mlp": "gpu0",
+      "layer-012.input_norm.reduce": "gpu0",
+      "layer-012.input_norm.apply": "gpu0",
+      "layer-012.post_attention_norm.reduce": "gpu0",
+      "layer-012.post_attention_norm.apply": "gpu0",
+      "layer-012.attention.q_bias": "gpu0",
+      "layer-012.attention.k_bias": "gpu0",
+      "layer-012.attention.v_bias": "gpu0",
+      "layer-012.attention.rope": "gpu0",
+      "layer-012.attention.qk": "gpu0",
+      "layer-012.attention.pv": "gpu0",
+      "layer-012.attention.softmax.reduce": "gpu0",
+      "layer-012.attention.softmax.normalize": "gpu0",
+      "layer-012.attention.residual": "gpu0",
+      "layer-012.mlp.activation": "gpu0",
+      "layer-012.mlp.residual": "gpu0",
+      "layer-013.attention": "gpu0",
+      "layer-013.mlp": "gpu0",
+      "layer-013.input_norm.reduce": "gpu0",
+      "layer-013.input_norm.apply": "gpu0",
+      "layer-013.post_attention_norm.reduce": "gpu0",
+      "layer-013.post_attention_norm.apply": "gpu0",
+      "layer-013.attention.q_bias": "gpu0",
+      "layer-013.attention.k_bias": "gpu0",
+      "layer-013.attention.v_bias": "gpu0",
+      "layer-013.attention.rope": "gpu0",
+      "layer-013.attention.qk": "gpu0",
+      "layer-013.attention.pv": "gpu0",
+      "layer-013.attention.softmax.reduce": "gpu0",
+      "layer-013.attention.softmax.normalize": "gpu0",
+      "layer-013.attention.residual": "gpu0",
+      "layer-013.mlp.activation": "gpu0",
+      "layer-013.mlp.residual": "gpu0",
+      "layer-014.attention": "gpu0",
+      "layer-014.mlp": "gpu0",
+      "layer-014.input_norm.reduce": "gpu0",
+      "layer-014.input_norm.apply": "gpu0",
+      "layer-014.post_attention_norm.reduce": "gpu0",
+      "layer-014.post_attention_norm.apply": "gpu0",
+      "layer-014.attention.q_bias": "gpu0",
+      "layer-014.attention.k_bias": "gpu0",
+      "layer-014.attention.v_bias": "gpu0",
+      "layer-014.attention.rope": "gpu0",
+      "layer-014.attention.qk": "gpu0",
+      "layer-014.attention.pv": "gpu0",
+      "layer-014.attention.softmax.reduce": "gpu0",
+      "layer-014.attention.softmax.normalize": "gpu0",
+      "layer-014.attention.residual": "gpu0",
+      "layer-014.mlp.activation": "gpu0",
+      "layer-014.mlp.residual": "gpu0",
+      "layer-015.attention": "gpu0",
+      "layer-015.mlp": "gpu0",
+      "layer-015.input_norm.reduce": "gpu0",
+      "layer-015.input_norm.apply": "gpu0",
+      "layer-015.post_attention_norm.reduce": "gpu0",
+      "layer-015.post_attention_norm.apply": "gpu0",
+      "layer-015.attention.q_bias": "gpu0",
+      "layer-015.attention.k_bias": "gpu0",
+      "layer-015.attention.v_bias": "gpu0",
+      "layer-015.attention.rope": "gpu0",
+      "layer-015.attention.qk": "gpu0",
+      "layer-015.attention.pv": "gpu0",
+      "layer-015.attention.softmax.reduce": "gpu0",
+      "layer-015.attention.softmax.normalize": "gpu0",
+      "layer-015.attention.residual": "gpu0",
+      "layer-015.mlp.activation": "gpu0",
+      "layer-015.mlp.residual": "gpu0",
+      "layer-016.attention": "gpu0",
+      "layer-016.mlp": "gpu0",
+      "layer-016.input_norm.reduce": "gpu0",
+      "layer-016.input_norm.apply": "gpu0",
+      "layer-016.post_attention_norm.reduce": "gpu0",
+      "layer-016.post_attention_norm.apply": "gpu0",
+      "layer-016.attention.q_bias": "gpu0",
+      "layer-016.attention.k_bias": "gpu0",
+      "layer-016.attention.v_bias": "gpu0",
+      "layer-016.attention.rope": "gpu0",
+      "layer-016.attention.qk": "gpu0",
+      "layer-016.attention.pv": "gpu0",
+      "layer-016.attention.softmax.reduce": "gpu0",
+      "layer-016.attention.softmax.normalize": "gpu0",
+      "layer-016.attention.residual": "gpu0",
+      "layer-016.mlp.activation": "gpu0",
+      "layer-016.mlp.residual": "gpu0",
+      "layer-017.attention": "gpu0",
+      "layer-017.mlp": "gpu0",
+      "layer-017.input_norm.reduce": "gpu0",
+      "layer-017.input_norm.apply": "gpu0",
+      "layer-017.post_attention_norm.reduce": "gpu0",
+      "layer-017.post_attention_norm.apply": "gpu0",
+      "layer-017.attention.q_bias": "gpu0",
+      "layer-017.attention.k_bias": "gpu0",
+      "layer-017.attention.v_bias": "gpu0",
+      "layer-017.attention.rope": "gpu0",
+      "layer-017.attention.qk": "gpu0",
+      "layer-017.attention.pv": "gpu0",
+      "layer-017.attention.softmax.reduce": "gpu0",
+      "layer-017.attention.softmax.normalize": "gpu0",
+      "layer-017.attention.residual": "gpu0",
+      "layer-017.mlp.activation": "gpu0",
+      "layer-017.mlp.residual": "gpu0",
+      "layer-018.attention": "gpu0",
+      "layer-018.mlp": "gpu0",
+      "layer-018.input_norm.reduce": "gpu0",
+      "layer-018.input_norm.apply": "gpu0",
+      "layer-018.post_attention_norm.reduce": "gpu0",
+      "layer-018.post_attention_norm.apply": "gpu0",
+      "layer-018.attention.q_bias": "gpu0",
+      "layer-018.attention.k_bias": "gpu0",
+      "layer-018.attention.v_bias": "gpu0",
+      "layer-018.attention.rope": "gpu0",
+      "layer-018.attention.qk": "gpu0",
+      "layer-018.attention.pv": "gpu0",
+      "layer-018.attention.softmax.reduce": "gpu0",
+      "layer-018.attention.softmax.normalize": "gpu0",
+      "layer-018.attention.residual": "gpu0",
+      "layer-018.mlp.activation": "gpu0",
+      "layer-018.mlp.residual": "gpu0",
+      "layer-019.attention": "gpu0",
+      "layer-019.mlp": "gpu0",
+      "layer-019.input_norm.reduce": "gpu0",
+      "layer-019.input_norm.apply": "gpu0",
+      "layer-019.post_attention_norm.reduce": "gpu0",
+      "layer-019.post_attention_norm.apply": "gpu0",
+      "layer-019.attention.q_bias": "gpu0",
+      "layer-019.attention.k_bias": "gpu0",
+      "layer-019.attention.v_bias": "gpu0",
+      "layer-019.attention.rope": "gpu0",
+      "layer-019.attention.qk": "gpu0",
+      "layer-019.attention.pv": "gpu0",
+      "layer-019.attention.softmax.reduce": "gpu0",
+      "layer-019.attention.softmax.normalize": "gpu0",
+      "layer-019.attention.residual": "gpu0",
+      "layer-019.mlp.activation": "gpu0",
+      "layer-019.mlp.residual": "gpu0",
+      "layer-020.attention": "gpu0",
+      "layer-020.mlp": "gpu0",
+      "layer-020.input_norm.reduce": "gpu0",
+      "layer-020.input_norm.apply": "gpu0",
+      "layer-020.post_attention_norm.reduce": "gpu0",
+      "layer-020.post_attention_norm.apply": "gpu0",
+      "layer-020.attention.q_bias": "gpu0",
+      "layer-020.attention.k_bias": "gpu0",
+      "layer-020.attention.v_bias": "gpu0",
+      "layer-020.attention.rope": "gpu0",
+      "layer-020.attention.qk": "gpu0",
+      "layer-020.attention.pv": "gpu0",
+      "layer-020.attention.softmax.reduce": "gpu0",
+      "layer-020.attention.softmax.normalize": "gpu0",
+      "layer-020.attention.residual": "gpu0",
+      "layer-020.mlp.activation": "gpu0",
+      "layer-020.mlp.residual": "gpu0",
+      "layer-021.attention": "gpu0",
+      "layer-021.mlp": "gpu0",
+      "layer-021.input_norm.reduce": "gpu0",
+      "layer-021.input_norm.apply": "gpu0",
+      "layer-021.post_attention_norm.reduce": "gpu0",
+      "layer-021.post_attention_norm.apply": "gpu0",
+      "layer-021.attention.q_bias": "gpu0",
+      "layer-021.attention.k_bias": "gpu0",
+      "layer-021.attention.v_bias": "gpu0",
+      "layer-021.attention.rope": "gpu0",
+      "layer-021.attention.qk": "gpu0",
+      "layer-021.attention.pv": "gpu0",
+      "layer-021.attention.softmax.reduce": "gpu0",
+      "layer-021.attention.softmax.normalize": "gpu0",
+      "layer-021.attention.residual": "gpu0",
+      "layer-021.mlp.activation": "gpu0",
+      "layer-021.mlp.residual": "gpu0",
+      "layer-022.attention": "gpu0",
+      "layer-022.mlp": "gpu0",
+      "layer-022.input_norm.reduce": "gpu0",
+      "layer-022.input_norm.apply": "gpu0",
+      "layer-022.post_attention_norm.reduce": "gpu0",
+      "layer-022.post_attention_norm.apply": "gpu0",
+      "layer-022.attention.q_bias": "gpu0",
+      "layer-022.attention.k_bias": "gpu0",
+      "layer-022.attention.v_bias": "gpu0",
+      "layer-022.attention.rope": "gpu0",
+      "layer-022.attention.qk": "gpu0",
+      "layer-022.attention.pv": "gpu0",
+      "layer-022.attention.softmax.reduce": "gpu0",
+      "layer-022.attention.softmax.normalize": "gpu0",
+      "layer-022.attention.residual": "gpu0",
+      "layer-022.mlp.activation": "gpu0",
+      "layer-022.mlp.residual": "gpu0",
+      "layer-023.attention": "gpu0",
+      "layer-023.mlp": "gpu0",
+      "layer-023.input_norm.reduce": "gpu0",
+      "layer-023.input_norm.apply": "gpu0",
+      "layer-023.post_attention_norm.reduce": "gpu0",
+      "layer-023.post_attention_norm.apply": "gpu0",
+      "layer-023.attention.q_bias": "gpu0",
+      "layer-023.attention.k_bias": "gpu0",
+      "layer-023.attention.v_bias": "gpu0",
+      "layer-023.attention.rope": "gpu0",
+      "layer-023.attention.qk": "gpu0",
+      "layer-023.attention.pv": "gpu0",
+      "layer-023.attention.softmax.reduce": "gpu0",
+      "layer-023.attention.softmax.normalize": "gpu0",
+      "layer-023.attention.residual": "gpu0",
+      "layer-023.mlp.activation": "gpu0",
+      "layer-023.mlp.residual": "gpu0",
+      "lm_head": "gpu0"
+    },
+    "tensor_to_component": {
+      "layer-000.attention_weights": "hbf0",
+      "layer-000.mlp_weights": "hbf0",
+      "layer-001.attention_weights": "hbf0",
+      "layer-001.mlp_weights": "hbf0",
+      "layer-002.attention_weights": "hbf0",
+      "layer-002.mlp_weights": "hbf0",
+      "layer-003.attention_weights": "hbf0",
+      "layer-003.mlp_weights": "hbf0",
+      "layer-004.attention_weights": "hbf0",
+      "layer-004.mlp_weights": "hbf0",
+      "layer-005.attention_weights": "hbf0",
+      "layer-005.mlp_weights": "hbf0",
+      "layer-006.attention_weights": "hbf0",
+      "layer-006.mlp_weights": "hbf0",
+      "layer-007.attention_weights": "hbf0",
+      "layer-007.mlp_weights": "hbf0",
+      "layer-008.attention_weights": "hbf0",
+      "layer-008.mlp_weights": "hbf0",
+      "layer-009.attention_weights": "hbf0",
+      "layer-009.mlp_weights": "hbf0",
+      "layer-010.attention_weights": "hbf0",
+      "layer-010.mlp_weights": "hbf0",
+      "layer-011.attention_weights": "hbf0",
+      "layer-011.mlp_weights": "hbf0",
+      "layer-012.attention_weights": "hbf0",
+      "layer-012.mlp_weights": "hbf0",
+      "layer-013.attention_weights": "hbf0",
+      "layer-013.mlp_weights": "hbf0",
+      "layer-014.attention_weights": "hbf0",
+      "layer-014.mlp_weights": "hbf0",
+      "layer-015.attention_weights": "hbf0",
+      "layer-015.mlp_weights": "hbf0",
+      "layer-016.attention_weights": "hbf0",
+      "layer-016.mlp_weights": "hbf0",
+      "layer-017.attention_weights": "hbf0",
+      "layer-017.mlp_weights": "hbf0",
+      "layer-018.attention_weights": "hbf0",
+      "layer-018.mlp_weights": "hbf0",
+      "layer-019.attention_weights": "hbf0",
+      "layer-019.mlp_weights": "hbf0",
+      "layer-020.attention_weights": "hbf0",
+      "layer-020.mlp_weights": "hbf0",
+      "layer-021.attention_weights": "hbf0",
+      "layer-021.mlp_weights": "hbf0",
+      "layer-022.attention_weights": "hbf0",
+      "layer-022.mlp_weights": "hbf0",
+      "layer-023.attention_weights": "hbf0",
+      "layer-023.mlp_weights": "hbf0",
+      "embedding_weights": "hbf0",
+      "kv_cache": "hbf0"
+    },
+    "active_memory": "hbf0",
+    "kv": "hbf0"
+  },
+  "wall_seconds": 12.478665900009219,
+  "cpu_seconds": 12.234375,
+  "finished_at": "2026-10-16T08:30:14.637123+00:00",
+  "python_executable": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\.venv\\Scripts\\python.exe",
+  "profiled": false,
+  "purpose": "runtime optimization benchmark; not a formal scan point"
+}

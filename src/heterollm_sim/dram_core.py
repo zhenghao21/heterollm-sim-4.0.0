@@ -124,6 +124,9 @@ class DramCore:
         # cannot affect another four-activation window.
         self._bank_group_state: Dict[tuple[int, int, int, int], dict] = {}
         self._hbm_control_state: dict = {}
+        self._hbm_transactions: list = []
+        self._hbm_numeric_state = None
+        self._hbm_numeric_enabled = False
         self._inflight: list[float] = []
         self._channel_inflight: dict[tuple[int, int], list[float]] = {}
         self._acceptance_ns = 0.0
@@ -145,6 +148,79 @@ class DramCore:
             from .memory_types import HBM_CONTROL_TIMING_FIELDS
             self._largest_stage_ns = max(self._largest_stage_ns,
                 *(getattr(config, name) for name in HBM_CONTROL_TIMING_FIELDS))
+
+    @property
+    def _banks(self):
+        self._hbm_publish_numeric()
+        return self.__dict__["_banks"]
+
+    @_banks.setter
+    def _banks(self, value):
+        if "_banks" in self.__dict__:
+            self._hbm_publish_numeric()
+        self.__dict__["_banks"] = value
+
+    @property
+    def _hbm_control_state(self):
+        self._hbm_publish_numeric()
+        return self.__dict__["_hbm_control_state"]
+
+    @_hbm_control_state.setter
+    def _hbm_control_state(self, value):
+        if "_hbm_control_state" in self.__dict__:
+            self._hbm_publish_numeric()
+        self.__dict__["_hbm_control_state"] = value
+
+    def _hbm_publish_numeric(self):
+        """Expose current Python state and end exclusive numeric ownership.
+
+        A caller may retain and mutate either dictionary after reading it.
+        Therefore a public read disables array residency, rather than relying
+        on an unsafe identity check to detect later mutations through aliases.
+        """
+        self.__dict__["_hbm_numeric_enabled"] = False
+        packed = self.__dict__.get("_hbm_numeric_state")
+        if packed is None:
+            return
+        for token in self._hbm_transactions:
+            token.materialize(self)
+        if packed._controller_commits:
+            packed.commit_controller()
+        self._hbm_numeric_state = None
+
+    def begin_transaction(self):
+        """Protect bank/controller state; the caller owns queues and timeline."""
+        from ._hbm_transaction import HBMTransaction
+        token = HBMTransaction(self)
+        if self.capture_details or self.config.control_mode != "jedec_hbm":
+            token.materialize(self)
+        self._hbm_transactions.append(token)
+        return token
+
+    def _finish_transaction(self, token):
+        if not self._hbm_transactions or self._hbm_transactions[-1] is not token:
+            raise ValueError("HBM transactions must finish once in reverse begin order")
+        self._hbm_transactions.pop()
+
+    def commit_transaction(self, token):
+        self._finish_transaction(token)
+
+    def rollback_transaction(self, token):
+        self._finish_transaction(token)
+        token.rollback(self)
+
+    def _hbm_before_reference(self):
+        self._hbm_publish_numeric()
+        for token in self._hbm_transactions:
+            token.materialize(self)
+
+    def _hbm_remember_bank(self, key):
+        for token in self._hbm_transactions:
+            token.remember_bank(self.__dict__["_banks"], key)
+
+    def _hbm_remember_entry(self, namespace, key):
+        for token in self._hbm_transactions:
+            token.remember_entry(self.__dict__["_hbm_control_state"][namespace], key)
 
     def _bank_id(self, mapping) -> str:
         prefix = str(self.config.metadata.get("bank_resource_prefix", "dram:bank"))

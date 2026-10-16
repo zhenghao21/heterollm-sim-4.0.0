@@ -162,8 +162,11 @@ class NandCore:
         count = self.config.read_cache_pages_per_bank
         if not count:
             return None, False
-        slots = self._read_cache.setdefault(self._bank_key(mapping),
-                                           [_ReadCacheSlot() for _ in range(count)])
+        bank = self._bank_key(mapping)
+        slots = self._read_cache.get(bank)
+        if slots is None:
+            slots = [_ReadCacheSlot() for _ in range(count)]
+            self._read_cache[bank] = slots
         key = self._staged_key(mapping)
         slot = next((slot for slot in slots if slot.page_key == key), None)
         hit = slot is not None
@@ -568,6 +571,13 @@ class NandCore:
 
     def submit(self, request: AccessRequest) -> TransactionResult:
         self._validate_request(request)
+        if (type(self) is NandCore and not self.capture_details and not self._observe_media
+                and self.config.protocol_mode == "ocp_hbf_0_7"
+                and request.address // self.config.page_bytes
+                == (request.address + request.byte_count - 1) // self.config.page_bytes):
+            result = self._submit_ocp_single_page_summary(request)
+            if result is not None:
+                return result
         self._observation_events = []
         effective_arrival = max(request.arrival_ns, self._acceptance_ns)
         inflight = [end for end in self._inflight if end > effective_arrival]
@@ -637,6 +647,185 @@ class NandCore:
         self._inflight = [*inflight, result.completion_ns]
         self._inflight_operations = [*admitted, (result.completion_ns, request.operation)]
         return result
+
+    def submit_read_pages(self, addresses, arrival_ns, *, link_program=()):
+        """Execute full-page reads interleaved with external links in order.
+
+        Return page completions, one NAND bill and per-link bills, or None if
+        the ordinary per-page executor is needed for the authored features.
+        Arrival may be one timestamp or one timestamp per page. No page,
+        cache or admission transition is skipped by the compiled loop.
+        """
+        try:
+            from ._compiled_nand import execute_pages
+        except (ImportError, OSError):
+            return None
+        return execute_pages(self, addresses, arrival_ns, link_program)
+
+    def submit_write_pages(self, addresses, arrival_ns, *, link_program=()):
+        """Program full pages with each page's incoming links before admission."""
+        try:
+            from ._compiled_nand import execute_pages
+        except (ImportError, OSError):
+            return None
+        return execute_pages(self, addresses, arrival_ns, link_program, operation=Operation.WRITE)
+
+    def _submit_ocp_single_page_summary(self, request: AccessRequest) -> Optional[TransactionResult]:
+        """Execute the same strict page transitions without trace allocations.
+
+        Host staging interleaves each page with its external link reservation,
+        so these requests cannot be replaced by a single bulk NAND transfer.
+        Only the three touched resources need accounting baselines; scanning
+        all resources in the shared machine timeline for every page is wasteful.
+        Multi-lane/custom timelines retain the detailed reservation executor.
+        """
+        timeline, config = self.timeline, self.config
+        if type(timeline) is not ResourceTimeline:
+            return None
+        mapping = map_nand_address(config, request.address // config.page_bytes * config.page_bytes)
+        array_id = self._array_id(mapping)
+        array_resource = self._array_resource_id(mapping)
+        channel = self._channel_id(mapping)
+        host_resource = self._host_id(mapping, request.operation)
+        resources = (array_resource, channel, host_resource)
+        if any(len(timeline.lane_available.get(resource, (0.,))) != 1 for resource in resources):
+            return None
+        if any(not isfinite(value) or value < 0 for resource in resources
+               for value in timeline.lane_available.get(resource, (timeline.ready_ns.get(resource, 0.),))):
+            return None
+        effective_arrival = max(request.arrival_ns, self._acceptance_ns)
+        inflight = [end for end in self._inflight if end > effective_arrival]
+        if len(inflight) >= config.max_outstanding_requests:
+            effective_arrival = max(effective_arrival, min(inflight))
+            inflight = [end for end in inflight if end > effective_arrival]
+        admitted = [(end, operation) for end, operation in self._inflight_operations
+                    if end > effective_arrival]
+        before_busy = {resource: timeline.busy_ns.get(resource, 0.) for resource in resources}
+        before_bytes = {resource: timeline.bytes_moved.get(resource, 0) for resource in resources}
+        timeline._intervals = {}
+        timeline._interval_limit = timeline._interval_count = 0
+        timeline._intervals_truncated = False
+        timeline._interval_payloads = {}
+        timeline._touched = set()
+        self._observation_events = []
+
+        def reserve(resource, earliest, duration, direction=None, payload=None):
+            lanes = timeline.lane_available.get(resource)
+            if lanes is None:
+                lanes = [timeline.ready_ns.get(resource, 0.)]
+                timeline.lane_available[resource] = lanes
+            start = max(float(earliest), float(lanes[0]))
+            end = start + float(duration)
+            busy = timeline.busy_ns.get(resource, 0.) + float(duration)
+            if not isfinite(end) or not isfinite(busy):
+                raise ValueError("resource reservation exceeds finite timing range")
+            lanes[0] = end
+            timeline.ready_ns[resource] = end
+            timeline.busy_ns[resource] = busy
+            timeline.last_intervals[resource] = (start, end)
+            timeline._touched.add(resource)
+            timeline._intervals_truncated = True
+            if direction:
+                timeline.directions[resource] = direction
+            timeline.lane_directions.pop(resource, None)
+            if payload is not None:
+                timeline.bytes_moved[resource] = timeline.bytes_moved.get(resource, 0) + payload
+            return end
+
+        base = effective_arrival + config.front_ns
+        dependency = max(base, self._array_ready.get(array_id, 0.), self._buffer_ready.get(array_id, 0.))
+        host_bytes = request.byte_count  # Strict requests are already 64-byte aligned.
+        internal_bytes = config.transfer_page_bytes
+        host_ns = host_bytes / self._host_bandwidth(request.operation)
+        internal_ns = internal_bytes / config.internal_bandwidth_gb_s
+        pages_read = pages_programmed = erases = read_cache_hits = read_cache_misses = 0
+        if request.operation is Operation.READ:
+            slot, hit = self._cache_slot(mapping)
+            if hit:
+                internal_bytes = 0
+                completion = reserve(host_resource, max(base, slot.ready_ns), host_ns, "read", host_bytes)
+                slot.reader_completion_ns = max(slot.reader_completion_ns, completion)
+                read_cache_hits = 1
+            else:
+                read_cache_misses = int(slot is not None)
+                read_end = reserve(array_resource, dependency, config.page_read_ns)
+                internal_end = reserve(channel, max(read_end, slot.reader_completion_ns if slot else 0.),
+                                       internal_ns, "read", internal_bytes)
+                completion = reserve(host_resource, internal_end, host_ns, "read", host_bytes)
+                if slot is not None:
+                    slot.page_key = self._staged_key(mapping)
+                    slot.ready_ns = internal_end
+                    slot.reader_completion_ns = completion
+                self._array_ready[array_id] = read_end
+                self._buffer_ready[array_id] = internal_end
+                timeline.ready_ns[array_id] = read_end
+                pages_read = 1
+        else:
+            self._invalidate_cache(mapping)
+            if mapping.page == 0:
+                self._invalidate_cache(mapping, block=True)
+                erase_end = reserve(array_resource, dependency, config.block_erase_ns)
+                self._array_ready[array_id] = erase_end
+                timeline.ready_ns[array_id] = erase_end
+                erases = 1
+            host_end = reserve(host_resource, base, host_ns, "write", host_bytes)
+            internal_end = reserve(channel, max(host_end, self._buffer_ready.get(array_id, 0.)),
+                                   internal_ns, "write", internal_bytes)
+            completion = reserve(array_resource, max(internal_end, self._array_ready.get(array_id, 0.)),
+                                 config.page_program_ns)
+            self._array_ready[array_id] = self._buffer_ready[array_id] = completion
+            timeline.ready_ns[array_id] = completion
+            self._next_program_page[self._block_key(mapping)] = mapping.page + 1
+            pages_programmed = 1
+        completion = max(base, completion)
+        moved = {resource: timeline.bytes_moved.get(resource, 0) - before_bytes[resource]
+                 for resource in timeline._touched
+                 if timeline.bytes_moved.get(resource, 0) != before_bytes[resource]}
+        busy = {resource: timeline.busy_ns[resource] - before_busy[resource]
+                for resource in timeline._touched if timeline.busy_ns[resource] != before_busy[resource]}
+        self._acceptance_ns = effective_arrival
+        self._inflight = [*inflight, completion]
+        self._inflight_operations = [*admitted, (completion, request.operation)]
+        return TransactionResult(
+            request_id=request.request_id, operation=request.operation, arrival_ns=request.arrival_ns,
+            completion_ns=completion, logical_bytes=request.byte_count, transfer_bytes=internal_bytes,
+            counters={
+                "host_transfer_bytes": host_bytes, "internal_transfer_bytes": internal_bytes,
+                "physical_read_bytes": pages_read * config.page_bytes,
+                "physical_write_bytes": pages_programmed * config.page_bytes,
+                "pages_read": pages_read, "pages_programmed": pages_programmed,
+                "merge_bytes": 0, "merged_pages": 0, "staging_write_pages": 0,
+                "staging_read_hits": 0, "staging_read_merges": 0,
+                "read_cache_hits": read_cache_hits, "read_cache_misses": read_cache_misses,
+                "erase_operations": erases, "page_count": 1, "details_truncated": False,
+                "bandwidth_ceiling_gb_s": config.host_bandwidth_for(request.operation) if read_cache_hits
+                    else self._bandwidth_ceiling_gb_s(request.operation),
+                "bandwidth_ceiling_scope":
+                    "directional host upper bound for transactions using cached/staged data; host acknowledgement is not media drain"
+                    if read_cache_hits else
+                    "device transfer upper bound: min(directional host, summed independent channels); excludes array latency",
+                "array_units": config.array_units,
+                "write_completion": "media_program_complete" if pages_programmed else "n/a",
+                "host_ack_completion_ns": None,
+                "media_drain_completion_ns": completion if pages_programmed else None,
+                "pages_touched": 1, "read_operations": pages_read, "program_operations": pages_programmed,
+                "rmw_read_operations": 0, "page_access_payload_bytes": request.byte_count,
+                "page_access_capacity_bytes": config.page_bytes, "host_admission_samples": 1,
+                "host_outstanding_at_admission_peak": len(admitted) + 1,
+                "host_read_outstanding_at_admission_peak":
+                    sum(operation is Operation.READ for _, operation in admitted) + int(request.operation is Operation.READ),
+                "host_write_outstanding_at_admission_peak":
+                    sum(operation is Operation.WRITE for _, operation in admitted) + int(request.operation is Operation.WRITE),
+                "host_admission_depth_scope": "outstanding host requests sampled at admission, including the admitted request; not NAND page queues",
+                "queue_wait_ns": effective_arrival - request.arrival_ns,
+                "write_buffer_wait_ns": 0., "write_buffer_bytes": 0, "write_buffer_occupancy_bytes": 0,
+                "write_buffer_peak_bytes": 0, "write_buffer_draining_bytes": 0, "buffered_write_mode": False,
+                "resource_busy_ns": busy, "resource_bytes": moved,
+                "resource_last_intervals": {resource: timeline.last_intervals[resource] for resource in timeline._touched},
+                "resource_intervals": {}, "resource_interval_payloads": {},
+                "intervals_truncated": timeline._intervals_truncated,
+            },
+        )
 
     def _execute_accepted(self, request: AccessRequest) -> TransactionResult:
         first_page = request.address // self.config.page_bytes

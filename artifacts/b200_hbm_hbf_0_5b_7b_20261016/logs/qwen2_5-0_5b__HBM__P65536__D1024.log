@@ -1,0 +1,211 @@
+{"stage": "control_plane", "completed": 0, "total": 1, "wall_seconds": 0.09}
+{"stage": "control_plane", "completed": 1, "total": 1, "wall_seconds": 0.94}
+{"stage": "validation", "completed": 0, "total": 1, "wall_seconds": 0.94}
+{"stage": "validation", "completed": 1, "total": 1, "wall_seconds": 0.95}
+{"stage": "serving_cohorts", "completed": 0, "total": null, "wall_seconds": 0.97}
+{"stage": "cohort_tasks", "completed": 0, "total": 1054, "wall_seconds": 2.33}
+{"stage": "control_plane", "completed": 0, "total": 1, "wall_seconds": 0.09}
+{"stage": "control_plane", "completed": 1, "total": 1, "wall_seconds": 0.91}
+{"stage": "validation", "completed": 0, "total": 1, "wall_seconds": 0.91}
+{"stage": "validation", "completed": 1, "total": 1, "wall_seconds": 0.92}
+{"stage": "serving_cohorts", "completed": 0, "total": null, "wall_seconds": 0.94}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 2.25}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 16.91}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 33.41}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 49.84}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 67.59}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 72.94}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 88.23}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 106.26}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 123.64}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 142.62}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 148.41}
+{"stage": "serving_cohorts", "completed": 1, "total": null, "wall_seconds": 148.61}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 149.41}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 166.2}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 184.97}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 203.45}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 222.7}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 228.59}
+{"stage": "control_plane", "completed": 0, "total": 1, "wall_seconds": 0.09}
+{"stage": "control_plane", "completed": 1, "total": 1, "wall_seconds": 0.91}
+{"stage": "validation", "completed": 0, "total": 1, "wall_seconds": 0.91}
+{"stage": "validation", "completed": 1, "total": 1, "wall_seconds": 0.92}
+{"stage": "serving_cohorts", "completed": 0, "total": null, "wall_seconds": 0.94}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 2.34}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 17.75}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 35.91}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 53.55}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 72.06}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 77.7}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 93.97}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 112.59}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 130.3}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 149.52}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 156.55}
+{"stage": "serving_cohorts", "completed": 1, "total": null, "wall_seconds": 156.8}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 157.78}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 174.61}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 193.12}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 211.24}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 231.89}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 238.67}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 256.45}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 276.14}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 295.06}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 314.38}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 320.28}
+{"stage": "serving_cohorts", "completed": 2, "total": null, "wall_seconds": 320.52}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 321.34}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 338.38}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 358.69}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 379.77}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 399.14}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 405.06}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 422.3}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 441.47}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 460.02}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 479.39}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 485.2}
+{"stage": "serving_cohorts", "completed": 3, "total": null, "wall_seconds": 485.41}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 486.24}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 503.09}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 522.36}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 541.08}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 560.33}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 566.27}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 583.86}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 603.36}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 622.39}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 642.16}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 648.08}
+{"stage": "serving_cohorts", "completed": 4, "total": null, "wall_seconds": 648.3}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 649.09}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 666.33}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 685.86}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 704.91}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 724.42}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 730.38}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 747.97}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 767.67}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 786.95}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 806.77}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 812.69}
+{"stage": "serving_cohorts", "completed": 5, "total": null, "wall_seconds": 812.89}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 813.69}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 831.11}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 850.89}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 870.2}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 890.09}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 895.99}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 914.05}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 933.92}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 953.27}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 973.33}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 979.27}
+{"stage": "serving_cohorts", "completed": 6, "total": null, "wall_seconds": 979.47}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 980.25}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 997.99}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 1018.02}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 1037.39}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 1057.3}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 1063.55}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 1081.58}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 1101.5}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 1120.97}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 1141.09}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 1147.05}
+{"stage": "serving_cohorts", "completed": 7, "total": null, "wall_seconds": 1147.27}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 1148.05}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 1165.62}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 1185.52}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 1205.25}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 1225.25}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 1231.22}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 1249.92}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 1270.49}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 1290.52}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 1311.22}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 1317.38}
+{"stage": "serving_cohorts", "completed": 8, "total": null, "wall_seconds": 1317.59}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 1318.38}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 1339.64}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 1363.66}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 1383.88}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 1404.34}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 1410.34}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 1428.99}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 1449.42}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 1469.17}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 1489.38}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 1495.58}
+{"stage": "serving_cohorts", "completed": 9, "total": null, "wall_seconds": 1495.8}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 1496.64}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 1514.94}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 1535.53}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 1555.78}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 1576.5}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 1582.74}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 1601.44}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 1622.31}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 1642.39}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 1662.91}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 1669.08}
+{"stage": "serving_cohorts", "completed": 10, "total": null, "wall_seconds": 1669.28}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 1670.11}
+{"stage": "cohort_tasks", "completed": 256, "total": 1102, "wall_seconds": 1688.92}
+{"stage": "cohort_tasks", "completed": 512, "total": 1102, "wall_seconds": 1709.99}
+{"stage": "cohort_tasks", "completed": 768, "total": 1102, "wall_seconds": 1730.11}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1102, "wall_seconds": 1750.8}
+{"stage": "cohort_tasks", "completed": 1102, "total": 1102, "wall_seconds": 1757.11}
+{"stage": "cohort_tasks", "completed": 256, "total": 1100, "wall_seconds": 1776.41}
+{"stage": "cohort_tasks", "completed": 512, "total": 1100, "wall_seconds": 1797.52}
+{"stage": "cohort_tasks", "completed": 768, "total": 1100, "wall_seconds": 1817.99}
+{"stage": "cohort_tasks", "completed": 1024, "total": 1100, "wall_seconds": 1838.81}
+{"stage": "cohort_tasks", "completed": 1100, "total": 1100, "wall_seconds": 1844.89}
+{"stage": "serving_cohorts", "completed": 11, "total": null, "wall_seconds": 1845.11}
+{"stage": "cohort_tasks", "completed": 0, "total": 1102, "wall_seconds": 1845.94}
+Traceback (most recent call last):
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\scripts\b200_hbm_hbf_scan.py", line 178, in worker
+    result = run_scenario(scenario, retention_policy="aggregate", control=ExecutionControl(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\reporting.py", line 207, in run_scenario
+    return _run_scenario_in_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\reporting.py", line 241, in _run_scenario_in_context
+    serving = simulate_online(
+              ^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py", line 2761, in simulate_online
+    return runtime.run()
+           ^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py", line 9975, in run
+    self._execute(cohort)
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py", line 14973, in _execute
+    self._execute_cohort(cohort)
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py", line 15064, in _execute_cohort
+    cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py", line 16200, in _lower_cost
+    raw = estimator(scenario, cohort)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py", line 27346, in estimate
+    return self._estimate_exact_in_context(scenario, cohort)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py", line 27362, in _estimate_exact_in_context
+    return self._templates.get_or_create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\scalable_serving.py", line 512, in get_or_create
+    value = factory()
+            ^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py", line 27364, in <lambda>
+    lambda: _estimate_serving_cohort_cost(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py", line 29285, in _estimate_serving_cohort_cost
+    summary = execute_cost_schedule(
+              ^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\scalable_serving.py", line 346, in execute_cost_schedule
+    execution_control.raise_if_cancelled()
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\execution_control.py", line 79, in raise_if_cancelled
+    raise ExecutionCancelledError("仿真任务已取消")
+heterollm_sim.execution_control.ExecutionCancelledError: 仿真任务已取消
+{"point_id": "qwen2_5-0_5b__HBM__P65536__D1024", "status": "failed", "wall_seconds": 1864.9530000000086}

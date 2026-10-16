@@ -1220,6 +1220,8 @@ class UnifiedEventKernel:
                 except (AllocationError, KeyError):
                     deferred.add((owner, buffer_id, generation))
                     continue
+                self.physical_runtime.release_staging_buffer(
+                    owner, buffer_id, generation, arrival_ns=arrival_ns)
                 self._pending_physical_releases.pop((owner, buffer_id, generation), None)
                 # Once a serving temporary is dead its dirty lines have no
                 # live backing destination.  Invalidate them together so a
@@ -2464,7 +2466,7 @@ class UnifiedEventKernel:
         physical_snapshot = None
         if is_physical:
             try:
-                physical_snapshot = self.physical_runtime.snapshot()
+                physical_snapshot = self.physical_runtime.begin_transaction()
                 # Local import avoids making the planner/data-motion module
                 # part of the kernel import cycle; it also keeps the physical
                 # adapter optional for analytical-only users.
@@ -2534,6 +2536,8 @@ class UnifiedEventKernel:
                 if l2_transaction is not None:
                     cache = self._l2_states[l2_owner][1]
                     cache.commit_transaction(l2_transaction)
+                if physical_snapshot is not None:
+                    self.physical_runtime.commit_transaction(physical_snapshot)
             demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
             # Core reservations happened on the shared timeline; publish
             # their earliest free lane to kernel readiness before the next

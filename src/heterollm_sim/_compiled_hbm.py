@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import copy
 from functools import lru_cache
 from types import MappingProxyType
 import numpy as np
@@ -67,6 +68,12 @@ def _pack_hbm_numeric(core, request):
             or c.effective_capacity_bytes > (1 << 63) - 1 or physical > (1 << 63) - 1
             or stop - first > 2 ** 53 or not math.isfinite(request.arrival_ns)):
         return None
+    # The parallel traversal strides one complete address stripe. Validate in
+    # Python integers before constructing the int64 geometry vector; a tiny
+    # valid request may still have an authored stripe wider than int64.
+    if (c.address_mapping != "row_local"
+            and lanes * ((c.interleave_bytes or c.burst_bytes) // c.burst_bytes) > (1 << 63) - 1):
+        return None
     try:
         from ._hbm_numeric import TIMING_FIELDS, run_hbm_numeric
     except (ImportError, OSError):
@@ -85,7 +92,15 @@ def _pack_hbm_numeric(core, request):
     # resources. Only aliases affecting this controller require fallback.
     if any(timeline.canonical_resource_id(rid) != rid for rid in ids):
         return None
-    state = core._hbm_control_state
+    cached = core._hbm_numeric_state
+    if cached is not None:
+        if c != cached._config:
+            core._hbm_publish_numeric()
+            return _pack_hbm_numeric(core, request)
+        if cached.refresh_resources(physical):
+            return cached
+        return None
+    state = core.__dict__["_hbm_control_state"]
     rows = np.full(total_banks, -1, dtype=np.int64)
     bf = np.zeros((total_banks, 7), dtype=np.float64)
     bf[:, 0] = -1
@@ -124,16 +139,24 @@ def _pack_hbm_numeric(core, request):
             moved[index] = previous_bytes
             direction = timeline.directions.get(rid)
             directions[index] = 1 if direction == "read" else 2 if direction == "write" else 3 if direction else 0
-        for index, rid in enumerate(bank_ids):
-            old = core._banks.get(rid)
-            if old is not None:
-                rows[index] = old.open_row if old.open_row is not None else -1
-                bf[index, 5], bf[index, 6] = old.ready_ns, old.activation_ready_ns
-            bank = state.get("banks", {}).get(rid)
-            if bank is not None:
-                addresses[index] = bank["mapping"].address
-                bf[index, :5] = [bank["last_activate"] if bank["last_activate"] is not None else -1.,
-                                bank["activate_ready"], bank["precharge_ready"], bank["read_ready"], bank["write_ready"]]
+        # Convert each numeric column in one pass. Avoid both NumPy scalar
+        # assignment per bank and thousands of temporary bank-record tuples
+        # that trigger cyclic-GC scans of an otherwise unchanged controller.
+        live_banks = [core.__dict__["_banks"].get(rid) for rid in bank_ids]
+        rows[:] = np.fromiter((old.open_row if old is not None and old.open_row is not None else -1
+                              for old in live_banks), dtype=np.int64, count=total_banks)
+        bf[:, 5] = np.fromiter((old.ready_ns if old is not None else 0. for old in live_banks),
+                              dtype=np.float64, count=total_banks)
+        bf[:, 6] = np.fromiter((old.activation_ready_ns if old is not None else 0. for old in live_banks),
+                              dtype=np.float64, count=total_banks)
+        saved_banks = state.get("banks", {})
+        controller_banks = [saved_banks.get(rid) for rid in bank_ids]
+        addresses[:] = np.fromiter((bank["mapping"].address if bank is not None else -1
+                                   for bank in controller_banks), dtype=np.int64, count=total_banks)
+        for column, field in enumerate(("last_activate", "activate_ready", "precharge_ready", "read_ready", "write_ready")):
+            default = -1. if column == 0 else 0.
+            bf[:, column] = np.fromiter((bank[field] if bank is not None and bank[field] is not None else default
+                                        for bank in controller_banks), dtype=np.float64, count=total_banks)
         for lane, key in enumerate(pc_keys):
             previous = state.get("pcs", {}).get(key)
             if previous is None:
@@ -179,9 +202,14 @@ def _pack_hbm_numeric(core, request):
         c.maximum_active_ns, c.four_activate_window_ns], dtype=np.float64)
     if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t, windows)):
         return None
-    return _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t,
+    packed = _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t,
         run_hbm_numeric, (rows, bf, addresses, pc, history, pc_seen, channel,
                           channel_int, resources, moved, directions, touched, windows, window_counts))
+    if core._hbm_numeric_enabled:
+        core._hbm_numeric_state = packed
+        for token in core._hbm_transactions:
+            token.capture_numeric(packed)
+    return packed
 
 
 class _HBMNumericState:
@@ -192,10 +220,39 @@ class _HBMNumericState:
         self.bank_ids, self.pc_keys, self.channel_keys, self.ids = bank_ids, pc_keys, channel_keys, ids
         self.g, self.t, self.run_numeric, self.arrays = g, t, run_numeric, arrays
         self._controller_before = self._copy_controller_arrays()
+        self._controller_commits = 0
+        self._config = copy.deepcopy(core.config)
+
+    def refresh_resources(self, physical):
+        """External link reservations remain authoritative on the timeline."""
+        timeline = self.core.timeline
+        resources, moved, directions = self.arrays[8:11]
+        ids = self.ids
+        slots = [timeline.lane_available.get(rid) for rid in ids]
+        present = [slot for slot in slots if slot is not None]
+        if any(len(slot) != 1 for slot in present) or len({id(slot) for slot in present}) != len(present):
+            return False
+        previous_bytes = [timeline.bytes_moved.get(rid, 0) for rid in ids]
+        limit = (1 << 63) - 1 - physical
+        if any(not isinstance(value, (int, np.integer)) or not 0 <= value <= limit for value in previous_bytes):
+            return False
+        # Bulk column conversion avoids four scalar NumPy writes per port.
+        # Alias validation above proves each present calendar has one slot,
+        # so this is exactly ResourceTimeline.available_ns for these ids.
+        resources[:, 0] = np.fromiter((float(slot[0]) if slot is not None else float(timeline.ready_ns.get(rid, 0.))
+                                      for rid, slot in zip(ids, slots)), dtype=np.float64, count=len(ids))
+        resources[:, 1] = np.fromiter((timeline.busy_ns.get(rid, 0.) for rid in ids),
+                                      dtype=np.float64, count=len(ids))
+        resources[:, 2:] = [timeline.last_intervals.get(rid, (0., 0.)) for rid in ids]
+        moved[:] = previous_bytes
+        direction_values = [timeline.directions.get(rid) for rid in ids]
+        directions[:] = [1 if value == "read" else 2 if value == "write" else 3 if value else 0
+                         for value in direction_values]
+        return bool(np.isfinite(resources).all())
 
     def _copy_controller_arrays(self):
-        # This private baseline lives only within one numeric submission or
-        # batch. Runtime snapshots and Python fallbacks still own normal dicts.
+        # Baseline of the currently published Python objects. A resident core
+        # retains it across submissions until that state is exposed publicly.
         return tuple(self.arrays[index].copy() for index in (0, 1, 2, 6, 7))
 
     def execute(self, request):
@@ -245,8 +302,9 @@ class _HBMNumericState:
     def commit_controller(self):
         from .dram_core import _BankState
 
-        core, c = self.core, self.core.config
-        state = core._hbm_control_state
+        core, c = self.core, self._config
+        state = core.__dict__["_hbm_control_state"]
+        live_banks = core.__dict__["_banks"]
         bank_ids, pc_keys, channel_keys = self.bank_ids, self.pc_keys, self.channel_keys
         history_stride = int(self.g[10])
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
@@ -263,7 +321,7 @@ class _HBMNumericState:
         # Preserve materialization of any pre-existing control-only bank, too.
         # Normally both dictionaries are populated together by the controller.
         for index in np.flatnonzero(addresses >= 0):
-            if bank_ids[index] not in core._banks:
+            if bank_ids[index] not in live_banks:
                 changed_banks[index] = True
         bank_indices = np.flatnonzero((addresses >= 0) & changed_banks)
         # Converting the selected rows in C avoids many individual NumPy scalar
@@ -272,9 +330,11 @@ class _HBMNumericState:
         bank_times = bf[bank_indices].tolist()
         for index, row, values in zip(bank_indices, bank_rows, bank_times):
             rid = bank_ids[index]
-            old = core._banks.get(rid)
+            core._hbm_remember_bank(rid)
+            core._hbm_remember_entry("banks", rid)
+            old = live_banks.get(rid)
             if old is None:
-                old = core._banks.setdefault(rid, _BankState())
+                old = live_banks.setdefault(rid, _BankState())
             old.open_row = row if row >= 0 else None
             old.ready_ns, old.activation_ready_ns = values[5], values[6]
             if rid not in saved_banks:
@@ -286,22 +346,30 @@ class _HBMNumericState:
         # Rebuild every seen PC's nested dictionaries just as the original
         # controller did. Extension fields may retain aliases to old histories;
         # skipping an unchanged PC would incorrectly keep those aliases live.
-        for lane in np.flatnonzero(pc_seen):
+        pc_indices = np.flatnonzero(pc_seen)
+        pc_values = pc[pc_indices].tolist()
+        history_values = history[pc_indices].tolist()
+        history_keys = tuple((entry * history_stride // 16,
+                              entry * history_stride // c.banks_per_group)
+                             for entry in range(history.shape[1]))
+        for lane, values, entries in zip(pc_indices, pc_values, history_values):
+            core._hbm_remember_entry("pcs", pc_keys[lane])
             previous = saved_pcs.setdefault(pc_keys[lane], {"activate_window": []})
             previous["activate_window"] = windows[lane, :window_counts[lane]].tolist()
-            previous.update(activate={int(group): float(history[lane, group, 0])
-                                      for group in np.flatnonzero(history[lane, :, 0] >= 0)},
-                            column={op: {(int(entry) * history_stride // 16, int(entry) * history_stride // c.banks_per_group): float(history[lane, entry, index])
-                                         for entry in np.flatnonzero(history[lane, :, index] >= 0)}
+            previous.update(activate={group: entry[0] for group, entry in enumerate(entries)
+                                      if entry[0] >= 0},
+                            column={op: {key: entry[index] for key, entry in zip(history_keys, entries)
+                                         if entry[index] >= 0}
                                     for op, index in (("read", 1), ("write", 2))},
-                            write_end={(int(entry) * history_stride // 16, int(entry) * history_stride // c.banks_per_group): float(history[lane, entry, 3])
-                                       for entry in np.flatnonzero(history[lane, :, 3] >= 0)},
-                            last_precharge=float(pc[lane, 0]) if pc[lane, 0] >= 0 else None,
-                            blocked_until=float(pc[lane, 1]),
-                            next_data_start={"read": float(pc[lane, 2]), "write": float(pc[lane, 3])})
+                            write_end={key: entry[3] for key, entry in zip(history_keys, entries)
+                                       if entry[3] >= 0},
+                            last_precharge=values[0] if values[0] >= 0 else None,
+                            blocked_until=values[1],
+                            next_data_start={"read": values[2], "write": values[3]})
         for ch in np.flatnonzero(changed_channels):
             key = channel_keys[ch]
             if channel[ch, 0] >= 0 or channel[ch, 1] >= 0:
+                core._hbm_remember_entry("channels", key)
                 previous = saved_channels.setdefault(key, {})
                 if channel[ch, 0] >= 0:
                     previous["last_activate_start"] = float(channel[ch, 0])
@@ -316,16 +384,19 @@ class _HBMNumericState:
         channels = len(self.channel_keys)
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
          resources, moved, directions, touched, windows, window_counts) = self.arrays
-        for index in np.flatnonzero(touched):
+        indices = np.flatnonzero(touched)
+        values = resources[indices].tolist()
+        transfer_bytes = moved[indices].tolist()
+        for index, resource, byte_count in zip(indices, values, transfer_bytes):
             rid = ids[index]
-            timeline.lane_available.setdefault(rid, [0.])[0] = float(resources[index, 0])
-            timeline.ready_ns[rid] = float(resources[index, 0])
-            timeline.busy_ns[rid] = float(resources[index, 1])
-            timeline.last_intervals[rid] = (float(resources[index, 2]), float(resources[index, 3]))
+            timeline.lane_available.setdefault(rid, [0.])[0] = resource[0]
+            timeline.ready_ns[rid] = resource[0]
+            timeline.busy_ns[rid] = resource[1]
+            timeline.last_intervals[rid] = (resource[2], resource[3])
             timeline.lane_directions.pop(rid, None)
             timeline._touched.add(rid)
             if index >= 2 * channels:
-                timeline.bytes_moved[rid] = int(moved[index])
+                timeline.bytes_moved[rid] = byte_count
                 timeline.directions[rid] = request.operation.value
         timeline._intervals_truncated = True
 
@@ -335,10 +406,21 @@ def execute_hbm_numeric(core, request):
     packed = _pack_hbm_numeric(core, request)
     if packed is None:
         return None
-    result = packed.execute(request)
+    resident = core._hbm_numeric_state is packed
+    before = tuple(array.copy() for array in packed.arrays) if resident else None
+    try:
+        result = packed.execute(request)
+    except BaseException:
+        if resident:
+            packed.arrays = before
+        raise
     if result is not None:
-        packed.commit_controller()
+        packed._controller_commits += 1
+        if not resident:
+            packed.commit_controller()
         packed.commit_timeline(request)
+    elif resident:
+        packed.arrays = before
     return result
 
 
@@ -359,6 +441,7 @@ def execute_hbm_numeric_many(core, requests):
         if result is None:
             raise _NumericDeclined
         packed.commit_timeline(request)
+        packed._controller_commits += 1
         return result
 
     results = []
@@ -367,18 +450,22 @@ def execute_hbm_numeric_many(core, requests):
         # successful state so an exception or decline cannot commit half of
         # the current request or discard requests already accepted in order.
         before = tuple(array.copy() for array in packed.arrays)
+        before_commits = packed._controller_commits
         try:
             result = core._submit_validated(request, execute=execute)
         except _NumericDeclined:
             packed.arrays = before
-            if results:
+            packed._controller_commits = before_commits
+            if results and core._hbm_numeric_state is not packed:
                 packed.commit_controller()
             return tuple(results) + tuple(core.submit(item) for item in requests[index:])
         except BaseException:
             packed.arrays = before
-            if results:
+            packed._controller_commits = before_commits
+            if results and core._hbm_numeric_state is not packed:
                 packed.commit_controller()
             raise
         results.append(result)
-    packed.commit_controller()
+    if core._hbm_numeric_state is not packed:
+        packed.commit_controller()
     return tuple(results)

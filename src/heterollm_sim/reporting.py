@@ -237,6 +237,7 @@ def _run_scenario_in_context(
         active_batch_lowerer = batch_lowerer or TopologyAwareBatchCostProvider(
             scenario,
             execution_control=execution_control,
+            defer_physical_execution=True,
         )
         serving = simulate_online(
             scenario,

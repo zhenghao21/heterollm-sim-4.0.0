@@ -1,0 +1,13 @@
+{
+  "status": "paused",
+  "manager_pid": 21596,
+  "updated_at": "2026-10-16T07:46:16.090314+00:00",
+  "total": 72,
+  "completed": 0,
+  "capacity_rejected": 0,
+  "failed": 0,
+  "pending": 72,
+  "running": [],
+  "reason": "stop_requested",
+  "optimization_report": "../scan_runtime_optimization/report.md"
+}

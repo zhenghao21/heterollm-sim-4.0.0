@@ -5,8 +5,11 @@ substituting a bandwidth-only service or the memory core's example defaults.
 """
 
 from copy import deepcopy
+from collections import OrderedDict
 from dataclasses import asdict, fields, is_dataclass, replace
+from enum import Enum
 from math import gcd
+from threading import RLock
 from typing import Mapping
 from ._hbm_dependencies import normalize_hbm_dependencies
 from ._hbm_errors import HBMConfigError
@@ -23,6 +26,41 @@ DRAM_COMPONENT_KINDS = frozenset({
 })
 NAND_COMPONENT_KINDS = frozenset({"hbf", "ssd", "high_io_ssd", "nvme"})
 PHYSICAL_MEMORY_COMPONENT_KINDS = DRAM_COMPONENT_KINDS | NAND_COMPONENT_KINDS
+
+_PARSED_CONFIGS = OrderedDict()
+_PARSED_CONFIGS_LOCK = RLock()
+
+
+def _config_key(value):
+    if type(value) in {str, int, float, bool, type(None)} or isinstance(value, Enum):
+        return type(value), value
+    if type(value) is dict:
+        return dict, tuple((_config_key(key), _config_key(item)) for key, item in value.items())
+    if type(value) in {list, tuple}:
+        return type(value), tuple(_config_key(item) for item in value)
+    raise TypeError("custom physical configuration value")
+
+
+def _parse_complete_config(raw):
+    """Amortize dependency normalization; each caller owns its mutable metadata."""
+    try:
+        key = _config_key(raw)
+    except (TypeError, RecursionError):
+        return parse_physical_memory_config(raw)
+    with _PARSED_CONFIGS_LOCK:
+        cached = _PARSED_CONFIGS.get(key)
+        if cached is not None:
+            _PARSED_CONFIGS.move_to_end(key)
+    if cached is not None:
+        return deepcopy(cached)
+    parsed = parse_physical_memory_config(raw)
+    # Never retain aliases to caller-owned dictionaries in the cache.
+    stored = deepcopy(parsed)
+    with _PARSED_CONFIGS_LOCK:
+        _PARSED_CONFIGS[key] = stored
+        if len(_PARSED_CONFIGS) > 32:
+            _PARSED_CONFIGS.popitem(last=False)
+    return parsed
 
 _DRAM_REQUIRED = frozenset({
     "kind", "channels", "subchannels_per_channel", "pseudo_channels_per_channel",
@@ -112,7 +150,7 @@ def parse_required_physical_config(component_id, kind, raw):
     if missing:
         raise ValueError(prefix + "physical_memory_config missing explicit fields: " + ", ".join(missing))
     try:
-        parsed = parse_physical_memory_config(raw)
+        parsed = _parse_complete_config(raw)
     except HBMConfigError as exc:
         exc.add_context("component {} ({})".format(component_id, kind))
         raise

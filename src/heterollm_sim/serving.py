@@ -480,6 +480,17 @@ def _has_live_physical_tasks(stages):
                for stage in stages for task in stage.execution_tasks)
 
 
+def _declares_explicit_task_dag(metadata):
+    """Recognize task ownership without claiming an executed physical preview.
+
+    Authored live physical DAGs already contain their host orchestration tasks;
+    their provisional preview durations cannot be reused as physical timings.
+    """
+    return metadata.get("execution_stage_source") in {
+        "executed_task_dag_kernel_timeline", "authored_physical_task_dag",
+    }
+
+
 @dataclass(frozen=True)
 class _ExecutionStageTaskLayout:
     """One task's immutable position in a cached stage replay graph."""
@@ -1266,8 +1277,7 @@ class _ExecutionStageMetadataCache:
     ) -> Tuple[Tuple[_ExecutionStage, ...], Optional[str]]:
         raw_stages = metadata.get("execution_stages")
         if (
-            metadata.get("execution_stage_source")
-            != "executed_task_dag_kernel_timeline"
+            not _declares_explicit_task_dag(metadata)
             or not isinstance(raw_stages, tuple)
         ):
             return _execution_stages_from_metadata(metadata)
@@ -2740,7 +2750,8 @@ def simulate_online(
     """
 
     bound_scenario = scenario.scenario if isinstance(scenario, ServingPlan) else scenario
-    lowerer = batch_lowerer or TopologyAwareBatchCostProvider(bound_scenario)
+    lowerer = batch_lowerer or TopologyAwareBatchCostProvider(
+        bound_scenario, defer_physical_execution=True)
     lowerer_context = getattr(lowerer, "_compilation_context", None)
     if getattr(lowerer_context, "scenario", None) is not bound_scenario:
         lowerer_context = None
@@ -7088,7 +7099,7 @@ class _OnlineRuntime:
 
         self._ensure_resource_profiles()
         snapshot = dict(self._resource_snapshot(cohort.items))
-        explicit_dag = metadata.get("execution_stage_source") == "executed_task_dag_kernel_timeline"
+        explicit_dag = _declares_explicit_task_dag(metadata)
         host_ns = (0.0 if explicit_dag else
                    max(0.0, float(metadata.get("host_orchestration_ns", 0.0))))
         device_ns = max(
@@ -9469,7 +9480,7 @@ class _OnlineRuntime:
         self.residency_fault_batches += fault_batch_count
         self.residency_clean_eviction_batches += clean_eviction_batch_count
         snapshot = manager.snapshot()
-        explicit_dag = metadata.get("execution_stage_source") == "executed_task_dag_kernel_timeline"
+        explicit_dag = _declares_explicit_task_dag(metadata)
         base_device_ns = max(
             0.0,
             float(
@@ -14535,8 +14546,7 @@ class _OnlineRuntime:
             realized.append(realized_stage)
 
         trusted_planner_stages = (
-            cost.metadata.get("execution_stage_source")
-            == "executed_task_dag_kernel_timeline"
+            _declares_explicit_task_dag(cost.metadata)
             and _trusted_execution_stages(
                 cost.metadata.get("execution_stages")
             )
@@ -15098,8 +15108,7 @@ class _OnlineRuntime:
             )
         if not stages and (
             cost.metadata.get("execution_stages") is not None
-            or cost.metadata.get("execution_stage_source")
-            == "executed_task_dag_kernel_timeline"
+            or _declares_explicit_task_dag(cost.metadata)
         ):
             raise ValueError(
                 "declared execution stages are invalid: {}".format(
@@ -15108,8 +15117,7 @@ class _OnlineRuntime:
             )
         has_explicit_execution_dag = bool(
             stages
-            and cost.metadata.get("execution_stage_source")
-            == "executed_task_dag_kernel_timeline"
+            and _declares_explicit_task_dag(cost.metadata)
         )
         # Task-interval unions may overlap and exclude idle gaps. They are
         # diagnostics, never an additive replacement for the DAG envelope.
@@ -16231,10 +16239,7 @@ def _execution_stages_from_metadata(
         return (), "execution_stages is not an ordered sequence"
     stages: List[_ExecutionStage] = []
     seen = set()
-    detailed_task_source = (
-        metadata.get("execution_stage_source")
-        == "executed_task_dag_kernel_timeline"
-    )
+    detailed_task_source = _declares_explicit_task_dag(metadata)
     for index, raw_stage in enumerate(raw_stages):
         if type(raw_stage) is not dict and not isinstance(
             raw_stage, _ABCMapping

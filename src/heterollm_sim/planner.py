@@ -4364,7 +4364,7 @@ def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfi
 
 
 def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
-    """Attach shared DRAM-core accesses to a lowered compute memory phase.
+    """Attach physical backing accesses to a lowered compute memory phase.
 
     The planner still owns dependencies and compute demands; only the local
     backing-memory demand is replaced by the physical core at event dispatch.
@@ -4388,11 +4388,12 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     if target_kind not in {None, "cpu", "gpu"}:
         _assert_physical_memory_demands(task, scenario)
         return task
-    from .physical_contract import DRAM_COMPONENT_KINDS
+    from .physical_contract import DRAM_COMPONENT_KINDS, require_physical_memory_config
     candidates = []
     for component in scenario.hardware.components:
         component_kind = _kind(component)
-        if component_kind not in DRAM_COMPONENT_KINDS:
+        hbf_memory = component_kind == "hbf" and component.is_active_memory
+        if component_kind not in DRAM_COMPONENT_KINDS and not hbf_memory:
             continue
         service = component.metadata.get("memory_service", {})
         owner = str(service.get("physical_owner") or default_memory_resource_id(component))
@@ -4405,9 +4406,11 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                     reference_component_id=scenario.host_orchestration_profile.cpu_component_id,
                     target_component_id=target_id))
         if any(str(d.resource_id) in resource_ids and d.bytes_moved > 0 for d in task.demands):
-            raw_config = _physical_dram_config(scenario, component)
+            raw_config = (component.metadata["physical_memory_config"] if hbf_memory
+                          else _physical_dram_config(scenario, component))
             if raw_config is None:
                 raise ValueError("task {} requires a DRAM backing component: {}".format(task.task_id, component.component_id))
+            require_physical_memory_config(component)
             candidates.append((component, raw_config, owner, resource_ids))
     if not candidates:
         _assert_physical_memory_demands(task, scenario)
@@ -4455,15 +4458,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 task.task_id
             )
         )
-    try:
-        capacity = int(raw_config.get("capacity_bytes") or 0)
-        burst = int(raw_config["burst_bytes"])
-    except (TypeError, ValueError):
-        raise ValueError(
-            "GDDR task {} has invalid capacity_bytes or burst_bytes".format(
-                task.task_id
-            )
-        )
+    from .memory_types import DramConfig
+    physical = require_physical_memory_config(component)
+    capacity = physical.effective_capacity_bytes
+    burst = physical.burst_bytes if isinstance(physical, DramConfig) else physical.page_bytes
     if capacity <= 0 or burst <= 0:
         raise ValueError(
             "GDDR task {} requires positive capacity_bytes and burst_bytes".format(
@@ -4890,6 +4888,141 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     return bound_task
 
 
+def _attach_hbf_host_staging(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
+    """Bind the explicit host page assembler to real memory and fabric owners.
+
+    The NAND protocol remains a complete-page protocol.  This is a host-side
+    service contract consumed at physical dispatch, where actual dirty ranges
+    and page flushes are known across successive decode invocations.
+    """
+    accesses = _memory_accesses(task.metadata) or ()
+    if not accesses or task.metadata.get("physical_memory_config") is None:
+        return task
+    from .data_motion import resolve_service
+    from .memory_types import DramConfig, NandConfig
+    from .physical_contract import require_physical_memory_config, parse_execution_physical_config
+
+    def declared_bindings():
+        bindings = {}
+        for component in scenario.hardware.components:
+            declaration = component.metadata.get("host_write_staging")
+            if declaration is None:
+                continue
+            if not isinstance(declaration, Mapping):
+                raise ValueError("host_write_staging must be a mapping")
+            unknown = set(declaration) - {"host_component_id", "capacity_bytes", "reserve_blocks"}
+            if unknown:
+                raise ValueError("host_write_staging has unsupported fields: " + ", ".join(sorted(unknown)))
+            physical = require_physical_memory_config(component)
+            if not isinstance(physical, NandConfig) or physical.protocol_mode != "ocp_hbf_0_7":
+                raise ValueError("host_write_staging requires strict ocp_hbf_0_7 HBF")
+            host_id = declaration.get("host_component_id")
+            host = scenario.hardware.component_map().get(host_id)
+            if host is None or host.normalized_kind != "host_memory":
+                raise ValueError("host_write_staging requires an explicit host_memory component")
+            host_config = require_physical_memory_config(host)
+            if not isinstance(host_config, DramConfig):
+                raise ValueError("host_write_staging host component requires physical DRAM")
+            capacity = declaration.get("capacity_bytes")
+            if type(capacity) is not int or capacity < 2 * physical.page_bytes or capacity % physical.page_bytes:
+                raise ValueError("host_write_staging capacity_bytes requires at least two aligned HBF pages")
+            if capacity > host_config.effective_capacity_bytes:
+                raise ValueError("host_write_staging capacity_bytes exceeds HOST DRAM capacity")
+            reserve = declaration.get("reserve_blocks", 1)
+            if type(reserve) is not int or reserve != 1:
+                raise ValueError("host_write_staging reserves exactly one physical erase block")
+            owner = resolve_service(component).physical_owner
+            if owner in bindings:
+                raise ValueError("host_write_staging requires unique HBF physical owners")
+            bindings[owner] = (component, physical, host, host_config, capacity, reserve)
+        return bindings
+
+    context = _active_compilation_context(scenario)
+    bindings = (declared_bindings() if context is None else
+                context.invariant(("hbf_host_staging_bindings",), declared_bindings))
+    owners = {str(row.get("physical_owner") or task.metadata.get("physical_owner") or "")
+              for row in accesses}
+    active = owners.intersection(bindings)
+    if not active:
+        return task
+    component_map = scenario.hardware.component_map()
+    endpoint_ids = tuple(dict.fromkeys(str(task.metadata[key]) for key in
+        ("target_component", "source_component") if task.metadata.get(key)))
+    explicit_initiator = task.metadata.get("hbf_staging_initiator")
+    if explicit_initiator is not None:
+        if (explicit_initiator not in component_map
+                or component_map[explicit_initiator].normalized_kind not in {"cpu", "gpu", "host_memory"}):
+            raise ValueError("HBF staging transfer initiator must be a CPU, GPU, or HOST DRAM component")
+        initiators = [explicit_initiator]
+    else:
+        initiators = [identifier for identifier in endpoint_ids
+                      if identifier in component_map and component_map[identifier].normalized_kind in {"cpu", "gpu"}]
+    if not initiators:
+        ranks = _parallel_plan(scenario).ranks
+        rank_id = task.metadata.get("rank")
+        matching = [rank.component_id for rank in ranks
+                    if rank.rank == rank_id] if rank_id is not None else [
+                        rank.component_id for rank in ranks if rank.memory_component_id in endpoint_ids]
+        initiators = list(dict.fromkeys(matching))
+    if len(initiators) != 1:
+        raise ValueError("HBF host staging requires an unambiguous task CPU/GPU or rank")
+    initiator = initiators[0]
+    router = _topology_router(scenario)
+    configs = dict(task.metadata.get("physical_memory_configs", {}))
+    primary_owner = str(task.metadata.get("physical_owner") or "")
+    if primary_owner:
+        configs.setdefault(primary_owner, task.metadata["physical_memory_config"])
+    contracts = dict(task.metadata.get("hbf_host_staging_by_owner", {}))
+    replaced_link_ids = set(task.metadata.get("hbf_staging_replaced_link_ids", ()))
+    preloaded = set(tuple(key) for key in task.metadata.get("hbf_preloaded_buffers", ()))
+    request_buffers = {identity for identities in task.metadata.get("persistent_request_buffers", {}).values()
+                       for identity in identities}
+    if scenario.weights_resident:
+        for row in accesses:
+            owner = str(row.get("physical_owner") or primary_owner)
+            identity = row.get("buffer_id")
+            if (owner in active and identity not in request_buffers
+                    and _is_resident_physical_buffer(task.metadata, identity)):
+                preloaded.add((owner, identity, int(row.get("allocation_generation", 0))))
+    for owner in sorted(active):
+        component, physical, host, host_config, capacity, reserve = bindings[owner]
+        host_owner = resolve_service(host).physical_owner
+        previous = configs.get(host_owner)
+        if previous is not None and parse_execution_physical_config(previous) != host_config:
+            raise ValueError("HBF host staging HOST DRAM physical configuration conflicts with the task")
+        configs[host_owner] = host_config
+
+        def route(source, target):
+            hops = router.route(source, target, physical.page_bytes)
+            return tuple({"link_id": hop.link_id, "resource_id": hop.resource_id,
+                          "bandwidth_gb_s": hop.bandwidth_gbps / 8.0,
+                          "latency_ns": hop.latency_ns,
+                          "inflight_resource_id": hop.service.physical_owner + ".inflight",
+                          "queue_depth": hop.queue_depth,
+                          "resource_capacities": dict(hop.resource_capacities),
+                          "direction": hop.source_component + "->" + hop.target_component}
+                         for hop in hops if hop.service_ref is None)
+
+        contracts[owner] = {"host_component_id": host.component_id,
+            "host_owner": host_owner, "host_config": host_config,
+            "capacity_bytes": capacity, "reserve_blocks": reserve,
+            "routes": {"to_host": route(initiator, host.component_id),
+                       "from_host": route(host.component_id, initiator),
+                       "to_hbf": route(host.component_id, component.component_id),
+                       "from_hbf": route(component.component_id, host.component_id),
+                       "read_hbf": route(component.component_id, initiator),
+                       "write_hbf": route(initiator, component.component_id)}}
+        for source, target in ((initiator, component.component_id),
+                               (component.component_id, initiator)):
+            replaced_link_ids.update(demand.resource_id
+                for hop in router.route(source, target, physical.page_bytes)
+                for demand in hop.demands(1))
+    return replace(task, metadata={**task.metadata, "physical_memory_configs": configs,
+        "hbf_host_staging_by_owner": contracts,
+        "hbf_staging_replaced_link_ids": tuple(sorted(replaced_link_ids)),
+        "hbf_preloaded_buffers": tuple(sorted(preloaded))})
+
+
 def _assert_physical_memory_demands(task: TaskSpec, scenario: ScenarioConfig) -> None:
     """Reject a memory demand left outside the task's physical descriptors."""
     from .physical_contract import PHYSICAL_MEMORY_COMPONENT_KINDS
@@ -5099,6 +5232,8 @@ class _TaskBuilder:
         if context is not None:
             self.tasks[-1] = _attach_gddr_physical_task(self.tasks[-1], context.scenario)
         self.tasks[-1] = _attach_planned_l2(self.tasks[-1])
+        if context is not None:
+            self.tasks[-1] = _attach_hbf_host_staging(self.tasks[-1], context.scenario)
         inherited: Dict[int, str] = {}
         ambiguous = set()
         for dependency_id in dependency_ids:
@@ -8760,12 +8895,12 @@ def _add_transfer_tasks(
         ):
             component = _component(scenario, component_id)
             raw_config = component.metadata.get("physical_memory_config")
-            if component_id in state_bindings or address is not None or not isinstance(raw_config, Mapping):
+            if component_id in state_bindings or address is not None or raw_config is None:
                 continue
             from .memory_types import DramConfig
             from .physical_contract import require_physical_memory_config
             config = require_physical_memory_config(component)
-            if not isinstance(config, DramConfig):
+            if not isinstance(config, DramConfig) and not component.metadata.get("host_write_staging"):
                 continue
             # The authoring IR may omit native addresses. Use an allocator
             # binding, never one fixed address for all DMA payloads.
@@ -8775,7 +8910,7 @@ def _add_transfer_tasks(
                 transfer_metadata, "read", fallback_identity=builder.request.request_id
             )
             address = _gddr_stable_address(identity, 0, byte_count,
-                config.capacity_bytes, config.burst_bytes)
+                config.capacity_bytes, config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes)
             row = {"address": address, "buffer_id": identity,
                    "byte_count": byte_count, "offset_bytes": 0,
                    "address_source": "stable_buffer_tensor_offset",
@@ -8808,6 +8943,29 @@ def _add_transfer_tasks(
             target_page_offset_bytes=target_page_offset,
         )
     )
+    staged_endpoint = None
+    staged_initiator = None
+    if scenario is not None:
+        staged = [endpoint for endpoint in (source_component, target_component)
+                  if _component(scenario, endpoint).metadata.get("host_write_staging")]
+        if len(staged) > 1:
+            raise ValueError("HBF-to-HBF staging transfers require an explicit intermediate host transfer")
+        if staged:
+            staged_endpoint = staged[0]
+            peer = target_component if staged_endpoint == source_component else source_component
+            if _component(scenario, peer).normalized_kind == "host_memory":
+                staged_initiator = peer
+            else:
+                devices = {rank.component_id for rank in _parallel_plan(scenario).ranks
+                           if rank.memory_component_id == peer or rank.component_id == peer}
+                if len(devices) != 1:
+                    raise ValueError("HBF staging transfer peer requires one explicit rank or HOST DRAM")
+                staged_initiator = next(iter(devices))
+            # The staged endpoint decides at dispatch whether this payload
+            # comes from HOST DRAM or NAND.  Its selected route owns transport;
+            # emitting the original HBF route as separate DAG tasks duplicates
+            # the same bytes and is wrong for unflushed host-resident data.
+            phases = tuple(phase for phase in phases if not phase.metadata.get("link_id"))
     previous = tuple(dependencies)
     if pageable_spec is not None:
         split_count = pageable_spec["graph_split_count"]
@@ -8965,6 +9123,10 @@ def _add_transfer_tasks(
             elif dma_direction == "in":
                 phase_direction = "write"
         phase_metadata.update(transfer_metadata)
+        phase_metadata.setdefault("source_component", source_component)
+        phase_metadata.setdefault("target_component", target_component)
+        if staged_endpoint is not None and phase_metadata.get("component_id") == staged_endpoint:
+            phase_metadata["hbf_staging_initiator"] = staged_initiator
         state_binding = state_bindings.get(phase_metadata.get("component_id"))
         if state_binding is not None and phase_metadata.get("memory_accesses"):
             template, = phase_metadata["memory_accesses"]
@@ -10551,6 +10713,11 @@ def _gpu_profiles(
         if gpu_profile.kernel_model is not None and gpu_profile.kernel_model.launch_ns is not None:
             gpu_profile = replace(gpu_profile, kernel_launch_ns=gpu_profile.kernel_model.launch_ns)
         selected_memory = memory_component_id
+        if selected_memory is None:
+            declared = {rank.memory_component_id for rank in scenario.placement.parallel.rank_mapping
+                        if rank.component_id == gpu_component_id and rank.memory_component_id}
+            if len(declared) == 1:
+                selected_memory = next(iter(declared))
         if selected_memory is not None:
             memory_component = _component(scenario, selected_memory)
             if not memory_component.is_active_memory or not memory_component.is_writable:
@@ -17262,6 +17429,8 @@ def _iter_parallel_request_task_chunks(
         # Autoregressive prefill consumes only the final prompt position's
         # logits.  Backbone/KV work still covers the whole prompt above.
         token_batch=1,
+        source_token_batch=request.prompt_tokens,
+        source_row_indices=(request.prompt_tokens - 1,),
         output_selection=selection,
         output_indices_dependency=output_indices,
     )
@@ -17338,6 +17507,7 @@ def _iter_parallel_request_task_chunks(
             )
             end = _compile_parallel_lm_head(
                 builder, scenario, plan, router, phase, (end,),
+                source_token_batch=1, source_row_indices=(0,),
                 output_selection=selection, output_indices_dependency=output_indices,
             )
             _bind_output_index_upload(builder, scenario, router, plan, first_invocation_task, output_indices)
@@ -17455,6 +17625,8 @@ def _iter_parallel_request_task_chunks(
             phase,
             (end,),
             token_batch=verifier_tokens,
+            source_token_batch=verifier_tokens,
+            source_row_indices=tuple(range(verifier_tokens)),
         )
         end = _add_host_visible_logits_sampling_commit(
             builder,
@@ -18249,6 +18421,23 @@ def _compile_parallel_embedding(
             )
         operation_metadata["weight_source_component"] = weight_source
         operation_metadata.setdefault("lookup_read_bytes", lookup_read_bytes)
+        if (_rank_uses_hbf_host_staging(scenario, rank)
+                and not source_get_rows and not declared_f32_storage):
+            # An indexed lookup reads the resident table, then produces the
+            # typed hidden edge consumed by the first layer. Keep the table's
+            # capacity independent of the number of repeated row accesses.
+            remaining_lookup = memory_weight_read_bytes
+            table_reads = []
+            while remaining_lookup:
+                row_bytes = min(remaining_lookup, rank_weight_bytes)
+                table_reads.append(_rank_tensor_access(
+                    rank, weight_tensor_id, row_bytes, "read", extent=rank_weight_bytes))
+                remaining_lookup -= row_bytes
+            operation_metadata.update(
+                buffer_view_cache_policy="aggregate_directional_v1",
+                buffer_accesses=table_reads + [_rank_tensor_access(
+                    rank, output_tensor_id, lookup_bytes, "write")],
+            )
         end, _target_component_id = _add_rank_primitive(
             builder,
             scenario,
@@ -19268,6 +19457,11 @@ def _compile_parallel_layer_body(
         hidden_elements = max(
             1, token_batch * layer.hidden_size
         )
+        bind_input_norm = generic_kv is not None and _rank_uses_hbf_host_staging(scenario, rank)
+        if bind_input_norm:
+            hidden_input, _hidden_output = _layer_hidden_tensor_ids(scenario, layer)
+            input_norm_hidden_bytes = _activation_bytes(layer, hidden_elements, scenario=scenario)
+            input_norm_stats_bytes = (max(1, token_batch) * max(16, activation_bits) + 7) // 8
         rank_meta = {
             "phase": phase,
             "layer_id": layer.layer_id,
@@ -19333,6 +19527,10 @@ def _compile_parallel_layer_body(
             source_component_id=rank.component_id,
             fallback_keys=("{}.norm".format(layer.layer_id),),
             metadata={**rank_meta, "event_kind": "input_norm_reduce",
+                **({"buffer_accesses": (
+                    _rank_tensor_access(rank, hidden_input, input_norm_hidden_bytes, "read"),
+                    generic_access("input_norm_stats", input_norm_stats_bytes, "write"))}
+                   if bind_input_norm else {}),
                 **({"input_tensor_id": prefix + ".rank{:03d}.residual_input".format(rank.rank),
                     "output_selection_input_shape": [token_batch, layer.hidden_size]}
                    if output_selection is not None and output_selection.position == "before_last_ffn" else {})},
@@ -19360,6 +19558,8 @@ def _compile_parallel_layer_body(
                 ),
                 reuse_factor=2.0,
                 name="attention_input_norm_apply",
+                read_storage_bytes=(input_norm_hidden_bytes + input_norm_stats_bytes
+                                    if bind_input_norm else None),
             ),
             "{}.input_norm.apply".format(layer.layer_id),
             "{}.rank{:03d}.input_norm_apply".format(prefix, rank.rank),
@@ -19367,6 +19567,11 @@ def _compile_parallel_layer_body(
             source_component_id=norm_component,
             fallback_keys=("{}.norm".format(layer.layer_id),),
             metadata={**rank_meta, "event_kind": "input_norm_apply",
+                      **({"buffer_accesses": (
+                          _rank_tensor_access(rank, hidden_input, input_norm_hidden_bytes, "read"),
+                          generic_access("input_norm_stats", input_norm_stats_bytes, "read"),
+                          generic_access("input_norm", input_norm_hidden_bytes, "write"))}
+                         if bind_input_norm else {}),
                       **({"output_buffer_id": source_base + ".input_norm"} if source_f32 else
                          {"output_buffer_id": generic_base + ".input_norm"} if generic_kv is not None else {})},
         )
@@ -19935,6 +20140,37 @@ def _compile_parallel_layer_body(
                     layer, rope_traffic_elements,
                     scenario=scenario,
                 )
+            if generic_kv is not None:
+                # The generic path materializes broadcast-expanded sin/cos
+                # values for this invocation. They are temporary data, not
+                # resident weights: charge their generation and backing write
+                # on both DRAM and HBF before the RoPE consumer can read them.
+                rope_table_bytes = rope_read_bytes - q_bytes - kv_activation_bytes
+                rope_table_elements = 2 * rope_compute_elements
+                rope_tables, _ = _add_rank_primitive(
+                    builder, scenario, router, plan, rank, OperatorClass.ELEMENTWISE,
+                    ElementwiseWorkload(elements=rope_table_elements,
+                        operations_per_element=2, transcendental_ops_per_element=1,
+                        input_bits=activation_bits, output_bits=activation_bits,
+                        read_storage_bytes=0, write_storage_bytes=rope_table_bytes,
+                        working_set_bytes=rope_table_bytes,
+                        name="rope_table_generate"),
+                    "{}.attention.rope".format(layer.layer_id),
+                    "{}.rank{:03d}.rope_table_generate".format(prefix, rank.rank),
+                    rope_dependencies, source_component_id=rope_source_component,
+                    target_component_id=rope_target,
+                    fallback_keys=("{}.attention".format(layer.layer_id),),
+                    metadata={**rank_meta, "event_kind": "rope_table_generate",
+                        "rope_table_strategy": "per_invocation_sin_cos",
+                        "rope_table_layout": "broadcast_expanded_q_and_k",
+                        "rope_table_input_semantics": "position_and_frequency_derived_from_shape_and_rotary_parameters",
+                        "sin_cos_function_evaluations": rope_table_elements,
+                        "buffer_accesses": [generic_access("rope_tables", rope_table_bytes, "write")]})
+                rope_dependencies = (*rope_dependencies,
+                    _discard_side_branch_rank_value(builder, rope_tables, rank))
+                rope_input_component_bytes = (
+                    *(rope_input_component_bytes or ((rope_source_component, q_bytes + kv_activation_bytes),)),
+                    (rope_target, rope_table_bytes))
             rope, rope_component = _add_rank_primitive(
                 builder,
                 scenario,
@@ -19972,7 +20208,7 @@ def _compile_parallel_layer_body(
                     **rank_meta,
                     **qkv_rope_audit,
                     "event_kind": "rope",
-                    "rope_table_strategy": "precomputed_sin_cos",
+                    "rope_table_strategy": "per_invocation_sin_cos" if generic_kv is not None else "precomputed_sin_cos",
                     **({"buffer_accesses": [
                         generic_access("q_norm", q_bytes, "read") if has_qk_norm else generic_projection("q"),
                         generic_access("k_norm", kv_activation_bytes, "read") if has_qk_norm else generic_projection("k"),
@@ -20670,6 +20906,8 @@ def _compile_parallel_layer_body(
             metadata={
                 **rank_meta,
                 "projection_id": "attention.output",
+                **({"output_buffer_id": generic_base + ".attention_output"}
+                   if _rank_uses_hbf_host_staging(scenario, rank) else {}),
                 **({"input_buffer_id": source_base + (".gated" if attention_execution is not None else ".context")}
                    if source_f32 else {"input_buffer_id": generic_base + ".context"} if generic_kv is not None else {}),
                 **({"output_tensor_id": prefix + ".rank{:03d}.attention_output_value".format(rank.rank)}
@@ -20767,6 +21005,12 @@ def _compile_parallel_layer_body(
                         **rank_meta,
                         **residual_norm_audit,
                         "event_kind": "attention_residual",
+                        **({"buffer_accesses": (
+                            _rank_tensor_access(rank, _layer_hidden_tensor_ids(scenario, layer)[0],
+                                _activation_bytes(layer, tail_elements, scenario=scenario), "read"),
+                            generic_access("attention_output", _activation_bytes(layer, tail_elements, scenario=scenario), "read"),
+                            generic_access("attention_residual", _activation_bytes(layer, tail_elements, scenario=scenario), "write"))}
+                           if _rank_uses_hbf_host_staging(scenario, rank) else {}),
                     },
                 )
             output = _return_rank_value(
@@ -21803,6 +22047,35 @@ def _compile_parallel_dense_mlp(
     return terminal
 
 
+def _layer_hidden_tensor_ids(scenario: ScenarioConfig, layer: LayerSpec) -> Tuple[str, str]:
+    """Resolve the real hidden edge, including expanded repeated layer groups."""
+    view = _execution_view(scenario)
+    instances = view.layer_instances
+    index = next(i for i, item in enumerate(instances) if item.layer_id == layer.layer_id)
+    instance = instances[index]
+    norm = next(op for op in view.operators if op.operator_id == instance.group_operator_id + ".norm1")
+    residual = next(op for op in view.operators if op.operator_id == instance.group_operator_id + ".residual2")
+    output_id = residual.output_tensor_ids[0]
+    if index + 1 < len(instances) and instances[index + 1].group_operator_id == instance.group_operator_id:
+        output_id += ":layer=" + instance.layer_id
+    input_id = norm.input_tensor_ids[0]
+    if index and instances[index - 1].group_operator_id == instance.group_operator_id:
+        input_id = residual.output_tensor_ids[0] + ":layer=" + instances[index - 1].layer_id
+    return input_id, output_id
+
+
+def _rank_tensor_access(rank, tensor_id, size, operation, *, offset=0, extent=None):
+    return {"buffer_id": "tensor:{}:rank={}:tp_rank={}:pp_rank={}".format(
+        tensor_id, rank.rank, rank.tp_rank, rank.pp_rank),
+        "operation": operation, "offset_bytes": offset, "size_bytes": size,
+        **({"buffer_size_bytes": extent} if extent is not None else {})}
+
+
+def _rank_uses_hbf_host_staging(scenario, rank):
+    return bool(rank.memory_component_id and _component(
+        scenario, rank.memory_component_id).metadata.get("host_write_staging"))
+
+
 def _compile_parallel_dense_mlp_uncached(
     builder: _TaskBuilder,
     scenario: ScenarioConfig,
@@ -21827,11 +22100,20 @@ def _compile_parallel_dense_mlp_uncached(
     for rank in ranks:
         activation_bits = _activation_storage_bits(layer, scenario)
         hidden_elements = max(1, token_batch * layer.hidden_size)
+        bind_hidden = _rank_uses_hbf_host_staging(scenario, rank)
+        hidden_input, hidden_output = (_layer_hidden_tensor_ids(scenario, layer)
+                                       if bind_hidden else ("", ""))
+        activation_base = prefix + ".rank{:03d}.activation".format(rank.rank)
+        hidden_bytes = _activation_bytes(layer, hidden_elements, scenario=scenario)
+        norm_stats_bytes = (max(1, token_batch) * max(16, activation_bits) + 7) // 8
+        def hidden_access(role, size, operation, **kwargs):
+            return _rank_tensor_access(rank, activation_base + "." + role, size, operation, **kwargs)
         ffn_meta = {
             "layer_id": layer.layer_id,
             "stage": stage,
             "ffn_path": "dense",
             "coverage_component": "dense_ffn",
+            **({"buffer_view_cache_policy": "aggregate_directional_v1"} if bind_hidden else {}),
         }
         residual_norm_fused, residual_norm_audit = (
             _residual_norm_fusion_decision(
@@ -21850,7 +22132,7 @@ def _compile_parallel_dense_mlp_uncached(
                     operations=5 * hidden_elements,
                     transcendental_operations=max(1, token_batch),
                     read_bytes=hidden_elements * element_bytes * 2,
-                    write_bytes=hidden_elements * element_bytes,
+                    write_bytes=hidden_elements * element_bytes * (2 if bind_hidden else 1),
                     dependency_depth=max(
                         4,
                         int(
@@ -21875,6 +22157,11 @@ def _compile_parallel_dense_mlp_uncached(
                     **residual_norm_audit,
                     "event_kind": "fused_residual_norm",
                     "norm_kind": "rmsnorm",
+                    **({"buffer_accesses": (
+                        _rank_tensor_access(rank, hidden_input, hidden_bytes, "read"),
+                        hidden_access("attention_output", hidden_bytes, "read"),
+                        hidden_access("attention_residual", hidden_bytes, "write"),
+                        hidden_access("post_norm", hidden_bytes, "write"))} if bind_hidden else {}),
                 },
             )
             norm_component = rank.component_id
@@ -21921,6 +22208,9 @@ def _compile_parallel_dense_mlp_uncached(
                     **ffn_meta,
                     **residual_norm_audit,
                     "event_kind": "post_attention_norm_reduce",
+                    **({"buffer_accesses": (
+                        hidden_access("attention_residual", hidden_bytes, "read"),
+                        hidden_access("post_norm_stats", norm_stats_bytes, "write"))} if bind_hidden else {}),
                 },
             )
             norm_apply, norm_component = _add_rank_primitive(
@@ -21945,6 +22235,7 @@ def _compile_parallel_dense_mlp_uncached(
                     ),
                     reuse_factor=2.0,
                     name="post_attention_norm_apply",
+                    read_storage_bytes=hidden_bytes + norm_stats_bytes if bind_hidden else None,
                 ),
                 "{}.post_attention_norm.apply".format(layer.layer_id),
                 "{}.rank{:03d}.post_attention_norm_apply".format(
@@ -21957,6 +22248,10 @@ def _compile_parallel_dense_mlp_uncached(
                     **ffn_meta,
                     **residual_norm_audit,
                     "event_kind": "post_attention_norm_apply",
+                    **({"buffer_accesses": (
+                        hidden_access("attention_residual", hidden_bytes, "read"),
+                        hidden_access("post_norm_stats", norm_stats_bytes, "read"),
+                        hidden_access("post_norm", hidden_bytes, "write"))} if bind_hidden else {}),
                 },
             )
         target = _parallel_target(scenario, layer, "mlp", rank)
@@ -22091,6 +22386,9 @@ def _compile_parallel_dense_mlp_uncached(
                     **ffn_meta,
                     **activation_audit,
                     "projection_id": ("mlp.up_gate" if gated_mlp else "mlp.up"),
+                    **({"input_buffer_id": activation_base + ".post_norm",
+                        "output_buffer_id": activation_base + (".mlp_activation" if activation_fused else ".mlp_up")}
+                       if bind_hidden else {}),
                     "projection_tp_degree": plan.tp_degree,
                     "projection_tp_rank": rank.tp_rank,
                     "projection_allow_padding": plan.allow_padding,
@@ -22153,6 +22451,9 @@ def _compile_parallel_dense_mlp_uncached(
                             **activation_audit,
                             "projection_id": "mlp.{}".format(projection_suffix),
                             "physical_projection": projection_suffix,
+                            **({"input_buffer_id": activation_base + ".post_norm",
+                                "output_buffer_id": activation_base + ".mlp_" + projection_suffix}
+                               if bind_hidden else {}),
                             "projection_tp_degree": plan.tp_degree,
                             "projection_tp_rank": rank.tp_rank,
                             "projection_allow_padding": plan.allow_padding,
@@ -22212,6 +22513,12 @@ def _compile_parallel_dense_mlp_uncached(
                     **activation_audit,
                     "event_kind": "mlp_activation",
                     "activation_function": "swiglu",
+                    **({"buffer_accesses": (
+                        *((hidden_access("mlp_gate", _activation_bytes(layer, activation_elements, scenario=scenario), "read"),
+                           hidden_access("mlp_up", _activation_bytes(layer, activation_elements, scenario=scenario), "read"))
+                          if split_mlp else (hidden_access("mlp_up", _activation_bytes(layer, 2 * activation_elements, scenario=scenario), "read"),)),
+                        hidden_access("mlp_activation", _activation_bytes(layer, activation_elements, scenario=scenario), "write"))}
+                       if bind_hidden else {}),
                 },
             )
         down = _add_rank_gemm(
@@ -22241,6 +22548,8 @@ def _compile_parallel_dense_mlp_uncached(
                 metadata={
                     **ffn_meta,
                     "projection_id": "mlp.down",
+                    **({"input_buffer_id": activation_base + (".mlp_activation" if gated_mlp else ".mlp_up"),
+                        "output_buffer_id": activation_base + ".mlp_down"} if bind_hidden else {}),
                     "projection_tp_degree": plan.tp_degree,
                     "projection_tp_rank": rank.tp_rank,
                     "projection_allow_padding": plan.allow_padding,
@@ -22276,7 +22585,12 @@ def _compile_parallel_dense_mlp_uncached(
             (down,),
             source_component_id=down_component,
             fallback_keys=("{}.norm".format(layer.layer_id),),
-            metadata={**ffn_meta, "event_kind": "mlp_residual"},
+            metadata={**ffn_meta, "event_kind": "mlp_residual",
+                **({"buffer_accesses": (
+                    hidden_access("mlp_down", hidden_bytes, "read"),
+                    hidden_access("attention_residual", hidden_bytes, "read"),
+                    _rank_tensor_access(rank, hidden_output, hidden_bytes, "write"))}
+                   if bind_hidden else {})},
         )
         ends.append(
             _return_rank_value(
@@ -23584,6 +23898,9 @@ def _compile_parallel_final_norm(
     dependencies: Sequence[str],
     token_batch: int = 1,
     output_selection: Optional[_FinalOutputSelection] = None,
+    *,
+    source_token_batch: int,
+    source_row_indices: Tuple[int, ...],
 ) -> Mapping[int, str]:
     """Lower the typed model-level RMSNorm before the output projection."""
 
@@ -23603,6 +23920,9 @@ def _compile_parallel_final_norm(
             "final_norm must be one rms_norm operator with one output tensor"
         )
     output_tensor_id = final_norm.output_tensor_ids[0]
+    if len(final_norm.input_tensor_ids) != 1:
+        raise ValueError("final_norm requires one explicit hidden activation input")
+    input_tensor_id = final_norm.input_tensor_ids[0]
     output_tensors = tuple(
         tensor
         for tensor in execution_view.tensors
@@ -23619,15 +23939,50 @@ def _compile_parallel_final_norm(
 
     activation_bits = 32 if _f32_hidden_storage_enabled(scenario) else _dtype_bits(output_tensor.dtype)
     batch_tokens = max(1, token_batch)
+    if output_selection is not None:
+        # An early gather has already compacted the last FFN input; a late
+        # gather runs after normalization of every backbone row.
+        source_token_batch = output_selection.ffn_rows
+        source_row_indices = tuple(range(output_selection.final_norm_rows))
+    if (type(source_token_batch) is not int or source_token_batch <= 0
+            or len(source_row_indices) != batch_tokens
+            or any(type(index) is not int or index < 0 or index >= source_token_batch
+                   for index in source_row_indices)
+            or tuple(sorted(set(source_row_indices))) != source_row_indices):
+        raise ValueError("final_norm requires explicit ordered input row views")
     stage = plan.pp_degree - 1
     ends: Dict[int, str] = {}
     for rank in plan.tp_group(stage, 0):
         hidden_elements = max(1, batch_tokens * hidden_size)
+        hidden_bytes = (hidden_elements * activation_bits + 7) // 8
+        row_bytes = (hidden_size * activation_bits + 7) // 8
+        source_bytes = source_token_batch * row_bytes
+        statistic_bytes = (batch_tokens * max(16, activation_bits) + 7) // 8
+        statistic_tensor_id = phase + ".final_norm.stats"
+        def norm_access(identity, size, operation, *, offset=0, extent=None):
+            return {"buffer_id": "tensor:{}:rank={}:tp_rank={}:pp_rank={}".format(
+                        identity, rank.rank, rank.tp_rank, rank.pp_rank),
+                    "offset_bytes": offset, "size_bytes": size,
+                    **({"buffer_size_bytes": extent} if extent is not None else {}),
+                    "operation": operation}
+        selected_spans = []
+        for index in source_row_indices:
+            if selected_spans and selected_spans[-1][1] == index:
+                selected_spans[-1] = (selected_spans[-1][0], index + 1)
+            else:
+                selected_spans.append((index, index + 1))
+        hidden_reads = tuple(norm_access(input_tensor_id, (stop - start) * row_bytes,
+                            "read", offset=start * row_bytes)
+                            for start, stop in selected_spans)
         metadata = {
             "stage": stage,
             "phase": phase,
             "model_operator_id": final_norm.operator_id,
             "model_operator_kind": final_norm.op_kind,
+            "input_tensor_id": input_tensor_id,
+            "input_source_rows": source_token_batch,
+            "input_source_bytes": source_bytes,
+            "input_row_indices": source_row_indices,
             "output_tensor_id": output_tensor_id,
             "hidden_size": hidden_size,
             "hidden_shard_size": hidden_size,
@@ -23673,7 +24028,11 @@ def _compile_parallel_final_norm(
             dependencies,
             source_component_id=rank.component_id,
             fallback_keys=("final_norm",),
-            metadata={**metadata, "event_kind": "final_norm_reduce"},
+            metadata={**metadata, "event_kind": "final_norm_reduce",
+                "output_tensor_id": statistic_tensor_id,
+                "buffer_view_cache_policy": "aggregate_directional_v1",
+                "buffer_accesses": hidden_reads + (
+                    norm_access(statistic_tensor_id, statistic_bytes, "write"),)},
         )
         norm_apply, _norm_component = _add_rank_primitive(
             builder,
@@ -23690,6 +24049,9 @@ def _compile_parallel_final_norm(
                 input_count=2,
                 input_bits=activation_bits,
                 output_bits=activation_bits,
+                # RMS statistics are one scalar per row, broadcast by the
+                # kernel; they are not a second full hidden allocation.
+                read_storage_bytes=hidden_bytes + statistic_bytes,
                 dependency_depth=4,
                 working_set_bytes=int(
                     math.ceil(hidden_elements * 3 * activation_bits / 8.0)
@@ -23702,7 +24064,11 @@ def _compile_parallel_final_norm(
             (norm_reduce,),
             source_component_id=norm_component,
             fallback_keys=("final_norm",),
-            metadata={**metadata, "event_kind": "final_norm_apply"},
+            metadata={**metadata, "event_kind": "final_norm_apply",
+                "buffer_view_cache_policy": "aggregate_directional_v1",
+                "buffer_accesses": hidden_reads + (
+                    norm_access(statistic_tensor_id, statistic_bytes, "read"),
+                    norm_access(output_tensor_id, hidden_bytes, "write"))},
         )
         ends[rank.rank] = norm_apply
     return ends
@@ -23718,6 +24084,9 @@ def _compile_parallel_lm_head(
     token_batch: int = 1,
     output_selection: Optional[_FinalOutputSelection] = None,
     output_indices_dependency: Optional[str] = None,
+    *,
+    source_token_batch: int,
+    source_row_indices: Tuple[int, ...],
 ) -> str:
     if output_selection is not None:
         if output_selection.logit_rows != token_batch:
@@ -23745,7 +24114,16 @@ def _compile_parallel_lm_head(
         dependencies,
         token_batch=(output_selection.final_norm_rows if output_selection is not None else token_batch),
         output_selection=output_selection,
+        source_token_batch=source_token_batch,
+        source_row_indices=source_row_indices,
     )
+    head_operators = tuple(operator for operator in execution_view.operators
+                           if operator.operator_id == "lm_head")
+    if (len(head_operators) != 1 or len(head_operators[0].input_tensor_ids) != 1
+            or len(head_operators[0].output_tensor_ids) != 1):
+        raise ValueError("lm_head requires explicit single input and output tensors")
+    head_input_ids = {rank.rank: head_operators[0].input_tensor_ids[0] for rank in ranks}
+    head_output_id = head_operators[0].output_tensor_ids[0]
     if output_selection is not None:
         if output_selection.logit_rows == 0:
             return _add_join(builder, phase + ".empty_output_head", tuple(final_norm_ends.values()),
@@ -23766,6 +24144,8 @@ def _compile_parallel_lm_head(
                     (norm_end,), stage="final_norm_rows", source_component=source,
                     target_component=source, indices_dependency=output_indices_dependency,
                     input_tensor_id=tensor_id)
+                head_input_ids[rank.rank] = (phase + "." + layer.layer_id
+                    + ".rank{:03d}.final_norm_rows.selected".format(rank.rank))
             final_norm_ends = selected_ends
     vocab_shard = shard_extent(
         vocabulary_size,
@@ -23861,6 +24241,8 @@ def _compile_parallel_lm_head(
                     "stage": stage,
                     "phase": phase,
                     "event_kind": "lm_head_projection",
+                    "input_tensor_id": head_input_ids[rank.rank],
+                    "output_tensor_id": head_output_id,
                     "projection_id": "lm_head",
                     "projection_tp_degree": plan.tp_degree,
                     "projection_tp_rank": rank.tp_rank,
@@ -25752,6 +26134,9 @@ def _compile_or_replay_serving_invocation(
             phase,
             (group_end,),
             token_batch=group.logit_token_batch,
+            source_token_batch=group.token_batch,
+            source_row_indices=tuple(index for index, lane in enumerate(group.lanes)
+                                     if lane.requires_logits),
             output_selection=selection,
             output_indices_dependency=output_indices,
         )
@@ -26888,9 +27273,11 @@ class TopologyAwareBatchCostProvider:
         execution_control: Optional[ExecutionControl] = None,
         template_cache_entries: int = 512,
         leaf_cache_entries: int = 4096,
+        defer_physical_execution: bool = False,
     ) -> None:
         self._template_cache_entries = template_cache_entries
         self._leaf_cache_entries = leaf_cache_entries
+        self._defer_physical_execution = defer_physical_execution
         self._scenario = scenario
         self._compilation_context = CompilationContext(
             scenario,
@@ -26972,7 +27359,8 @@ class TopologyAwareBatchCostProvider:
             return _estimate_serving_cohort_cost(
                 scenario, cohort, cached_plan=self._plan, cached_router=self._router,
                 scenario_hash=self._scenario_hash, execution_control=self._execution_control,
-                compiled_executor=self._compiled_executor)
+                compiled_executor=self._compiled_executor,
+                defer_physical_execution=self._defer_physical_execution)
         cache_key = _serving_cohort_cache_key(cohort)
         return self._templates.get_or_create(
             cache_key,
@@ -26984,6 +27372,7 @@ class TopologyAwareBatchCostProvider:
                 scenario_hash=self._scenario_hash,
                 execution_control=self._execution_control,
                 compiled_executor=self._compiled_executor,
+                defer_physical_execution=self._defer_physical_execution,
             ),
         )
 
@@ -28865,6 +29254,7 @@ def _estimate_serving_cohort_cost(
     scenario_hash: Optional[str] = None,
     execution_control: Optional[ExecutionControl] = None,
     compiled_executor: Optional[CompiledGraphExecutor] = None,
+    defer_physical_execution: bool = False,
 ) -> Mapping[str, object]:
     """Lower one realized online cohort through the topology-aware planner.
 
@@ -28896,11 +29286,23 @@ def _estimate_serving_cohort_cost(
             tasks=_promote_physical_allocation_extents(lowering.schedule.tasks),
         ),
     )
+    # Online execution will run the unchanged physical DAG against its live
+    # controller. Replaying it here against a fresh controller duplicates the
+    # expensive work and cannot provide the final persistent-state timings.
+    # Standalone estimates still execute their independent physical preview.
+    staged_hbf_deferred = any(task.metadata.get("hbf_host_staging_by_owner")
+                              for task in lowering.schedule.tasks)
+    deferred_physical = staged_hbf_deferred or any(
+        defer_physical_execution and str(cohort.kind) in {"prefill", "decode", "mixed", "mtp"} and (
+            task.metadata.get("physical_memory_config") is not None
+            or task.metadata.get("stateful_l2") is not None)
+        for task in lowering.schedule.tasks)
     summary = execute_cost_schedule(
         lowering.schedule,
         control=execution_control,
         compiled_executor=compiled_executor,
         retain_task_metadata=False,
+        defer_physical_execution=deferred_physical,
     )
     kv_traffic = _summarize_kv_task_traffic(lowering.schedule.tasks)
     resource_busy_by_direction = _resource_busy_by_direction(
@@ -28988,11 +29390,14 @@ def _estimate_serving_cohort_cost(
                 execution_stages
             ),
             "execution_stage_source": (
-                "executed_task_dag_kernel_timeline"
+                "deferred_physical_task_dag" if staged_hbf_deferred
+                else "authored_physical_task_dag" if deferred_physical and execution_stages
+                else "executed_task_dag_kernel_timeline"
                 if execution_stages
                 else "serial_fallback"
             ),
             "execution_stage_fallback_reason": stage_fallback_reason,
+            **({"preview_physical_cost_scope": "deferred_to_live_persistent_runtime"} if deferred_physical else {}),
             **kv_traffic,
             **dict(lowering.extra_metadata),
         },

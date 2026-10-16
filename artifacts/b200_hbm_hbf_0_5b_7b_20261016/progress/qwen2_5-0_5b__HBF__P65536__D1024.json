@@ -1,0 +1,10 @@
+{
+  "point_id": "qwen2_5-0_5b__HBF__P65536__D1024",
+  "model_id": "qwen2_5-0_5b",
+  "architecture": "HBF",
+  "prompt_tokens": 65536,
+  "output_tokens": 1024,
+  "status": "interrupted",
+  "updated_at": "2026-10-16T07:46:16.089315+00:00",
+  "reason": "stop_requested"
+}

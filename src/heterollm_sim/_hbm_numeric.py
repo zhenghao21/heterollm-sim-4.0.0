@@ -7,9 +7,16 @@ remain distinct. No fast-math or parallel reductions are used.
 from __future__ import annotations
 
 import math
+import os
+from concurrent.futures import ThreadPoolExecutor, wait
+from threading import Condition
 import numpy as np
 from numba import njit
 from ._hbm_clock import align_clock, clock_after
+
+_CHANNEL_WORKERS = min(8, os.cpu_count() or 1)
+_CHANNEL_EXECUTOR = ThreadPoolExecutor(max_workers=_CHANNEL_WORKERS,
+                                       thread_name_prefix="hbm-channel")
 
 # Timing vector indices, shared with the packing module.
 TIMING_FIELDS = (
@@ -386,133 +393,202 @@ def _refresh_until(lane, horizon, arrival, g, t, rows, bf, addresses, pc, pc_see
 
 
 @njit(cache=True, nogil=True, fastmath=False)
-def run_hbm_numeric(first, stop, arrival, read, g, t, rows, bf, addresses, pc,
+def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses, pc,
                     history, pc_seen, channel, channel_int, resources, moved, directions, touched,
-                    windows, window_counts):
+                    windows, window_counts, channel_first, channel_stop):
     """Run complete bursts; caller commits arrays only after successful return."""
     completion = arrival
     hits = misses = conflicts = 0
     counts = np.zeros(7, dtype=np.float64)
     channels = g[0] // 2
     active_deadlines = np.empty(channels, dtype=np.float64)
-    for ch in range(channels):
+    for ch in range(channel_first, channel_stop):
         active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
     # Recovery depends only on this request's direction and timing profile.
     # Keep the empty-range path free of timing arithmetic, as before.
     recovery = 0.
     if first < stop:
         recovery = t[9] if read else _after(_after(t[23], t[26], t[0] / 2), t[10], t[0] / 2)
-    for cursor in range(first, stop):
-        if g[11]:  # row_local: complete rows, then banks, then lanes.
-            stripe = cursor // g[3]
-            bank_within = stripe % g[1]
-            lane = (stripe // g[1]) % g[0]
-            row = stripe // (g[1] * g[0])
-        else:
-            block, inner = cursor // g[2], cursor % g[2]
-            lane = block % g[0]
-            bank_linear = block // g[0]
-            bank_within = bank_linear % g[1]
-            row = ((bank_linear // g[1]) * g[2] + inner) // g[3]
-        bank = lane * g[1] + bank_within
-        group = bank_within // g[4]
-        ch = lane // 2
-        if g[6] >= 0:
-            row &= ~(1 << g[6])
-        if addresses[bank] < 0:
-            addresses[bank] = cursor * g[9]
-        pc_seen[lane] = True
-        activate_not_before = arrival
-        for iteration in range(2 * g[1] + 16):
-            command_start, anchor = _estimate(lane, bank, group, row, arrival, activate_not_before, read, g, t, rows,
-                                             bf, pc, history, channel, channel_int, resources, directions,
-                                             windows, window_counts)
-            horizon = _after(command_start, recovery, t[0] / 2)
-            if active_deadlines[ch] <= horizon:
-                if g[8] and channel[ch, 1] < 0:
-                    channel[ch, 1] = max(t[20], math.floor(arrival / t[20]) * t[20])
-                if g[8] and channel[ch, 1] <= active_deadlines[ch]:
-                    _refresh_until(lane, channel[ch, 1], arrival, g, t, rows, bf, addresses,
-                                   pc, pc_seen, channel, channel_int, resources, touched, counts)
-                else:
-                    _close_expiring(ch, horizon, g, t, rows, bf, addresses, pc, channel,
-                                    channel_int, resources, touched, counts)
-                active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
-                continue
-            if _refresh_until(lane, command_start, arrival, g, t, rows, bf, addresses,
-                              pc, pc_seen, channel, channel_int, resources, touched, counts):
-                active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
-                continue
-            if t[29] > 0 and rows[bank] != row and horizon > _after(anchor, t[29], t[0] / 2):
-                rcd = t[4] if read else t[5]
-                if _after(rcd, recovery, t[0] / 2) > t[29]:
-                    raise ValueError("HBM access recovery exceeds the tRASmax activation window")
-                activate_not_before = _align(max(_after(activate_not_before, t[0], t[0] / 2),
-                    _after(_after(horizon, -t[29], t[0] / 2), -t[0], t[0] / 2)), t[0])
-                continue
-            break
-        else:
-            raise ValueError("HBM timing inputs leave no column-command window between maintenance commands")
-        if rows[bank] == row:
-            hits += 1
-            # The final estimate saw this open row and no maintenance command
-            # ran afterward. Its column start therefore uses exactly the same
-            # state as a second _column_start call here would use.
-            start = command_start
-        else:
-            if rows[bank] < 0:
-                misses += 1
+    # Each physical channel owns both PCs and their banks/CA/data ports.
+    # Walk only this channel range's stripes, retaining its original burst
+    # order even for row-local mappings and partial first/last stripes.
+    lane_span = g[3] * g[1] if g[11] else g[2]
+    period = g[0] * lane_span
+    offset = 2 * channel_first * lane_span
+    width = 2 * (channel_stop - channel_first) * lane_span
+    stripe_start = (first // period) * period + offset
+    while stripe_start < stop:
+        for cursor in range(max(first, stripe_start), min(stop, stripe_start + width)):
+            if g[11]:  # row_local: complete rows, then banks, then lanes.
+                stripe = cursor // g[3]
+                bank_within = stripe % g[1]
+                lane = (stripe // g[1]) % g[0]
+                row = stripe // (g[1] * g[0])
             else:
-                conflicts += 1
-                earliest = _pre_ready(lane, max(arrival, bf[bank, 2], pc[lane, 1]), pc, t)
-                if channel_int[lane // 2, 0] == bank:
-                    earliest = max(earliest, _after(channel[lane // 2, 0], 2 * t[0], t[0] / 2))
-                start, _ = _command(lane // 2, 0, earliest, t[2], False, g, t,
+                block, inner = cursor // g[2], cursor % g[2]
+                lane = block % g[0]
+                bank_linear = block // g[0]
+                bank_within = bank_linear % g[1]
+                row = ((bank_linear // g[1]) * g[2] + inner) // g[3]
+            bank = lane * g[1] + bank_within
+            group = bank_within // g[4]
+            ch = lane // 2
+            if g[6] >= 0:
+                row &= ~(1 << g[6])
+            if addresses[bank] < 0:
+                addresses[bank] = cursor * g[9]
+            pc_seen[lane] = True
+            activate_not_before = arrival
+            for iteration in range(2 * g[1] + 16):
+                command_start, anchor = _estimate(lane, bank, group, row, arrival, activate_not_before, read, g, t, rows,
+                                                 bf, pc, history, channel, channel_int, resources, directions,
+                                                 windows, window_counts)
+                horizon = _after(command_start, recovery, t[0] / 2)
+                if active_deadlines[ch] <= horizon:
+                    if g[8] and channel[ch, 1] < 0:
+                        channel[ch, 1] = max(t[20], math.floor(arrival / t[20]) * t[20])
+                    if g[8] and channel[ch, 1] <= active_deadlines[ch]:
+                        _refresh_until(lane, channel[ch, 1], arrival, g, t, rows, bf, addresses,
+                                       pc, pc_seen, channel, channel_int, resources, touched, counts)
+                    else:
+                        _close_expiring(ch, horizon, g, t, rows, bf, addresses, pc, channel,
+                                        channel_int, resources, touched, counts)
+                    active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+                    continue
+                if _refresh_until(lane, command_start, arrival, g, t, rows, bf, addresses,
+                                  pc, pc_seen, channel, channel_int, resources, touched, counts):
+                    active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+                    continue
+                if t[29] > 0 and rows[bank] != row and horizon > _after(anchor, t[29], t[0] / 2):
+                    rcd = t[4] if read else t[5]
+                    if _after(rcd, recovery, t[0] / 2) > t[29]:
+                        raise ValueError("HBM access recovery exceeds the tRASmax activation window")
+                    activate_not_before = _align(max(_after(activate_not_before, t[0], t[0] / 2),
+                        _after(_after(horizon, -t[29], t[0] / 2), -t[0], t[0] / 2)), t[0])
+                    continue
+                break
+            else:
+                raise ValueError("HBM timing inputs leave no column-command window between maintenance commands")
+            if rows[bank] == row:
+                hits += 1
+                # The final estimate saw this open row and no maintenance command
+                # ran afterward. Its column start therefore uses exactly the same
+                # state as a second _column_start call here would use.
+                start = command_start
+            else:
+                if rows[bank] < 0:
+                    misses += 1
+                else:
+                    conflicts += 1
+                    earliest = _pre_ready(lane, max(arrival, bf[bank, 2], pc[lane, 1]), pc, t)
+                    if channel_int[lane // 2, 0] == bank:
+                        earliest = max(earliest, _after(channel[lane // 2, 0], 2 * t[0], t[0] / 2))
+                    start, _ = _command(lane // 2, 0, earliest, t[2], False, g, t,
+                                         resources, touched, counts)
+                    counts[1] += 1
+                    pc[lane, 0] = start
+                    rows[bank] = -1
+                    bf[bank, 1] = _after(start, t[6], t[0] / 2)
+                    bf[bank, 5] = bf[bank, 1]
+                start = _activate_start(lane, bank, group, activate_not_before, arrival,
+                    g, t, bf, pc, history, resources, windows, window_counts)
+                start, _ = _command(lane // 2, 0, start, t[1], True, g, t,
                                      resources, touched, counts)
-                counts[1] += 1
-                pc[lane, 0] = start
-                rows[bank] = -1
-                bf[bank, 1] = _after(start, t[6], t[0] / 2)
-                bf[bank, 5] = bf[bank, 1]
-            start = _activate_start(lane, bank, group, activate_not_before, arrival,
-                g, t, bf, pc, history, resources, windows, window_counts)
-            start, _ = _command(lane // 2, 0, start, t[1], True, g, t,
-                                 resources, touched, counts)
-            anchor = _after(start, t[0], t[0] / 2)
-            history[lane, group, 0] = anchor
-            if t[30] > 0:
-                _record_activate(lane, anchor, windows, window_counts)
-            channel[lane // 2, 0] = start
-            channel_int[lane // 2, 0], channel_int[lane // 2, 1] = bank, lane
-            bf[bank, 0] = anchor
-            bf[bank, 3], bf[bank, 4] = _after(anchor, t[4], t[0] / 2), _after(anchor, t[5], t[0] / 2)
-            bf[bank, 2] = _after(anchor, t[7], t[0] / 2)
-            rows[bank] = row
-            bf[bank, 6] = min(bf[bank, 3], bf[bank, 4])
+                anchor = _after(start, t[0], t[0] / 2)
+                history[lane, group, 0] = anchor
+                if t[30] > 0:
+                    _record_activate(lane, anchor, windows, window_counts)
+                channel[lane // 2, 0] = start
+                channel_int[lane // 2, 0], channel_int[lane // 2, 1] = bank, lane
+                bf[bank, 0] = anchor
+                bf[bank, 3], bf[bank, 4] = _after(anchor, t[4], t[0] / 2), _after(anchor, t[5], t[0] / 2)
+                bf[bank, 2] = _after(anchor, t[7], t[0] / 2)
+                rows[bank] = row
+                bf[bank, 6] = min(bf[bank, 3], bf[bank, 4])
+                bf[bank, 5] = bf[bank, 2]
+                counts[0] += 1
+                active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+                start = _column_start(lane, bank, group, bf[bank, 3 if read else 4], arrival,
+                                      read, g, t, pc, history, resources, directions)
+            start, _ = _command(lane // 2, 1, start, t[3], True, g, t, resources, touched, counts)
+            counts[2 if read else 3] += 1
+            entry = bank_within // g[10]
+            history[lane, entry, 1 if read else 2] = start
+            data_start = max(_after(start, t[22 if read else 23], t[0] / 2), resources[2 * channels + lane, 0])
+            data_end = _after(data_start, t[26], t[0] / 2)
+            rid = 2 * channels + lane
+            resources[rid, 0] = data_end
+            resources[rid, 1] += t[26]
+            resources[rid, 2], resources[rid, 3] = data_start, data_end
+            moved[rid] += g[9]
+            directions[rid] = 1 if read else 2
+            touched[rid] = True
+            pc[lane, 2 if read else 3] = _after(data_start, t[27 if read else 28], t[0] / 2)
+            if read:
+                bf[bank, 2] = max(bf[bank, 2], _after(start, t[9], t[0] / 2))
+            else:
+                bf[bank, 2] = max(bf[bank, 2], _after(data_end, t[10], t[0] / 2))
+                history[lane, entry, 3] = data_end
             bf[bank, 5] = bf[bank, 2]
-            counts[0] += 1
-            active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
-            start = _column_start(lane, bank, group, bf[bank, 3 if read else 4], arrival,
-                                  read, g, t, pc, history, resources, directions)
-        start, _ = _command(lane // 2, 1, start, t[3], True, g, t, resources, touched, counts)
-        counts[2 if read else 3] += 1
-        entry = bank_within // g[10]
-        history[lane, entry, 1 if read else 2] = start
-        data_start = max(_after(start, t[22 if read else 23], t[0] / 2), resources[2 * channels + lane, 0])
-        data_end = _after(data_start, t[26], t[0] / 2)
-        rid = 2 * channels + lane
-        resources[rid, 0] = data_end
-        resources[rid, 1] += t[26]
-        resources[rid, 2], resources[rid, 3] = data_start, data_end
-        moved[rid] += g[9]
-        directions[rid] = 1 if read else 2
-        touched[rid] = True
-        pc[lane, 2 if read else 3] = _after(data_start, t[27 if read else 28], t[0] / 2)
-        if read:
-            bf[bank, 2] = max(bf[bank, 2], _after(start, t[9], t[0] / 2))
-        else:
-            bf[bank, 2] = max(bf[bank, 2], _after(data_end, t[10], t[0] / 2))
-            history[lane, entry, 3] = data_end
-        bf[bank, 5] = bf[bank, 2]
-        completion = max(completion, data_end)
+            completion = max(completion, data_end)
+        if period >= stop - stripe_start:
+            break
+        stripe_start += period
+    return completion, hits, misses, conflicts, counts
+
+
+def run_hbm_numeric(first, stop, arrival, read, g, t, *arrays):
+    """Execute independent channels concurrently, preserving each command."""
+    channels = int(g[0]) // 2
+    workers = min(_CHANNEL_WORKERS, channels)
+    if stop - first < 65536 or workers < 2:
+        return _run_hbm_channel_range(first, stop, arrival, read, g, t, *arrays, 0, channels)
+    # Compile/cache-load on the calling thread before touching shared arrays.
+    # An empty interval performs no mutation and avoids concurrent first JIT.
+    _run_hbm_channel_range(first, first, arrival, read, g, t, *arrays, 0, 0)
+    condition = Condition()
+    cancelled = False
+    active = 0
+
+    def execute_channel(channel_first, channel_stop):
+        nonlocal active
+        with condition:
+            if cancelled:
+                return None
+            active += 1
+        try:
+            return _run_hbm_channel_range(first, stop, arrival, read, g, t,
+                                          *arrays, channel_first, channel_stop)
+        finally:
+            with condition:
+                active -= 1
+                condition.notify_all()
+
+    jobs = []
+    try:
+        for index in range(workers):
+            jobs.append(_CHANNEL_EXECUTOR.submit(execute_channel,
+                index * channels // workers, (index + 1) * channels // workers))
+        wait(jobs)
+        results = [job.result() for job in jobs]
+    except BaseException:
+        # submit() can enqueue work before raising, without returning a future.
+        # Guard the actual mutations, including such untracked queued work:
+        # after cancellation no new worker enters, and rollback waits for every
+        # worker already inside the numeric controller, even on interruption.
+        with condition:
+            cancelled = True
+            while active:
+                try:
+                    condition.wait()
+                except BaseException:
+                    continue
+        raise
+    completion = max(result[0] for result in results)
+    hits = sum(result[1] for result in results)
+    misses = sum(result[2] for result in results)
+    conflicts = sum(result[3] for result in results)
+    counts = np.zeros(7, dtype=np.float64)
+    for result in results:
+        counts += result[4]
     return completion, hits, misses, conflicts, counts

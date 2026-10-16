@@ -122,6 +122,7 @@ def compact_execution_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any]
         key: metadata[key]
         for key in (
             "persistent_request_buffers", "persistent_buffer_ids",
+            "hbf_host_staging",
             "native_kv_work", "source_f32_kv", "native_rope_source_contract",
             "mmvf_source_work", "mmq_source_work", "native_get_rows_storage",
             "kernel_prediction", "qwen35_attention_work", "qwen35_tensor_geometry",
@@ -182,6 +183,7 @@ def execute_cost_schedule(
     control: Optional[ExecutionControl] = None,
     compiled_executor: Optional[CompiledGraphExecutor] = None,
     retain_task_metadata: bool = True,
+    defer_physical_execution: bool = False,
 ) -> ScheduleCostResult:
     """Execute and reduce a cohort schedule in one exact pass.
 
@@ -191,6 +193,21 @@ def execute_cost_schedule(
 
     execution_control = control or ExecutionControl()
     execution_control.raise_if_cancelled()
+    # Live physical cohorts execute once against their persistent controllers.
+    # A preview only organizes the authored host/compute/link envelope. Staged
+    # HBF also depends on writes from earlier cohorts, so a fresh preview core
+    # cannot execute those reads. Preserve the complete physical tasks for
+    # the live kernel; provisional envelope times are not physical timings.
+    original_physical_tasks = {task.task_id: _unresolved_physical_task(task) for task in schedule.tasks
+        if task.metadata.get("physical_memory_config") is not None
+        or task.metadata.get("stateful_l2") is not None}
+    submitted_tasks = schedule.tasks
+    if defer_physical_execution:
+        submitted_tasks = tuple(replace(task, metadata={
+            key: value for key, value in task.metadata.items()
+            if not key.startswith(("physical_", "hbf_"))
+            and key not in {"memory_accesses", "stateful_l2", "l2_execution"}})
+            if task.task_id in original_physical_tasks else task for task in schedule.tasks)
     bulk_events = None
     # The compiled drain returns a tuple of KernelEvent objects.  That fast
     # path is useful for analytical graphs, but physical/stateful tasks carry
@@ -202,12 +219,12 @@ def execute_cost_schedule(
         or any(
             task.metadata.get("stateful_l2") is not None
             or task.metadata.get("physical_memory_config") is not None
-            for task in schedule.tasks
+            for task in submitted_tasks
         )
     )
     if compiled_executor is not None and not has_physical_or_stateful:
         compiled_tasks, compiled_layout = compiled_executor._compiled_layout(
-            schedule.tasks
+            submitted_tasks
         )
         kernel = UnifiedEventKernel(
             resource_capacities=schedule.resource_capacities,
@@ -221,14 +238,11 @@ def execute_cost_schedule(
         )
     else:
         kernel = UnifiedEventKernel.from_closed_graph(
-            schedule.tasks,
+            submitted_tasks,
             resource_capacities=schedule.resource_capacities,
             resource_owners=schedule.resource_owners,
             capture_physical_details=retain_task_metadata,
         )
-    original_physical_tasks = {task.task_id: _unresolved_physical_task(task) for task in schedule.tasks
-        if task.metadata.get("physical_memory_config") is not None
-        or task.metadata.get("stateful_l2") is not None}
     total_tasks = len(schedule.tasks)
     execution_control.report("cohort_tasks", 0, total_tasks)
     resource_last_path: Dict[

@@ -19,6 +19,7 @@ from ._hbm_clock import align_clock, clock_after
 
 class _Controller:
     def __init__(self, core, request):
+        core._hbm_before_reference()
         self.core, self.config, self.timeline, self.request = core, core.config, core.timeline, request
         self.state = core._hbm_control_state
         self.banks = self.state.setdefault("banks", {})
@@ -526,7 +527,8 @@ def execute_hbm(core, request):
     # bursts on a large device, the same reference controller costs less.
     # Bound Python work to 16 bursts and require 256 packed banks per burst;
     # batches still pack once and large requests still use the numeric loop.
-    tiny_request = count <= min(16, c.lane_count * c.bank_count // 256)
+    tiny_request = (not core._hbm_transactions and not core._hbm_numeric_enabled
+                    and count <= min(16, c.lane_count * c.bank_count // 256))
     if not core.capture_details and not tiny_request:
         try:
             from ._compiled_hbm import execute_hbm_numeric
