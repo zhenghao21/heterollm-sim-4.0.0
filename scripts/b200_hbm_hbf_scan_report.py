@@ -67,10 +67,17 @@ def _local_time(value: str | None) -> str:
 
 
 def _read_optional_json(path: Path) -> dict[str, Any] | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8-sig"))
-    except FileNotFoundError:
-        return None
+    # A Windows reader can briefly be denied while a worker publishes progress.
+    # Retry the read; permanent errors still stop the report with their cause.
+    for attempt in range(10):
+        try:
+            return json.loads(path.read_text(encoding="utf-8-sig"))
+        except FileNotFoundError:
+            return None
+        except PermissionError:
+            if attempt == 9:
+                raise
+            time.sleep(0.1)
 
 
 def _latest_log_progress(path: Path) -> dict[str, Any]:
