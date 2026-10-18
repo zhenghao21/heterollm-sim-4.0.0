@@ -499,6 +499,7 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                       f"队列更新时间：{_markdown(_local_time(queue_status.get('updated_at')))}（北京时间）。", ""])
         if queue_status.get("reason"):
             reason = {"stop_requested": "按要求暂停，未自动恢复扫描",
+                      "configuration_boundary": "当前配置已结束，在配置边界暂停以切换通过测试的加速版本",
                       "requested_group_completed": "64K/5K 配置已全部完成，按要求暂停后续扫描",
                       "paired_budget_fix_retry": "先重跑 4 个原 HBF 64K/10K 拒绝点，再继续剩余 72 点队列",
                       "budget_correction_retry": "修正配对预算及未来擦除上界后，优先重跑原拒绝点",

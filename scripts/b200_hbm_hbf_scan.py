@@ -496,7 +496,7 @@ def validate_retry_selection(output_dir, manifest, identifiers, simulation_mode)
             raise ValueError("retry selection has no rejected attempt to preserve: " + identifier)
 
 
-def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast", retry_point_ids=(), adopt_running=False):
+def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast", retry_point_ids=(), adopt_running=False, pause_after_current=False):
     from b200_hbm_hbf_scan_report import write_report, refresh_markdown
     if workers not in (1, 2):
         raise ValueError("workers must be 1 or 2")
@@ -571,7 +571,7 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                     break
                 changed = False
                 retry_phase = bool(retry_point_ids) and retry_group_counts(finished, retry_point_ids)["retry_group_completed"] < len(retry_point_ids)
-                while pending and len(running) < workers:
+                while pending and len(running) < workers and not pause_after_current:
                     # Keep one job per medium. This avoids two large HBF page
                     # maps occupying the host at once while retaining an A/B pair.
                     occupied = {item[1]["architecture"] for item in running.values()}
@@ -615,6 +615,9 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                 retry_status = retry_group_counts(finished, retry_point_ids)
                 if retry_status["retry_group_accepted"] is False and not stop_reason:
                     stop_reason = "retry_group_not_accepted"
+                if pause_after_current and not running and not stop_reason:
+                    stop_reason = "configuration_boundary"
+                    (output_dir / "stop.request").write_text(stop_reason, encoding="utf-8")
                 write_json(output_dir / "status.json", {"status": "needs_attention" if stop_reason else "running",
                     "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
                     "manager_pid": os.getpid(), "updated_at": utc_now(), "total": len(manifest["points"]),
@@ -660,7 +663,7 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                         finished.append(saved)
                     else:
                         pending.append(point)
-            queue_state = ("paused" if stop_reason == "stop_requested" else
+            queue_state = ("paused" if stop_reason in {"stop_requested", "configuration_boundary"} else
                            "needs_attention" if stop_reason else "completed")
             if still_running:
                 queue_state = "needs_attention"
@@ -686,13 +689,14 @@ def main():
     parser.add_argument("--simulation-mode", choices=("fast", "detailed"), default="fast")
     parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--adopt-running", action="store_true", help="Adopt live workers only after their old manager has exited.")
+    parser.add_argument("--pause-after-current", action="store_true", help="Finish adopted workers and pause before launching another configuration.")
     parser.add_argument("--retry-point-id", action="append", default=[],
                         help="Revalidate selected archived points or forecast refusals first, preserving prior attempts.")
     parser.add_argument("--point-id")
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()
     if args.command == "run":
-        return run_queue(output_dir, args.workers, args.retry_failed, args.simulation_mode, args.retry_point_id, args.adopt_running)
+        return run_queue(output_dir, args.workers, args.retry_failed, args.simulation_mode, args.retry_point_id, args.adopt_running, args.pause_after_current)
     if args.command == "worker":
         manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
         point = next(point for point in manifest["points"] if point["point_id"] == args.point_id)

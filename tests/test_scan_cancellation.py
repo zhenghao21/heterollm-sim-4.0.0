@@ -70,7 +70,8 @@ def test_resuming_full_manifest_never_launches_cancelled_points(tmp_path, monkey
     assert scan.run_queue(tmp_path) == 0 and launches == []
 
 
-def test_takeover_keeps_existing_worker_and_only_launches_remaining_point(tmp_path, monkeypatch):
+@pytest.mark.parametrize("pause_after_current", (False, True))
+def test_takeover_keeps_existing_worker_and_only_launches_remaining_point(tmp_path, monkeypatch, pause_after_current):
     manifest = scan.initialize(tmp_path)
     point = manifest["points"][0]
     other = manifest["points"][1]
@@ -100,9 +101,13 @@ def test_takeover_keeps_existing_worker_and_only_launches_remaining_point(tmp_pa
              "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS, "status": "forecast_completed"})
         return SimpleNamespace(pid=300, poll=lambda: 0)
     monkeypatch.setattr(scan.subprocess, "Popen", launch)
-    assert scan.run_queue(tmp_path, adopt_running=True) == 0
-    assert launches == [other["point_id"]]
-    assert json.loads((tmp_path / "status.json").read_text())["completed"] == 72
+    assert scan.run_queue(tmp_path, adopt_running=True, pause_after_current=pause_after_current) == int(pause_after_current)
+    assert launches == ([] if pause_after_current else [other["point_id"]])
+    status = json.loads((tmp_path / "status.json").read_text())
+    assert status["completed"] == (71 if pause_after_current else 72)
+    if pause_after_current:
+        assert status["status"] == "paused" and status["pending"] == 1
+        assert (tmp_path / "stop.request").read_text() == "configuration_boundary"
 
 
 def test_takeover_refuses_live_previous_manager(tmp_path, monkeypatch):
