@@ -1,0 +1,36 @@
+{
+  "valid_for_candidate_speedup": true,
+  "scope": "controller GC with real NAND/HOST/link, seeded programmed 256 bank medium, 128*256-page writes, 2 retained live pages/block; retained first read-state build included; no LLM end-to-end claim",
+  "protocol": "ABBA, fixed 8 CPUs, below normal, correct package/source paths asserted; formal queue paused",
+  "exact_physical_fields": {
+    "simulated_completion_ns": true,
+    "stats_delta": true,
+    "physical_costs_sum": true,
+    "final_metadata_counts": true
+  },
+  "baseline_seconds": 0.9581782500317786,
+  "candidate_seconds": 0.913290650001727,
+  "speedup": 1.0491493042548576,
+  "runs": {
+    "A1": {
+      "wall_seconds": 0.9654970000265166,
+      "implementation_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src",
+      "nand_core_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+    },
+    "A2": {
+      "wall_seconds": 0.9508595000370406,
+      "implementation_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src",
+      "nand_core_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+    },
+    "B1": {
+      "wall_seconds": 0.9127762999851257,
+      "implementation_root": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src",
+      "nand_core_source": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+    },
+    "B2": {
+      "wall_seconds": 0.9138050000183284,
+      "implementation_root": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src",
+      "nand_core_source": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 0.07084540004143491}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.8152503999881446}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.8268296000314876}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 4.622002099989913}
+{"stage": "serving_cohorts", "completed": 2, "kind": "decode", "wall_seconds": 7.071738600032404}
+{"stage": "serving_cohorts", "completed": 3, "kind": "decode", "wall_seconds": 9.333748700038996}
+{"wall_seconds": 9.35409850004362, "cpu_seconds": 9.1875, "ttft_ns": 142005390.98237285, "tpot_ns": 102111685.63873471}

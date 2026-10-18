@@ -1,0 +1,138 @@
+{
+  "scope": "Qwen2.5-0.5B 2048/5 exact physical short request, not a formal detailed reference",
+  "protocol": "serial A/B/B/A, 32/2 warmup in each child, highest 8 eligible CPUs, below normal priority; formal 7B HBF scan concurrently active",
+  "all_simulation_fields_exact": true,
+  "phases": {
+    "prefill": {
+      "baseline_seconds": 3.690684000001056,
+      "candidate_seconds": 3.088871600019047,
+      "speedup": 1.194832443011972
+    },
+    "decode": {
+      "baseline_seconds": 3.2132144999923185,
+      "candidate_seconds": 2.9451285999675747,
+      "speedup": 1.0910268909913459
+    },
+    "total": {
+      "baseline_seconds": 7.728228400024818,
+      "candidate_seconds": 6.868967699992936,
+      "speedup": 1.1250931344505763
+    }
+  },
+  "pairs": {
+    "A1_B1": {
+      "exactly_equal": true,
+      "difference_count": 0,
+      "differences": [],
+      "timing": {
+        "baseline": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 3.716043599997647,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 4.513762200018391,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 3.0742457999731414,
+          "decode_unprofiled_seconds_per_step": 0.7685614499932854,
+          "total_wall_seconds": 7.616703400039114,
+          "total_cpu_seconds": 7.4375,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        },
+        "candidate": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 3.0792791999992914,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 3.8929378000320867,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 2.9205154999508522,
+          "decode_unprofiled_seconds_per_step": 0.7301288749877131,
+          "total_wall_seconds": 6.837694699992426,
+          "total_cpu_seconds": 6.78125,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        }
+      },
+      "speedup": {
+        "prefill_unprofiled": 1.2067900825616924,
+        "decode_unprofiled": 1.0526380702396123,
+        "total_unprofiled": 1.1139285584142198
+      },
+      "notes": []
+    },
+    "A2_B2": {
+      "exactly_equal": true,
+      "difference_count": 0,
+      "differences": [],
+      "timing": {
+        "baseline": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 3.665324400004465,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 4.462472899991553,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 3.3521832000114955,
+          "decode_unprofiled_seconds_per_step": 0.8380458000028739,
+          "total_wall_seconds": 7.8397534000105225,
+          "total_cpu_seconds": 7.796875,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        },
+        "candidate": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 3.0984640000388026,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 3.9045973000465892,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 2.969741699984297,
+          "decode_unprofiled_seconds_per_step": 0.7424354249960743,
+          "total_wall_seconds": 6.9002406999934465,
+          "total_cpu_seconds": 6.8125,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        }
+      },
+      "speedup": {
+        "prefill_unprofiled": 1.1829488417353127,
+        "decode_unprofiled": 1.1287793817318255,
+        "total_unprofiled": 1.13615651118054
+      },
+      "notes": []
+    }
+  }
+}

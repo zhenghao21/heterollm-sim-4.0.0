@@ -1,0 +1,185 @@
+{
+  "scope": "actual 8192 input/17 output request, 32/2 warm, ABBA, 8 fixed CPUs, below normal; formal queue paused; eager seed removed",
+  "exactly_equal": true,
+  "mean_speedup": {
+    "prefill_before_first_token_wall_seconds": 1.1258593539213122,
+    "decode_unprofiled_wall_seconds": 1.0401442968388253,
+    "total_wall_seconds": 1.0825494394839381
+  },
+  "pairs": [
+    {
+      "exactly_equal": true,
+      "difference_count": 0,
+      "differences": [],
+      "timing": {
+        "baseline": {
+          "prefill_before_first_token_cohorts": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "prefill_before_first_token_wall_seconds": 13.7996487999917,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 14.557660399994347,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ],
+          "decode_unprofiled_steps": 16,
+          "decode_unprofiled_wall_seconds": 11.417336700018495,
+          "decode_unprofiled_seconds_per_step": 0.713583543751156,
+          "total_wall_seconds": 26.003682399983518,
+          "total_cpu_seconds": 25.515625,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        },
+        "candidate": {
+          "prefill_before_first_token_cohorts": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "prefill_before_first_token_wall_seconds": 12.202898500021547,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 12.953564100025687,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ],
+          "decode_unprofiled_steps": 16,
+          "decode_unprofiled_wall_seconds": 10.939809200004674,
+          "decode_unprofiled_seconds_per_step": 0.6837380750002922,
+          "total_wall_seconds": 23.921408599999268,
+          "total_cpu_seconds": 23.5,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        }
+      },
+      "speedup": {
+        "prefill_unprofiled": 1.1308500845079825,
+        "decode_unprofiled": 1.043650441363604,
+        "total_unprofiled": 1.0870464542787968
+      },
+      "notes": []
+    },
+    {
+      "exactly_equal": true,
+      "difference_count": 0,
+      "differences": [],
+      "timing": {
+        "baseline": {
+          "prefill_before_first_token_cohorts": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "prefill_before_first_token_wall_seconds": 13.815124099957757,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 14.583462000009604,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ],
+          "decode_unprofiled_steps": 16,
+          "decode_unprofiled_wall_seconds": 11.410835000046063,
+          "decode_unprofiled_seconds_per_step": 0.713177187502879,
+          "total_wall_seconds": 26.023291400051676,
+          "total_cpu_seconds": 25.53125,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        },
+        "candidate": {
+          "prefill_before_first_token_cohorts": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "prefill_before_first_token_wall_seconds": 12.32483030000003,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 13.10113760002423,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20
+          ],
+          "decode_unprofiled_steps": 16,
+          "decode_unprofiled_wall_seconds": 11.007310800021514,
+          "decode_unprofiled_seconds_per_step": 0.6879569250013446,
+          "total_wall_seconds": 24.138266000023577,
+          "total_cpu_seconds": 23.4375,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        }
+      },
+      "speedup": {
+        "prefill_unprofiled": 1.1209179975449821,
+        "decode_unprofiled": 1.0366596535117152,
+        "total_unprofiled": 1.0780928257243605
+      },
+      "notes": []
+    }
+  ]
+}

@@ -1,0 +1,247 @@
+{
+  "samples": 1999,
+  "deepest_project_file": [
+    {
+      "file": "_hbf_page_state.cp312-win_amd64.pyd",
+      "samples": 927,
+      "percent": 46.37318659329665
+    },
+    {
+      "file": "nand_core.py",
+      "samples": 308,
+      "percent": 15.407703851925962
+    },
+    {
+      "file": "_token_program.cp312-win_amd64.pyd",
+      "samples": 265,
+      "percent": 13.256628314157078
+    },
+    {
+      "file": "_nand_pack.cp312-win_amd64.pyd",
+      "samples": 156,
+      "percent": 7.8039019509754874
+    },
+    {
+      "file": "_nand_execution.cp312-win_amd64.pyd",
+      "samples": 144,
+      "percent": 7.20360180090045
+    },
+    {
+      "file": "_io_execution.cp312-win_amd64.pyd",
+      "samples": 110,
+      "percent": 5.502751375687844
+    },
+    {
+      "file": "_resource_ledger.cp312-win_amd64.pyd",
+      "samples": 62,
+      "percent": 3.1015507753876936
+    },
+    {
+      "file": "planner.py",
+      "samples": 16,
+      "percent": 0.80040020010005
+    },
+    {
+      "file": "_cost_ledger.cp312-win_amd64.pyd",
+      "samples": 5,
+      "percent": 0.25012506253126565
+    },
+    {
+      "file": "serving.py",
+      "samples": 3,
+      "percent": 0.1500750375187594
+    },
+    {
+      "file": "_physical_task.cp312-win_amd64.pyd",
+      "samples": 1,
+      "percent": 0.05002501250625312
+    },
+    {
+      "file": "_physical_binding.py",
+      "samples": 1,
+      "percent": 0.05002501250625312
+    },
+    {
+      "file": "scalable_serving.py",
+      "samples": 1,
+      "percent": 0.05002501250625312
+    }
+  ],
+  "deepest_python_frame": [
+    {
+      "file": "hbf_staging.py",
+      "function": "_write_full_pages",
+      "line": 1040,
+      "samples": 455,
+      "percent": 22.761380690345174
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit_read_pages",
+      "line": 1023,
+      "samples": 295,
+      "percent": 14.757378689344673
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit_write_pages",
+      "line": 1031,
+      "samples": 284,
+      "percent": 14.207103551775887
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_read_state",
+      "line": 647,
+      "samples": 227,
+      "percent": 11.35567783891946
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_write_full_pages",
+      "line": 1014,
+      "samples": 166,
+      "percent": 8.304152076038019
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_release_clean_pages",
+      "line": 1296,
+      "samples": 119,
+      "percent": 5.952976488244122
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "write",
+      "line": 898,
+      "samples": 48,
+      "percent": 2.4012006003001503
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_account_task_execution",
+      "line": 2467,
+      "samples": 22,
+      "percent": 1.1005502751375689
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_release_clean_pages",
+      "line": 1293,
+      "samples": 22,
+      "percent": 1.1005502751375689
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_drain_prevalidated_compiled",
+      "line": 1990,
+      "samples": 20,
+      "percent": 1.0005002501250626
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_publish_physical_summary",
+      "line": 788,
+      "samples": 17,
+      "percent": 0.8504252126063031
+    },
+    {
+      "file": "data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "line": 1217,
+      "samples": 12,
+      "percent": 0.6003001500750376
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "plan",
+      "line": 150,
+      "samples": 10,
+      "percent": 0.5002501250625313
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_release_clean_pages",
+      "line": 1262,
+      "samples": 10,
+      "percent": 0.5002501250625313
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "write",
+      "line": 909,
+      "samples": 10,
+      "percent": 0.5002501250625313
+    },
+    {
+      "file": "live_execution_metrics.py",
+      "function": "observe",
+      "line": 111,
+      "samples": 9,
+      "percent": 0.4502251125562781
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_update_program_frontiers",
+      "line": 318,
+      "samples": 9,
+      "percent": 0.4502251125562781
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_nand_publish_numeric",
+      "line": 270,
+      "samples": 8,
+      "percent": 0.400200100050025
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "plan",
+      "line": 149,
+      "samples": 8,
+      "percent": 0.400200100050025
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "update_max",
+      "line": 365,
+      "samples": 7,
+      "percent": 0.3501750875437719
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "release",
+      "line": 1314,
+      "samples": 6,
+      "percent": 0.3001500750375188
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "ready_ns",
+      "line": 85,
+      "samples": 6,
+      "percent": 0.3001500750375188
+    },
+    {
+      "file": "data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "line": 1202,
+      "samples": 6,
+      "percent": 0.3001500750375188
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_release_clean_pages",
+      "line": 1292,
+      "samples": 6,
+      "percent": 0.3001500750375188
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "update_max",
+      "line": 376,
+      "samples": 5,
+      "percent": 0.25012506253126565
+    }
+  ]
+}

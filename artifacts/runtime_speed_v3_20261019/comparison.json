@@ -1,0 +1,194 @@
+{
+  "source_commit": "387335b",
+  "scope": "0.5B exact physical diagnostic, 8192 input and 17 output, four Prefill blocks plus 16 real Decode steps; not a formal detailed reference",
+  "protocol": "ABBA, each child warms 32/2, fixed highest 8 eligible CPUs and below normal priority; HBM formal HBF worker concurrently active, HBF/GC queue paused",
+  "selected": {
+    "HBM": {
+      "source": "hbm_long_comparison.json",
+      "all_simulation_fields_exact": true,
+      "phases": {
+        "prefill": {
+          "baseline_seconds": 16.155504049966112,
+          "candidate_seconds": 15.451806650002254,
+          "speedup": 1.045541431879343
+        },
+        "decode": {
+          "baseline_seconds": 21.564009350026026,
+          "candidate_seconds": 20.770767549984157,
+          "speedup": 1.0381902978853794
+        },
+        "total": {
+          "baseline_seconds": 38.44992205002927,
+          "candidate_seconds": 36.94605974998558,
+          "speedup": 1.0407042675246114
+        }
+      }
+    },
+    "HBF": {
+      "source": "hbf_final_comparison.json",
+      "all_simulation_fields_exact": true,
+      "phases": {
+        "prefill": {
+          "baseline_seconds": 13.980475700023817,
+          "candidate_seconds": 12.303679300006479,
+          "speedup": 1.1362841438834037
+        },
+        "decode": {
+          "baseline_seconds": 11.650851299986243,
+          "candidate_seconds": 11.007996900007129,
+          "speedup": 1.0583988536532654
+        },
+        "total": {
+          "baseline_seconds": 26.423031600017566,
+          "candidate_seconds": 24.105273150024004,
+          "speedup": 1.09615151156216
+        }
+      }
+    }
+  },
+  "gc_controller": {
+    "materialized_lists": {
+      "valid_for_candidate_speedup": true,
+      "scope": "controller GC with real NAND/HOST/link, seeded programmed 256 bank medium, 128*256-page writes, 2 retained live pages/block; retained first read-state build included; no LLM end-to-end claim",
+      "protocol": "ABBA, fixed 8 CPUs, below normal, correct package/source paths asserted; formal queue paused",
+      "exact_physical_fields": {
+        "simulated_completion_ns": true,
+        "stats_delta": true,
+        "physical_costs_sum": true,
+        "final_metadata_counts": true
+      },
+      "baseline_seconds": 0.9581782500317786,
+      "candidate_seconds": 0.913290650001727,
+      "speedup": 1.0491493042548576,
+      "runs": {
+        "A1": {
+          "wall_seconds": 0.9654970000265166,
+          "implementation_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src",
+          "nand_core_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+        },
+        "A2": {
+          "wall_seconds": 0.9508595000370406,
+          "implementation_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src",
+          "nand_core_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+        },
+        "B1": {
+          "wall_seconds": 0.9127762999851257,
+          "implementation_root": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src",
+          "nand_core_source": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+        },
+        "B2": {
+          "wall_seconds": 0.9138050000183284,
+          "implementation_root": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src",
+          "nand_core_source": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+        }
+      },
+      "intervals": {
+        "baseline": {
+          "first_write_including_read_state_and_victim_index": 0.6335134500113782,
+          "following_127_writes": 0.32218130002729595
+        },
+        "candidate": {
+          "first_write_including_read_state_and_victim_index": 0.5994877999764867,
+          "following_127_writes": 0.31142435024958104
+        }
+      }
+    },
+    "fresh_bulk_metadata": {
+      "valid_for_candidate_speedup": true,
+      "scope": "controller GC with real NAND/HOST/link, seeded programmed 256 bank medium, 128*256-page writes, 2 retained live pages/block; natural page metadata copied from the actual complete-page warm write of each implementation; retained first read-state build included; no LLM end-to-end claim",
+      "protocol": "ABBA, fixed 8 CPUs, below normal, correct package/source paths asserted; formal queue paused",
+      "exact_physical_fields": {
+        "simulated_completion_ns": true,
+        "stats_delta": true,
+        "physical_costs_sum": true,
+        "final_metadata_counts": true
+      },
+      "baseline_seconds": 0.9605436499696225,
+      "candidate_seconds": 0.8481848999799695,
+      "speedup": 1.132469641928672,
+      "runs": {
+        "A1": {
+          "wall_seconds": 0.9526013999711722,
+          "implementation_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src",
+          "nand_core_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+        },
+        "A2": {
+          "wall_seconds": 0.9684858999680728,
+          "implementation_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src",
+          "nand_core_source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+        },
+        "B1": {
+          "wall_seconds": 0.8481157999485731,
+          "implementation_root": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src",
+          "nand_core_source": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+        },
+        "B2": {
+          "wall_seconds": 0.8482540000113659,
+          "implementation_root": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src",
+          "nand_core_source": "C:\\Users\\A\\.codex\\worktrees\\hbf-long-prefill-speed\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py"
+        }
+      },
+      "intervals": {
+        "baseline": {
+          "first_write_including_read_state_and_victim_index": 0.6312233000062406,
+          "following_127_writes": 0.3267764000338502
+        },
+        "candidate": {
+          "first_write_including_read_state_and_victim_index": 0.5273803499876522,
+          "following_127_writes": 0.3183216499455739
+        }
+      }
+    }
+  },
+  "transactions": {
+    "HBM": {
+      "exactly_equal": true,
+      "record_count": 4251
+    },
+    "HBF": {
+      "exactly_equal": true,
+      "record_count": 10857
+    }
+  },
+  "main_tests": {
+    "physical_fast_and_report": 844,
+    "cancellation_and_website": 35,
+    "total_disjoint_cases": 879,
+    "result": "passed"
+  },
+  "constraints": {
+    "physical_parameters_changed": false,
+    "fast_target_relative_error": 0.1,
+    "max_actual_decode_steps": 128,
+    "formal_detailed_reference_repeated": false,
+    "cancelled_points": 32,
+    "formal_success_at_switch": 32,
+    "remaining_1k_points": 8
+  },
+  "discarded_variants": [
+    "HBM scratch v1, structref v3/v4 slower than v2",
+    "eager first-write read-state binding withdrawn: custom completion conversion timing",
+    "initial GC runner compared baseline with baseline; gc_resident_comparison.json invalid",
+    "pre-typed page representation regressed materialized-list GC; superseded by typed initialization"
+  ],
+  "limits": [
+    "No formal 256K/512K end-to-end speedup inferred from 8K diagnostic",
+    "Seeded GC includes initial read-state/victim index construction; following 127-write timing reported separately",
+    "Fresh bulk page representation cannot stand in for all materialized long-lived KV pages",
+    "Exact bounded execution comparison does not add a full detailed empirical accuracy guarantee to forecast tails"
+  ],
+  "deployment": {
+    "source_commit": "387335b",
+    "resumed_at": "2026-10-18T18:34:29Z",
+    "manager_pid": 36416,
+    "worker_pid_at_resume": 32128,
+    "first_point": "qwen2_5-0_5b__HBM__P524288__D1024",
+    "manager_log": "manager_runtime_speed_v3.log",
+    "worker_count": 1,
+    "own_configuration_boundary_removed": true,
+    "queue_plan_cancelled_points_preserved": 32,
+    "dashboard_http_status": 200,
+    "heartbeat_updated": true
+  },
+  "raw_transaction_storage": "Large gzip observation streams retained locally; counts and exact comparison results committed."
+}

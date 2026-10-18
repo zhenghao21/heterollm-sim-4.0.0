@@ -1,0 +1,17 @@
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 0.0015693000168539584}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.7692853000480682}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.7868443000479601}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 2.074818800028879}
+{"stage": "serving_cohorts", "completed": 2, "kind": "decode", "wall_seconds": 2.996427800040692}
+{"wall_seconds": 3.0160371999954805, "cpu_seconds": 2.984375, "ttft_ns": 142005390.98237285, "tpot_ns": 102109620.4708457}
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 0.0045332000008784235}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.785706199996639}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.7971484999870881}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 4.462472899991553}
+{"stage": "serving_cohorts", "completed": 2, "kind": "decode", "wall_seconds": 5.450787000008859}
+{"stage": "serving_cohorts", "completed": 3, "kind": "decode", "wall_seconds": 6.271408499975223}
+{"stage": "serving_cohorts", "completed": 4, "kind": "decode", "wall_seconds": 7.047291499970015}
+{"stage": "serving_cohorts", "completed": 5, "kind": "decode", "wall_seconds": 7.814656100003049}
+{"wall_seconds": 7.8397534000105225, "cpu_seconds": 7.796875, "ttft_ns": 331402931.7224071, "tpot_ns": 102732806.88745281}

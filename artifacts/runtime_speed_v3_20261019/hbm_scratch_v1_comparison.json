@@ -1,0 +1,137 @@
+{
+  "candidate": "thread-local channel-partitioned 13-array scratch reuse and empty-JIT early return",
+  "scope": "0.5B HBM 2048/5, 32/2 warm in each process, ABBA serial subprocesses; formal 7B HBF scan concurrently active; BELOW_NORMAL process priority; diagnostic CPUs24..31",
+  "comparisons": {
+    "first": {
+      "exactly_equal": true,
+      "difference_count": 0,
+      "differences": [],
+      "timing": {
+        "baseline": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 4.23973939998541,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 4.986398999986704,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 5.354749299993273,
+          "decode_unprofiled_seconds_per_step": 1.3386873249983182,
+          "total_wall_seconds": 10.357693600002676,
+          "total_cpu_seconds": 19.859375,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        },
+        "candidate": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 4.396466499951202,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 5.071461499959696,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 5.565994500007946,
+          "decode_unprofiled_seconds_per_step": 1.3914986250019865,
+          "total_wall_seconds": 10.656684699992184,
+          "total_cpu_seconds": 20.78125,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        }
+      },
+      "speedup": {
+        "prefill_unprofiled": 0.9643515764381392,
+        "decode_unprofiled": 0.9620471777299867,
+        "total_unprofiled": 0.9719433286799105
+      },
+      "notes": []
+    },
+    "second": {
+      "exactly_equal": true,
+      "difference_count": 0,
+      "differences": [],
+      "timing": {
+        "baseline": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 4.525390099966899,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 5.206022300000768,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 5.405039800039958,
+          "decode_unprofiled_seconds_per_step": 1.3512599500099896,
+          "total_wall_seconds": 10.628770700015593,
+          "total_cpu_seconds": 20.203125,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        },
+        "candidate": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 4.4838416000129655,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 5.196296099980827,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 5.5242753000347875,
+          "decode_unprofiled_seconds_per_step": 1.3810688250086969,
+          "total_wall_seconds": 10.737653399992269,
+          "total_cpu_seconds": 20.96875,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        }
+      },
+      "speedup": {
+        "prefill_unprofiled": 1.0092662729106694,
+        "decode_unprofiled": 0.9784160829214869,
+        "total_unprofiled": 0.9898597304345144
+      },
+      "notes": []
+    }
+  },
+  "means": {
+    "prefill_before_first_token_wall_seconds": {
+      "baseline": 4.382564749976154,
+      "candidate": 4.440154049982084,
+      "speedup": 0.9870298869458906
+    },
+    "decode_unprofiled_wall_seconds": {
+      "baseline": 5.3798945500166155,
+      "candidate": 5.545134900021367,
+      "speedup": 0.9702008421825563
+    },
+    "total_wall_seconds": {
+      "baseline": 10.493232150009135,
+      "candidate": 10.697169049992226,
+      "speedup": 0.9809354326336238
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "candidate": "flat aligned channel scratch with one shared native structref context",
+  "scope": "0.5B HBM 2048/5, 32/2 warm in each process, ABBA serial subprocesses; formal 7B HBF scan concurrently active; BELOW_NORMAL process priority; diagnostic CPUs24..31",
+  "comparisons": {
+    "first": {
+      "exactly_equal": true,
+      "difference_count": 0,
+      "differences": [],
+      "timing": {
+        "baseline": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 4.492338200041559,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 5.239833900006488,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 5.430131300003268,
+          "decode_unprofiled_seconds_per_step": 1.357532825000817,
+          "total_wall_seconds": 10.687650499981828,
+          "total_cpu_seconds": 19.890625,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        },
+        "candidate": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 4.590755500015803,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 5.271248399978504,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 5.390800399996806,
+          "decode_unprofiled_seconds_per_step": 1.3477000999992015,
+          "total_wall_seconds": 10.680490800004918,
+          "total_cpu_seconds": 21.71875,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        }
+      },
+      "speedup": {
+        "prefill_unprofiled": 0.9785618510996925,
+        "decode_unprofiled": 1.0072959295629802,
+        "total_unprofiled": 1.000670353086855
+      },
+      "notes": []
+    },
+    "second": {
+      "exactly_equal": true,
+      "difference_count": 0,
+      "differences": [],
+      "timing": {
+        "baseline": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 4.293309900036547,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 4.95509270002367,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 5.271698899974581,
+          "decode_unprofiled_seconds_per_step": 1.3179247249936452,
+          "total_wall_seconds": 10.242303900013212,
+          "total_cpu_seconds": 19.734375,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        },
+        "candidate": {
+          "prefill_before_first_token_cohorts": [
+            1
+          ],
+          "prefill_before_first_token_wall_seconds": 4.131857200001832,
+          "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+          "wall_to_first_token_seconds": 4.783409599971492,
+          "prefill_all_unprofiled": true,
+          "decode_unprofiled_cohorts": [
+            2,
+            3,
+            4,
+            5
+          ],
+          "decode_unprofiled_steps": 4,
+          "decode_unprofiled_wall_seconds": 5.21635200001765,
+          "decode_unprofiled_seconds_per_step": 1.3040880000044126,
+          "total_wall_seconds": 10.018562399956863,
+          "total_cpu_seconds": 19.25,
+          "transaction_capture": false,
+          "total_contains_profiling": false
+        }
+      },
+      "speedup": {
+        "prefill_unprofiled": 1.039075091954931,
+        "decode_unprofiled": 1.010610269390705,
+        "total_unprofiled": 1.0223326951636607
+      },
+      "notes": []
+    }
+  },
+  "numba_cache": {
+    "B1": {
+      "context_hits": 0,
+      "context_misses": 1,
+      "kernel_hits": 0,
+      "kernel_misses": 1
+    },
+    "B2": {
+      "context_hits": 1,
+      "context_misses": 0,
+      "kernel_hits": 1,
+      "kernel_misses": 0
+    }
+  },
+  "means": {
+    "prefill_before_first_token_wall_seconds": {
+      "baseline": 4.392824050039053,
+      "candidate": 4.361306350008817,
+      "speedup": 1.007226665017506
+    },
+    "decode_unprofiled_wall_seconds": {
+      "baseline": 5.350915099988924,
+      "candidate": 5.303576200007228,
+      "speedup": 1.0089258451649346
+    },
+    "total_wall_seconds": {
+      "baseline": 10.46497719999752,
+      "candidate": 10.34952659998089,
+      "speedup": 1.0111551575718296
+    }
+  }
+}

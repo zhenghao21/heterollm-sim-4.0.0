@@ -1,0 +1,33 @@
+Page helper: C:\Users\A\.codex\worktrees\hbf-long-prefill-speed\heterollm-sim-4.0.0\src\heterollm_sim\_hbf_page_state.cp312-win_amd64.pyd
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 0.0012381999986246228}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.765040299971588}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.7770742999855429}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 2.055583699955605}
+{"stage": "serving_cohorts", "completed": 2, "kind": "decode", "wall_seconds": 2.884699299989734}
+{"wall_seconds": 2.9028098999988288, "cpu_seconds": 2.8125, "ttft_ns": 142005390.98237285, "tpot_ns": 102109620.4708457}
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 7.350003579631448e-05}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.7576086000190116}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.7701871000463143}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 3.810764200054109}
+{"stage": "serving_cohorts", "completed": 2, "kind": "prefill", "wall_seconds": 6.82964340003673}
+{"stage": "serving_cohorts", "completed": 3, "kind": "prefill", "wall_seconds": 9.941483800008427}
+{"stage": "serving_cohorts", "completed": 4, "kind": "prefill", "wall_seconds": 13.151144900009967}
+{"stage": "serving_cohorts", "completed": 5, "kind": "decode", "wall_seconds": 14.036297900020145}
+{"stage": "serving_cohorts", "completed": 6, "kind": "decode", "wall_seconds": 14.73875440005213}
+{"stage": "serving_cohorts", "completed": 7, "kind": "decode", "wall_seconds": 15.408903500007}
+{"stage": "serving_cohorts", "completed": 8, "kind": "decode", "wall_seconds": 16.077655800036155}
+{"stage": "serving_cohorts", "completed": 9, "kind": "decode", "wall_seconds": 16.746062500053085}
+{"stage": "serving_cohorts", "completed": 10, "kind": "decode", "wall_seconds": 17.415004100010265}
+{"stage": "serving_cohorts", "completed": 11, "kind": "decode", "wall_seconds": 18.086104300047737}
+{"stage": "serving_cohorts", "completed": 12, "kind": "decode", "wall_seconds": 18.755651900020894}
+{"stage": "serving_cohorts", "completed": 13, "kind": "decode", "wall_seconds": 19.424128800048493}
+{"stage": "serving_cohorts", "completed": 14, "kind": "decode", "wall_seconds": 20.15711500000907}
+{"stage": "serving_cohorts", "completed": 15, "kind": "decode", "wall_seconds": 20.820611600007396}
+{"stage": "serving_cohorts", "completed": 16, "kind": "decode", "wall_seconds": 21.489781200012658}
+{"stage": "serving_cohorts", "completed": 17, "kind": "decode", "wall_seconds": 22.15551620000042}
+{"stage": "serving_cohorts", "completed": 18, "kind": "decode", "wall_seconds": 22.820360700017773}
+{"stage": "serving_cohorts", "completed": 19, "kind": "decode", "wall_seconds": 23.489319800049998}
+{"stage": "serving_cohorts", "completed": 20, "kind": "decode", "wall_seconds": 24.201991600042675}
+{"wall_seconds": 24.23048770002788, "cpu_seconds": 23.90625, "ttft_ns": 1301472756.7263975, "tpot_ns": 104742511.17984232}

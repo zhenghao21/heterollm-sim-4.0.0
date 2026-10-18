@@ -1,0 +1,32 @@
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 0.00134529999922961}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.6906231000320986}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.7087577000493184}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 2.770017100032419}
+{"stage": "serving_cohorts", "completed": 2, "kind": "decode", "wall_seconds": 4.043004200037103}
+{"wall_seconds": 4.057162900047842, "cpu_seconds": 5.4375, "ttft_ns": 956320.1005714285, "tpot_ns": 813679.1040000002}
+implementation loaded; starting full benchmark request
+{"stage": "control_plane", "completed": 0, "kind": null, "wall_seconds": 0.00010830000974237919}
+{"stage": "control_plane", "completed": 1, "kind": null, "wall_seconds": 0.6953248999780044}
+{"stage": "serving_cohorts", "completed": 0, "kind": null, "wall_seconds": 0.7191132000298239}
+{"stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 5.0124600999988616}
+{"stage": "serving_cohorts", "completed": 2, "kind": "prefill", "wall_seconds": 8.862847800017335}
+{"stage": "serving_cohorts", "completed": 3, "kind": "prefill", "wall_seconds": 12.946302900032606}
+{"stage": "serving_cohorts", "completed": 4, "kind": "prefill", "wall_seconds": 16.87930139998207}
+{"stage": "serving_cohorts", "completed": 5, "kind": "decode", "wall_seconds": 18.391517299984116}
+{"stage": "serving_cohorts", "completed": 6, "kind": "decode", "wall_seconds": 19.714648100023624}
+{"stage": "serving_cohorts", "completed": 7, "kind": "decode", "wall_seconds": 21.072999700030778}
+{"stage": "serving_cohorts", "completed": 8, "kind": "decode", "wall_seconds": 22.448660099995323}
+{"stage": "serving_cohorts", "completed": 9, "kind": "decode", "wall_seconds": 23.789288500032853}
+{"stage": "serving_cohorts", "completed": 10, "kind": "decode", "wall_seconds": 25.106445299985353}
+{"stage": "serving_cohorts", "completed": 11, "kind": "decode", "wall_seconds": 26.4121028999798}
+{"stage": "serving_cohorts", "completed": 12, "kind": "decode", "wall_seconds": 27.694520900025964}
+{"stage": "serving_cohorts", "completed": 13, "kind": "decode", "wall_seconds": 29.00944629998412}
+{"stage": "serving_cohorts", "completed": 14, "kind": "decode", "wall_seconds": 30.41041569999652}
+{"stage": "serving_cohorts", "completed": 15, "kind": "decode", "wall_seconds": 31.796811099979095}
+{"stage": "serving_cohorts", "completed": 16, "kind": "decode", "wall_seconds": 33.25826720002806}
+{"stage": "serving_cohorts", "completed": 17, "kind": "decode", "wall_seconds": 34.57032860000618}
+{"stage": "serving_cohorts", "completed": 18, "kind": "decode", "wall_seconds": 35.90074220002862}
+{"stage": "serving_cohorts", "completed": 19, "kind": "decode", "wall_seconds": 37.25215670000762}
+{"stage": "serving_cohorts", "completed": 20, "kind": "decode", "wall_seconds": 38.5267060000333}
+{"wall_seconds": 38.551020800019614, "cpu_seconds": 74.59375, "ttft_ns": 15703964.516571429, "tpot_ns": 954521.5360000001}
