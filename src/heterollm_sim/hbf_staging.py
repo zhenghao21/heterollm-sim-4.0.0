@@ -11,6 +11,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import repeat
+import heapq
 import sys
 from threading import Lock
 from typing import Callable, Hashable
@@ -283,6 +284,7 @@ class _BlockPool:
 
 _MISSING = object()
 _JOURNALED_MAPS = ("_used", "_slot_ready", "_block_ready")
+_GC_INDEX_FIELDS = ("_gc_heap", "_gc_entries", "_gc_dirty", "_gc_sequence")
 
 
 class _JournalDict(dict):
@@ -364,7 +366,7 @@ def _copy_controller_state(state, *, include_pages=True):
     """
     result = {key: value for key, value in state.items()
               if key not in {"_pages", "_buffer_pages", "_owners", "_transaction_stack",
-                             "_read_states", "_slots", *_JOURNALED_MAPS}}
+                             "_read_states", "_slots", *_JOURNALED_MAPS, *_GC_INDEX_FIELDS}}
     for name in ("_preloads", "stats"):
         result[name] = state[name].copy()
     if include_pages:
@@ -435,6 +437,14 @@ class HbfStagingController:
         self._scratch_ready = 0.0
         self.stats: dict[str, int] = {}
         self._transaction_stack: list[dict] = []
+        self._reset_gc_index()
+
+    def _reset_gc_index(self):
+        # This is a derived index, never physical state or rollback evidence.
+        self._gc_heap = None
+        self._gc_entries = {}
+        self._gc_dirty = None
+        self._gc_sequence = 0
 
     def _count(self, name: str, count: int = 1) -> None:
         self.stats[name] = self.stats.get(name, 0) + count
@@ -474,6 +484,7 @@ class HbfStagingController:
         self.__dict__.clear()
         self.__dict__.update(_copy_controller_state(state))
         self._read_states = {}
+        self._reset_gc_index()
         for name in _JOURNALED_MAPS:
             self.__dict__[name] = _JournalDict(self.__dict__[name])
 
@@ -535,6 +546,7 @@ class HbfStagingController:
                 page._ready_ns = page.ready_ns
                 page._read_state = None
         self._read_states.clear()
+        self._reset_gc_index()
 
     @staticmethod
     def _ready_before(token, page):
@@ -612,6 +624,8 @@ class HbfStagingController:
             state.update(key[2], page, address)
 
     def _touch_owners(self, block):
+        if self._gc_dirty is not None:
+            self._gc_dirty.add(block)
         for token in self._transaction_stack:
             if block not in token["owners"]:
                 owners = self._owners.get(block)
@@ -681,17 +695,7 @@ class HbfStagingController:
             self._used[block] = 0
             self._active.append(block)
         if not self._active:
-            candidates = []
-            for block in self._used:
-                if block == self._spare:
-                    continue
-                owners = self._owners.get(block, {})
-                live = len(owners) - int(replacing in owners.values())
-                if live < pages_per_block:
-                    candidates.append((live, block))
-            if not candidates:
-                raise MemoryError("HBF has no reclaimable block after reserving GC space")
-            _, victim = min(candidates)
+            victim = self._gc_victim(replacing)
             time = self._collect(victim, replacing, time, io)
         block = self._active.popleft()
         page = self._used[block]
@@ -703,6 +707,50 @@ class HbfStagingController:
         if page == 0:
             time = max(time, self._block_ready.get(block, 0.0))
         return (block, page), time
+
+    def _gc_victim(self, replacing: Key) -> int:
+        """Return exactly min((live excluding replacing, block)), incrementally.
+
+        Scanning every physical block and all its owners for each collection
+        made the first exhausted free-block pool a complexity cliff. Ownership
+        changes already pass through _touch_owners (including native writes),
+        so only those blocks need new heap entries. A page has one physical
+        owner: its block is the only candidate whose live count can decrease
+        for this particular replacement.
+        """
+        pages_per_block = self.config.pages_per_block
+        if self._gc_heap is None:
+            self._gc_heap = []
+            self._gc_dirty = set(self._used)
+        for block in self._gc_dirty:
+            live = len(self._owners.get(block, ()))
+            if block in self._used and block != self._spare and live < pages_per_block:
+                self._gc_sequence += 1
+                entry = live, block, self._gc_sequence
+                self._gc_entries[block] = entry
+                heapq.heappush(self._gc_heap, entry)
+            else:
+                self._gc_entries.pop(block, None)
+        self._gc_dirty.clear()
+        # Bound stale entries without a device-wide scan on every collection.
+        if len(self._gc_heap) > 2 * len(self._gc_entries) + 1024:
+            self._gc_heap = list(self._gc_entries.values())
+            heapq.heapify(self._gc_heap)
+        while self._gc_heap and self._gc_entries.get(self._gc_heap[0][1]) != self._gc_heap[0]:
+            heapq.heappop(self._gc_heap)
+        candidate = self._gc_heap[0][:2] if self._gc_heap else None
+        page = self._pages.get(replacing)
+        if page is not None and page.flash is not None:
+            block, index = page.flash
+            owners = self._owners.get(block, {})
+            if (block in self._used and block != self._spare
+                    and owners.get(index) == replacing):
+                replacement = len(owners) - 1, block
+                if replacement[0] < pages_per_block and (candidate is None or replacement < candidate):
+                    candidate = replacement
+        if candidate is None:
+            raise MemoryError("HBF has no reclaimable block after reserving GC space")
+        return candidate[1]
 
     def _collect(self, victim: int, replacing: Key, time: float, io: HbfStagingIO) -> float:
         target = self._spare
@@ -871,13 +919,23 @@ class HbfStagingController:
         # Collection retains the ordinary read/host-copy/program sequence.
         available = (len(self._free_blocks) * self.config.pages_per_block
                      + sum(self.config.pages_per_block - self._used[block] for block in self._active))
-        if stop - first > available:
+        needs_collection = stop - first > available
+        if needs_collection and (type(self) is not HbfStagingController or any(
+                name in self.__dict__ or getattr(HbfStagingController, name) is not method
+                for name, method in _EMPTY_GC_METHODS.items())):
             return None
         native = _use_page_helpers(self, buffer_id, generation, first, stop)
         token = self.begin_transaction()
         locations, arrivals, old_ready = [], [], []
         try:
-            if native:
+            if needs_collection:
+                prepared = self._prepare_empty_gc_write(buffer_id, generation, first, stop,
+                                                        time_ns, io)
+                if prepared is None:
+                    self.rollback_transaction(token)
+                    return None
+                locations, addresses, arrivals, old_ready = prepared
+            elif native:
                 locations, addresses, arrivals, old_ready = _hbf_page_state.prepare_full_write(
                     self, buffer_id, generation, first, stop, time_ns, _MISSING)
             else:
@@ -937,6 +995,40 @@ class HbfStagingController:
         self._count("write_hbf_bytes", (stop - first) * PAGE)
         self._count("direct_write_pages", stop - first)
         return completion
+
+    def _prepare_empty_gc_write(self, buffer_id, generation, first, stop, time_ns, io):
+        """Keep bulk NAND submission when collection copies no live pages.
+
+        Provisional ownership prevents a later allocation in the same batch
+        from reclaiming one of its unpublished writes. The surrounding normal
+        transaction undoes this plan if any victim requires copying live data;
+        no IO has then been submitted, so the original scalar path can run.
+        Every physical page, page-zero erase and readiness arrival is retained.
+        """
+        locations, addresses, arrivals, old_ready = [], [], [], []
+        for index in range(first, stop):
+            key = buffer_id, generation, index
+            page = self._pages.get(key)
+            ready = max(time_ns, page.ready_ns if page is not None else 0.0)
+            if not self._active and not self._free_blocks:
+                try:
+                    victim = self._gc_victim(key)
+                except MemoryError:
+                    return None
+                owners = self._owners.get(victim, {})
+                if len(owners) - int(key in owners.values()):
+                    return None
+            physical, arrival = self._allocate(ready, io, key)
+            if page is not None and page.flash is not None:
+                self._touch_owners(page.flash[0])
+                self._owners.get(page.flash[0], {}).pop(page.flash[1], None)
+            self._touch_owners(physical[0])
+            self._owners.setdefault(physical[0], {})[physical[1]] = key
+            locations.append(physical)
+            addresses.append(self._address(*physical))
+            arrivals.append(arrival)
+            old_ready.append(ready)
+        return locations, addresses, arrivals, old_ready
 
     def read(self, buffer_id: Hashable, generation: int, offset: int, byte_count: int,
              time_ns: float, io: HbfStagingIO) -> float:
@@ -1108,6 +1200,8 @@ class HbfStagingController:
                                             return_inverse=True, return_counts=True)
         partial = []
         for position, (block, count) in enumerate(zip(blocks.tolist(), counts.tolist())):
+            if self._gc_dirty is not None:
+                self._gc_dirty.add(block)
             owners = self._owners.get(block)
             if owners is None:
                 continue
@@ -1163,8 +1257,7 @@ class HbfStagingController:
                 self._slots.append(page.slot)
                 self._resident.pop(key)
             if page.flash is not None:
-                if journaled:
-                    self._touch_owners(page.flash[0])
+                self._touch_owners(page.flash[0])
                 self._owners.get(page.flash[0], {}).pop(page.flash[1], None)
         self._read_states.pop(owner, None)
         self._count("released_buffers")
@@ -1185,6 +1278,8 @@ _PAGE_HELPER_JOURNAL_READS = {
 _PAGE_HELPER_BLOCK_POP = _BlockPool.popleft
 _PAGE_HELPER_PAGE_TYPE = _Page
 _PAGE_HELPER_READ_UPDATE = _BufferReadState.update
+_EMPTY_GC_METHODS = {name: getattr(HbfStagingController, name) for name in (
+    "_allocate", "_collect", "_gc_victim", "_address", "_touch_owners")}
 
 
 def _use_page_helpers(controller, buffer_id, generation, first, stop):

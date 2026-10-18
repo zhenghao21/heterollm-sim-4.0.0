@@ -75,10 +75,13 @@ def _remember_page(pages: dict, transactions: list, key: object,
 
 @cython.cfunc
 @cython.inline
-def _remember_owners(owners: dict, transactions: list, block: object) -> cython.void:
+def _remember_owners(owners: dict, transactions: list, block: object,
+                     gc_dirty: object) -> cython.void:
     token: dict
     saved: dict
     previous: object
+    if gc_dirty is not None:
+        gc_dirty.add(block)
     for token in transactions:
         saved = token["owners"]
         if block not in saved:
@@ -168,6 +171,7 @@ def commit_full_write(controller, buffer_id, generation,
     owners: dict = controller._owners
     indexes: dict = controller._buffer_pages.setdefault((buffer_id, generation), {})
     transactions: list = controller._transaction_stack
+    gc_dirty: object = controller._gc_dirty
     block_ready: dict = cython.cast(dict, controller._block_ready)
     block_journals: list = controller._block_ready._journals
     slot_ready: dict = cython.cast(dict, controller._slot_ready)
@@ -196,7 +200,7 @@ def commit_full_write(controller, buffer_id, generation,
             indexes[first + position] = None
         else:
             if page.flash is not None:
-                _remember_owners(owners, transactions, page.flash[0])
+                _remember_owners(owners, transactions, page.flash[0], gc_dirty)
                 owners.get(page.flash[0], {}).pop(page.flash[1], None)
             if page.slot is not None:
                 _remember_set(slot_ready, slot_journals, page.slot, ready, missing)
@@ -208,7 +212,7 @@ def commit_full_write(controller, buffer_id, generation,
             page.valid = [(0, PAGE)]
             page.dirty = []
             page.ready_ns = time
-        _remember_owners(owners, transactions, physical[0])
+        _remember_owners(owners, transactions, physical[0], gc_dirty)
         owners.setdefault(physical[0], {})[physical[1]] = key
         if read_state is not None:
             controller._refresh_read_state(key, page)

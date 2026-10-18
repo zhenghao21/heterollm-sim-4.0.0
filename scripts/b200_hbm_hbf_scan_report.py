@@ -28,6 +28,9 @@ BASE_COLUMNS = (
     "physical_execution_scope", "ttft_ns", "tpot_ns", "ttft_s", "tpot_ms",
     "sampled_decode_steps", "predicted_decode_steps", "method",
     "target_relative_error", "conditional_relative_error_budget", "validation_status",
+    "budget_acceptance_strategy", "budget_accepted", "paired_reference_source_id",
+    "candidate_relative_error_budget", "reference_relative_error_budget",
+    "pair_relative_error_budget", "pair_ratio_direction", "paired_budget_decision",
     "wall_seconds", "reason", "fallback_reasons", "sampling_attempts",
     "sampling_resets", "error_budget_breakdown", "approximation",
 )
@@ -65,6 +68,19 @@ def _summary_row(row: dict[str, Any]) -> dict[str, Any]:
                 "fallback_reasons", "sampling_attempts", "sampling_resets", "error_budget_breakdown"):
         if key not in values:
             values[key] = approximation.get(key)
+    decision = approximation.get("paired_budget_decision") or {}
+    values["paired_budget_decision"] = decision or None
+    for column, key in (
+        ("budget_acceptance_strategy", "strategy"), ("budget_accepted", "accepted"),
+        ("paired_reference_source_id", "reference_source_id"),
+        ("candidate_relative_error_budget", "candidate_relative_error_budget"),
+        ("reference_relative_error_budget", "reference_relative_error_budget"),
+        ("pair_relative_error_budget", "pair_relative_error_budget"),
+        ("pair_ratio_direction", "pair_ratio_direction"),
+    ):
+        values[column] = decision.get(key)
+    if isinstance(values["pair_ratio_direction"], str):
+        values["pair_ratio_direction"] = values["pair_ratio_direction"].upper()
     if forecast:
         values.setdefault("physical_execution_scope", "detailed_prefill_and_decode_prefix_only")
     for metric, converted, scale in (("ttft_ns", "ttft_s", 1e9), ("tpot_ns", "tpot_ms", 1e6)):
@@ -86,6 +102,17 @@ def _markdown(value: Any) -> str:
 
 def _tokens(value: int) -> str:
     return f"{value // 1024}K" if value % 1024 == 0 else str(value)
+
+
+def _percentage(value: Any) -> str:
+    return (f"{value:.3%}" if isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value) else "未记录")
+
+
+def _history_summary(output_dir: Path) -> dict[str, Any]:
+    """Archived attempts stay discoverable without entering active point counts."""
+    directory = output_dir / "points_history"
+    return {"directory": "points_history", "record_count": sum(1 for _ in directory.rglob("*.json"))}
 
 
 def _local_time(value: str | None) -> str:
@@ -417,9 +444,30 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                       f"队列更新时间：{_markdown(_local_time(queue_status.get('updated_at')))}（北京时间）。", ""])
         if queue_status.get("reason"):
             reason = {"stop_requested": "按要求暂停，未自动恢复扫描",
-                      "requested_group_completed": "64K/5K 配置已全部完成，按要求暂停后续扫描"}.get(
+                      "requested_group_completed": "64K/5K 配置已全部完成，按要求暂停后续扫描",
+                      "paired_budget_fix_retry": "先重跑 4 个原 HBF 64K/10K 拒绝点，再继续剩余 72 点队列",
+                      "budget_correction_retry": "修正配对预算及未来擦除上界后，优先重跑原拒绝点",
+                      "retry_group_not_accepted": "重跑组仍有未接受点，暂停队列等待处理"}.get(
                 queue_status["reason"], queue_status["reason"])
             lines.extend([f"队列说明：{_markdown(reason)}。", ""])
+        retry_points = queue_status.get("retry_priority_points", [])
+        if retry_points:
+            lines.extend([
+                f"配对预算修复后优先重跑：**{len(retry_points)} 个点**。"
+                "旧拒绝尝试保留在历史目录，只有 active points 的最新结果计入本报告；"
+                "重跑不执行完整详细模式。", "",
+                "优先点位：" + "、".join(_markdown(point.get("point_id", point) if isinstance(point, dict)
+                                                else point) for point in retry_points) + "。", "",
+            ])
+        if queue_status.get("retry_group_total"):
+            accepted = queue_status.get("retry_group_accepted")
+            retry_acceptance = "全部通过" if accepted is True else "未全部通过" if accepted is False else "尚未全部处理"
+            lines.extend([
+                f"本轮修复重跑已处理 **{queue_status.get('retry_group_completed', 0)}/"
+                f"{queue_status['retry_group_total']}** 个；"
+                f"验收状态：**{retry_acceptance}**。"
+                "该组全部接受后继续原队列；仍有拒绝则暂停处理。", "",
+            ])
         group = queue_status.get("pause_after_group")
         if group:
             lines.extend([
@@ -477,6 +525,12 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
             "未做完整详细对照的点保留原始 validation_status，不标为全请求误差验证通过。"
             "预测拒绝和容量拒绝是已处理终态，保留原因并继续后续点；代码执行失败需要处理。", "",
         ])
+    history = _history_summary(output_dir)
+    if history["record_count"]:
+        lines.extend([
+            f"[历史尝试记录](points_history/) 保留 **{history['record_count']}** 份旧结果；"
+            "历史拒绝不重复计入当前成功数、拒绝数或曲线。", "",
+        ])
     if counts["completed"]:
         lines.extend(["![TTFT 和 TPOT 扫描结果](comparison.png)", "",
                       "每个面板用颜色区分 9 种输入/输出长度组合，用实线表示 HBM、虚线表示 HBF。"
@@ -500,6 +554,35 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                 row.get("validation_status") or "detailed_execution")
             lines.append("| " + " | ".join(_markdown(value) for value in values) + " |")
         lines.append("")
+    budget_rows = [_summary_row(row) for row in rows
+                   if (row.get("approximation") or {}).get("paired_budget_decision")]
+    if budget_rows:
+        lines.extend([
+            "## 快速预测的条件预算判定", "",
+            "下表是采样模型的条件界，**不是与完整详细模式对照得到的实测误差**。"
+            "有匹配参考时，候选点、参考点各自的条件预算及 HBF/HBM 比值条件预算都必须 ≤10%；"
+            "没有匹配参考时，仍使用独立对称预算 ≤4.7619% 的充分条件。"
+            "配对判定使用方向区间，不把 4.7619% 的独立门槛简单放宽到 10%。", "",
+            "| 模型 / 存储 | 输入/输出 | 接受策略 | 单点条件预算 | 参考点条件预算 | 比值条件预算 | 判定 | HBM 参考点 |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        ])
+        strategy_labels = {"matched_directional_pair": "匹配方向区间配对",
+                           "independent_symmetric_sufficient_bound": "独立对称充分条件"}
+        for row in budget_rows:
+            decision = row["paired_budget_decision"]
+            accepted = decision.get("accepted")
+            values = (
+                f"{row['model_id']} / {row['architecture']}",
+                f"{_tokens(row['prompt_tokens'])}/{_tokens(row['output_tokens'])}",
+                strategy_labels.get(decision.get("strategy"), decision.get("strategy") or "未记录"),
+                _percentage(decision.get("candidate_relative_error_budget")),
+                _percentage(decision.get("reference_relative_error_budget")),
+                _percentage(decision.get("pair_relative_error_budget")),
+                "接受" if accepted is True else "拒绝" if accepted is False else "未记录",
+                decision.get("reference_source_id") or "无匹配参考",
+            )
+            lines.append("| " + " | ".join(_markdown(value) for value in values) + " |")
+        lines.extend(["", "各轮校准判定、方向上下界及未来擦除分项均保留在 CSV/JSON 的原始预算记录中。", ""])
     unsuccessful = [row for row in rows if row.get("status") in {"failed", "capacity_rejected", "forecast_rejected"}]
     if unsuccessful:
         lines.extend(["## 未成功的配置", "", "| 模型 | 存储 | 输入/输出 | 状态 | 原因 |", "| --- | --- | --- | --- | --- |"])
@@ -508,7 +591,7 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                          f"{_tokens(row['prompt_tokens'])}/{_tokens(row['output_tokens'])} | "
                          f"{_markdown(row['status'])} | {_markdown(row.get('reason', ''))} |")
         lines.append("")
-    lines.extend(["文件：[summary.csv](summary.csv) 保留全部终态的主指标、精度口径、采样记录、条件预算及拒绝原因（无指标时留空）；"
+    lines.extend(["文件：[summary.csv](summary.csv) 保留全部终态的主指标、精度口径、采样记录、单点/配对预算、参考点及拒绝原因（无指标时留空）；"
                   "[results.json](results.json) 保留全部结果、详细数据和参数。", ""])
     _atomic_text(output_dir / "report.md", "\n".join(lines))
 
@@ -542,6 +625,7 @@ def write_report(output_dir: str | Path) -> dict[str, int]:
     _write_csv(output_dir, rows)
     (output_dir / "results.json").write_text(json.dumps(
         {"manifest": manifest, "counts": counts, "queue_status": queue_status,
+         "historical_attempts": _history_summary(output_dir),
          "rows": [_summary_row(row) for row in rows]},
         ensure_ascii=False, indent=2, allow_nan=False,
     ) + "\n", encoding="utf-8")

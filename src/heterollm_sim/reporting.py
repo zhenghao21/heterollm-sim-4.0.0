@@ -76,7 +76,7 @@ from .streaming_des import (
     ScheduleExecutionResult,
     execute_incremental_schedule,
 )
-from .fast_simulation import DecodeForecast, simulate_fast
+from .fast_simulation import DecodeForecast, PairedTimingReference, simulate_fast
 
 
 _SCALABLE_REQUEST_DETAIL_LIMIT = 1_000
@@ -161,6 +161,7 @@ def run_scenario(
     control: Optional[ExecutionControl] = None,
     residency_manager: Optional[AllocationResidencyManager] = None,
     batch_lowerer: Optional[TopologyAwareBatchCostProvider] = None,
+    paired_reference: Optional[PairedTimingReference] = None,
 ) -> RunResult:
     """Plan, validate, and execute through the V4 unified event kernel."""
 
@@ -175,6 +176,9 @@ def run_scenario(
     scheduler_mode = (
         scheduler.mode if scheduler else "static"
     )
+    if paired_reference is not None and (
+            scenario.simulation.mode != "fast" or scheduler_mode != "continuous"):
+        raise ValueError("paired timing references require continuous fast simulation")
     selected_policy = (
         RetentionPolicy.AGGREGATE
         if retention_policy is None and scheduler_mode == "continuous"
@@ -230,6 +234,7 @@ def run_scenario(
             control=execution_control,
             residency_manager=residency_manager,
             batch_lowerer=batch_lowerer,
+            paired_reference=paired_reference,
             control_plane=bootstrap,
         )
 
@@ -241,6 +246,7 @@ def _run_scenario_in_context(
     control: Optional[ExecutionControl] = None,
     residency_manager: Optional[AllocationResidencyManager] = None,
     batch_lowerer: Optional[TopologyAwareBatchCostProvider] = None,
+    paired_reference: Optional[PairedTimingReference] = None,
     control_plane: ControlPlaneBootstrap,
 ) -> RunResult:
     execution_control = control or ExecutionControl()
@@ -262,6 +268,8 @@ def _run_scenario_in_context(
         simulation_runner = simulate_fast if scenario.simulation.mode == "fast" else simulate_online
         runner_options = ({"custom_lowerer": batch_lowerer is not None}
                           if scenario.simulation.mode == "fast" else {})
+        if paired_reference is not None:
+            runner_options["paired_reference"] = paired_reference
         simulation = simulation_runner(
             scenario,
             batch_lowerer=active_batch_lowerer,

@@ -1,0 +1,16 @@
+{
+  "point_id": "qwen2_5-1_5b__HBF__P262144__D1024",
+  "model_id": "qwen2_5-1_5b",
+  "architecture": "HBF",
+  "prompt_tokens": 262144,
+  "output_tokens": 1024,
+  "pid": 54028,
+  "simulation_mode": "fast",
+  "real_prefill_steps": 100,
+  "real_decode_steps": 0,
+  "approximation": {},
+  "status": "interrupted",
+  "updated_at": "2026-10-18T06:00:50.837553+00:00",
+  "wall_seconds": 3003.3910000000033,
+  "reason": "ExecutionCancelledError: 仿真任务已取消"
+}

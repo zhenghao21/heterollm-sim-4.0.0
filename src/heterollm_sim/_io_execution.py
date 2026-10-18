@@ -407,6 +407,9 @@ def _io_flash_pages(io, execution: _IOExecutionState, operation, addresses, arri
     active.clock_ns = max(active.clock_ns, media.completion_ns)
     execution.records.append((operation, execution.owner, execution.state["config"], media))
     for owner, link in links:
+        # Like scalar _io_transfer in aggregate mode, the stream retains
+        # only the final reservation per resource, not its interval history.
+        link.counters["intervals_truncated"] = bool(link.counters.get("resource_last_intervals"))
         execution.records.append((Operation.READ, owner, SimpleNamespace(kind="LINK"), link))
     # Keep the stream numeric for vectorized mapping/dependency updates.
     # Scalar controller paths convert once before iterating in Python.

@@ -1,14 +1,24 @@
 {
-  "status": "ready",
-  "updated_at": "2026-10-18T02:32:17.420889+00:00",
+  "status": "paused",
+  "manager_pid": 31132,
+  "updated_at": "2026-10-18T06:18:17.250205+00:00",
   "total": 72,
   "simulation_mode": "fast",
-  "completed": 0,
-  "forecast_completed": 0,
+  "completed": 23,
+  "forecast_completed": 23,
   "capacity_rejected": 0,
-  "forecast_rejected": 0,
+  "forecast_rejected": 4,
   "failed": 0,
-  "pending": 72,
+  "pending": 45,
   "running": [],
-  "reason": null
+  "reason": "budget_correction_retry",
+  "retry_priority_points": [
+    "qwen2_5-0_5b__HBF__P65536__D10240",
+    "qwen2_5-1_5b__HBF__P65536__D10240",
+    "qwen2_5-3b__HBF__P65536__D10240",
+    "qwen2_5-7b__HBF__P65536__D10240"
+  ],
+  "retry_group_total": 4,
+  "retry_group_completed": 0,
+  "retry_group_accepted": null
 }

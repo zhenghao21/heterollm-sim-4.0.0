@@ -410,13 +410,14 @@ def test_compiled_write_failure_restores_core_and_controller_allocation(monkeypa
     assert runtime.snapshot() == before
 
 
-def test_gc_after_compiled_full_pages_preserves_live_mapping_and_timing(monkeypatch):
+@pytest.mark.parametrize("capture_details", [False, True])
+def test_gc_after_compiled_full_pages_preserves_live_mapping_and_timing(monkeypatch, capture_details):
     from heterollm_sim._io_execution import _PhysicalIO
 
     config, binding = setup()
     original = _PhysicalIO.write_flash_pages
     original_read = _PhysicalIO.read_flash_pages
-    calls, snapshots, ends = [], [], []
+    calls, snapshots, ends, costs = [], [], [], []
     def observed(io, addresses, arrivals):
         value = original(io, addresses, arrivals)
         if value is not None:
@@ -425,15 +426,22 @@ def test_gc_after_compiled_full_pages_preserves_live_mapping_and_timing(monkeypa
     for compiled in (False, True):
         monkeypatch.setattr(_PhysicalIO, "write_flash_pages", observed if compiled else lambda *_: None)
         monkeypatch.setattr(_PhysicalIO, "read_flash_pages", original_read if compiled else lambda *_: None)
-        runtime = PhysicalRuntimeContext(capture_details=False)
+        runtime = PhysicalRuntimeContext(capture_details=capture_details)
         size = 40 * 4096  # 60 allocatable pages: the overwrite must collect.
         rows = [resolve_physical_task(task(config, binding, operation, count=size, size=size), runtime, 0.)
                 for operation in ("write", "read", "write", "read")]
         assert runtime.hbf_staging["flash"]["controller"].stats["gc_cycles"] > 0
         ends.append([row.metadata["physical_completion_ns"] for row in rows])
+        costs.append([row.metadata["physical_execution_by_owner"] for row in rows])
         snapshots.append(runtime.snapshot())
-    assert calls == [40]
+    # Empty-victim collection retains the stream API for the overwrite, too.
+    assert calls == ([] if capture_details else [40, 40])
     assert ends[1] == ends[0]
+    assert costs[1] == costs[0]
+    for row in costs[1]:
+        for name in ("write_hbf", "read_hbf"):
+            if name in row:
+                assert row[name]["intervals_truncated"] is not capture_details
     # Saved snapshots contain their runtime objects as well as copied state;
     # compare the exact controller, core and resource calendars separately.
     a, b = snapshots

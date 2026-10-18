@@ -1,0 +1,80 @@
+{
+  "point_id": "qwen2_5-1_5b__HBF__P262144__D1024",
+  "model_id": "qwen2_5-1_5b",
+  "architecture": "HBF",
+  "prompt_tokens": 262144,
+  "output_tokens": 1024,
+  "started_at": "2026-10-18T05:10:47.452704+00:00",
+  "ttft_ns": null,
+  "tpot_ns": null,
+  "python_executable": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\.venv\\Scripts\\python.exe",
+  "simulation_mode": "fast",
+  "simulation_config": {
+    "mode": "fast",
+    "fast_decode": {
+      "warmup_tokens": 8,
+      "calibration_tokens": 32,
+      "validation_tokens": 16,
+      "max_sample_tokens": 128,
+      "target_relative_error": 0.1,
+      "max_context_growth": 0.2,
+      "segment_tokens": 256,
+      "sampling_strategy": "adaptive"
+    }
+  },
+  "pid": 54028,
+  "model": {
+    "name": "Qwen2.5-1.5B",
+    "layers": 28,
+    "weight_bytes": 3087253504,
+    "metadata": {
+      "preset_id": "qwen2_5-1_5b",
+      "family": "Qwen2.5",
+      "parameter_scale": "1.5B",
+      "model_kind": "dense",
+      "source_repo": "Qwen/Qwen2.5-1.5B",
+      "source_revision": "main",
+      "source_sha": "8faed761d45a263340a0528343f099c05c9a4323",
+      "config_hash": null,
+      "provenance_status": "pinned_commit",
+      "source": "bundled",
+      "license": "Apache-2.0",
+      "openness": "open_source",
+      "access": "public",
+      "commercial_use": "allowed",
+      "support_level": "exact",
+      "coverage": "full_language_model",
+      "limitations": [],
+      "architecture_evidence": {
+        "status": "config_verified_no_official_diagram",
+        "source_type": "official_pinned_config",
+        "source_url": "https://huggingface.co/Qwen/Qwen2.5-1.5B/blob/8faed761d45a263340a0528343f099c05c9a4323/config.json",
+        "config_url": "https://huggingface.co/Qwen/Qwen2.5-1.5B/blob/8faed761d45a263340a0528343f099c05c9a4323/config.json",
+        "notes": "Layer counts and tensor dimensions are grounded in the official config at the pinned commit; no separate official architecture diagram is asserted by this catalog entry.",
+        "uncertainty": "Architecture graph is generated from config fields, not a manually traced paper figure."
+      },
+      "notes": "Public config.json fields; bf16 storage bytes are derived analytically.",
+      "embedding_weight_bytes_method": "bf16_input_embedding_estimate",
+      "embedding_weight_storage_bits": 16,
+      "output_weight_bytes": 466747392,
+      "output_weight_storage_bits": 16,
+      "tie_word_embeddings": true,
+      "study_context_extrapolation": {
+        "native_max_tokens": 32768,
+        "requested_tokens": 263168,
+        "accuracy_claim": false
+      }
+    }
+  },
+  "gc_thresholds": [
+    7000,
+    100,
+    100
+  ],
+  "status": "interrupted",
+  "reason": "ExecutionCancelledError: 仿真任务已取消",
+  "finished_at": "2026-10-18T06:00:50.836526+00:00",
+  "wall_seconds": 3003.3910000000033,
+  "real_prefill_steps": 100,
+  "real_decode_steps": 0
+}

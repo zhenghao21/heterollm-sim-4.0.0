@@ -13,6 +13,7 @@ from statistics import fmean
 from typing import Any, Mapping
 
 from .execution_control import ExecutionControl
+from .fast_budget import PairedTimingReference, paired_timing_decision, validate_paired_reference
 from .fast_state import hbf_kv_page_period, project_fast_tail
 from .planner import _compilation_scope, _execution_layers, _parallel_plan
 from .precision import canonical_dtype
@@ -343,6 +344,8 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
         "error_budget_breakdown": {"semantics": "conditional_interval_bounds_not_additive_percentages",
             "forecast_tail_ns": estimate, "local_relative_error": local_error if valid_local else None,
             "prefix_erase_bias_guard_ns": prefix, "future_erase_serial_guard_ns": future,
+            "legacy_future_erase_serial_guard_ns": maintenance.get("legacy_future_erase_serial_guard_ns", future),
+            "future_erase_upper_bound_methods": maintenance.get("future_erase_upper_bound_methods", []),
             "model_only": model, "model_with_local_error": local,
             "model_with_prefix_erase_bias": interval(lower - prefix, upper),
             "model_with_future_erase": interval(lower, upper + future),
@@ -360,6 +363,7 @@ def maintenance_error_envelope(runtime, projection, sampling: SamplingWindow,
     """
     if not projection.hbf_devices:
         return {"prefix_erase_bias_guard_ns": 0., "future_erase_serial_guard_ns": 0.,
+                "legacy_future_erase_serial_guard_ns": 0., "future_erase_upper_bound_methods": [],
                 "sampled_erase_operations": 0, "erase_observations_available": True}
     count = sampling.training + sampling.holdout
     indexes = [index for index, batch in enumerate(runtime.batches) if batch.kind == "decode"]
@@ -382,8 +386,13 @@ def maintenance_error_envelope(runtime, projection, sampling: SamplingWindow,
     prefix_bias = erases * serial_per_erase * remaining / count * context_scale
     future = math.fsum(float(row["ordinary_erase_serial_time_guard_ns"])
                        for row in projection.hbf_devices)
+    legacy_future = math.fsum(float(row.get("legacy_ordinary_erase_serial_time_guard_ns",
+        row["ordinary_erase_serial_time_guard_ns"])) for row in projection.hbf_devices)
     return {"prefix_erase_bias_guard_ns": prefix_bias,
             "future_erase_serial_guard_ns": future,
+            "legacy_future_erase_serial_guard_ns": legacy_future,
+            "future_erase_upper_bound_methods": [row.get("ordinary_erase_upper_bound_method",
+                "serial_service_upper_bound") for row in projection.hbf_devices],
             "sampled_erase_operations": erases,
             "selected_cohort_erase_operations": erases - previous_erases,
             "previous_cohort_erase_operations": previous_erases,
@@ -395,14 +404,27 @@ def maintenance_error_envelope(runtime, projection, sampling: SamplingWindow,
             "erase_guard_semantics": "serial_service_upper_bounds_not_predicted_stall_time"}
 
 
+def _candidate_memory_kind(scenario, plan) -> str | None:
+    hardware = getattr(scenario, "hardware", None)
+    kv_policy = getattr(plan, "kv_policy", None)
+    if hardware is None or kv_policy is None:
+        return None
+    component = hardware.component_map().get(kv_policy.cache_component)
+    kind = getattr(component, "normalized_kind", None)
+    return "hbm" if kind in {"hbm", "hbm_stack"} else "hbf" if kind == "hbf" else None
+
+
 def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                   residency_manager=None, execution_kernel=None,
-                  runtime_origin_ns=0.0, custom_lowerer=False) -> FastSimulationOutcome:
+                  runtime_origin_ns=0.0, custom_lowerer=False,
+                  paired_reference: PairedTimingReference | None = None) -> FastSimulationOutcome:
     """Execute a real prefix and forecast only inside the declared safe domain."""
     control = execution_control or ExecutionControl()
     options = scenario.simulation.fast_decode
+    if paired_reference is not None and not isinstance(paired_reference, PairedTimingReference):
+        raise ValueError("paired_reference must be a PairedTimingReference")
     diagnostics: dict[str, Any] = {
-        "method": "maintenance_aware_cycle_adaptive_prefix_and_segmented_context_envelope/v3",
+        "method": "maintenance_aware_adaptive_prefix_directional_paired_envelope/v4",
         "requested_mode": "fast", "effective_mode": "detailed",
         "target_relative_error": options.target_relative_error,
         "validation_status": "not_validated_against_full_detailed",
@@ -412,7 +434,10 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
         "accuracy_target_is_guarantee": False,
         "sampling_strategy": options.sampling_strategy,
         "pairwise_ratio_target_relative_error": options.target_relative_error,
-        "per_storage_conditional_error_target": options.target_relative_error / (2 + options.target_relative_error),
+        "per_storage_conditional_error_target": (options.target_relative_error if paired_reference
+            else options.target_relative_error / (2 + options.target_relative_error)),
+        "independent_symmetric_conditional_error_target": options.target_relative_error / (2 + options.target_relative_error),
+        "paired_reference": asdict(paired_reference) if paired_reference else None,
         "sampling_attempts": [],
         "sampling_resets": [],
         "model_assumptions": [
@@ -421,7 +446,8 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
             "ordinary OCP page-zero erases are bounded by serial service budgets; GC and block reuse remain excluded",
             "after observed ordinary erases, a new steady-cost fit may exclude those already timed prefix cohorts and their cleanup; future erase guards remain unchanged",
             "no unseen cache, scheduling, pressure-flush or allocation regime change",
-            "per-storage conditional timing bounds are tightened to target/(2+target) for the storage ratio",
+            "whole-Decode bounds include the exact timed prefix; a matched BF16 request uses directional HBF/HBM interval arithmetic with both single-point and ratio errors bounded by target",
+            "without a matched reference, per-storage conditional bounds retain target/(2+target) as a sufficient ratio condition",
             "prefix holdout error does not establish full-suffix accuracy",
         ],
     }
@@ -430,6 +456,21 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
         lowerer_context = None
     with _compilation_scope(scenario, lowerer_context):
         plan = compile_serving_plan(scenario)
+        memory_kind = _candidate_memory_kind(scenario, plan)
+        if paired_reference is not None:
+            reference_domain_reasons = _eligibility_reasons(scenario, plan,
+                shared_residency=residency_manager is not None, custom_lowerer=custom_lowerer)
+            if reference_domain_reasons:
+                raise ValueError("paired reference candidate is outside the BF16 fast domain: "
+                                 + ", ".join(reference_domain_reasons))
+            request = plan.requests[0]
+            validate_paired_reference(paired_reference, model_name=scenario.model.name,
+                prompt_tokens=request.prompt_tokens, output_tokens=request.output_tokens,
+                memory_kind=memory_kind, target_relative_error=options.target_relative_error)
+        diagnostics["paired_budget_decision"] = paired_timing_decision(
+            decode_estimate_ns=0., decode_lower_ns=None, decode_upper_ns=None,
+            target_relative_error=options.target_relative_error,
+            candidate_memory_kind=memory_kind, reference=paired_reference)
         runtime = _OnlineRuntime(plan, batch_lowerer, execution_control=control,
             residency_manager=residency_manager, execution_kernel=execution_kernel,
             runtime_origin_ns=runtime_origin_ns)
@@ -466,6 +507,9 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                 or getattr(runtime, "_agent_config", None)):
             reasons += ("retained_or_agent_runtime_requires_detailed_mode",)
         if reasons:
+            if paired_reference is not None:
+                raise ValueError("paired reference candidate is outside the fast runtime domain: "
+                                 + ", ".join(reasons))
             return detailed(*reasons)
         request = plan.requests[0]
         total_steps = max(0, request.output_tokens - 1)
@@ -535,17 +579,31 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                     return detailed("hbf_erase_observations_unavailable")
                 budget = conditional_error_budget(lower, upper, estimate, local_error, maintenance)
                 error_budget = budget["conditional_relative_error_budget"]
-                diagnostics.update(model_relative_half_width=half_width, **budget)
+                exact_prefix = math.fsum(sample.duration_ns for sample in samples)
+                tail_lower, tail_upper = budget["conditional_tail_lower_ns"], budget["conditional_tail_upper_ns"]
+                whole_lower = exact_prefix + tail_lower if tail_lower is not None else None
+                whole_upper = exact_prefix + tail_upper if tail_upper is not None else None
+                decision = paired_timing_decision(decode_estimate_ns=exact_prefix + estimate,
+                    decode_lower_ns=whole_lower, decode_upper_ns=whole_upper,
+                    target_relative_error=options.target_relative_error,
+                    candidate_memory_kind=memory_kind, reference=paired_reference)
+                diagnostics.update(model_relative_half_width=half_width, **budget,
+                    exact_sampled_decode_ns=exact_prefix,
+                    decode_forecast_estimate_ns=exact_prefix + estimate,
+                    decode_conditional_lower_ns=whole_lower, decode_conditional_upper_ns=whole_upper,
+                    decode_conditional_relative_error_budget=decision["candidate_relative_error_budget"],
+                    paired_budget_decision=decision)
                 attempt = {
                     "sampled_steps": len(samples), **asdict(sampling),
                     **calibration, **maintenance, **budget,
                     "acceptance_target_relative_error": diagnostics["per_storage_conditional_error_target"],
-                    "forecast_accepted": error_budget is not None and error_budget <= diagnostics["per_storage_conditional_error_target"]}
+                    "paired_budget_decision": decision,
+                    "forecast_accepted": decision["accepted"]}
                 diagnostics["sampling_attempts"].append(attempt)
                 control.report("fast_calibration", len(samples), total_steps,
                     message="Decode 采样误差预算分项", simulated_time_ns=runtime.now,
                     metadata={"approximation": recorded_diagnostics(), "calibration_attempt": attempt})
-                if error_budget is not None and error_budget <= diagnostics["per_storage_conditional_error_target"]:
+                if decision["accepted"]:
                     break
                 if options.sampling_strategy == "adaptive" and projection.hbf_devices:
                     reset = maintenance_recalibration(runtime, sampling, options)
