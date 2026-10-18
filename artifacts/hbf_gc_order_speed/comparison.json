@@ -1,0 +1,43 @@
+{
+  "scope": "Bounded live-copy GC replay seeded at full programmed medium, using authored 256-bank HBF geometry and real NAND/HOST/LINK services. Not an LLM request or detailed reference.",
+  "location": "isolated worktree only; main formal worker unchanged",
+  "actual_profile_basis": "Existing actual_post100_20261018/candidate_stack_breakdown.json: GC journal order snapshot 15.343562 percent of 1499 post-120 Prefill samples.",
+  "method": "Sequential ABBA, below-normal process priority; first GC victim-index and insertion-order-index costs included. Seed setup excluded. Compiled page-state helper built from matching old/new source; all other unchanged native helpers reused read-only from the current checkout.",
+  "baseline_revision": "eb17597",
+  "runs": [
+    {
+      "tag": "order_A1_128",
+      "wall_seconds": 1.0399275999516249,
+      "seed_setup_seconds_excluded": 3.8278175000450574
+    },
+    {
+      "tag": "order_B1_128",
+      "wall_seconds": 0.5981441999902017,
+      "seed_setup_seconds_excluded": 3.8802652999875136
+    },
+    {
+      "tag": "order_B2_128",
+      "wall_seconds": 0.572071100003086,
+      "seed_setup_seconds_excluded": 3.846005300001707
+    },
+    {
+      "tag": "order_A2_128",
+      "wall_seconds": 1.048643300018739,
+      "seed_setup_seconds_excluded": 3.797716400003992
+    }
+  ],
+  "baseline_mean_seconds": 1.044285449985182,
+  "candidate_mean_seconds": 0.5851076499966439,
+  "local_speedup": 1.784774904226892,
+  "equal_fields": [
+    "geometry",
+    "simulated_completion_ns",
+    "stats_delta",
+    "physical_costs_sum",
+    "final_metadata_counts"
+  ],
+  "simulated_completion_ns": 1859093308.333913,
+  "gc_cycles": 129,
+  "gc_copied_pages": 129,
+  "formal_scan_end_to_end_speedup": "not measured; safe-boundary rollout required"
+}

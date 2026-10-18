@@ -106,6 +106,45 @@ def test_index_updates_only_changed_blocks_after_initial_build():
     assert len(staging._gc_heap) <= 2 * len(staging._gc_entries) + 1024
 
 
+@pytest.mark.parametrize("source_helper", [False, True])
+def test_bulk_new_frontiers_keep_delete_order_through_nested_rollback(source_helper):
+    """Native dict writes must maintain the same ordering evidence as setters."""
+    import importlib.util
+    from pathlib import Path
+    from heterollm_sim.hbf_staging import _MISSING
+
+    helper = _hbf_page_state
+    if source_helper:
+        path = Path(helper.__file__).parent / "_hbf_page_state.py"
+        spec = importlib.util.spec_from_file_location("hbf_page_state_source", path)
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+    staging = HbfStagingController(config(channels=1, host_channels=1,
+        pages_per_block=4, blocks_per_plane=16), 4 * PAGE)
+    staging.write("K", 0, 0, 2 * PAGE, 137., PageIO().io)
+    warm = staging.begin_transaction()
+    staging._used.pop(0)
+    staging.rollback_transaction(warm)
+    before = staging.snapshot()
+    outer = staging.begin_transaction()
+    helper.prepare_full_write(staging, "workspace", 0, 0, 9, 137., _MISSING)
+    assert tuple(staging._used.items()) == ((0, 4), (1, 4), (2, 3))
+    assert set(staging._used._positions) == set(staging._used)
+    after_outer = staging.snapshot()
+    inner = staging.begin_transaction()
+    staging._used.pop(1)
+    staging._used[1] = 4
+    helper.prepare_full_write(staging, "workspace", 0, 9, 12, 137., _MISSING)
+    assert 3 in staging._used._positions
+    staging.rollback_transaction(inner)
+    assert tuple(staging._used.items()) == ((0, 4), (1, 4), (2, 3))
+    assert staging.snapshot() == after_outer
+    staging.rollback_transaction(outer)
+    assert tuple(staging._used.items()) == ((0, 2),)
+    assert set(staging._used._positions) == {0}
+    assert staging.snapshot() == before
+
+
 @pytest.mark.parametrize("native", [False, True])
 def test_full_page_native_commit_invalidates_old_and_new_block_counts(monkeypatch, native):
     monkeypatch.setattr(_hbf_page_state, "COMPILED", native)

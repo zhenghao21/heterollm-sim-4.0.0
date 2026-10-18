@@ -290,14 +290,16 @@ _GC_INDEX_FIELDS = ("_gc_heap", "_gc_entries", "_gc_dirty", "_gc_sequence")
 class _JournalDict(dict):
     """Scalar dependencies/frontiers with first-write transaction journals."""
 
-    __slots__ = ("_journals",)
+    __slots__ = ("_journals", "_positions", "_next_position")
 
     def __init__(self, values=()):
         super().__init__(values)
         self._journals = []
+        self._positions = None
+        self._next_position = 0
 
     def begin(self):
-        token = {"values": {}, "order": None}
+        token = {"values": {}, "deleted_positions": {}}
         self._journals.append(token)
         return token
 
@@ -310,26 +312,53 @@ class _JournalDict(dict):
         for key, value in token["values"].items():
             if value is _MISSING:
                 dict.pop(self, key, None)
+                if self._positions is not None:
+                    self._positions.pop(key, None)
             else:
                 dict.__setitem__(self, key, value)
-        if token["order"] is not None:
-            # Deletion is rare (GC), but a restored program-frontier mapping
-            # must retain insertion order because it breaks victim ties.
-            items = [(key, self[key]) for key in token["order"] if key in self]
+        if token["deleted_positions"]:
+            # Successful GC must not copy every used block merely to remember
+            # one deletion. Reconstruct insertion order only on an actual undo.
+            self._positions.update(token["deleted_positions"])
+            items = sorted(dict.items(self), key=lambda item: self._positions[item[0]])
             dict.clear(self)
             dict.update(self, items)
 
     def _remember(self, key, *, deleting=False):
+        if deleting and self._journals and self._positions is None:
+            # Lazily index this map once, rather than once per GC transaction.
+            # Maps containing only clocks never pay for deletion ordering.
+            self._positions = {key: position for position, key in enumerate(self)}
+            self._next_position = len(self)
         for token in self._journals:
             values = token["values"]
             if key not in values:
                 values[key] = self.get(key, _MISSING)
-            if deleting and token["order"] is None:
-                token["order"] = tuple(self)
+            if deleting and values[key] is not _MISSING:
+                token["deleted_positions"].setdefault(key, self._positions[key])
 
     def __setitem__(self, key, value):
         self._remember(key)
+        if self._positions is not None and key not in self:
+            self._positions[key] = self._next_position
+            self._next_position += 1
         dict.__setitem__(self, key, value)
+
+    def update(self, values=(), **keywords):
+        if self._positions is None and not self._journals:
+            dict.update(self, values, **keywords)
+            return
+        for key, value in dict(values, **keywords).items():
+            self[key] = value
+
+    def clear(self):
+        if self._journals:
+            for key in tuple(self):
+                self.pop(key)
+        else:
+            dict.clear(self)
+            self._positions = None
+            self._next_position = 0
 
     def update_max(self, keys, values):
         """Commit a unique block stream without a Python setter per block."""
@@ -345,12 +374,20 @@ class _JournalDict(dict):
             if _MISSING in previous else previous, dtype=np.float64)
         # max(new, old) retains new on a tie, including signed zero.
         ready = np.where(np.greater(old_ready, values), old_ready, values).tolist()
+        if self._positions is not None:
+            for key, value in zip(keys, previous):
+                if value is _MISSING:
+                    self._positions[key] = self._next_position
+                    self._next_position += 1
         dict.update(self, zip(keys, ready))
 
     def pop(self, key, default=_MISSING):
         if key in self:
             self._remember(key, deleting=True)
-            return dict.pop(self, key)
+            value = dict.pop(self, key)
+            if self._positions is not None:
+                self._positions.pop(key)
+            return value
         if default is _MISSING:
             raise KeyError(key)
         return default

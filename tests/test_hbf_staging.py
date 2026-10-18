@@ -193,6 +193,87 @@ def test_scalar_frontier_journal_keeps_nested_delete_order_without_full_copy():
     assert tuple(values.items()) == ((2, 4), (7, 8), (3, 9))
 
 
+def test_gc_delete_journal_does_not_rescan_frontiers_after_first_collection():
+    from heterollm_sim.hbf_staging import _JournalDict
+
+    class CountedMap(_JournalDict):
+        scans = 0
+
+        def __iter__(self):
+            self.scans += 1
+            return super().__iter__()
+
+    values = CountedMap({block: 256 for block in range(8191)})
+    for block in range(128):
+        token = values.begin()
+        values.pop(block)
+        values[8191 + block] = 1
+        assert len(token["values"]) == 2
+        assert len(token["deleted_positions"]) == 1
+        values.commit(token)
+    assert values.scans == 1
+    assert tuple(values) == tuple(range(128, 8319))
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_delete_order_journal_matches_plain_dict_at_nested_transaction_boundaries(seed):
+    import random
+    from heterollm_sim.hbf_staging import _JournalDict
+
+    rng = random.Random(seed)
+    values = _JournalDict({key: -key for key in range(16)})
+    expected = dict(values)
+    stack = []
+    for _ in range(800):
+        choice = rng.randrange(12)
+        key, value = rng.randrange(24), rng.randrange(100)
+        if choice < 2 and len(stack) < 4:
+            stack.append((values.begin(), expected.copy()))
+        elif choice == 2 and stack:
+            token, saved = stack.pop()
+            values.rollback(token)
+            expected = saved
+        elif choice == 3 and stack:
+            token, _ = stack.pop()
+            values.commit(token)
+        elif choice in (4, 5):
+            assert values.pop(key, None) == expected.pop(key, None)
+        elif choice == 6:
+            updates = {key: value, (key + 1) % 24: value + 1}
+            values.update(updates)
+            expected.update(updates)
+        elif choice == 7:
+            keys = (key, (key + 1) % 24)
+            updates = (float(value), float(value + 1))
+            values.update_max(keys, updates)
+            for changed, ready in zip(keys, updates):
+                expected[changed] = max(ready, expected.get(changed, 0.))
+        else:
+            values[key] = value
+            expected[key] = value
+        assert tuple(values.items()) == tuple(expected.items())
+    while stack:
+        token, expected = stack.pop()
+        values.rollback(token)
+        assert tuple(values.items()) == tuple(expected.items())
+
+
+def test_delete_order_cache_is_reset_by_clear_and_rebuilt_only_when_needed():
+    from heterollm_sim.hbf_staging import _JournalDict
+    values = _JournalDict({0: 1, 1: 2})
+    token = values.begin()
+    values.pop(0)
+    values.commit(token)
+    values.clear()
+    assert values._positions is None
+    values.update({6: 9, 2: 3})
+    token = values.begin()
+    values.clear()
+    values[1] = 3
+    values.rollback(token)
+    assert tuple(values.items()) == ((6, 9), (2, 3))
+
+
 @pytest.mark.parametrize("fragmented", [False, True])
 @pytest.mark.parametrize("dirty_tail", [False, True])
 def test_clean_numeric_release_preserves_partial_blocks_and_all_remaining_state(fragmented, dirty_tail):

@@ -41,6 +41,12 @@ def _remember_set(mapping: dict, journals: list, key: object,
         values = token["values"]
         if key not in values:
             values[key] = mapping.get(key, missing)
+    if key not in mapping:
+        owner: object = cython.cast(object, mapping)
+        positions: object = owner._positions
+        if positions is not None:
+            positions[key] = owner._next_position
+            owner._next_position += 1
     # A typed dictionary assignment calls PyDict_SetItem directly. The
     # ordinary setter's journal work was performed above in the same order.
     dict.__setitem__(mapping, key, value)
