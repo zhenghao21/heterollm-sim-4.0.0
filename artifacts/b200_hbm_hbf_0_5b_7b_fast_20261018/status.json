@@ -1,10 +1,10 @@
 {
-  "status": "paused",
-  "manager_pid": null,
-  "updated_at": "2026-10-18T09:59:45.858910+00:00",
+  "status": "running",
+  "physical_weight_semantics": "canonical_shared_resident_weights_v1",
+  "manager_pid": 37304,
+  "updated_at": "2026-10-18T10:01:52.770738+00:00",
   "total": 72,
   "simulation_mode": "fast",
-  "physical_weight_semantics": "canonical_shared_resident_weights_v1",
   "completed": 3,
   "forecast_completed": 3,
   "capacity_rejected": 0,
@@ -40,7 +40,18 @@
   "retry_group_total": 25,
   "retry_group_completed": 0,
   "retry_group_accepted": null,
-  "pending": 69,
-  "running": [],
-  "reason": "stop_requested"
+  "pending": 68,
+  "running": [
+    {
+      "point_id": "qwen2_5-1_5b__HBM__P262144__D1024",
+      "model_id": "qwen2_5-1_5b",
+      "architecture": "HBM",
+      "prompt_tokens": 262144,
+      "output_tokens": 1024,
+      "pid": 53108,
+      "started_at": "2026-10-18T10:00:37.487683+00:00",
+      "simulation_mode": "fast"
+    }
+  ],
+  "reason": "priority_revalidation"
 }

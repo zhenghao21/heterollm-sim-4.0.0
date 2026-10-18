@@ -49,6 +49,8 @@ GC 内部 `_used.pop` 的顺序日志占总样本 4.379%，实际 GC NAND/HOST/L
 
 正式结果已显式迁移为 `canonical_shared_resident_weights_v1`：原 25 行及其进度/配置保留到 `points_history`，活动集合只复用已评审的 3 个 7B HBM 行，指标与预算原值不改。manifest、新 worker 结果、配对参考和报告严格检查语义标签，不兼容接收旧标签。优先组先运行 1.5B HBM / 256K / 1K，再运行 HBF 同配置，然后按原 manifest 顺序重测其余 23 点；复用现有优先组验收门闩，25 点全部 `forecast_completed` 且预算接受才继续原队列。迁移记录见 [physical_weight_migration.json](../artifacts/b200_hbm_hbf_0_5b_7b_fast_20261018/physical_weight_migration.json)。没有重跑旧详细参考、完整详细后缀或修改原 72 点参数。
 
+提交 `a6b11eb`、`56231e1`、`22465f6` 已推送。北京时间 18:00:37 启动同目录单 worker 优先重测，实际管理器 37304、首个 1.5B HBM / 256K / 1K worker 49332 已在新语义下推进；3 个评审复用点、25 个优先待验收点、44 个原待点分别保留，尚不能宣称新 25 点通过。管理器日志为 `manager_resident_weights.log` / `.err.log`，每分钟维护报告；自动跟进已恢复，并改为携带迁移记录中的完整 25 个优先 ID，只有整组接受才继续普通队列。后续用户新暂停优先。
+
 ## 2026-10-18：第 100 块后 GC 耗时分解与回滚优化
 
 按用户新指令暂停正式队列和自动跟进；1.5B HBF / 256K / 1K 在第 107 个 Prefill 块后取消，27 个已成功配置及四点配对验收结果保留，没有重跑完整详细参考。上一轮只测空 victim，漏掉了需要搬运活页时的回退成本。本轮使用正式 256-bank、524,288-block 几何及真实 NAND/HOST/链路回调，直接建立已编程控制器状态，分别测空 victim 和带约 104 万保留页、读取缓存的 live-copy GC，避免再重放完整长输入作为详细参考。
