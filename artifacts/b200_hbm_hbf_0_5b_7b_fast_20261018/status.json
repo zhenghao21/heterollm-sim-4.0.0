@@ -1,7 +1,7 @@
 {
-  "status": "paused",
-  "manager_pid": 54004,
-  "updated_at": "2026-10-18T07:53:05.609852+00:00",
+  "status": "running",
+  "manager_pid": 33500,
+  "updated_at": "2026-10-18T08:04:47.325887+00:00",
   "total": 72,
   "simulation_mode": "fast",
   "completed": 27,
@@ -18,7 +18,18 @@
   "retry_group_total": 4,
   "retry_group_completed": 4,
   "retry_group_accepted": true,
-  "pending": 45,
-  "running": [],
-  "reason": "stop_requested"
+  "pending": 44,
+  "running": [
+    {
+      "point_id": "qwen2_5-1_5b__HBF__P262144__D1024",
+      "model_id": "qwen2_5-1_5b",
+      "architecture": "HBF",
+      "prompt_tokens": 262144,
+      "output_tokens": 1024,
+      "pid": 27640,
+      "started_at": "2026-10-18T08:03:36.962754+00:00",
+      "simulation_mode": "fast"
+    }
+  ],
+  "reason": null
 }
