@@ -26,7 +26,8 @@ def strict_staging_scenario(*, prompt=31, output=3, capacity=8192, all_hbf=False
                 layer_to_stage={layer.layer_id: 0 for layer in layer_specs})))
     hbf = base.hardware.get_component("hbf0")
     physical = replace(hbf.metadata["physical_memory_config"], protocol_mode="ocp_hbf_0_7",
-        channels=1, host_channels=1, parallel_units=1, blocks_per_plane=128 if all_hbf else 32,
+        channels=1, host_channels=1, parallel_units=None, planes_per_lun=1,
+        planes_independent=True, queue_scope="host_channel", blocks_per_plane=128 if all_hbf else 32,
         pages_per_block=16, capacity_bytes=(8 if all_hbf else 2) * 1024**2,
         page_read_ns=100., page_program_ns=1000., block_erase_ns=2000.)
     hbf = replace(hbf, capacity_bytes=physical.capacity_bytes, metadata={**hbf.metadata,

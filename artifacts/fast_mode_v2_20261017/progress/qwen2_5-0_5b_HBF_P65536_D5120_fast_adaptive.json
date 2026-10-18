@@ -1,0 +1,67 @@
+{
+  "model_id": "qwen2_5-0_5b",
+  "architecture": "HBF",
+  "requested_mode": "fast",
+  "prompt_tokens": 65536,
+  "output_tokens": 5120,
+  "full_output_tokens": 5120,
+  "total_decode_steps": 5119,
+  "process_id": 33580,
+  "status": "failed",
+  "phase": "failed",
+  "stage": "failed",
+  "prefill_steps": 32,
+  "decode_steps": 100,
+  "wall_seconds": 212.0168311999878,
+  "process_wall_seconds": 212.86400300002424,
+  "wall_scope": "simulation_excludes_imports_and_scenario_build",
+  "recent_decode_steps": 16,
+  "recent_16_decode_step_mean_seconds": 0.8635940624990326,
+  "windows": [
+    {
+      "first_decode_step": 1,
+      "last_decode_step": 16,
+      "mean_step_wall_seconds": 0.8675712437507173,
+      "end_wall_seconds": 139.59111340000527
+    },
+    {
+      "first_decode_step": 17,
+      "last_decode_step": 32,
+      "mean_step_wall_seconds": 0.8628426687500905,
+      "end_wall_seconds": 153.39659610000672
+    },
+    {
+      "first_decode_step": 33,
+      "last_decode_step": 48,
+      "mean_step_wall_seconds": 0.8631269437501032,
+      "end_wall_seconds": 167.20662720000837
+    },
+    {
+      "first_decode_step": 49,
+      "last_decode_step": 64,
+      "mean_step_wall_seconds": 0.8597530562474276,
+      "end_wall_seconds": 180.9626760999672
+    },
+    {
+      "first_decode_step": 65,
+      "last_decode_step": 80,
+      "mean_step_wall_seconds": 0.8624911562510533,
+      "end_wall_seconds": 194.76253459998406
+    },
+    {
+      "first_decode_step": 81,
+      "last_decode_step": 96,
+      "mean_step_wall_seconds": 0.8569182812498184,
+      "end_wall_seconds": 208.47322709998116
+    }
+  ],
+  "window_count": 6,
+  "windows_retained": "last_16_nonoverlapping_16_step_wall_windows",
+  "fallback_reasons": [
+    "prefix_calibration_exceeds_error_budget"
+  ],
+  "updated_at": "2026-10-18T00:50:56.667144+00:00",
+  "purpose": "limited fast-mode diagnostics; not a formal scan",
+  "error_type": "FastForecastUnavailable",
+  "reason": "fast forecast rejected: prefix_calibration_exceeds_error_budget"
+}

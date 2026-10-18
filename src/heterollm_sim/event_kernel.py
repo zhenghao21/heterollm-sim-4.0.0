@@ -1617,6 +1617,9 @@ class UnifiedEventKernel:
     ) -> SubmissionReceipt:
         """Fully validate a dynamic chunk before changing any kernel state."""
 
+        frame = getattr(self, "_token_frame", None)
+        if frame is not None:
+            frame.export_incremental()
         chunk = tuple(tasks)
         retained = tuple(retain_dependencies)
 
@@ -1850,6 +1853,9 @@ class UnifiedEventKernel:
         retain_dependencies: Iterable[str],
         validate_structure: bool,
     ) -> SubmissionReceipt:
+        frame = getattr(self, "_token_frame", None)
+        if frame is not None:
+            frame.export_incremental()
         if not isinstance(layout, CompiledGraphLayout):
             raise TypeError("layout must be a CompiledGraphLayout")
         chunk = tuple(tasks)
@@ -1958,6 +1964,10 @@ class UnifiedEventKernel:
         layout: CompiledGraphLayout,
         *,
         validate_tasks: bool = True,
+        event_observer=None,
+        before_step=None,
+        index_physical_allocations=False,
+        on_submitted=None,
     ) -> Tuple[KernelEvent, ...]:
         """Execute one internally keyed closed graph with array-local state.
 
@@ -1973,21 +1983,14 @@ class UnifiedEventKernel:
             raise ValueError("prevalidated compiled drain requires an idle kernel")
         chunk = tuple(tasks)
         from .data_motion import is_physical_task
-        if (
-            self.resource_owners
-            or any("stateful_l2" in task.metadata or is_physical_task(task) for task in chunk)
-        ):
-            if not layout.matches_structure(chunk):
-                raise ValueError("task graph does not match compiled structure")
-            self.submit_compiled(chunk, layout)
-            events: List[KernelEvent] = []
-            while self.has_active_tasks:
-                event = self.step()
-                if event is None:
-                    self.assert_drained()
-                else:
-                    events.append(event)
-            return tuple(events)
+        if (self.resource_owners or event_observer is not None or before_step is not None
+                or on_submitted is not None or index_physical_allocations
+                or any("stateful_l2" in task.metadata or is_physical_task(task) for task in chunk)):
+            from ._token_program import drain_token_program
+            return drain_token_program(self, chunk, layout, validate_tasks=validate_tasks,
+                                       event_observer=event_observer, before_step=before_step,
+                                       index_physical_allocations=index_physical_allocations,
+                                       on_submitted=on_submitted)
         if len(chunk) != layout.task_count:
             raise ValueError("task graph does not match compiled structure")
         task_ids = tuple(task.task_id for task in chunk)
@@ -2394,6 +2397,9 @@ class UnifiedEventKernel:
     def peek_ready_key(self) -> Optional[ReadyKey]:
         """Return the next valid event key without consuming it."""
 
+        frame = getattr(self, "_token_frame", None)
+        if frame is not None:
+            return frame.peek_ready_key()
         queued = self._pop_ready_entry()
         if queued is None:
             return None
@@ -2450,9 +2456,22 @@ class UnifiedEventKernel:
         )
         return lanes, lane_index, lanes[lane_index]
 
+    def _resolve_task_execution(self, task, start_ns, sorted_demands=None):
+        from ._token_program import resolve_task_execution
+        return resolve_task_execution(self, task, start_ns, sorted_demands)
+
+    def _account_task_execution(self, task, demands, is_physical, physical_snapshot,
+                                start_ns, effective_ready_ns, dependency_ready_ns):
+        from ._token_program import account_task_execution
+        return account_task_execution(self, task, demands, is_physical, physical_snapshot,
+                                      start_ns, effective_ready_ns, dependency_ready_ns)
+
     def step(self) -> Optional[KernelEvent]:
         """Execute and return one task, or ``None`` when no task is ready."""
 
+        frame = getattr(self, "_token_frame", None)
+        if frame is not None:
+            return frame.step()
         queued = self._pop_ready_entry()
         if queued is None:
             return None
@@ -2468,127 +2487,12 @@ class UnifiedEventKernel:
             _version,
         ) = queued
         task = self._tasks[task_id]
-        self._reclaim_physical_allocations(start_ns)
-        from .data_motion import is_physical_task
-        is_physical = is_physical_task(task)
-        registered_physical_allocations = is_physical
-        l2_snapshot = None
-        l2_transaction = None
-        l2_owner = None
-        physical_snapshot = None
-        if is_physical:
-            try:
-                physical_snapshot = self.physical_runtime.begin_transaction()
-                # Local import avoids making the planner/data-motion module
-                # part of the kernel import cycle; it also keeps the physical
-                # adapter optional for analytical-only users.
-                from .data_motion import register_physical_allocations, resolve_physical_task
-                # A physical GDDR descriptor is only a preview until the
-                # mutable L2 contract has run.  Resolve that contract first,
-                # then submit the remaining miss/write-back traffic to the
-                # DRAM core.  This preserves cache reuse while retaining the
-                # physical event path for cold traffic.
-                if "stateful_l2" in task.metadata:
-                    contract = task.metadata["stateful_l2"]
-                    l2_owner = str(contract["owner"])
-                    previous_l2_state = self._l2_states.get(l2_owner)
-                    l2_snapshot = (l2_owner, previous_l2_state)
-                    if previous_l2_state is not None:
-                        l2_transaction = previous_l2_state[1].begin_transaction()
-                    register_physical_allocations(task, self.physical_runtime)
-                    registered_physical_allocations = True
-                    task = resolve_l2_task(task, self._l2_states, self.physical_runtime)
-                    task, is_physical = _materialize_l2_physical_access(task, self.physical_runtime)
-                if is_physical:
-                    backing_offset_ns = task.metadata.get("l2_execution", {}).get(
-                        "backing_arrival_offset_ns", 0.0
-                    )
-                    task = resolve_physical_task(
-                        task, self.physical_runtime, start_ns + backing_offset_ns,
-                        _caller_managed_transaction=True,
-                    )
-                    contract = task.metadata.get("stateful_l2")
-                    if contract is not None:
-                        completion_span = float(task.metadata["physical_completion_ns"]) - float(start_ns)
-                        order_resource = contract.get("order_resource")
-                        envelopes = set(contract["envelope_resources"])
-                        excluded_ids = envelopes | set(task.metadata["physical_demands_resource_ids"])
-                        compute_span = max((d.service_ns for d in task.demands
-                                            if d.resource_id not in excluded_ids), default=0.0)
-                        duration = max(compute_span, completion_span) + contract.get("dependency_ns", 0.0)
-                        demands = tuple(
-                            replace(d, service_ns=completion_span if d.resource_id == order_resource else duration)
-                            if d.resource_id in envelopes else d
-                            for d in task.demands
-                        )
-                        task = replace(task, demands=demands, metadata={
-                            **_l2_execution_metadata(task.metadata, duration, demands,
-                                physical=True), "l2_execution": {
-                            **task.metadata["l2_execution"],
-                            "memory_completion_offset_ns": completion_span,
-                        }})
-                # Validation belongs to the same transaction as the Core
-                # reservations and mutable L2 update. A rejected completion
-                # must not leave either device state or an absent ready item.
-                _validate_event_timing(task, start_ns, task.demands)
-            except Exception:
-                if l2_snapshot is not None:
-                    owner, previous = l2_snapshot
-                    if previous is None:
-                        self._l2_states.pop(owner, None)
-                    else:
-                        self._l2_states[owner] = previous
-                    if l2_transaction is not None:
-                        previous[1].rollback_transaction(l2_transaction)
-                if physical_snapshot is not None:
-                    self.physical_runtime.restore(physical_snapshot)
-                heapq.heappush(self._ready_heap, queued)
-                raise
-            else:
-                if l2_transaction is not None:
-                    cache = self._l2_states[l2_owner][1]
-                    cache.commit_transaction(l2_transaction)
-                if physical_snapshot is not None:
-                    self.physical_runtime.commit_transaction(physical_snapshot)
-            demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
-            # Even a zero-duration reservation can advance a resource's
-            # frontier to its arrival. Such a resource has no positive busy
-            # demand below, but must still be visible to ordinary tasks.
-            if is_physical:
-                from ._resource_ledger import publish_timeline_frontiers
-                publish_timeline_frontiers(
-                    self.physical_runtime.timeline.lane_available, self.resource_available)
-        elif "stateful_l2" in task.metadata:
-            try:
-                l2_owner = str(task.metadata["stateful_l2"]["owner"])
-                previous_l2_state = self._l2_states.get(l2_owner)
-                if previous_l2_state is not None:
-                    l2_transaction = previous_l2_state[1].begin_transaction()
-                task = resolve_l2_task(task, self._l2_states)
-                _validate_event_timing(task, start_ns, task.demands)
-            except Exception:
-                if l2_owner is not None:
-                    if previous_l2_state is None:
-                        self._l2_states.pop(l2_owner, None)
-                    else:
-                        self._l2_states[l2_owner] = previous_l2_state
-                        if l2_transaction is not None:
-                            previous_l2_state[1].rollback_transaction(l2_transaction)
-                # The task remains in its group queue; retain its global ready
-                # entry too, so validation failure cannot silently drop it.
-                heapq.heappush(self._ready_heap, queued)
-                raise
-            else:
-                if l2_transaction is not None:
-                    self._l2_states[l2_owner][1].commit_transaction(l2_transaction)
-            demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
-        else:
-            demands = self._sorted_demands[task_id]
-            try:
-                _validate_event_timing(task, start_ns, demands)
-            except Exception:
-                heapq.heappush(self._ready_heap, queued)
-                raise
+        try:
+            task, demands, is_physical, registered_physical_allocations, physical_snapshot = (
+                self._resolve_task_execution(task, start_ns))
+        except Exception:
+            heapq.heappush(self._ready_heap, queued)
+            raise
 
         group_ready = self._ready_by_group[resource_group]
         heapq.heappop(group_ready)
@@ -2598,82 +2502,10 @@ class UnifiedEventKernel:
         self._resource_groups.pop(task_id)
         self._sorted_demands.pop(task_id)
         self._phase_sequence.pop(task_id)
-        from ._resource_ledger import account_task_demands
-        queue_wait_ns = start_ns - effective_ready_ns
-        end_ns, physical_ids, resource_predecessors, resource_lanes = account_task_demands(
-            self, task, demands, is_physical, start_ns, effective_ready_ns)
-        resource_last_interval = self.resource_last_interval
-        resource_available = self.resource_available
-
-        if is_physical:
-            if not task.metadata.get("physical_resource_intervals"):
-                physical_lane_completions = _publish_physical_summary(
-                    self, task, physical_ids, physical_snapshot, resource_predecessors)
-            else:
-                physical_intervals: Dict[str, List[Dict[str, object]]] = {}
-                physical_lane_completions = []
-                for stage in task.metadata.get("physical_resource_intervals", ()):
-                    if stage.resource_id is None:
-                        continue
-                    resource_id = stage.resource_id
-                    interval = {
-                        "task_id": task_id, "resource_id": resource_id,
-                        "start_ns": stage.start_ns, "end_ns": stage.end_ns,
-                    }
-                    physical_intervals.setdefault(resource_id, []).append(interval)
-                # Summary execution still retains the final real reservation. It
-                # must publish the same readiness and task predecessor as detailed
-                # execution whenever the lane can be identified unambiguously.
-                for resource_id, (start, end) in task.metadata.get(
-                        "physical_resource_last_intervals", {}).items():
-                    physical_intervals.setdefault(resource_id, []).append({
-                        "task_id": task_id, "resource_id": resource_id,
-                        "start_ns": start, "end_ns": end,
-                    })
-                for resource_id in physical_ids:
-                    lanes = self.physical_runtime.timeline.lane_available.get(resource_id, ())
-                    before_lanes = physical_snapshot["timeline"]["lane_available"].get(resource_id, ())
-                    intervals = physical_intervals.get(resource_id, ())
-                    previous = resource_last_interval.get(resource_id)
-                    if (len(lanes) == 1 and previous is not None
-                            and any(previous["end_ns"] == item["start_ns"] for item in intervals)):
-                        resource_predecessors.setdefault(resource_id, dict(previous))
-                    if intervals:
-                        last = max(intervals, key=lambda item: item["end_ns"])
-                        if previous is None or last["end_ns"] >= previous["end_ns"]:
-                            resource_last_interval[resource_id] = last
-                    for lane_index, end in enumerate(lanes):
-                        before = before_lanes[lane_index] if lane_index < len(before_lanes) else 0.0
-                        if end <= before:
-                            continue
-                        physical_lane_completions.append((resource_id, lane_index, end))
-                        matches = [item for item in intervals
-                                   if item["end_ns"] == end and item["start_ns"] >= before]
-                        key = (resource_id, lane_index)
-                        if matches:
-                            self._resource_lane_last_interval[key] = {
-                                **max(matches, key=lambda item: item["start_ns"]), "lane": lane_index}
-                        else:
-                            # A truncated trace may omit the interval, but the
-                            # changed lane clock proves this task's release point.
-                            # Do not invent its unknown reservation start time.
-                            self._resource_lane_last_interval[key] = {
-                                "task_id": task_id, "resource_id": resource_id,
-                                "end_ns": end, "lane": lane_index}
-                    if lanes:
-                        # The next task may use any free lane. Stage detail is
-                        # history, not a replacement for this calendar authority.
-                        resource_available[resource_id] = min(lanes)
-            task = replace(task, metadata={**task.metadata,
-                "physical_resource_lane_completions": tuple(physical_lane_completions)})
-
-        self._completed_end[task_id] = end_ns
-        self._completion_leases[task_id] = 1
-        self.completed_count += 1
-        self.total_queue_wait_ns += queue_wait_ns
-        self.total_service_ns += end_ns - start_ns
-        if end_ns > self.makespan_ns:
-            self.makespan_ns = end_ns
+        event = self._account_task_execution(
+            task, demands, is_physical, physical_snapshot,
+            start_ns, effective_ready_ns, dependency_ready_ns)
+        end_ns = event.end_ns
 
         groups_to_refresh = [resource_group]
         for dependent_id in self._dependents.get(task_id, ()):
@@ -2710,16 +2542,7 @@ class UnifiedEventKernel:
             if not self._tasks:
                 self._reclaim_physical_allocations(float("inf"))
 
-        return KernelEvent(
-            task=task,
-            start_ns=start_ns,
-            end_ns=end_ns,
-            dependency_ready_ns=dependency_ready_ns,
-            effective_ready_ns=effective_ready_ns,
-            demands=demands,
-            resource_predecessors=resource_predecessors,
-            resource_lanes=resource_lanes,
-        )
+        return event
 
     def step_completion(self) -> Optional[KernelCompletion]:
         """Execute one task and return its typed runtime completion view."""

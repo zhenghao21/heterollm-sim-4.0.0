@@ -23,6 +23,7 @@ from .execution_control import (
     progress_unit_label_zh,
 )
 from .reporting import (
+    FastScenarioResult,
     OnlineScenarioResult,
     RunResult,
     page_online_batch_trace,
@@ -628,6 +629,14 @@ class RunJobManager:
                 "仅已完成的仿真任务可以读取批次时间轴",
                 message_en="batch traces are available only for completed jobs",
                 details={"status": job.status},
+            )
+        if isinstance(job.result, FastScenarioResult):
+            if isinstance(job.result.detailed, OnlineScenarioResult):
+                return job.result.detailed
+            raise RunJobTraceError(
+                409, "fast_forecast_has_no_physical_trace",
+                "快速预测结果没有完整物理时间轴；请选择详细模式生成时间轴",
+                message_en="a fast forecast has no complete physical timeline; use detailed mode",
             )
         if not isinstance(job.result, OnlineScenarioResult):
             raise RunJobTraceError(

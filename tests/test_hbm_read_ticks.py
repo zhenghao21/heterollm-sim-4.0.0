@@ -56,7 +56,7 @@ def test_off_grid_restored_column_history_disables_reduction():
 
 @pytest.mark.parametrize("clock", [.512, .3, 1., 1.28])
 def test_read_tick_gap_rounding_requires_a_provable_margin(clock):
-    from heterollm_sim._hbm_numeric import _read_tick_profile
+    from heterollm_sim._hbm_numeric import _column_tick_profile
 
     packed = _pack_hbm_numeric(DramCore(b200_memory(), capture_details=False),
                                AccessRequest("read", "read", 0, 32))
@@ -64,9 +64,9 @@ def test_read_tick_gap_rounding_requires_a_provable_margin(clock):
     packed.t[11:14] = [5 * clock, 2 * clock, 4 * clock]
     packed.t[22] = 32 * clock
     packed.t[26:28] = 2 * clock
-    assert _read_tick_profile(packed.g, packed.t)[0] == 1
+    assert _column_tick_profile(packed.g, packed.t, True)[0] == 1
     packed.t[11] = np.nextafter(5 * clock, np.inf)
-    assert _read_tick_profile(packed.g, packed.t)[0] == 0
+    assert _column_tick_profile(packed.g, packed.t, True)[0] == 0
 
 
 @pytest.mark.parametrize("interleave,arrival", [(32, 1e9 + .001), (128, 2 ** 36 * .512 - 1.)])

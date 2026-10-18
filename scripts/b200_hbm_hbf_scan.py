@@ -1,18 +1,20 @@
-"""Full-length B200 HBM/HBF scan with independent, resumable point processes.
+"""B200 HBM/HBF scan with explicit fidelity and resumable point processes.
 
-No token sampling or numerical extrapolation is used. A point is published only
-after the requested single request has actually completed in the serving kernel.
+Fast mode executes Prefill and a real Decode prefix. Refused forecasts are
+recorded and never silently start a detailed suffix in this scan.
 """
 from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from copy import deepcopy
 from contextlib import contextmanager
-from dataclasses import fields, is_dataclass
+from dataclasses import fields, is_dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 import gc
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -33,6 +35,12 @@ MODELS = (
 PROMPTS = (64 * 1024, 256 * 1024, 512 * 1024)
 OUTPUTS = (1024, 5 * 1024, 10 * 1024)
 ARCHITECTURES = ("HBM", "HBF")
+SUCCESS_STATUSES = {"completed", "forecast_completed"}
+REUSABLE_STATUSES = SUCCESS_STATUSES | {"capacity_rejected", "forecast_rejected"}
+
+
+class FastForecastRejected(RuntimeError):
+    """The formal fast queue does not execute a rejected forecast's suffix."""
 
 
 def utc_now():
@@ -95,7 +103,7 @@ def point_id(model_id, architecture, prompt_tokens, output_tokens):
 
 def all_points():
     # Start with the shortest input/output pair across model sizes, then grow
-    # output length and context. Each point still executes its full request.
+    # output length and context. Fast forecasts retain the full request budget.
     return [{"point_id": point_id(model["model_id"], architecture, prompt, output),
              "model_id": model["model_id"], "architecture": architecture,
              "prompt_tokens": prompt, "output_tokens": output}
@@ -103,17 +111,22 @@ def all_points():
             for architecture in ARCHITECTURES]
 
 
-def initialize(output_dir):
+def initialize(output_dir, simulation_mode="fast"):
     from b200_hbm_hbf_scan_config import describe_scan_parameters
+    from heterollm_sim.simulation_options import SimulationConfig
+    simulation = SimulationConfig(mode=simulation_mode)
     output_dir.mkdir(parents=True, exist_ok=True)
     for name in ("points", "progress", "logs", "configurations"):
         (output_dir / name).mkdir(exist_ok=True)
     path = output_dir / "manifest.json"
-    manifest = {"schema": "b200-hbm-hbf-scan-v1", "models": MODELS,
+    manifest = {"schema": "b200-hbm-hbf-scan-v2", "models": MODELS,
         "prompts": PROMPTS, "outputs": OUTPUTS, "architectures": ARCHITECTURES,
         "points": all_points(), "point_count": 72,
         "parameters": describe_scan_parameters(),
-        "execution": "full_length_physical_serving", "retention_policy": "aggregate",
+        "simulation": simulation,
+        "execution": "detailed_prefill_sampled_decode_forecast" if simulation_mode == "fast" else "full_length_physical_serving",
+        "forecast_refusal_policy": "record_and_continue_without_detailed_suffix",
+        "retention_policy": "aggregate",
         "ttft_definition": "request arrival to first visible output token",
         "tpot_definition": "(last visible token time - first visible token time) / (output_tokens - 1)"}
     # JSON normalization makes tuples/lists compare by their persisted meaning.
@@ -131,6 +144,37 @@ def initialize(output_dir):
 def collect_result(result, point):
     from heterollm_sim.serving import RequestStatus
     from heterollm_sim.reporting import _sum_batch_storage_traffic, _sum_batch_dram_traffic
+    placement = result.scenario.placement
+    if not placement.op_to_component or set(placement.op_to_component.values()) != {"gpu0"}:
+        raise ValueError("model operators were moved away from the fixed B200 compute endpoint")
+    expected = "hbm0" if point["architecture"] == "HBM" else "hbf0"
+    if not placement.tensor_to_component or set(placement.tensor_to_component.values()) != {expected}:
+        raise ValueError("model tensors are not all on the selected memory tier")
+    if placement.kv_policy.cache_component != expected:
+        raise ValueError("KV cache is not on the selected memory tier")
+    if point["architecture"] == "HBF" and any(
+            component.normalized_kind == "hbm" for component in result.scenario.hardware.components):
+        raise ValueError("all-HBF deployment unexpectedly contains HBM")
+    resolved = {"op_to_component": placement.op_to_component,
+        "tensor_to_component": placement.tensor_to_component,
+        "active_memory": expected, "kv": placement.kv_policy.cache_component}
+    forecast = getattr(result, "forecast", None)
+    if forecast is not None:
+        approximation = deepcopy(result.approximation)
+        if (forecast.output_tokens != point["output_tokens"]
+                or forecast.prompt_tokens != point["prompt_tokens"]
+                or forecast.sampled_decode_steps + forecast.predicted_decode_steps != point["output_tokens"] - 1
+                or approximation.get("effective_mode") != "fast"
+                or not all(math.isfinite(value) and value > 0 for value in (forecast.ttft_ns, forecast.tpot_ns))):
+            raise ValueError("forecast does not cover the original complete request")
+        return {"status": "forecast_completed", "simulation_mode": "fast",
+            "ttft_ns": forecast.ttft_ns, "tpot_ns": forecast.tpot_ns,
+            "visible_output_tokens": forecast.output_tokens,
+            "metric_fidelity": {"ttft": "detailed", "tpot": "estimated"},
+            "physical_execution_scope": "prefix_only", "approximation": approximation,
+            "resolved_placement": resolved}
+    if hasattr(result, "approximation"):
+        raise ValueError("formal fast scan unexpectedly returned detailed fallback")
     requests = list(result.serving.request_metrics.values())
     if len(requests) != 1:
         raise ValueError("single-request baseline returned a different request count")
@@ -139,15 +183,6 @@ def collect_result(result, point):
         raise ValueError(f"request did not finish all requested tokens: {request}")
     if request.ttft_ns is None or (point["output_tokens"] > 1 and request.tpot_ns is None):
         raise ValueError("completed request has no TTFT or TPOT")
-    placement = result.scenario.placement
-    if not placement.op_to_component or set(placement.op_to_component.values()) != {"gpu0"}:
-        raise ValueError("model operators were moved away from the fixed B200 compute endpoint")
-    expected = "hbm0" if point["architecture"] == "HBM" else "hbf0"
-    if placement.kv_policy.cache_component != expected:
-        raise ValueError("KV cache is not on the selected memory tier")
-    if point["architecture"] == "HBF" and any(
-            component.normalized_kind == "hbm" for component in result.scenario.hardware.components):
-        raise ValueError("all-HBF deployment unexpectedly contains HBM")
     resources = defaultdict(float)
     for batch in result.serving.batches:
         metadata = batch.cost.metadata
@@ -156,15 +191,14 @@ def collect_result(result, point):
         for resource, value in metadata.get("resource_busy_ns", {}).items():
             resources[resource] += value
     return {"status": "completed", "ttft_ns": request.ttft_ns,
+        "simulation_mode": "detailed", "metric_fidelity": {"ttft": "detailed", "tpot": "detailed"},
         "tpot_ns": request.tpot_ns, "request_metrics": request,
         "batch_count": len(result.serving.batches),
         "physical_execution_scope": "persistent_live_kernel",
         "resource_busy_ns": dict(resources),
         "storage_traffic": _sum_batch_storage_traffic(result),
         "dram_traffic": _sum_batch_dram_traffic(result),
-        "resolved_placement": {"op_to_component": placement.op_to_component,
-            "tensor_to_component": placement.tensor_to_component,
-            "active_memory": expected, "kv": placement.kv_policy.cache_component}}
+        "resolved_placement": resolved}
 
 
 def worker(output_dir, point):
@@ -172,24 +206,41 @@ def worker(output_dir, point):
     from heterollm_sim.execution_control import ExecutionControl, ExecutionCancelledError
     from heterollm_sim.reporting import run_scenario
     from heterollm_sim.memory_allocator import AllocationError
+    from heterollm_sim.simulation_options import simulation_from_dict
 
     started = time.monotonic()
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    simulation = simulation_from_dict(manifest["simulation"])
     progress_path = output_dir / "progress" / (point["point_id"] + ".json")
     row = {**point, "started_at": utc_now(), "ttft_ns": None, "tpot_ns": None,
-           "python_executable": sys.executable}
+           "python_executable": sys.executable, "simulation_mode": simulation.mode,
+           "simulation_config": simulation, "pid": os.getpid()}
     last_write = 0.0
     last_stage = None
+    approximation = {}
+    real_steps = {"prefill": 0, "decode": 0}
 
     def progress(event):
-        nonlocal last_write, last_stage
+        nonlocal last_write, last_stage, approximation
         now = time.monotonic()
-        if now - last_write < 5 and last_stage == event.stage and event.completed != event.total:
+        if event.stage == "serving_cohorts" and event.completed:
+            kind = event.metadata.get("cohort_kind")
+            if kind in real_steps:
+                real_steps[kind] += 1
+        if "approximation" in event.metadata:
+            approximation = deepcopy(event.metadata["approximation"])
+        if (not event.stage.startswith("fast_") and now - last_write < 5
+                and last_stage == event.stage and event.completed != event.total):
             return
         last_write, last_stage = now, event.stage
         write_json(progress_path, {**point, "status": "running", "pid": os.getpid(),
+            "simulation_mode": simulation.mode, "approximation": approximation,
+            "real_prefill_steps": real_steps["prefill"], "real_decode_steps": real_steps["decode"],
             "updated_at": utc_now(), "wall_seconds": now - started, "progress": event})
         print(json.dumps({"stage": event.stage, "completed": event.completed,
             "total": event.total, "wall_seconds": round(now - started, 2)}), flush=True)
+        if simulation.mode == "fast" and event.stage == "fast_mode_fallback":
+            raise FastForecastRejected(", ".join(event.metadata.get("fallback_reasons", ())))
 
     previous_path = output_dir / "points" / (point["point_id"] + ".json")
     if previous_path.exists():
@@ -201,6 +252,7 @@ def worker(output_dir, point):
     try:
         scenario = build_scan_scenario(point["model_id"], point["architecture"],
                                        point["prompt_tokens"], point["output_tokens"])
+        scenario = replace(scenario, simulation=simulation)
         write_json(output_dir / "configurations" / (point["point_id"] + ".json"), scenario)
         row["model"] = {"name": scenario.model.name, "layers": scenario.model.num_layers,
             "weight_bytes": scenario.model.total_declared_weight_bytes,
@@ -211,6 +263,9 @@ def worker(output_dir, point):
                 progress_callback=progress,
                 cancellation_callback=lambda: (output_dir / "stop.request").exists()))
         row.update(collect_result(result, point))
+    except FastForecastRejected as error:
+        row.update(status="forecast_rejected", reason=str(error), approximation=approximation,
+            physical_execution_scope="prefix_only", metric_fidelity={"ttft": "unavailable", "tpot": "unavailable"})
     except ExecutionCancelledError as error:
         row.update(status="interrupted", reason=f"{type(error).__name__}: {error}")
     except (AllocationError, MemoryError) as error:
@@ -225,17 +280,66 @@ def worker(output_dir, point):
         row.update(status="failed", reason=f"{type(error).__name__}: {error}")
         traceback.print_exc()
     row.update(finished_at=utc_now(), wall_seconds=time.monotonic() - started)
+    row.update(real_prefill_steps=real_steps["prefill"], real_decode_steps=real_steps["decode"])
+    if approximation and "approximation" not in row:
+        row["approximation"] = approximation
     write_json(output_dir / "points" / (point["point_id"] + ".json"), row)
-    write_json(progress_path, {**point, "status": row["status"], "updated_at": utc_now(),
+    write_json(progress_path, {**point, "pid": os.getpid(), "simulation_mode": simulation.mode,
+        "real_prefill_steps": real_steps["prefill"], "real_decode_steps": real_steps["decode"],
+        "approximation": row.get("approximation", {}), "status": row["status"], "updated_at": utc_now(),
         "wall_seconds": row["wall_seconds"], "reason": row.get("reason")})
     print(json.dumps({"point_id": point["point_id"], "status": row["status"],
                       "wall_seconds": row["wall_seconds"]}), flush=True)
-    return 1 if row["status"] == "failed" else 0
+    return 1 if row["status"] in {"failed", "interrupted"} else 0
 
 
-def run_queue(output_dir, workers, retry_failed=False):
+def process_alive(pid):
+    if not pid:
+        return False
+    if os.name == "nt":
+        import ctypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = [ctypes.c_uint, ctypes.c_bool, ctypes.c_uint]
+        kernel.OpenProcess.restype = ctypes.c_void_p
+        kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        handle = kernel.OpenProcess(0x100000, False, pid)
+        if not handle:
+            return False
+        try:
+            return kernel.WaitForSingleObject(handle, 0) == 0x102
+        finally:
+            kernel.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+def assert_no_live_workers(output_dir):
+    # On Windows Popen may identify a venv launcher. Progress is written by
+    # the actual interpreter, which can outlive an interrupted manager.
+    for path in (output_dir / "progress").glob("*.json"):
+        progress = json.loads(path.read_text(encoding="utf-8"))
+        pid = progress.get("pid")
+        if progress.get("status") in {"starting", "running"} and process_alive(pid):
+            raise RuntimeError(f"scan worker {pid} is still alive; refusing duplicate queue: {path.name}")
+
+
+def queue_counts(finished):
+    return {"completed": sum(row["status"] in SUCCESS_STATUSES for row in finished),
+        "forecast_completed": sum(row["status"] == "forecast_completed" for row in finished),
+        "capacity_rejected": sum(row["status"] == "capacity_rejected" for row in finished),
+        "forecast_rejected": sum(row["status"] == "forecast_rejected" for row in finished),
+        "failed": sum(row["status"] == "failed" for row in finished)}
+
+
+def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast"):
     from b200_hbm_hbf_scan_report import write_report, refresh_markdown
-    manifest = initialize(output_dir)
+    if workers not in (1, 2):
+        raise ValueError("workers must be 1 or 2")
+    manifest = initialize(output_dir, simulation_mode)
     # Keep one OS file lock for the manager lifetime, preventing two managers
     # from submitting the same scan. No hashes or copied source trees are used.
     with (output_dir / "manager.lock").open("a+b") as lock:
@@ -250,11 +354,12 @@ def run_queue(output_dir, workers, retry_failed=False):
         else:
             import fcntl
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        assert_no_live_workers(output_dir)
         pending, finished = [], []
         for point in manifest["points"]:
             path = output_dir / "points" / (point["point_id"] + ".json")
             saved = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
-            if saved is not None and saved["status"] in {"completed", "capacity_rejected"}:
+            if saved is not None and saved["status"] in REUSABLE_STATUSES:
                 finished.append(saved)
             elif saved is not None and saved["status"] == "failed" and not retry_failed:
                 raise ValueError("failed point needs correction and --retry-failed: " + point["point_id"])
@@ -304,12 +409,14 @@ def run_queue(output_dir, workers, retry_failed=False):
                     changed = True
                     if saved["status"] == "failed":
                         stop_reason = "point_failed"
+                    elif saved["status"] == "interrupted":
+                        pending.insert(0, point)
+                        stop_reason = "worker_interrupted"
                 write_json(output_dir / "status.json", {"status": "needs_attention" if stop_reason else "running",
                     "manager_pid": os.getpid(), "updated_at": utc_now(), "total": len(manifest["points"]),
-                    "completed": sum(row["status"] == "completed" for row in finished),
-                    "capacity_rejected": sum(row["status"] == "capacity_rejected" for row in finished),
-                    "failed": sum(row["status"] == "failed" for row in finished),
-                    "pending": len(pending), "running": [{**point, "pid": process.pid, "started_at": start}
+                    "simulation_mode": simulation_mode, **queue_counts(finished),
+                    "pending": len(pending), "running": [{**point, "pid": process.pid, "started_at": start,
+                        "simulation_mode": simulation_mode}
                         for process, point, _log, start in running.values()], "reason": stop_reason})
                 if changed:
                     write_report(output_dir)
@@ -325,20 +432,37 @@ def run_queue(output_dir, workers, retry_failed=False):
             stop_reason = "manager_interrupted" if isinstance(error, KeyboardInterrupt) else "manager_failed"
             raise
         finally:
+            if running and not (output_dir / "stop.request").exists():
+                (output_dir / "stop.request").write_text(stop_reason or "manager_interrupted", encoding="utf-8")
+            deadline = time.monotonic() + 55
+            while any(process.poll() is None for process, *_ in running.values()) and time.monotonic() < deadline:
+                # Cooperative cancellation reaches the actual interpreter;
+                # terminating only the Windows launcher can orphan a worker.
+                time.sleep(.2)
+            still_running = []
             for process, point, log, start in running.values():
-                process.terminate()
-                process.wait()
                 log.close()
-                write_json(output_dir / "progress" / (point["point_id"] + ".json"), {
-                    **point, "status": "interrupted", "updated_at": utc_now(), "reason": stop_reason or "manager_interrupted"})
+                if process.poll() is None:
+                    still_running.append({**point, "pid": process.pid, "started_at": start,
+                                          "simulation_mode": simulation_mode})
+                else:
+                    path = output_dir / "points" / (point["point_id"] + ".json")
+                    saved = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+                    if saved and saved["status"] in REUSABLE_STATUSES | {"failed"}:
+                        finished.append(saved)
+                    else:
+                        pending.append(point)
             queue_state = ("paused" if stop_reason == "stop_requested" else
                            "needs_attention" if stop_reason else "completed")
+            if still_running:
+                queue_state = "needs_attention"
+                stop_reason = "workers_still_stopping"
+            elif queue_state == "completed" and any(row["status"] not in SUCCESS_STATUSES for row in finished):
+                queue_state = "completed_with_rejections"
             write_json(output_dir / "status.json", {"status": queue_state,
                 "manager_pid": os.getpid(), "updated_at": utc_now(), "total": len(manifest["points"]),
-                "completed": sum(row["status"] == "completed" for row in finished),
-                "capacity_rejected": sum(row["status"] == "capacity_rejected" for row in finished),
-                "failed": sum(row["status"] == "failed" for row in finished),
-                "pending": len(pending) + len(running), "running": [], "reason": stop_reason})
+                "simulation_mode": simulation_mode, **queue_counts(finished),
+                "pending": len(pending), "running": still_running, "reason": stop_reason})
             write_report(output_dir)
     return 1 if stop_reason else 0
 
@@ -347,13 +471,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("run", "worker", "report", "stop"))
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--workers", type=int, choices=(1, 2), default=2)
+    parser.add_argument("--workers", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--simulation-mode", choices=("fast", "detailed"), default="fast")
     parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--point-id")
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()
     if args.command == "run":
-        return run_queue(output_dir, args.workers, args.retry_failed)
+        return run_queue(output_dir, args.workers, args.retry_failed, args.simulation_mode)
     if args.command == "worker":
         manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
         point = next(point for point in manifest["points"] if point["point_id"] == args.point_id)

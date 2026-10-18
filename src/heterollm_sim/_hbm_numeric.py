@@ -435,8 +435,8 @@ def _refresh_until(lane, horizon, arrival, g, t, rows, bf, addresses, pc, pc_see
 
 
 @njit(cache=True, nogil=True, fastmath=False)
-def _read_tick_profile(g, t):
-    """Prove the integer recurrence used by normal READ row hits.
+def _column_tick_profile(g, t, read):
+    """Prove the integer recurrence used by same-direction row hits.
 
     No command is omitted. This changes the representation of grid-valued
     clocks only. Analog column gaps must lie far enough inside their tick
@@ -446,11 +446,14 @@ def _read_tick_profile(g, t):
     result = np.zeros(8, dtype=np.int64)
     limit = 2 ** 38
     result[1] = limit
-    if (g[8] or t[3] != 1. or t[9] != 0. or t[16] != 0.
-            or t[17] != 0. or t[25] != 0.):
+    if (g[8] or t[3] != 1.
+            or (read and (t[9] != 0. or t[16] != 0. or t[17] != 0. or t[25] != 0.))
+            # WRITE has no SID-specific gap. A custom group spanning several
+            # SIDs would need the same-group gap across those SID histories.
+            or (not read and (g[4] > 16 or t[18] != 0. or t[24] != 0.))):
         return result
     clock = t[0]
-    for index, field in enumerate((22, 26, 27)):
+    for index, field in enumerate((22 if read else 23, 26, 27 if read else 28)):
         value = t[field]
         if abs(value / clock) >= limit:
             return result
@@ -458,7 +461,7 @@ def _read_tick_profile(g, t):
         if value != ticks * clock or ticks < 0:
             return result
         result[2 + index] = ticks
-    for index, field in enumerate((11, 12, 13)):
+    for index, field in enumerate((11, 12, 13 if read else 12)):
         value = t[field]
         if value < 0 or value / clock >= limit:
             return result
@@ -514,14 +517,14 @@ def _binary_shift(value):
 
 
 @njit(cache=True, nogil=True, fastmath=False)
-def _fold_read_cycles(cycles, channel_first, channel_stop, g, t, profile,
+def _fold_column_cycles(cycles, channel_first, channel_stop, read, recovery, g, t, profile,
                       previous_columns, previous_data, previous_history,
                       tick_columns, tick_data, tick_history, tick_base, tick_banks,
                       cycle_starts, group_tops, sid_tops, deadlines,
                       bf, pc, history, resources, moved, counts):
     """Repeat an exact translation orbit of the integer max-plus controller.
 
-    Every dynamic input of the READ recurrence must translate by one common
+    Every dynamic input of the directional recurrence must translate by one common
     integer delta within its independent physical channel. The fixed lower
     bounds must already lie behind that channel's old column frontier. This
     proves translation equivariance for all subsequent cycles, rather than
@@ -551,8 +554,9 @@ def _fold_read_cycles(cycles, channel_first, channel_stop, g, t, profile,
                     return 0, 0.
         while cycles > 0:
             last = tick_columns[ch] - 1 + cycles * delta
+            horizon = last * t[0] if read else _after(last * t[0], recovery, t[0] / 2)
             if (last + profile[2] + max(profile[3], profile[4]) < profile[1]
-                    and last * t[0] < deadlines[ch]):
+                    and horizon < deadlines[ch]):
                 break
             cycles -= 1
         if cycles == 0:
@@ -582,7 +586,9 @@ def _fold_read_cycles(cycles, channel_first, channel_stop, g, t, profile,
         for lane in range(2 * ch, 2 * ch + 2):
             for entry in range(history.shape[1]):
                 tick_history[lane, entry] += shift
-                history[lane, entry, 1] = tick_history[lane, entry] * t[0]
+                history[lane, entry, 1 if read else 2] = tick_history[lane, entry] * t[0]
+                if not read:
+                    history[lane, entry, 3] = (tick_history[lane, entry] + profile[2] + profile[3]) * t[0]
             for sid in range(group_tops.shape[1]):
                 for index in (0, 2):
                     if group_tops[lane, sid, index] >= 0:
@@ -592,7 +598,11 @@ def _fold_read_cycles(cycles, channel_first, channel_stop, g, t, profile,
                     sid_tops[lane, index] += shift
             for bank in range(lane * g[1], (lane + 1) * g[1]):
                 last = cycle_starts[bank, g[2] - 1] + shift
-                bf[bank, 2] = max(bf[bank, 2], last * t[0])
+                if read:
+                    bf[bank, 2] = max(bf[bank, 2], last * t[0])
+                else:
+                    data_end = (last + profile[2] + profile[3]) * t[0]
+                    bf[bank, 2] = max(bf[bank, 2], _after(data_end, t[10], t[0] / 2))
                 bf[bank, 5] = bf[bank, 2]
                 for inner in range(g[2]):
                     cycle_starts[bank, inner] += shift
@@ -604,10 +614,10 @@ def _fold_read_cycles(cycles, channel_first, channel_stop, g, t, profile,
             resources[rid, 1] = _repeat_add(resources[rid, 1], t[26], pc_bursts)
             resources[rid, 2], resources[rid, 3] = data_start, data_end
             moved[rid] += pc_bursts * g[9]
-            pc[lane, 2] = (last + profile[2] + profile[4]) * t[0]
+            pc[lane, 2 if read else 3] = (last + profile[2] + profile[4]) * t[0]
             tick_data[lane] += shift
             completion = max(completion, data_end)
-    counts[2] += 2 * (channel_stop - channel_first) * pc_bursts
+    counts[2 if read else 3] += 2 * (channel_stop - channel_first) * pc_bursts
     return cycles, completion
 
 
@@ -623,8 +633,8 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
     active_deadlines = np.empty(channels, dtype=np.float64)
     for ch in range(channel_first, channel_stop):
         active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
-    tick_candidate = read and g[12] and stop - first >= 64
-    tick_profile = _read_tick_profile(g, t) if tick_candidate else np.zeros(8, dtype=np.int64)
+    tick_candidate = g[12] and stop - first >= 64
+    tick_profile = _column_tick_profile(g, t, read) if tick_candidate else np.zeros(8, dtype=np.int64)
     tick_mode = tick_candidate and tick_profile[0]
     tick_lanes = g[0] if tick_mode else 0
     tick_channels = channels if tick_mode else 0
@@ -656,16 +666,19 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 valid = True
                 base = max(arrival, pc[lane, 1])
                 for entry in range(history.shape[1]):
-                    stamp = history[lane, entry, 1]
+                    stamp = history[lane, entry, 1 if read else 2]
                     tick_history[lane, entry] = -1 if stamp < 0 else _bounded_tick(stamp, t[0], tick_profile[1], False)
                     if tick_history[lane, entry] == -2:
                         valid = False
                     elif tick_history[lane, entry] >= 0:
                         _tick_history_record(lane, entry, tick_history[lane, entry], g[10],
                                              tick_group_tops, tick_sid_tops)
-                    base = max(base, history[lane, entry, 3])
+                    # The opposite direction's history stays fixed throughout
+                    # this homogeneous request. Both selected turnaround gaps
+                    # are proved zero by _column_tick_profile.
+                    base = max(base, history[lane, entry, 3 if read else 1])
                 tick_base[lane] = _bounded_tick(base, t[0], tick_profile[1], True)
-                tick_data[lane] = _bounded_tick(max(resources[2 * channels + lane, 0], pc[lane, 2]),
+                tick_data[lane] = _bounded_tick(max(resources[2 * channels + lane, 0], pc[lane, 2 if read else 3]),
                                                  t[0], tick_profile[1], False)
                 tick_valid[lane] = valid and tick_base[lane] >= 0
     # Recovery depends only on this request's direction and timing profile.
@@ -696,8 +709,8 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                     cycles = min(g[3] // g[2] - row_phase,
                                  (stop - (stripe_start - offset)) // cycle_span)
                     if cycles > 0:
-                        folded, folded_completion = _fold_read_cycles(cycles, channel_first, channel_stop,
-                            g, t, tick_profile, previous_columns, previous_data, previous_history,
+                        folded, folded_completion = _fold_column_cycles(cycles, channel_first, channel_stop,
+                            read, recovery, g, t, tick_profile, previous_columns, previous_data, previous_history,
                             tick_columns, tick_data, tick_history, tick_base, tick_banks, cycle_starts,
                             tick_group_tops, tick_sid_tops, active_deadlines,
                             bf, pc, history, resources, moved, counts)
@@ -755,7 +768,7 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
             if (tick_mode and tick_valid[lane] and rows[bank] == row
                     and tick_data[lane] >= 0 and tick_columns[ch] >= 0):
                 if tick_banks[bank] == -2:
-                    tick_banks[bank] = _bounded_tick(bf[bank, 3], t[0], tick_profile[1], True)
+                    tick_banks[bank] = _bounded_tick(bf[bank, 3 if read else 4], t[0], tick_profile[1], True)
                 if tick_banks[bank] >= 0:
                     tick = max(tick_base[lane], tick_banks[bank], tick_columns[ch],
                                tick_data[lane] - tick_profile[2])
@@ -774,7 +787,8 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                         tick = max(tick, previous + tick_profile[7])
                     start = tick * t[0]
                     last_tick = tick + tick_profile[2] + max(tick_profile[3], tick_profile[4])
-                    if last_tick < tick_profile[1] and start < active_deadlines[ch]:
+                    horizon = start if read else _after(start, recovery, t[0] / 2)
+                    if last_tick < tick_profile[1] and horizon < active_deadlines[ch]:
                         # These are exactly clock_after's integer tick sums,
                         # expressed in full rather than half clock units.
                         end = (tick + 1) * t[0]
@@ -784,11 +798,11 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                         resources[column, 2], resources[column, 3] = start, end
                         touched[column] = True
                         counts[6] += end - start
-                        counts[2] += 1
+                        counts[2 if read else 3] += 1
                         hits += 1
                         tick_columns[ch] = tick + 1
                         entry = history_entry
-                        history[lane, entry, 1] = start
+                        history[lane, entry, 1 if read else 2] = start
                         tick_history[lane, entry] = tick
                         _tick_history_record(lane, entry, tick, g[10], tick_group_tops, tick_sid_tops)
                         if fold_mode:
@@ -800,11 +814,17 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                         resources[rid, 1] += t[26]
                         resources[rid, 2], resources[rid, 3] = data_start, data_end
                         moved[rid] += g[9]
-                        directions[rid] = 1
+                        directions[rid] = 1 if read else 2
                         touched[rid] = True
                         tick_data[lane] = tick + tick_profile[2] + max(tick_profile[3], tick_profile[4])
-                        pc[lane, 2] = (tick + tick_profile[2] + tick_profile[4]) * t[0]
-                        bf[bank, 2] = max(bf[bank, 2], start)
+                        pc[lane, 2 if read else 3] = (tick + tick_profile[2] + tick_profile[4]) * t[0]
+                        if read:
+                            bf[bank, 2] = max(bf[bank, 2], start)
+                        else:
+                            # tWR may be analog (15 ns on the B200 reference).
+                            # Keep the original data-end anchor and rounding.
+                            bf[bank, 2] = max(bf[bank, 2], _after(data_end, t[10], t[0] / 2))
+                            history[lane, entry, 3] = data_end
                         bf[bank, 5] = bf[bank, 2]
                         completion = max(completion, data_end)
                         continue
@@ -912,7 +932,7 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                                          tick_group_tops, tick_sid_tops)
                     if fold_mode:
                         cycle_starts[bank, inner] = tick_history[lane, entry]
-                tick_data[lane] = _bounded_tick(max(data_end, pc[lane, 2]), t[0], tick_profile[1], False)
+                tick_data[lane] = _bounded_tick(max(data_end, pc[lane, 2 if read else 3]), t[0], tick_profile[1], False)
         if period >= stop - stripe_start:
             break
         stripe_start += period

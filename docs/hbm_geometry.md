@@ -196,7 +196,7 @@ HBM 的已知时序约束报错使用 `HBMConfigError`（仍是 `ValueError`）�
 
 ## 当前物理配置接口
 
-序列化的 DRAM 配置必须显式声明 bank-group 时序、控制模式与几何作用域；不再为旧配置补零。NAND 配置必须显式声明共享、读取、写入三项主机带宽，以及 `protocol_mode`、`host_channels`、`host_full_duplex`、`read_cache_pages_per_bank`；不为旧文件补语义。`generic_nand` 下，`write_buffer_bytes > 0` 启用页合并写缓冲，返回主机确认后通过刷新完成介质写入；设为 `0` 使用写穿模式。`ocp_hbf_0_7` 要求零写缓冲、4 KiB完整页写和64 B读粒度，并在介质完成后应答。原 `metadata.buffered_write_mode` 开关已删除。HBM预设使用 `hbm3e_reference`、`hbm3e_reference_flat`、`hbm3e_reference_synthetic_timing` 及对应 HBM4 名称；分析式零 bank-group 控制使用 `hbm_analytical_zero`。
+序列化的 DRAM 配置必须显式声明 bank-group 时序、控制模式与几何作用域；不再为旧配置补零。NAND 配置必须显式声明共享、读取、写入三项主机带宽，以及 `protocol_mode`、`host_channels`、`host_full_duplex`、`read_cache_pages_per_bank`、`queue_scope` 和 `max_outstanding_write_requests`；最后一项可以显式为 `null`，表示写请求共用总在途额度，不为旧文件补语义。`generic_nand` 保留 SSD 等通用 NAND 的层级和全设备队列；`write_buffer_bytes > 0` 启用页合并写缓冲，返回主机确认后通过刷新完成介质写入，设为 `0` 使用写穿模式。`ocp_hbf_0_7` 要求零写缓冲、4 KiB完整页写和64 B读粒度，并在介质完成后应答；队列范围必须为 `host_channel`，bank 由独立 plane 几何派生，不接受 `parallel_units` 数值覆盖。原 `metadata.buffered_write_mode` 开关已删除。HBM预设使用 `hbm3e_reference`、`hbm3e_reference_flat`、`hbm3e_reference_synthetic_timing` 及对应 HBM4 名称；分析式零 bank-group 控制使用 `hbm_analytical_zero`。
 
 ## HBM3E 工程时序预设
 
@@ -240,7 +240,39 @@ tRTW 采用 JESD238 表 93 注 18（p.164）的公式，并加入单独声明的
 
 另提供 `hbm3e_timing_ramulator2` 公开预设，移植固定版本 Ramulator2 的 `HBM3_6400Mbps` / `HBM3_32Gb_16hi` 标量时序和相关公式。仅支持 tCK=0.625 ns、32 Gbit/die、16H，不将该速度档外推至其他时钟。执行继续使用本项目的命令锚点、控制器和刷新排程，不等同于运行 Ramulator2 本体；默认 `reference` 不变。来源、逐项映射、调用方法及对照实验见 [Ramulator2 参数对照说明](hbm_ramulator2_comparison.md)。
 
-## 版本 10 主实验工作点
+## HBF 参数研究与配置修正（2026-10-17）
+
+`hbf_ocp_0_7` 已改用下述 FlashLabAE 256-bank 研究参考几何，并声明每主机通道的在途限制；**这不是厂商校准，实验扫描仍暂停**。旧预设使用 `channels=64`、`parallel_units=64`，512 GiB 来自 `64 × 8192 blocks × 256 pages × 4096 B`；这个未校准的等效阵列选择已从严格 HBF 预设废弃，不能用于真实器件性能结论。旧值可追到 `d4a9fee` 的实验脚本，`b5f76bbe1a00c4c7a571d7dbb4635c96d5462dda` 添加严格协议子集预设时仍保留该假设。支持部分协议事务不等于几何和时序已获验证。
+
+下表按来源分别记录，不把几套组织拼成同一个器件。OCP 页码均为印刷页码；开源配置使用固定提交，论文使用固定版本。
+
+| 来源与证据类型 | 可采用或核对的参数 | 不能由此确定的内容 |
+|---|---|---|
+| [OCP HBF v0.7.0，2026-08-03][hbf-ocp-v070]：协议要求，p.15、p.69–70 | 最多 16 个独立全双工主机通道；4 KiB NAND 页；写入为 4 KiB 对齐完整页；读取以 64 B 为粒度且不跨页；每 bank 两个 4 KiB cache buffers | 完整厂商物理组织及实测介质时序；两个 buffer 也不等于两个独立感测阵列 |
+| 同一 OCP 规范：实现可配，BUCCAP，§5.9.2.1，p.69–70 | 每 UCIe 通道 core die 数 NCDU 可为 1/2/4/8/16；MOCS 是该通道的命令队列能力，列出 1 以及 256–16384 的 2 的幂档位 | NCDU、实际队列档位须由具体实现确定；不能用全设备队列深度替代每通道 MOCS |
+| 同一 OCP 规范：容量计算与架构示例，Table 3 p.16、Figure 4 p.23 | Table 3 列 16 dies/cube、16 banks/channel、4 KiB 页和 512 GiB；Figure 4 示例为每 host channel 下 2 core channels × 2 dies × 16 banks，即 64 bank 实例/host channel | 两处不是一套已披露的产品几何；不能强行把 Figure 4 外推到 16 个 host channels 后的 1024 个通道局部 bank 实例解释为已确认的 16-die 产品 |
+| [FlashLabAE/HBFSim，提交 `7a6cb439` 的默认配置][hbf-flashlab-config]：OCP 0.7 研究参考 | 每栈 16 channels × 1 die/channel × 16 planes/die，模型按 256 banks 调度；每 bank 2048 blocks × 256 pages × 4 KiB，合计 512 GiB；读/编程/擦除为 4 μs / 75 μs / 2 ms；每 bank 两页缓存 | [来源表][hbf-flashlab-provenance]明确标为 `exploratory_assumption`；一 channel 一 die、block 几何和时序不是厂商披露或 OCP 强制值 |
+| [FLINT，arXiv:2608.25062v1，§2、§5 Table 2][hbf-flint]：论文设计点 | 每栈 16 dies × 32 planes/die = 512 planes；每 plane 256 blocks × 1024 pages × 4 KiB，按这些整数得 512 GiB；读/编程/擦除为 2 μs / 50 μs / 3 ms；接口 1 TB/s/stack | 论文表中容量写作 GB，本表仅把几何乘积换算成 GiB；未确认公开的 FLINT 仿真器及对应配置。论文使用 HBF 权重层，KV 和激活在 HBM，不能直接套用其性能结论到全 HBF |
+| [Sandisk HBF Fact Sheet，2025-07，p.2、p.3 脚注 2][hbf-sandisk-factsheet]：厂商公开参数 | 第一代列 16 dies/stack、256 Gb/die、512 GB/stack、读带宽 1.6 TB/s；脚注明确 GB/TB 为十进制，实际用户容量更小 | 512 GB = 512,000,000,000 B，不能改写为 512 GiB；该资料没有给出完整 bank/plane/block/page 几何和读写时序表 |
+
+`bank` 与 `plane` 不应默认一一对应。OCP 使用 host channel、core channel/die、NAND bank 等概念；论文和模拟器中的 plane 可能是不同层次的独立操作资源。FlashLabAE 将其 16 planes/die 用作 bank 的调度实例，是该模型的明确映射。其 `16 × 1 × 16` 能与 Table 3 的数量在数值上自洽，但不能据此断言标准要求每个物理 die 独占一个 host channel。
+
+当前主参考采用 FlashLabAE 的 **256 banks 可复现研究点**；FLINT 的 512 planes 仍是独立文献参考，未混入该预设。字段映射为 `host_channels=16`、`channels=16`、`targets_per_channel=dies_per_target=luns_per_die=1`、`planes_per_lun=16`、`planes_independent=True`、`parallel_units=None`；即每主机通道一个内部通道和一个 core die，target/LUN 为单例映射层，每 plane 在本模型中代表一个独立 bank。每 bank 的 2048 blocks × 256 pages × 4 KiB 导出总容量 512 GiB，`array_units` 从几何得到 256。严格模式拒绝独立并行数覆盖和共享 plane；通用 NAND/SSD 仍保留自己的资源组织。
+
+严格预设不再继承通用 NAND 的全设备 32 请求限制，使用 `queue_scope="host_channel"`、`max_outstanding_requests=256` 和 `max_outstanding_write_requests=64`：**每主机通道读写合计最多 256 个在途请求，其中写请求最多 64 个**，写额度包含在总额内。256 来自将上游 4096 个每栈读页 credits 均分给 16 个通道；把它解释为读写合计额度是本项目的研究选择，不是上游队列实现的逐字复制，也不是 OCP 规定的器件 MOCS。字段作用域、通道归属与独立 bank 排程共同限制可用并行度。`generic_nand` 仅允许 `queue_scope="device"`，按完整请求占用全设备额度；严格 OCP 模式才把跨页请求拆为各主机通道的页命令。不能在未拆页的通用 NAND 路径启用每通道额度。
+
+介质读/编程/擦除采用 4 μs / 75 μs / 2 ms。主机接口按 OCP p.16 Table 2/4 的 grade 2：16 GT/s、16 channels、75% 有效载荷效率，得到双向各 1536 GB/s；不再使用旧的 16 GB/s 写接口上限重复限制 NAND 编程吞吐。上游[速度等级实现][hbf-flashlab-grade]保留标准 p.32/35 的 94/188 与 p.16 的 96/192 GB/s 差异，本项目采用后者作为研究参考。`internal_bandwidth_gb_s=96` 按每内部通道的 payload 计，由上游 raw-channel 参考值按 `101.25 GB/s × 4096/(4096+224 OOB) = 96 GB/s` 转换；本项目没有复刻上游的 OOB、ECC、TSV 等独立阶段，`front_ns=0` 也是本项目简化，因此不能称为 FlashLabAE 完整复现。几何、时序、队列与传输假设及固定提交链接分别记录在预设 `metadata.parameter_provenance` 中；显式修改字段后记录为新的研究假设。
+
+仍缺少目标产品的真实层级映射、可见容量与保留空间、读/编程/擦除时序、实际 MOCS、共享内部链路及 ECC 吞吐校准。公开研究配置能替换无来源的参数选择，不能使这些未知项自动变成真实器件规格。
+
+[hbf-ocp-v070]: https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf
+[hbf-flashlab-config]: https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12
+[hbf-flashlab-provenance]: https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/configs/parameter-provenance.json#L509
+[hbf-flashlab-grade]: https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_standard.hpp#L11
+[hbf-flint]: https://arxiv.org/html/2608.25062v1#S5
+[hbf-sandisk-factsheet]: https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/collateral/company/Sandisk-HBF-Fact-Sheet.pdf
+
+## 版本 10 主实验工作点（历史控制）
 
 `scripts/hbf_hbm_experiments.py` 与 `hbf_hbm_serving_study.py` 的主服务比较固定 HBM3E 16H × 32 Gbit，即每 stack 原始64 GiB，tCK=0.625 ns（6.4 Gb/s/pin分析工作点）。512 GiB / 1 TiB 分别用8 / 16 stacks，物理接口总速率为6553.6 / 13107.2 GB/s，读写方向预算均为1600 GB/s。容量不再改变频率；更多stack会改变并行度，不能把这个对照称为仅改变容量且所有物理资源不变。版本10的普通主实验套用 `hbm_timing_profiles` 的 `reference` 工程参数包：tRRD_S/L=4/6 ns、tFAW=20 ns、tRTP=6 CK、tWTR_S/L=6/8 CK、tRTW=18.125 ns，周期REFab使用tREFI=3900 ns、tRFC=500 ns。对应厂商tRFC仍未知，500 ns是明确的敏感性参考假设，不是原标准TBD已经得到解决，也没有借用HBM4数值。
 
@@ -248,7 +280,7 @@ tRTW 采用 JESD238 表 93 注 18（p.164）的公式，并加入单独声明的
 
 控制器可选择 `address_mapping=bank_interleaved/row_local`、`scheduler=fcfs/row_hit_first/read_write_batch`、`scheduler_window` 和 `queue_scope=device/channel`。窗口只选择已到达且没有更早重叠读写依赖的请求，加入老化防饥饿；结果保持输入顺序。它重排聚合请求，行命中评分看首个突发，不声称逐命令FR-FCFS。单独 `submit` 无可供重排的请求窗口；服务内同一物理任务的连续同owner访问可通过 `submit_many` 实际使用策略。每通道队列额度按整个请求涉及的全部物理通道占用，直到该请求整体完成；这个保守聚合定义不等于每通道突发队列。
 
-主实验HBF使用逻辑页服务分析：4 KiB介质页、64 B主机传输计费、64个有效阵列单元、16个全双工主机通道和每bank两页读缓存。读/编程延迟4 / 75 µs是分析假设；接口1600 / 16 GB/s与理想冷阵列65.536 / 3.495253 GB/s上限分别输出。`published_hbf` 的未给定并行度采用固定128单元假设，主实验显式覆盖为64，均不按接口吞吐反推单元数。逻辑模型可执行RMW，但未包含主机重映射、物理页序和擦除成本；严格完整页事务另用 `hbf_ocp_0_7` 预设。
+版本10历史控制中的HBF使用逻辑页服务分析：4 KiB介质页、64 B主机传输计费、64个有效阵列单元、16个全双工主机通道和每bank两页读缓存。读/编程延迟4 / 75 µs是分析假设；接口1600 / 16 GB/s与理想冷阵列65.536 / 3.495253 GB/s上限分别输出。`published_hbf` 的未给定并行度采用固定128单元假设，主实验显式覆盖为64，均不按接口吞吐反推单元数。逻辑模型可执行RMW，但未包含主机重映射、物理页序和擦除成本；严格完整页事务另用 `hbf_ocp_0_7` 预设。这些记录仅保留为历史控制；64单元及其推导吞吐均未获得器件校准，不能据此判断真实HBF相对HBM的性能，`hbf_ocp_0_7` 的名称也不解除上述限制。
 
 上述默认值只适用于主实验。文献参数化探针保留显式输入的文献工作点和未知项，微基准保留其独立敏感性参数；第11组封装候选明确使用0.32 ns分析时钟和每栈1600 GB/s方向预算，不混入主容量比较。其36十进制GB可见容量预算小于64 GiB原始参考stack容量，不代表已识别器件。
 

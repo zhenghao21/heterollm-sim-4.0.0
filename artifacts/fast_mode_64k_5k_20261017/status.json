@@ -1,0 +1,16 @@
+{
+  "status": "completed",
+  "manager_pid": 49500,
+  "started_at": "2026-10-17T09:14:41.761839+00:00",
+  "current_case": null,
+  "worker_pid": null,
+  "case_started_at": "2026-10-17T20:33:34.766460+00:00",
+  "finished_at": "2026-10-18T00:45:33.445349+00:00",
+  "completed_runs": 8,
+  "total_runs": 8,
+  "updated_at": "2026-10-18T00:45:33.447977+00:00",
+  "prompt_tokens": 65536,
+  "output_tokens": 5120,
+  "purpose": "limited fast-mode validation; formal scan remains paused",
+  "worker_progress": null
+}

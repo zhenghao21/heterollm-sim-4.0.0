@@ -167,6 +167,9 @@ class PhysicalAddressAllocator:
             cursor = max(cursor, item.base_address + item.size_bytes)
         cursor = self._align(cursor, self.alignment_bytes)
         if cursor + size > upper:
+            # The failure report reads this immutable tuple from the traceback
+            # after rollback may have changed the allocator's live extents.
+            failure_allocations = self.allocations()
             raise AllocationError(
                 "unable to allocate {} bytes in capacity {}{}".format(size, self.capacity_bytes,
                     " ({} arena [{}, {}))".format(allocation_arena or ("resident" if generation == 0 else "workspace"), lower, upper)

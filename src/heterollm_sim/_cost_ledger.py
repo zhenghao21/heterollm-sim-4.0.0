@@ -81,7 +81,8 @@ def _iadd(previous: object, value: object) -> object:
     return previous
 
 
-def _task_memory_direction(task):
+def _task_memory_direction(task, task_names=None):
+    """Classify authored tasks or records without materializing task proxies."""
     explicit = str(task.metadata.get("memory_direction", "")).lower()
     if explicit in {"read", "write"}:
         return explicit
@@ -89,7 +90,7 @@ def _task_memory_direction(task):
         (
             str(task.metadata.get("event_kind", "")),
             str(task.metadata.get("phase", "")),
-            str(task.name),
+            str(task.name if task_names is None else task_names[task.task_id]),
         )
     ).lower()
     return "write" if any(
@@ -99,6 +100,8 @@ def _task_memory_direction(task):
 
 def _resource_busy_by_direction(
     tasks,
+    *,
+    task_names=None,
 ):
     rows: dict = {"read": {}, "write": {}}
     reads: dict = rows["read"]
@@ -111,7 +114,7 @@ def _resource_busy_by_direction(
     resource_directions: object
     modeled_write: object
     for task in tasks:
-        direction = _task_memory_direction(task)
+        direction = _task_memory_direction(task, task_names)
         default_rows = rows[direction]
         raw_resource_directions = task.metadata.get("resource_directions", {})
         resource_directions = (

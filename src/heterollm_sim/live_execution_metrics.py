@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from math import isfinite
-from types import SimpleNamespace
 from typing import Mapping, Optional
 
 from .contracts import TaskCategory
@@ -175,9 +174,7 @@ class LiveCohortMetrics:
         from .planner import (_GPU_CONSUMER_FRONTEND_STAGE, _resource_busy_by_direction,
                               _summarize_dram_task_traffic, _summarize_nand_task_traffic)
         summary = self.summary()
-        tasks = tuple(SimpleNamespace(task_id=row.task_id, name=self._names[row.task_id],
-                                      metadata=row.metadata, demands=row.demands)
-                      for row in summary.execution_records)
+        records = summary.execution_records
         host = tuple(row for row in summary.execution_records
                      if row.metadata.get("orchestration_stage") in {
                          "host_prefix", "host_target_frontend", "host_suffix", _GPU_CONSUMER_FRONTEND_STAGE})
@@ -190,13 +187,13 @@ class LiveCohortMetrics:
             "task_count": summary.task_count,
             "resource_accounted_bytes": summary.bytes_moved,
             "resource_busy_ns": dict(summary.resource_busy_ns),
-            "resource_busy_by_direction_ns": _resource_busy_by_direction(tasks),
+            "resource_busy_by_direction_ns": _resource_busy_by_direction(records, task_names=self._names),
             "category_time_ns": {key.value: value for key, value in summary.category_time_ns.items()},
             "critical_path_category_ns": {key.value: value for key, value in summary.critical_path_category_ns.items()},
             "coverage": summary.coverage,
             "linear_state_bytes": summary.linear_state_bytes,
-            "dram_traffic": _summarize_dram_task_traffic(tasks, resource_owners=self.resource_owners),
-            "storage_traffic": _summarize_nand_task_traffic(tasks, resource_owners=self.resource_owners),
+            "dram_traffic": _summarize_dram_task_traffic(records, resource_owners=self.resource_owners),
+            "storage_traffic": _summarize_nand_task_traffic(records, resource_owners=self.resource_owners),
             "execution_stage_makespan_ns": summary.makespan_ns,
             **time_breakdown,
             "host_orchestration_task_count": len(host),

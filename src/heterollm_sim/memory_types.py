@@ -587,7 +587,10 @@ class NandConfig:
 
     Host bandwidths are aggregate per direction. Internal channels are
     distributed evenly across host channels; full duplex separates their
-    read/write calendars. OCP mode covers complete-unit IO, not AXI packets.
+    read/write calendars. Internal bandwidth is per internal channel. Queue
+    limits apply to the selected device or host-channel scope; the write
+    limit is a subset of the combined limit. OCP mode covers complete-unit
+    IO, not AXI packets, and derives independent banks from geometry.
     """
 
     kind: MemoryKind | str = MemoryKind.SSD
@@ -627,6 +630,8 @@ class NandConfig:
     partial_page_policy: str = "read_modify_write"
     capacity_bytes: Optional[int] = None
     max_outstanding_requests: int = 32
+    queue_scope: str = field(default="device", kw_only=True)
+    max_outstanding_write_requests: Optional[int] = field(default=None, kw_only=True)
     max_expanded_segments: int = 1_000_000
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
@@ -660,6 +665,10 @@ class NandConfig:
             raise ValueError("planes_independent must be a boolean")
         if self.protocol_mode not in {"generic_nand", "ocp_hbf_0_7"}:
             raise ValueError("protocol_mode must be generic_nand or ocp_hbf_0_7")
+        if self.queue_scope not in {"device", "host_channel"}:
+            raise ValueError("NAND queue_scope must be device or host_channel")
+        if self.protocol_mode == "generic_nand" and self.queue_scope != "device":
+            raise ValueError("generic_nand requires queue_scope=device; host-channel page-command admission is supported only by ocp_hbf_0_7")
         _positive_int("host_channels", self.host_channels)
         if self.host_channels > self.channels or self.channels % self.host_channels:
             raise ValueError("internal channels must divide evenly among host_channels")
@@ -672,6 +681,12 @@ class NandConfig:
         if self.protocol_mode == "ocp_hbf_0_7":
             if kind is not MemoryKind.HBF:
                 raise ValueError("ocp_hbf_0_7 requires kind=HBF")
+            if self.parallel_units is not None:
+                raise ValueError("ocp_hbf_0_7 derives bank parallelism from geometry; parallel_units must be None")
+            if not self.planes_independent:
+                raise ValueError("ocp_hbf_0_7 requires independent bank resources (planes_independent=True)")
+            if self.queue_scope != "host_channel":
+                raise ValueError("ocp_hbf_0_7 requires queue_scope=host_channel")
             if self.page_bytes != 4096 or self.host_granularity_bytes != 64:
                 raise ValueError("ocp_hbf_0_7 requires 4096-byte pages and 64-byte host granularity")
             if self.host_channels > 16 or not self.host_full_duplex:
@@ -688,6 +703,10 @@ class NandConfig:
                 # page cross the declared device boundary.
                 raise ValueError("capacity_bytes must be a multiple of page_bytes")
         _positive_int("max_outstanding_requests", self.max_outstanding_requests)
+        if self.max_outstanding_write_requests is not None:
+            _positive_int("max_outstanding_write_requests", self.max_outstanding_write_requests)
+            if self.max_outstanding_write_requests > self.max_outstanding_requests:
+                raise ValueError("max_outstanding_write_requests cannot exceed max_outstanding_requests")
         _positive_int("max_expanded_segments", self.max_expanded_segments)
         if (isinstance(self.write_buffer_bytes, bool)
                 or not isinstance(self.write_buffer_bytes, int)

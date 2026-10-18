@@ -71,7 +71,8 @@ _NAND_RESEARCH_BASE = {
     "block_erase_ns": 3000000.0, "front_ns": 800.0,
     "write_buffer_bytes": 0, "wear_model": None, "detailed_observability": False,
     "partial_page_policy": "read_modify_write", "capacity_bytes": 8 * 1024 ** 3,
-    "max_outstanding_requests": 32, "max_expanded_segments": 1000000,
+    "max_outstanding_requests": 32, "queue_scope": "device",
+    "max_outstanding_write_requests": None, "max_expanded_segments": 1000000,
     "metadata": {
         "parameter_basis": "synthetic_research_assumptions",
         "configuration_scope": "explicit_physical_memory_research",
@@ -123,18 +124,64 @@ _PHYSICAL_CONFIG_CATALOG["published_hbf"] = _preset(
               "model_abstraction": "analytical_page_service",
               "model_scope": "logical buffers served by equivalent NAND pages; no FTL or OCP physical write-order guarantee",
               "parallelism_mapping": "explicit effective units, otherwise a fixed 128-unit sensitivity assumption; never derived to meet an interface throughput target; internal channels map one-to-one to effective units"})
+_HBF_FLASHLAB_REVISION = "7a6cb439235d721137f8c5c3a952e2ecc520a47b"
+_HBF_FLASHLAB_ROOT = "https://github.com/FlashLabAE/HBFSim/blob/" + _HBF_FLASHLAB_REVISION
+_HBF_OCP_SOURCE = "https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf"
+_HBF_REFERENCE_GROUPS = (
+    ({"channels": 16, "targets_per_channel": 1, "dies_per_target": 1, "luns_per_die": 1,
+      "planes_per_lun": 16, "planes_independent": True, "parallel_units": None,
+      "blocks_per_plane": 2048, "pages_per_block": 256, "page_bytes": 4096,
+      "capacity_bytes": 512 * 1024 ** 3},
+     _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_config.hpp#L12",
+     "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."),
+    ({"page_read_ns": 4000.0, "page_program_ns": 75000.0, "block_erase_ns": 2000000.0},
+     _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_config.hpp#L26",
+     "Upstream exploratory NAND timing assumptions; not OCP requirements or measured HBF timings."),
+    ({"host_channels": 16, "host_full_duplex": True, "read_cache_pages_per_bank": 2,
+      "host_granularity_bytes": 64, "write_buffer_bytes": 0},
+     _HBF_OCP_SOURCE,
+     "Selected 16-channel composition with OCP full-duplex, two cache pages per bank, 64 B read granularity and media-complete ordinary writes; protocol subset only."),
+    ({"host_bandwidth_gb_s": 1536.0, "host_read_bandwidth_gb_s": 1536.0,
+      "host_write_bandwidth_gb_s": 1536.0},
+     _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_standard.hpp#L11",
+     "Grade-2 interface payload budget: 16 channels * x64 * 16 GT/s / 8 * 75% = 1536 GB/s per direction. Program latency separately limits media writes; no extra 16 GB/s write cap. OCP p16 vs pp32/35 payload-rate discrepancy remains unresolved."),
+    ({"queue_scope": "host_channel", "max_outstanding_requests": 256,
+      "max_outstanding_write_requests": 64},
+     _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_config.hpp",
+     "Local research translation: divide upstream 4096 read-page credits/stack over 16 host channels, then use 256 combined read/write credits and a 64-write subset per host channel. Not upstream queue semantics or OCP-mandated values."),
+    ({"internal_bandwidth_gb_s": 96.0, "front_ns": 0.0},
+     _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_config.hpp",
+     "Per-core-channel payload rate = upstream raw 101.25 GB/s * 4096 / (4096 + 224 OOB) = 96 GB/s. No separate OOB, ECC or TSV stage is reproduced; zero fixed front delay is a local simplification."),
+)
+_HBF_REFERENCE_VALUES = {name: value for values, _, _ in _HBF_REFERENCE_GROUPS for name, value in values.items()}
 _PHYSICAL_CONFIG_CATALOG["hbf_ocp_0_7"] = _preset(
-    _NAND_RESEARCH_BASE, protocol_mode="ocp_hbf_0_7",
-    channels=64, parallel_units=64, host_channels=16, host_full_duplex=True,
-    read_cache_pages_per_bank=2, page_bytes=4096, host_granularity_bytes=64,
-    blocks_per_plane=8192, capacity_bytes=512 * 1024 ** 3,
-    host_bandwidth_gb_s=1600.0, host_read_bandwidth_gb_s=1600.0,
-    host_write_bandwidth_gb_s=16.0, internal_bandwidth_gb_s=1600000.0, front_ns=0.0,
-    metadata={"model_abstraction": "ocp_physical_protocol_subset",
-              "model_scope": "strict OCP physical read/write subset; not a complete device implementation",
-              "protocol_basis": "OCP HBF v0.7.0 physical full-page writes, sequential block programming and page-0 erase; 64-byte reads; not a complete UCIe/AXI or vendor device model",
-              "timing_basis": "4 us read, 75 us program and 3 ms erase are explicit analytical assumptions, not OCP mandated latencies",
-              "parallelism_mapping": "64 explicit equivalent array units across 16 host channels; not a disclosed vendor geometry"})
+    _NAND_RESEARCH_BASE, protocol_mode="ocp_hbf_0_7", **_HBF_REFERENCE_VALUES,
+    metadata={
+        "parameter_basis": "ocp_protocol_with_flashlab_research_reference",
+        "model_abstraction": "ocp_physical_protocol_subset",
+        "model_scope": "Research adaptation, not a complete FlashLabAE reproduction, UCIe/AXI implementation or calibrated HBF device",
+        "protocol_basis": "OCP HBF v0.7.0 full-page writes, sequential block programming, page-0 erase, 64-byte reads and host-channel admission",
+        "geometry_status": "research_reference",
+        "geometry_basis": "FlashLabAE 16 channels * 1 die/channel * 16 banks/die; target and LUN are singleton mapping levels",
+        "parallelism_mapping": "Independent bank resources derived from geometry; parallel_units override forbidden in OCP mode",
+        "timing_basis": "4 us read, 75 us program and 2 ms erase are upstream exploratory assumptions, not OCP mandated latencies",
+        "queue_basis": "256 combined requests and 64 writes per host channel are local research assumptions; not a measured MOCS or an exact copy of upstream read/write queues",
+        "internal_transfer_basis": "96 GB/s payload per core channel = upstream 101.25 GB/s raw * 4096/(4096+224 OOB); no separate OOB/ECC/TSV stages",
+        "source_revision": _HBF_FLASHLAB_REVISION,
+        "source_documents": {
+            "ocp_hbf_v0_7_0": _HBF_OCP_SOURCE,
+            "flashlab_configuration": _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_config.hpp",
+            "flashlab_provenance": _HBF_FLASHLAB_ROOT + "/configs/parameter-provenance.json#L509",
+            "flashlab_speed_grades": _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_standard.hpp",
+        },
+        "parameter_provenance": {
+            name: {"value": value, "status": "research_reference", "source": source, "basis": basis}
+            for values, source, basis in _HBF_REFERENCE_GROUPS for name, value in values.items()
+        },
+        "unknown_parameters": ["vendor_bank_plane_mapping", "vendor_visible_capacity_and_reserves",
+                               "vendor_media_timing", "vendor_mocs", "shared_internal_links", "ecc_throughput"],
+        "vendor_calibrated": False, "vendor_verified": False, "target_hardware_calibrated": False,
+    })
 _PHYSICAL_CONFIG_CATALOG["study_nvme_baseline"] = _preset(
     _PHYSICAL_CONFIG_CATALOG["ssd_synthetic"], channels=32, blocks_per_plane=8192,
     host_bandwidth_gb_s=7.0, host_read_bandwidth_gb_s=7.0, host_write_bandwidth_gb_s=4.0)

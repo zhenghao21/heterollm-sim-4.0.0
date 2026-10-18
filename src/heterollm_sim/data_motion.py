@@ -434,10 +434,12 @@ class PhysicalRuntimeContext:
                                if type(bank) is _BankState else copy.copy(bank))
                         for name, bank in value.items()
                     }
-                elif key in {"_array_ready", "_buffer_ready", "_next_program_page"} and isinstance(value, dict):
+                elif key in {"_array_ready", "_buffer_ready", "_next_program_page", "_host_acceptance_ns"} and isinstance(value, dict):
                     # NAND readiness values are scalars, so a shallow dict
                     # copy is sufficient and avoids copying timeline history.
                     core_state[key] = dict(value)
+                elif key == "_host_inflight":
+                    core_state[key] = {host: list(commands) for host, commands in value.items()}
                 elif key == "_hbm_control_state":
                     core_state[key] = _copy_hbm_control_state(value)
                 elif key in {"_bank_group_state", "_channel_inflight"}:
@@ -921,38 +923,35 @@ def _resolve_physical_task(
 ) -> TaskSpec:
     if not task.metadata.get("hbf_host_staging_by_owner"):
         return _execute_physical_task(task, runtime, arrival_ns)
-    from . import hbf_staging_runtime
+    from . import _io_execution
 
-    token = hbf_staging_runtime.begin_task(runtime)
+    token = _io_execution.begin_task(runtime)
     success = False
     try:
         result = _execute_physical_task(task, runtime, arrival_ns)
         success = True
         return result
     finally:
-        hbf_staging_runtime.end_task(runtime, token, success=success)
+        _io_execution.end_task(runtime, token, success=success)
 
 
-def _execute_physical_task(
+def prepare_physical_task(
     task: TaskSpec,
     runtime: PhysicalRuntimeContext,
     arrival_ns: float,
-) -> TaskSpec:
-    """Commit one physical task at its event-kernel arrival time.
+):
+    """Resolve and validate one task's ordered physical instructions.
 
-    Planner pricing remains a preview.  This function is the single formal
-    submission point used by the event kernel; the core's own resource
-    timeline supplies the task completion time and per-resource busy demand.
-    The event kernel already protects allocation and L2 changes with a wider
-    transaction. Its internal call can reuse that boundary; standalone calls
-    continue to own their physical-submission rollback.
+    Allocation registration and HBF preload are part of the caller's existing
+    task transaction. The returned instructions are valid for this dispatch,
+    and must not be cached across allocation generations or external edits.
     """
     metadata = dict(task.metadata)
     raw_config = metadata.get("physical_memory_config")
     accesses = _memory_accesses(metadata)
     if raw_config is None or not isinstance(accesses, (tuple, list)) or not accesses:
         raise ValueError("physical task requires physical_memory_config and memory_accesses")
-    from .memory_types import AccessRequest, DramConfig, Operation
+    from .memory_types import Operation
     config = runtime.parse_config(raw_config)
     if isinstance(arrival_ns, bool) or not isinstance(arrival_ns, (int, float)) or arrival_ns < 0:
         raise ValueError("physical task arrival_ns must be non-negative")
@@ -1021,6 +1020,31 @@ def _execute_physical_task(
                 "physical access exceeds owner {} capacity".format(owner)
             )
         validated.append((access, operation, address, byte_count, owner, access_config))
+    from ._physical_task import PreparedPhysicalTask
+    return PreparedPhysicalTask(metadata, config, owners, validated, staging_bindings)
+
+
+def _execute_physical_task(
+    task: TaskSpec,
+    runtime: PhysicalRuntimeContext,
+    arrival_ns: float,
+) -> TaskSpec:
+    """Prepare and execute inside the existing per-task transaction."""
+    return execute_prepared_physical_task(
+        task, runtime, arrival_ns, prepare_physical_task(task, runtime, arrival_ns))
+
+
+def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskSpec:
+    """Consume validated instructions without rebuilding their descriptors.
+
+    The caller must retain the transaction and HBF task scope around both
+    preparation and execution, as ``resolve_physical_task`` does.
+    """
+    from .memory_types import AccessRequest, DramConfig, Operation
+    from ._physical_task import PhysicalTaskLedger
+
+    metadata, owners = prepared.metadata, prepared.owners
+    validated, staging_bindings = prepared.instructions, prepared.staging_bindings
     # Previous accesses only constrain a new request when at least one side
     # writes.  The old implementation scanned every prior descriptor for
     # every descriptor (O(n**2)); a large line-expanded projection can contain
@@ -1051,9 +1075,9 @@ def _execute_physical_task(
             value = access.get(key)
             if value:
                 placeholder_ids.add(str(value))
-    results = []
-    physical_results = []
-    staging_stats = {}
+    ledger = PhysicalTaskLedger()
+    physical_results, staging_stats = ledger.records, ledger.staging_stats
+    staging_sessions = {}
     resolved_accesses = []
     resource_accumulator = None
     if (len(owners) == 1 and not staging_bindings and not runtime.capture_details
@@ -1065,36 +1089,30 @@ def _execute_physical_task(
     index = 0
     while index < len(validated):
         access, operation, address, byte_count, owner, access_config = validated[index]
-        active = runtime.runtime(access_config, owner)
         if owner in staging_bindings:
+            from ._io_execution import PreparedStagingIO
+            session = staging_sessions.get(owner)
+            if session is None:
+                session = staging_sessions[owner] = PreparedStagingIO(
+                    runtime, owner, staging_bindings[owner], ledger)
             access_arrival = float(arrival_ns)
             if track_overlaps:
                 prior = all_completion[owner] if operation is Operation.WRITE else write_completion[owner]
                 access_arrival = max(access_arrival, prior.query(address, byte_count))
-            request = AccessRequest(f"{task.request_id or task.task_id}:{index}", operation,
-                address, byte_count, access_arrival)
-            result, records = hbf_staging_runtime.submit(runtime, owner, access_config,
-                staging_bindings[owner], access, request)
-            results.append(result)
-            physical_results.extend(records)
-            stats = staging_stats.setdefault(owner, {})
-            for key, value in result.counters["host_staging"].items():
-                if key in {"host_occupied_bytes", "host_reserved_bytes", "media_occupied_bytes", "media_reserved_bytes"}:
-                    stats[key] = value
-                else:
-                    stats[key] = stats.get(key, 0) + value
+            completion = session.submit(access, operation, byte_count, access_arrival)
             if track_overlaps:
-                all_completion[owner].update(address, byte_count, result.completion_ns)
+                all_completion[owner].update(address, byte_count, completion)
                 if operation is Operation.WRITE:
-                    write_completion[owner].update(address, byte_count, result.completion_ns)
+                    write_completion[owner].update(address, byte_count, completion)
             resolved_accesses.append({**dict(access), "address": address})
             index += 1
             continue
+        active = runtime.runtime(access_config, owner)
         # An authored task may mix staged HBF accesses and a direct access
         # to the same HOST controller. Publish the preceding staged work
         # before the direct core reads the shared resource calendars.
         if getattr(runtime, "_hbf_host_task", None) is not None:
-            from .hbf_staging_runtime import flush_task
+            from ._io_execution import flush_task
             flush_task(runtime)
         stop = index + 1
         scheduled_batch = (isinstance(active.core.config, DramConfig)
@@ -1148,7 +1166,7 @@ def _execute_physical_task(
         for position, result in zip(range(index, stop), group_results):
             access, op, addr, count, _owner, _config = validated[position]
             active.clock_ns = max(active.clock_ns, result.completion_ns)
-            results.append(result)
+            ledger.accept(result.operation, result.completion_ns)
             physical_results.append((op, owner, access_config, result))
             if track_overlaps:
                 all_completion[owner].update(addr, count, result.completion_ns)
@@ -1156,7 +1174,7 @@ def _execute_physical_task(
                     write_completion[owner].update(addr, count, result.completion_ns)
             resolved_accesses.append({**dict(access), "address": addr})
         index = stop
-    completion_ns = max(item.completion_ns for item in results)
+    completion_ns = ledger.completion_ns
     # Single-owner tasks need only one ordered resource reduction. The owner
     # bill already performs the same additions below; copying its final maps
     # preserves independent public ownership without repeating every lookup.
@@ -1197,7 +1215,7 @@ def _execute_physical_task(
     from ._resource_ledger import physical_demands
     demands = physical_demands(
         resource_busy, resource_bytes, runtime._physical_demand_cache, ResourceDemand)
-    if not demands and not all(item.operation is Operation.ERASE for item in results):
+    if not demands and not ledger.all_erases:
         raise ValueError("physical memory core returned no resource timing for a positive-byte access")
     metadata.update({
         "memory_accesses": tuple(resolved_accesses),

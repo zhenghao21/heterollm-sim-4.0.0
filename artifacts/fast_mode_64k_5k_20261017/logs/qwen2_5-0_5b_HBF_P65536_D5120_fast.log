@@ -1,0 +1,38 @@
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 5.777267800003756}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 2, "kind": "prefill", "wall_seconds": 11.009669899998698}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 3, "kind": "prefill", "wall_seconds": 16.142875899997307}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 4, "kind": "prefill", "wall_seconds": 21.342628000013065}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 5, "kind": "prefill", "wall_seconds": 26.456632799992803}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 6, "kind": "prefill", "wall_seconds": 31.76851200000965}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 7, "kind": "prefill", "wall_seconds": 37.000534199993126}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 8, "kind": "prefill", "wall_seconds": 42.27638699999079}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 9, "kind": "prefill", "wall_seconds": 47.49387010000646}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 10, "kind": "prefill", "wall_seconds": 52.894644200016046}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 11, "kind": "prefill", "wall_seconds": 58.19173099999898}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 12, "kind": "prefill", "wall_seconds": 63.617661500000395}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 13, "kind": "prefill", "wall_seconds": 68.95776570000453}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 14, "kind": "prefill", "wall_seconds": 74.56724510001368}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 15, "kind": "prefill", "wall_seconds": 80.02368990000105}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 16, "kind": "prefill", "wall_seconds": 85.55476369999815}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 17, "kind": "prefill", "wall_seconds": 91.08109870000044}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 18, "kind": "prefill", "wall_seconds": 96.5760908999946}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 19, "kind": "prefill", "wall_seconds": 102.10577409999678}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 20, "kind": "prefill", "wall_seconds": 107.66877570000361}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 21, "kind": "prefill", "wall_seconds": 113.27748700001393}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 22, "kind": "prefill", "wall_seconds": 118.85899050001171}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 23, "kind": "prefill", "wall_seconds": 124.37794100001338}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 24, "kind": "prefill", "wall_seconds": 130.03905479999958}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 25, "kind": "prefill", "wall_seconds": 135.59967160000815}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 26, "kind": "prefill", "wall_seconds": 141.88897420000285}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 27, "kind": "prefill", "wall_seconds": 147.62294930001372}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 28, "kind": "prefill", "wall_seconds": 153.46108050001203}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 29, "kind": "prefill", "wall_seconds": 159.09754129999783}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 30, "kind": "prefill", "wall_seconds": 164.7031466999906}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 31, "kind": "prefill", "wall_seconds": 170.38756490001106}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 32, "kind": "prefill", "wall_seconds": 176.20968850000645}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 48, "kind": "decode", "wall_seconds": 190.55023970000912}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 64, "kind": "decode", "wall_seconds": 204.76258569999482}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 80, "kind": "decode", "wall_seconds": 218.86444080001093}
+{"architecture": "HBF", "mode": "fast", "stage": "fast_forecast_complete", "completed": 5119, "metadata": {"sampled_decode_steps": 56, "predicted_decode_steps": 5063}, "wall_seconds": 226.05890199998976}
+{"timing_breakdown": {"measurement": "existing_public_progress_boundaries; no_profiler_or_kernel_hooks", "setup_to_serving_start_seconds": 0.5377763000142295, "prefill_cohorts_wall_seconds": 175.67190739998478, "decode_cohorts_wall_seconds": 49.820972699992126, "after_last_cohort_seconds": 0.2615695999993477, "endpoint_extraction_seconds": 1.1600001016631722e-05, "prefill_steps": 32, "decode_steps": 56, "control_plane": {"runtime": "dynamic_hardware_dag", "makespan_ns": 14379.146666666666, "completed_task_count": 15, "placement_status": "feasible", "placement_fingerprint": "b90dd6899a3b21febbbadef6ea330f37b95a4e09ad63e8549a99397adbe41f73"}, "wall_to_first_token_seconds": 176.209683699999, "decode_window_scope": "cohort completion intervals including public callback overhead"}}
+{"architecture": "HBF", "requested_mode": "fast", "ttft_ns": 10528480132.556366, "tpot_ns": 127216263.44488254, "wall_seconds": 226.29222599999048, "approximation": {"effective_mode": "fast", "sampled_decode_steps": 56, "predicted_decode_steps": 5063, "fallback_reasons": []}}

@@ -49,6 +49,8 @@ from .planner import (
     _compilation_scope,
     _execution_view,
     _host_output_contract_projection,
+    _merge_nand_queue_scopes,
+    _nand_queue_scope_description,
     _parallel_plan,
     _topology_router,
     compile_serving_cohort_schedule,
@@ -74,6 +76,7 @@ from .streaming_des import (
     ScheduleExecutionResult,
     execute_incremental_schedule,
 )
+from .fast_simulation import DecodeForecast, simulate_fast
 
 
 _SCALABLE_REQUEST_DETAIL_LIMIT = 1_000
@@ -108,7 +111,24 @@ class OnlineScenarioResult:
     retention_policy: str
     validation_information: Tuple[str, ...] = ()
 
-RunResult = Union[ScenarioResult, OnlineScenarioResult]
+@dataclass(frozen=True)
+class FastScenarioResult:
+    """A forecast or explicitly explained detailed execution of a fast request.
+
+    A forecast is deliberately not a ServingResult: the unexecuted suffix
+    has no physical timeline, device counters or resumable controller state.
+    """
+    scenario: ScenarioConfig
+    manifest: RunManifest
+    approximation: Mapping[str, Any]
+    validation_warnings: Tuple[str, ...]
+    retention_policy: str
+    validation_information: Tuple[str, ...] = ()
+    forecast: Optional[DecodeForecast] = None
+    detailed: Optional[Union[ScenarioResult, OnlineScenarioResult]] = None
+
+
+RunResult = Union[ScenarioResult, OnlineScenarioResult, FastScenarioResult]
 StaticRunResult = ScenarioResult
 
 
@@ -239,16 +259,24 @@ def _run_scenario_in_context(
             execution_control=execution_control,
             defer_physical_execution=True,
         )
-        serving = simulate_online(
+        simulation_runner = simulate_fast if scenario.simulation.mode == "fast" else simulate_online
+        runner_options = ({"custom_lowerer": batch_lowerer is not None}
+                          if scenario.simulation.mode == "fast" else {})
+        simulation = simulation_runner(
             scenario,
             batch_lowerer=active_batch_lowerer,
             execution_control=execution_control,
             residency_manager=residency_manager,
             execution_kernel=control_plane.kernel,
             runtime_origin_ns=control_plane.makespan_ns,
+            **runner_options,
         )
+        serving = (simulation.detailed if scenario.simulation.mode == "fast" else simulation)
+        fast_assumptions = ((
+            "Fast mode: Prefill and the continuous Decode prefix execute in detail; a forecast suffix has no physical transaction trace. Accuracy target requires independent full-request validation.",)
+            if scenario.simulation.mode == "fast" else ())
         manifest_assumptions = (
-            scenario.assumptions + validation.warnings + validation.information
+            scenario.assumptions + validation.warnings + validation.information + fast_assumptions
         )
         manifest_assumptions_zh, manifest_assumptions_en = localized_manifest_assumptions(
             manifest_assumptions,
@@ -256,6 +284,7 @@ def _run_scenario_in_context(
                 scenario.assumptions
                 + validation.warnings_en
                 + validation.information_en
+                + fast_assumptions
             ),
         )
         manifest = RunManifest(
@@ -284,14 +313,22 @@ def _run_scenario_in_context(
                 },
             },
         )
-        return OnlineScenarioResult(
+        detailed = (OnlineScenarioResult(
             scenario=scenario,
             serving=serving,
             manifest=manifest,
             validation_warnings=validation.warnings,
             retention_policy=retention_policy.value,
             validation_information=validation.information,
-        )
+        ) if serving is not None else None)
+        if scenario.simulation.mode == "fast":
+            manifest = replace(manifest, metadata={**manifest.metadata,
+                "simulation_mode": "fast", "effective_simulation_mode": simulation.diagnostics["effective_mode"]})
+            return FastScenarioResult(scenario, manifest, simulation.diagnostics,
+                validation.warnings, retention_policy.value, validation.information,
+                forecast=simulation.forecast, detailed=detailed)
+        assert detailed is not None
+        return detailed
 
     execution_control.raise_if_cancelled()
     execution_control.report("compilation", 0, 1, message="正在编译统一执行计划")
@@ -310,13 +347,21 @@ def _run_scenario_in_context(
         execution_kernel=control_plane.kernel,
         runtime_origin_ns=control_plane.makespan_ns,
     )
-    return ScenarioResult(
+    result = ScenarioResult(
         scenario=scenario,
         execution=execution,
         validation_warnings=validation.warnings,
         retention_policy=retention_policy.value,
         validation_information=validation.information,
     )
+    if scenario.simulation.mode == "fast":
+        return FastScenarioResult(scenario, result.trace.manifest,
+            {"requested_mode": "fast", "effective_mode": "detailed",
+             "target_relative_error": scenario.simulation.fast_decode.target_relative_error,
+             "validation_status": "detailed_execution", "predicted_decode_steps": 0,
+             "fallback_reasons": ["fast_mode_requires_continuous_scheduler"]},
+            validation.warnings, retention_policy.value, validation.information, detailed=result)
+    return result
 
 
 def gpu_baseline_scenario(scenario: ScenarioConfig) -> ScenarioConfig:
@@ -581,11 +626,13 @@ def _sum_batch_storage_traffic(
     organizations: List[Any] = []
     page_observations = []
     complete_page_batches = 0
+    queue_scopes_by_owner = {}
     for metadata in _online_cost_metadata(result):
         ledger = metadata.get("storage_traffic", {})
         if not isinstance(ledger, Mapping) or not ledger.get("task_count"):
             continue
         physical_batches += 1
+        _merge_nand_queue_scopes(queue_scopes_by_owner, ledger.get("queue_depth_scopes_by_owner", {}))
         for key, statuses in source_statuses.items():
             value = ledger.get(key)
             numeric_value = isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -661,7 +708,8 @@ def _sum_batch_storage_traffic(
         "nand_observations": observed_pages,
         "nand_read_queue_depth": observed_pages["read_queue_depth"] if observed_pages else None,
         "nand_program_queue_depth": observed_pages["program_queue_depth"] if observed_pages else None,
-        "queue_depth_scope": "max per-device outstanding host requests sampled at admission, including the new request; buffered writes end at host acknowledgement; not NAND page/program queues",
+        "queue_depth_scope": _nand_queue_scope_description(queue_scopes_by_owner),
+        "queue_depth_scopes_by_owner": queue_scopes_by_owner,
         "page_utilization_scope": "logical payload / sum of per-access page-rounded spans; repeated accesses count again; not unique resident capacity utilization",
         "metric_availability": {
             "nand_read_queue_depth": {"status": "recorded" if complete_page_batches==physical_batches else "partial" if page_observations else "not_recorded", "reason": "page-level observation is opt-in; host requests are separate"},
@@ -5966,9 +6014,12 @@ def _static_kv_report(result: StaticRunResult) -> Dict[str, Any]:
     }
 
 
-def online_summary_dict(result: OnlineScenarioResult) -> Dict[str, Any]:
+def online_summary_dict(result: Union[OnlineScenarioResult, FastScenarioResult]) -> Dict[str, Any]:
     """Serialize only the shared online summary and bounded request rows."""
 
+    if isinstance(result, FastScenarioResult):
+        data = report_dict(result, include_visualization=False)
+        return {"summary": data["summary"], "requests": data["requests"]}
     if not isinstance(result, OnlineScenarioResult):
         raise TypeError("online_summary_dict requires an OnlineScenarioResult")
     with _compilation_scope(result.scenario):
@@ -6005,6 +6056,70 @@ def _runtime_placement_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
     }
 
 
+def _fast_report_dict(result: FastScenarioResult, **options) -> Dict[str, Any]:
+    approximation = to_primitive(dict(result.approximation))
+    if result.detailed is not None:
+        data = _report_dict_in_context(result.detailed, **options)
+        data.update(simulation_mode="fast", approximation=approximation,
+                    manifest=to_primitive(result.manifest))
+        return data
+    forecast = result.forecast
+    assert forecast is not None
+    elapsed = max(0.0, forecast.finish_ns - forecast.runtime_origin_ns)
+    e2e = forecast.finish_ns - forecast.arrival_ns
+    seconds = elapsed / 1e9
+    request = {
+        "request_id": forecast.request_id, "status": "forecast_completed",
+        "arrival_ns": forecast.arrival_ns, "first_token_ns": forecast.first_token_ns,
+        "finish_ns": forecast.finish_ns, "ttft_ns": forecast.ttft_ns,
+        "tpot_ns": forecast.tpot_ns, "e2e_ns": e2e,
+        "prompt_tokens": forecast.prompt_tokens,
+        "requested_output_tokens": forecast.output_tokens,
+        "visible_output_tokens": forecast.output_tokens,
+        "detailed_visible_output_tokens": forecast.sampled_decode_steps + 1,
+        "predicted_output_tokens": forecast.predicted_decode_steps,
+        "metric_semantics": {"ttft_ns": "detailed", "tpot_ns": "estimated_mean",
+                             "finish_ns": "estimated", "e2e_ns": "estimated"},
+    }
+    unavailable = {"scope": "detailed_prefix_only", "full_request_available": False}
+    return {
+        "scenario": result.scenario.name, "manifest": to_primitive(result.manifest),
+        "runtime_placement": _runtime_placement_payload(result.scenario),
+        "execution_mode": "continuous_batching", "simulation_mode": "fast",
+        "retention_policy": result.retention_policy, "trace_fidelity": "approximate",
+        "approximation": approximation,
+        "result_semantics": {
+            "precision": "detailed_prefill_and_contiguous_decode_prefix_with_forecast_suffix",
+            "ttft": "detailed_arrival_to_first_visible_token",
+            "tpot": "estimated_last_minus_first_visible_token_divided_by_output_minus_one",
+            "transactions": "only_sampled_prefix_executed; no_full_request_transaction_trace",
+            "controller_state": "discarded_at_detailed_prefix_cutoff; not_advanced_to_forecast_end",
+            "model_interval": "conditional_context_scaling_envelope; not_a_confidence_interval",
+        },
+        "summary": {
+            "makespan_ns": elapsed, "task_count": None, "batch_count": None,
+            "completed_requests": 1, "completed_requests_semantics": "forecast",
+            "rejected_requests": 0, "resource_accounted_bytes": None,
+            "throughput": {"requests_per_s": 1 / seconds if seconds else 0.0,
+                "visible_output_tokens_per_s": forecast.output_tokens / seconds if seconds else 0.0},
+            "ttft_ns": _percentiles((forecast.ttft_ns,)),
+            "tpot_ns": _percentiles((forecast.tpot_ns,)),
+            "tbt_ns": _percentiles(()), "e2e_ns": _percentiles((e2e,)),
+            "bottleneck_resource": None,
+        },
+        "requests": {forecast.request_id: request}, "resource_utilization": {},
+        "category_time_ns": {}, "critical_path_category_ns": {},
+        "storage_traffic": unavailable, "dram_traffic": unavailable,
+        "scheduler": unavailable, "owner_residency": unavailable,
+        "kv_cache": {"scope": "logical_forecast", **to_primitive(dict(forecast.storage_projection))},
+        "batch_history": [], "scheduler_events": [], "batch_trace_index": None,
+        "visualization": {"status": "unavailable_for_forecast"},
+        "component_timeseries": {"status": "unavailable_for_forecast"},
+        "validation_warnings": list(result.validation_warnings),
+        "validation_information": list(result.validation_information),
+    }
+
+
 def report_dict(
     result: RunResult,
     *,
@@ -6033,6 +6148,12 @@ def _report_dict_in_context(
     visualization_memory_segment_limit: int = DEFAULT_VISUALIZATION_MEMORY_SEGMENT_LIMIT,
     include_visualization: bool = True,
 ) -> Dict[str, Any]:
+    if isinstance(result, FastScenarioResult):
+        return _fast_report_dict(result,
+            visualization_offset=visualization_offset,
+            visualization_limit=visualization_limit,
+            visualization_memory_segment_limit=visualization_memory_segment_limit,
+            include_visualization=include_visualization)
     options = VisualizationTraceOptions(
         event_offset=visualization_offset,
         event_limit=visualization_limit,
@@ -6227,6 +6348,26 @@ def format_report(
 
     if data is None:
         data = report_dict(result)
+    if isinstance(result, FastScenarioResult):
+        approximation = data["approximation"]
+        if result.detailed is not None:
+            return ("快速模式请求使用详细执行：{}\n".format(
+                ", ".join(approximation.get("fallback_reasons", ())))
+                + format_report(result.detailed, data=data))
+        forecast = result.forecast
+        assert forecast is not None
+        return "\n".join([
+            "场景：{}".format(result.scenario.name),
+            "仿真模式：快速估算（Prefill 详细执行）",
+            "Decode：详细采样 {} 步，预测 {} 步".format(
+                forecast.sampled_decode_steps, forecast.predicted_decode_steps),
+            "TTFT={:.3f} ms，平均 TPOT≈{:.3f} ms，E2E≈{:.3f} ms".format(
+                forecast.ttft_ns / 1e6, forecast.tpot_ns / 1e6,
+                (forecast.finish_ns - forecast.arrival_ns) / 1e6),
+            "误差目标≤{:.0%}；本次结果尚无完整详细对照验证。".format(
+                approximation["target_relative_error"]),
+            "预测尾段不提供逐事务轨迹、物理计数或资源利用率。",
+        ])
     summary = data["summary"]
     manifest = data["manifest"]
     lines = [
@@ -6289,6 +6430,7 @@ def _fmt_ms(value_ns: Optional[float]) -> str:
 
 
 __all__ = [
+    "FastScenarioResult",
     "OnlineScenarioResult",
     "RunResult",
     "ScenarioResult",

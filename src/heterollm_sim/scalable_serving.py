@@ -209,11 +209,12 @@ def execute_cost_schedule(
             and key not in {"memory_accesses", "stateful_l2", "l2_execution"}})
             if task.task_id in original_physical_tasks else task for task in schedule.tasks)
     bulk_events = None
-    # The compiled drain returns a tuple of KernelEvent objects.  That fast
-    # path is useful for analytical graphs, but physical/stateful tasks carry
-    # per-dispatch DRAM/L2 details in each event and retaining the whole tuple
-    # defeats aggregate retention.  Let the normal kernel consume those events
-    # one at a time so completed physical payloads can be reclaimed promptly.
+    compiled_preview = None
+    # Deferred physical previews contain only their authored analytical
+    # envelope.  Keep their exact event/reduction results while executing the
+    # resident position graph; owner aliases alone do not require incremental
+    # dispatch.  Real physical/stateful previews still consume events one at
+    # a time so completed DRAM/L2 payloads can be reclaimed promptly.
     has_physical_or_stateful = bool(
         schedule.resource_owners
         or any(
@@ -222,7 +223,9 @@ def execute_cost_schedule(
             for task in submitted_tasks
         )
     )
-    if compiled_executor is not None and not has_physical_or_stateful:
+    if compiled_executor is not None and (
+        defer_physical_execution or not has_physical_or_stateful
+    ):
         compiled_tasks, compiled_layout = compiled_executor._compiled_layout(
             submitted_tasks
         )
@@ -231,11 +234,17 @@ def execute_cost_schedule(
             resource_owners=schedule.resource_owners,
             capture_physical_details=retain_task_metadata,
         )
-        bulk_events = kernel._drain_prevalidated_compiled(
-            compiled_tasks,
-            compiled_layout,
-            validate_tasks=False,
-        )
+        if defer_physical_execution:
+            # Bind the resident graph after its observer exists, then reduce
+            # each committed event before the next dispatch.  Cancellation
+            # therefore retains exactly the incremental execution prefix.
+            compiled_preview = (compiled_tasks, compiled_layout)
+        else:
+            bulk_events = kernel._drain_prevalidated_compiled(
+                compiled_tasks,
+                compiled_layout,
+                validate_tasks=False,
+            )
     else:
         kernel = UnifiedEventKernel.from_closed_graph(
             submitted_tasks,
@@ -244,7 +253,8 @@ def execute_cost_schedule(
             capture_physical_details=retain_task_metadata,
         )
     total_tasks = len(schedule.tasks)
-    execution_control.report("cohort_tasks", 0, total_tasks)
+    if compiled_preview is None:
+        execution_control.report("cohort_tasks", 0, total_tasks)
     resource_last_path: Dict[
         Tuple[str, int], Tuple[float, Optional[_PathLink]]
     ] = {}
@@ -263,19 +273,7 @@ def execute_cost_schedule(
         ]
     ] = []
 
-    bulk_iterator = iter(bulk_events) if bulk_events is not None else None
-    while bulk_iterator is not None or kernel.has_active_tasks:
-        if bulk_iterator is not None:
-            try:
-                event = next(bulk_iterator)
-            except StopIteration:
-                bulk_iterator = None
-                continue
-        else:
-            event = kernel.step()
-            if event is None:
-                kernel.assert_drained()
-                break
+    def observe_event(event):
         task = event.task
         task_id = task.task_id
         effective_ready_ns = event.effective_ready_ns
@@ -348,6 +346,29 @@ def execute_cost_schedule(
             execution_control.report(
                 "cohort_tasks", kernel.completed_count, total_tasks
             )
+
+    if compiled_preview is not None:
+        compiled_tasks, compiled_layout = compiled_preview
+        kernel._drain_prevalidated_compiled(
+            compiled_tasks, compiled_layout, validate_tasks=False,
+            event_observer=observe_event,
+            on_submitted=lambda: execution_control.report("cohort_tasks", 0, total_tasks),
+        )
+    else:
+        bulk_iterator = iter(bulk_events) if bulk_events is not None else None
+        while bulk_iterator is not None or kernel.has_active_tasks:
+            if bulk_iterator is not None:
+                try:
+                    event = next(bulk_iterator)
+                except StopIteration:
+                    bulk_iterator = None
+                    continue
+            else:
+                event = kernel.step()
+                if event is None:
+                    kernel.assert_drained()
+                    break
+            observe_event(event)
 
     if kernel.completed_count != total_tasks:
         raise ValueError("schedule contains a dependency cycle")

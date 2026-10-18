@@ -185,7 +185,7 @@ def test_numeric_exception_does_not_poison_reusable_workspace(monkeypatch):
 @pytest.mark.parametrize("foreign_count", [0, 200])
 @pytest.mark.parametrize("shared", [False, True])
 def test_internal_host_submit_preserves_all_accounting_and_state(foreign_count, shared):
-    from heterollm_sim._compiled_dram import HostTaskScope
+    from heterollm_sim._io_execution import HostTaskScope
 
     configured = config(channels=2, bank_groups_per_rank=2, banks_per_group=4,
         rows_per_bank=128, row_bytes=8192, max_outstanding_requests=2,
@@ -220,7 +220,7 @@ def test_internal_host_submit_preserves_all_accounting_and_state(foreign_count, 
 
 
 def test_internal_host_submit_declines_custom_or_tiny_paths_and_rolls_back(monkeypatch):
-    from heterollm_sim._compiled_dram import HostTaskScope
+    from heterollm_sim._io_execution import HostTaskScope
     from heterollm_sim import _dram_numeric
     core = populated()
     request = AccessRequest("ordinary", "read", 0, 256)
@@ -250,7 +250,7 @@ def test_internal_host_submit_declines_custom_or_tiny_paths_and_rolls_back(monke
 
 
 def test_host_task_scope_reuses_numeric_banks_without_changing_reports_or_final_state():
-    from heterollm_sim._compiled_dram import HostTaskScope
+    from heterollm_sim._io_execution import HostTaskScope
     old, new = populated(), populated()
     scope = HostTaskScope(new)
     requests = [AccessRequest(str(index), "read" if index % 3 else "write",
@@ -271,7 +271,7 @@ def test_host_task_scope_reuses_numeric_banks_without_changing_reports_or_final_
 
 
 def test_host_task_scope_flushes_each_shared_core_handoff():
-    from heterollm_sim.hbf_staging_runtime import _HostTask
+    from heterollm_sim._io_execution import _HostTask
     from heterollm_sim.memory_transfer import ResourceTimeline
     old_timeline, new_timeline = ResourceTimeline(), ResourceTimeline()
     old = [DramCore(config(), old_timeline, capture_details=False) for _ in range(2)]

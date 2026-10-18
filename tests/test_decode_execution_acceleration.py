@@ -1,11 +1,37 @@
 """Decode optimizations preserve physical execution and input ownership."""
-from dataclasses import replace
+from dataclasses import fields, is_dataclass, replace
 
 import pytest
 
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.memory_types import AccessRequest
 from test_dram_core_semantics import config
+
+
+def exact_values(left, right, seen=None):
+    """Include scalar types, float bits and mapping order in lowering checks."""
+    if seen is None:
+        seen = set()
+    assert type(left) is type(right)
+    pair = (id(left), id(right))
+    if pair in seen:
+        return
+    seen.add(pair)
+    if isinstance(left, float):
+        assert left.hex() == right.hex()
+    elif is_dataclass(left):
+        for field in fields(left):
+            exact_values(getattr(left, field.name), getattr(right, field.name), seen)
+    elif isinstance(left, dict):
+        assert tuple(left) == tuple(right)
+        for key in left:
+            exact_values(left[key], right[key], seen)
+    elif isinstance(left, (tuple, list)):
+        assert len(left) == len(right)
+        for first, second in zip(left, right, strict=True):
+            exact_values(first, second, seen)
+    else:
+        assert left == right
 
 
 @pytest.mark.parametrize("bursts", [4, 5, 16, 63])
@@ -76,11 +102,44 @@ def test_physical_dense_segment_rebinds_every_request_generation(medium, monkeyp
             return tuple(builder.tasks)
         emit("request-first", True)
         cache = context.invariant(("dense_mlp_task_segment_cache_v1",), dict)
-        assert cache and all(template.rebind_physical for template in cache.values())
+        assert cache and all(template.physical_bindings is not None for template in cache.values())
+        attached = []
+        attach = planner._attach_gddr_physical_task
+        def counted(task, configured):
+            attached.append(task.task_id)
+            return attach(task, configured)
+        monkeypatch.setattr(planner, "_attach_gddr_physical_task", counted)
         actual = emit("request-second", True)
+        # The input task is outside the cached fragment. Its complete static
+        # MLP binds slots without rebuilding any physical descriptor contract.
+        assert len(attached) == 1
         expected = emit("request-second", False)
         assert actual == expected
+        exact_values(actual, expected)
         assert any(task.metadata.get("memory_accesses") for task in actual)
+        for new, old in zip(actual, expected, strict=True):
+            if "physical_memory_config" in new.metadata:
+                assert new.metadata["physical_memory_config"] is old.metadata["physical_memory_config"]
+            for owner, configured in new.metadata.get("physical_memory_configs", {}).items():
+                assert configured is old.metadata["physical_memory_configs"][owner]
+            for owner, contract in new.metadata.get("hbf_host_staging_by_owner", {}).items():
+                old_contract = old.metadata["hbf_host_staging_by_owner"][owner]
+                assert contract["host_config"] is old_contract["host_config"]
+                assert contract is not old_contract
+                assert contract["routes"] is not old_contract["routes"]
+                for direction, hops in contract["routes"].items():
+                    for hop, old_hop in zip(hops, old_contract["routes"][direction], strict=True):
+                        assert hop is not old_hop
+                        assert hop["resource_capacities"] is not old_hop["resource_capacities"]
+        physical = next(task for task in actual if task.metadata.get("memory_accesses"))
+        physical.metadata["memory_accesses"][0]["byte_count"] = 1
+        if medium == "HBF":
+            contract = next(iter(physical.metadata["hbf_host_staging_by_owner"].values()))
+            hops = next(hops for hops in contract["routes"].values() if hops)
+            hops[0]["latency_ns"] = 999999.0
+        # Published task metadata cannot mutate the resident template or the
+        # independently bound routes/descriptors of the following request.
+        assert emit("request-third", True) == emit("request-third", False)
 
 
 @pytest.mark.parametrize("prompt,output,cpu_rows", [(64, 3, 1), (32, 7, 1), (32, 3, 2)])
@@ -394,6 +453,7 @@ def test_static_projection_replays_raw_sources_while_kv_context_pages_and_genera
                             lambda *args, **kwargs: args[-1]())
         expected = emit("cohort-second", 16, 7)
         assert actual == expected
+        exact_values(actual, expected)
         assert changed_rows == emit("cohort-third", 17, 8, cpu_rows=2)
         first_views = [task.metadata["generic_kv_storage"] for task in first
                        if "generic_kv_storage" in task.metadata]

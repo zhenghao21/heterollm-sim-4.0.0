@@ -1,0 +1,107 @@
+{
+  "purpose": "fast mode diagnostics; not a formal scan",
+  "target_relative_error": 0.1,
+  "cases": {
+    "HBM": {
+      "architecture": "HBM",
+      "model_id": "qwen2_5-0_5b",
+      "prompt_tokens": 65536,
+      "output_tokens": 5120,
+      "target_relative_error": 0.1,
+      "valid_comparison": true,
+      "within_target": true,
+      "relative_errors": {
+        "ttft_ns": 0.0,
+        "tpot_ns": 0.011255298156769053
+      },
+      "invalid_reasons": [],
+      "latency_ns": {
+        "ttft_ns": {
+          "detailed": 400130162.53257143,
+          "fast": 400130162.53257143
+        },
+        "tpot_ns": {
+          "detailed": 1242308.418062903,
+          "fast": 1256290.969710865
+        }
+      },
+      "wall_seconds": {
+        "detailed": 8989.847194300004,
+        "fast": 147.4155683000281
+      },
+      "speedup": {
+        "total_wall": 60.9830243709632,
+        "decode_wall": 144.0868460658571
+      },
+      "effective_mode": "fast",
+      "sampled_decode_steps": 56,
+      "predicted_decode_steps": 5063,
+      "fallback_reasons": [],
+      "prefix_validation_relative_error": 0.00013711621226650524,
+      "model_relative_half_width": 0.0192273318720666,
+      "full_request_validation_status": "within_target_for_this_request",
+      "transaction_equivalence_claimed": false
+    },
+    "HBF": {
+      "architecture": "HBF",
+      "model_id": "qwen2_5-0_5b",
+      "prompt_tokens": 65536,
+      "output_tokens": 5120,
+      "target_relative_error": 0.1,
+      "valid_comparison": true,
+      "within_target": true,
+      "relative_errors": {
+        "ttft_ns": 0.0,
+        "tpot_ns": 0.030129487237313856
+      },
+      "invalid_reasons": [],
+      "latency_ns": {
+        "ttft_ns": {
+          "detailed": 10528480132.556366,
+          "fast": 10528480132.556366
+        },
+        "tpot_ns": {
+          "detailed": 123495410.06350726,
+          "fast": 127216263.44488254
+        }
+      },
+      "wall_seconds": {
+        "detailed": 5047.799101599987,
+        "fast": 226.29222599999048
+      },
+      "speedup": {
+        "total_wall": 22.306551094690274,
+        "decode_wall": 97.54203977981423
+      },
+      "effective_mode": "fast",
+      "sampled_decode_steps": 56,
+      "predicted_decode_steps": 5063,
+      "fallback_reasons": [],
+      "prefix_validation_relative_error": 0.030273669787245116,
+      "model_relative_half_width": 0.01922733187206671,
+      "full_request_validation_status": "within_target_for_this_request",
+      "transaction_equivalence_claimed": false
+    }
+  },
+  "ratio_comparison": {
+    "ttft_ns": {
+      "hbf_over_hbm": {
+        "detailed": 26.31263803237859,
+        "fast": 26.31263803237859
+      },
+      "relative_error": 0.0,
+      "within_target": true
+    },
+    "tpot_ns": {
+      "hbf_over_hbm": {
+        "detailed": 99.40801194607553,
+        "fast": 101.26337489647109
+      },
+      "relative_error": 0.01866411885796501,
+      "within_target": true
+    }
+  },
+  "all_within_target": true,
+  "accuracy_scope": "these complete requests only; no global error guarantee",
+  "speedup_scope": "separate serial processes; same affinity and full output budget"
+}

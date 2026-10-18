@@ -1,0 +1,60 @@
+{
+  "exactly_equal": true,
+  "difference_count": 0,
+  "differences": [],
+  "timing": {
+    "baseline": {
+      "prefill_before_first_token_cohorts": [
+        1
+      ],
+      "prefill_before_first_token_wall_seconds": 1.820265999995172,
+      "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+      "wall_to_first_token_seconds": 2.5089311999909114,
+      "prefill_all_unprofiled": true,
+      "decode_unprofiled_cohorts": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "decode_unprofiled_steps": 8,
+      "decode_unprofiled_wall_seconds": 8.292835100000957,
+      "decode_unprofiled_seconds_per_step": 1.0366043875001196,
+      "total_wall_seconds": 10.822147499973653,
+      "total_cpu_seconds": 21.328125,
+      "transaction_capture": false,
+      "total_contains_profiling": false
+    },
+    "candidate": {
+      "prefill_before_first_token_cohorts": [
+        1
+      ],
+      "prefill_before_first_token_wall_seconds": 1.8177746,
+      "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+      "wall_to_first_token_seconds": 2.4715499,
+      "prefill_all_unprofiled": false,
+      "decode_unprofiled_cohorts": [],
+      "decode_unprofiled_steps": 0,
+      "decode_unprofiled_wall_seconds": 0,
+      "decode_unprofiled_seconds_per_step": null,
+      "total_wall_seconds": 10.2660281,
+      "total_cpu_seconds": 19.390625,
+      "transaction_capture": false,
+      "total_contains_profiling": true
+    }
+  },
+  "speedup": {
+    "prefill_unprofiled": null,
+    "decode_unprofiled": null,
+    "total_unprofiled": null
+  },
+  "notes": [
+    "Decode timing is instrumented, absent or uses different cohort windows; Decode speedup is unavailable.",
+    "Prefill timing is instrumented or the cohort windows differ; Prefill speedup is unavailable.",
+    "Total wall time includes instrumentation and must not establish speedup."
+  ]
+}

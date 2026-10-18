@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from heterollm_sim.planner import (
     _task_segment_capture_metadata,
     _task_segment_clone_metadata_with_plan,
+    _task_segment_omit_overwritten_builtin_branches,
 )
 
 
@@ -55,3 +56,38 @@ def test_metadata_replays_preserve_internal_aliases_and_isolate_mutable_bindings
         "buffer_id": "later.decode.weights", "byte_count": 16, "offset_bytes": 0}
     assert template["memory_accesses"][0]["byte_count"] == 16
     assert binding["byte_count"] == 16
+
+
+def test_overwrite_pruning_keeps_descriptor_aliases_routes_and_key_order():
+    descriptor = {"buffer_id": "source.decode.value", "byte_count": 16}
+    source = {"cost_model": {"cache": {"old_bytes": 16}},
+        "memory_accesses": [descriptor], "physical_address_bindings": (descriptor,),
+        "hbf_host_staging_by_owner": {"memory:hbf0": {"routes": {
+            "read": ({"resource_capacities": {"host0.link": 2}},)}}}}
+    template, plan = _task_segment_capture_metadata(
+        source, source_request_id="source", source_prefix="decode")
+    pruned = _task_segment_omit_overwritten_builtin_branches(plan, {"cost_model"})
+    first = _replay(template, pruned)
+    second = _replay(template, pruned, request="later")
+    # The slot replaces the borrowed old value before a TaskSpec is published.
+    assert first["cost_model"] is template["cost_model"]
+    first["cost_model"] = {"cache": {"old_bytes": 32}}
+    assert tuple(first) == tuple(source)
+    assert first["memory_accesses"][0] is first["physical_address_bindings"][0]
+    assert first["memory_accesses"][0] is not second["memory_accesses"][0]
+    assert first["memory_accesses"][0] is not template["memory_accesses"][0]
+    capacities = first["hbf_host_staging_by_owner"]["memory:hbf0"]["routes"]["read"][0]["resource_capacities"]
+    capacities["host0.link"] = 9
+    assert second["hbf_host_staging_by_owner"]["memory:hbf0"]["routes"]["read"][0]["resource_capacities"] == {"host0.link": 2}
+    assert template["cost_model"] == {"cache": {"old_bytes": 16}}
+
+
+def test_overwrite_pruning_keeps_unknown_copy_hooks():
+    template, plan = _task_segment_capture_metadata(
+        {"cost_model": {"custom": _PhysicalConfig()}},
+        source_request_id="source", source_prefix="decode")
+    pruned = _task_segment_omit_overwritten_builtin_branches(plan, {"cost_model"})
+    assert pruned == plan
+    actual = _replay(template, pruned)
+    assert actual["cost_model"] is not template["cost_model"]
+    assert actual["cost_model"]["custom"] is not template["cost_model"]["custom"]

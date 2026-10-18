@@ -208,6 +208,8 @@ class NandCore:
         # leave this host-level population at acknowledgement, before drain.
         self._inflight_operations: list[tuple[float, Operation]] = []
         self._acceptance_ns = 0.0
+        self._host_inflight: dict[int, list[tuple[float, Operation]]] = {}
+        self._host_acceptance_ns: dict[int, float] = {}
         # A positive write_buffer_bytes models a shared host-side staging
         # budget.  Entries are released when their media program completes;
         # zero preserves the existing write-through path.
@@ -379,6 +381,51 @@ class NandCore:
     def _host_bandwidth(self, operation) -> float:
         """Configured rates are device aggregates, divided among host channels."""
         return self.config.host_bandwidth_for(operation) / self.config.host_channels
+
+    def _admission_depth_scope(self) -> str:
+        if self.config.queue_scope == "host_channel":
+            return "outstanding page commands per host channel sampled at admission, including the admitted command"
+        return "outstanding host requests sampled at admission, including the admitted request; not NAND page queues"
+
+    def _admit_host_request(self, request, mapping=None):
+        """Find a free command credit without changing another host's clock."""
+        host_channel = None
+        if self.config.queue_scope == "host_channel":
+            if mapping is None:
+                mapping = map_nand_address(self.config, request.address)
+            host_channel = mapping.channel % self.config.host_channels
+            population = self._host_inflight.get(host_channel, ())
+            # _acceptance_ns is a device clock only when the caller explicitly
+            # advances/drains the core; ordinary host admissions never set it.
+            acceptance = max(self._host_acceptance_ns.get(host_channel, 0.), self._acceptance_ns)
+        else:
+            population = self._inflight_operations
+            acceptance = self._acceptance_ns
+        effective = max(request.arrival_ns, acceptance)
+        admitted = [(end, operation) for end, operation in population if end > effective]
+        write_limit = self.config.max_outstanding_write_requests
+        while True:
+            blocked_until = []
+            if len(admitted) >= self.config.max_outstanding_requests:
+                blocked_until.append(min(end for end, _ in admitted))
+            if request.operation is Operation.WRITE and write_limit is not None:
+                writes = [end for end, operation in admitted if operation is Operation.WRITE]
+                if len(writes) >= write_limit:
+                    blocked_until.append(min(writes))
+            if not blocked_until:
+                return effective, admitted, host_channel
+            effective = max(effective, max(blocked_until))
+            admitted = [(end, operation) for end, operation in admitted if end > effective]
+
+    def _record_host_admission(self, host_channel, effective, admitted, completion, operation):
+        population = [*admitted, (completion, operation)]
+        if host_channel is None:
+            self._acceptance_ns = effective
+            self._inflight_operations = population
+            self._inflight = [end for end, _ in population]
+        else:
+            self._host_acceptance_ns[host_channel] = effective
+            self._host_inflight[host_channel] = population
 
     @staticmethod
     def _bank_key(mapping) -> tuple[int, ...]:
@@ -811,6 +858,10 @@ class NandCore:
     def submit(self, request: AccessRequest) -> TransactionResult:
         self._nand_publish_numeric()
         self._validate_request(request)
+        if (self.config.protocol_mode == "ocp_hbf_0_7"
+                and request.address // self.config.page_bytes
+                != (request.address + request.byte_count - 1) // self.config.page_bytes):
+            return self._submit_ocp_page_commands(request)
         if (type(self) is NandCore and not self.capture_details and not self._observe_media
                 and self.config.protocol_mode == "ocp_hbf_0_7"
                 and request.address // self.config.page_bytes
@@ -819,11 +870,7 @@ class NandCore:
             if result is not None:
                 return result
         self._observation_events = []
-        effective_arrival = max(request.arrival_ns, self._acceptance_ns)
-        inflight = [end for end in self._inflight if end > effective_arrival]
-        if len(inflight) >= self.config.max_outstanding_requests:
-            effective_arrival = max(effective_arrival, min(inflight))
-            inflight = [end for end in inflight if end > effective_arrival]
+        effective_arrival, admitted, host_channel = self._admit_host_request(request)
         before_metrics = self.timeline.metrics_snapshot(
             max_intervals=(
                 self.config.max_expanded_segments
@@ -834,8 +881,7 @@ class NandCore:
         effective_arrival, write_buffer_bytes, write_buffer_wait_ns, drained = self._admit_write_buffer(
             request, effective_arrival
         )
-        admitted = [(end, operation) for end, operation in self._inflight_operations
-                    if end > effective_arrival]
+        admitted = [(end, operation) for end, operation in admitted if end > effective_arrival]
         admission_depths = {
             "host_outstanding_at_admission_peak": len(admitted) + 1,
             "host_read_outstanding_at_admission_peak":
@@ -871,7 +917,7 @@ class NandCore:
                                             if request.operation is not Operation.ERASE else 0),
             "host_admission_samples": 1,
             **admission_depths,
-            "host_admission_depth_scope": "outstanding host requests sampled at admission, including the admitted request; not NAND page queues",
+            "host_admission_depth_scope": self._admission_depth_scope(),
             "queue_wait_ns": effective_arrival - request.arrival_ns,
             "write_buffer_wait_ns": write_buffer_wait_ns,
             "write_buffer_bytes": write_buffer_bytes,
@@ -883,10 +929,84 @@ class NandCore:
             **self._observations(),
         })
         self._reserve_write_buffer(write_buffer_bytes)
-        self._acceptance_ns = effective_arrival
-        self._inflight = [*inflight, result.completion_ns]
-        self._inflight_operations = [*admitted, (result.completion_ns, request.operation)]
+        self._record_host_admission(host_channel, effective_arrival, admitted,
+                                    result.completion_ns, request.operation)
         return result
+
+    def _submit_ocp_page_commands(self, request):
+        """Split a validated host span into separately admitted page commands."""
+        # submit() prevalidated the complete span and every program frontier.
+        # Reaching a later invalid page must never leave earlier pages scheduled.
+        counters = {}
+        mappings, stages, observations = [], [], []
+        completion = request.arrival_ns
+        transfer_bytes = 0
+        page_count = 0
+        interval_counts = {"resource_intervals": 0, "resource_interval_payloads": 0}
+        intervals_truncated = False
+        details_truncated = False
+        maxima = {"array_units", "bandwidth_ceiling_gb_s", "write_buffer_peak_bytes",
+                  "write_buffer_occupancy_bytes", "write_buffer_draining_bytes",
+                  "host_outstanding_at_admission_peak", "host_read_outstanding_at_admission_peak",
+                  "host_write_outstanding_at_admission_peak", "host_ack_completion_ns",
+                  "media_drain_completion_ns"}
+        for segment in split_nand_request(request, self.config):
+            address = max(request.address, segment.address)
+            size = min(request.address + request.byte_count,
+                       segment.address + self.config.page_bytes) - address
+            result = self.submit(replace(request, address=address, byte_count=size))
+            page_count += 1
+            completion = max(completion, result.completion_ns)
+            transfer_bytes += result.transfer_bytes
+            observations.extend(self._observation_events)
+            if page_count <= self.config.max_expanded_segments and not details_truncated:
+                mappings.extend(result.mapping)
+                stages.extend(result.stages)
+            else:
+                mappings.clear()
+                stages.clear()
+                details_truncated = True
+            for key, value in result.counters.items():
+                if key == "nand_observations":
+                    continue
+                if key in {"resource_busy_ns", "resource_bytes"}:
+                    target = counters.setdefault(key, {})
+                    for resource, count in value.items():
+                        target[resource] = target.get(resource, 0) + count
+                elif key == "resource_last_intervals":
+                    counters.setdefault(key, {}).update(value)
+                elif key in {"resource_intervals", "resource_interval_payloads"}:
+                    target = counters.setdefault(key, {})
+                    for resource, intervals in value.items():
+                        remaining = max(0, self.config.max_expanded_segments - interval_counts[key])
+                        retained = intervals[:remaining]
+                        if retained:
+                            target.setdefault(resource, []).extend(retained)
+                            interval_counts[key] += len(retained)
+                        intervals_truncated |= len(retained) != len(intervals)
+                elif isinstance(value, bool):
+                    counters[key] = counters.get(key, False) or value
+                elif isinstance(value, (int, float)):
+                    counters[key] = (max(counters.get(key, value), value) if key in maxima
+                                     else counters.get(key, 0) + value)
+                elif value is not None or key not in counters:
+                    counters[key] = value
+        self._observation_events = observations
+        counters.update(self._observations())
+        if any(counters.get(key, 0) for key in ("staging_write_pages", "staging_read_hits", "read_cache_hits")):
+            counters["bandwidth_ceiling_gb_s"] = self.config.host_bandwidth_for(request.operation)
+            counters["bandwidth_ceiling_scope"] = (
+                "directional host upper bound for transactions using cached/staged data; host acknowledgement is not media drain")
+        for key in ("resource_intervals", "resource_interval_payloads"):
+            counters[key] = {resource: tuple(intervals)
+                             for resource, intervals in counters.get(key, {}).items()}
+        counters["intervals_truncated"] = counters.get("intervals_truncated", False) or intervals_truncated
+        counters["details_truncated"] = details_truncated
+        return TransactionResult(
+            request_id=request.request_id, operation=request.operation,
+            arrival_ns=request.arrival_ns, completion_ns=completion,
+            logical_bytes=request.byte_count, transfer_bytes=transfer_bytes,
+            mapping=tuple(mappings), stages=tuple(stages), counters=counters)
 
     def submit_read_pages(self, addresses, arrival_ns, *, link_program=()):
         """Execute full-page reads interleaved with external links in order.
@@ -897,7 +1017,7 @@ class NandCore:
         cache or admission transition is skipped by the compiled loop.
         """
         try:
-            from ._compiled_nand import execute_pages
+            from ._nand_execution import execute_pages
         except (ImportError, OSError):
             return None
         return execute_pages(self, addresses, arrival_ns, link_program)
@@ -905,7 +1025,7 @@ class NandCore:
     def submit_write_pages(self, addresses, arrival_ns, *, link_program=()):
         """Program full pages with each page's incoming links before admission."""
         try:
-            from ._compiled_nand import execute_pages
+            from ._nand_execution import execute_pages
         except (ImportError, OSError):
             return None
         return execute_pages(self, addresses, arrival_ns, link_program, operation=Operation.WRITE)
@@ -933,13 +1053,7 @@ class NandCore:
         if any(not isfinite(value) or value < 0 for resource in resources
                for value in timeline.lane_available.get(resource, (timeline.ready_ns.get(resource, 0.),))):
             return None
-        effective_arrival = max(request.arrival_ns, self._acceptance_ns)
-        inflight = [end for end in self._inflight if end > effective_arrival]
-        if len(inflight) >= config.max_outstanding_requests:
-            effective_arrival = max(effective_arrival, min(inflight))
-            inflight = [end for end in inflight if end > effective_arrival]
-        admitted = [(end, operation) for end, operation in self._inflight_operations
-                    if end > effective_arrival]
+        effective_arrival, admitted, host_channel = self._admit_host_request(request, mapping)
         before_busy = {resource: timeline.busy_ns.get(resource, 0.) for resource in resources}
         before_bytes = {resource: timeline.bytes_moved.get(resource, 0) for resource in resources}
         timeline._intervals = {}
@@ -1023,9 +1137,8 @@ class NandCore:
                  if timeline.bytes_moved.get(resource, 0) != before_bytes[resource]}
         busy = {resource: timeline.busy_ns[resource] - before_busy[resource]
                 for resource in timeline._touched if timeline.busy_ns[resource] != before_busy[resource]}
-        self._acceptance_ns = effective_arrival
-        self._inflight = [*inflight, completion]
-        self._inflight_operations = [*admitted, (completion, request.operation)]
+        self._record_host_admission(host_channel, effective_arrival, admitted,
+                                    completion, request.operation)
         return TransactionResult(
             request_id=request.request_id, operation=request.operation, arrival_ns=request.arrival_ns,
             completion_ns=completion, logical_bytes=request.byte_count, transfer_bytes=internal_bytes,
@@ -1056,7 +1169,7 @@ class NandCore:
                     sum(operation is Operation.READ for _, operation in admitted) + int(request.operation is Operation.READ),
                 "host_write_outstanding_at_admission_peak":
                     sum(operation is Operation.WRITE for _, operation in admitted) + int(request.operation is Operation.WRITE),
-                "host_admission_depth_scope": "outstanding host requests sampled at admission, including the admitted request; not NAND page queues",
+                "host_admission_depth_scope": self._admission_depth_scope(),
                 "queue_wait_ns": effective_arrival - request.arrival_ns,
                 "write_buffer_wait_ns": 0., "write_buffer_bytes": 0, "write_buffer_occupancy_bytes": 0,
                 "write_buffer_peak_bytes": 0, "write_buffer_draining_bytes": 0, "buffered_write_mode": False,

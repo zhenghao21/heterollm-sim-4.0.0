@@ -2981,6 +2981,14 @@ function ensureScenarioShape(scenario) {
   requireScenarioSchemaV4(scenario, "scenario");
   scenario.name ??= "untitled-scenario";
   scenario.assumptions = asArray(scenario.assumptions);
+  if (scenario.simulation === undefined) scenario.simulation = { mode: "detailed" };
+  if (!scenario.simulation || typeof scenario.simulation !== "object" || Array.isArray(scenario.simulation)) {
+    throw new Error("simulation 必须是对象");
+  }
+  scenario.simulation.mode ??= "detailed";
+  if (!["detailed", "fast"].includes(scenario.simulation.mode)) {
+    throw new Error("simulation.mode 必须是 detailed 或 fast");
+  }
 
   scenario.hardware = asObject(scenario.hardware);
   requireScenarioSchemaV4(scenario.hardware, "hardware", { inherited: true });
@@ -3070,6 +3078,7 @@ function createEmptyScenario() {
     name: "untitled-scenario",
     weights_resident: true,
     assumptions: [],
+    simulation: { mode: "detailed" },
     hardware: { name: "", components: [], links: [], require_connected: true, metadata: {} },
     model: { name: "", graph: { graph_id: "empty-model", operators: [], tensors: [], attributes: {} } },
     placement: {
@@ -4283,6 +4292,8 @@ function renderRunJobDialog() {
   if (!dom.runJobDialog) return;
   const estimate = asObject(state.runEstimate);
   const job = asObject(state.runJob);
+  dom.runSimulationMode.value = state.scenario?.simulation?.mode || "detailed";
+  dom.runSimulationMode.disabled = runJobIsActive(job) || state.runJobSubmitting || state.busy;
   const risk = ["low", "medium", "high", "critical"].includes(estimate.risk_level)
     ? estimate.risk_level
     : "low";
@@ -4514,6 +4525,15 @@ async function startRunJob() {
     renderRunJobDialog();
     showOperationError(uiText("后台仿真启动失败", "Failed to start background simulation"), error);
   }
+}
+
+async function changeRunSimulationMode() {
+  if (!state.scenario || state.runJobSubmitting || runJobIsActive() || state.busy) return;
+  const mode = dom.runSimulationMode.value;
+  if (!["detailed", "fast"].includes(mode) || mode === state.scenario.simulation?.mode) return;
+  state.scenario.simulation = { ...asObject(state.scenario.simulation), mode };
+  markScenarioChanged("", { mappingImpact: false, preserveModelArtifact: true });
+  await runScenario();
 }
 
 async function cancelRunJob() {
@@ -5069,6 +5089,7 @@ const NAND_PHYSICAL_REQUIRED_FIELDS = [
   "host_bandwidth_gb_s", "host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s", "internal_bandwidth_gb_s", "page_read_ns", "page_program_ns",
   "block_erase_ns", "front_ns", "planes_independent", "partial_page_policy", "max_outstanding_requests",
   "protocol_mode", "host_channels", "host_full_duplex", "read_cache_pages_per_bank",
+  "queue_scope",
 ];
 
 function physicalMemoryConfigForComponent(component) {
@@ -5113,6 +5134,9 @@ function validatePhysicalMemoryConfig(value, component) {
       throw new Error(`physical_memory_config.${field} 是必填字段。`);
     }
   });
+  if (nand && !Object.hasOwn(value, "max_outstanding_write_requests")) {
+    throw new Error("physical_memory_config.max_outstanding_write_requests 必须显式填写；null 表示共用总在途上限。");
+  }
   const integerFields = nand
     ? ["channels", "host_channels", "targets_per_channel", "dies_per_target", "luns_per_die", "planes_per_lun", "blocks_per_plane", "pages_per_block", "page_bytes", "host_granularity_bytes", "max_outstanding_requests"]
     : ["channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes", "max_outstanding_requests"];
@@ -5154,6 +5178,18 @@ function validatePhysicalMemoryConfig(value, component) {
     throw new Error("physical_memory_config.partial_page_policy 必须是 read_modify_write 或 reject。");
   }
   if (nand) {
+    if (!["device", "host_channel"].includes(value.queue_scope)) {
+      throw new Error("NAND 队列范围必须是 device（全设备）或 host_channel（每主机通道）。");
+    }
+    if (value.protocol_mode === "generic_nand" && value.queue_scope !== "device") {
+      throw new Error("通用 NAND 使用全设备请求队列；每主机通道的页命令队列只适用于 OCP HBF 0.7 模式。");
+    }
+    if (value.max_outstanding_write_requests !== null
+        && (!Number.isSafeInteger(value.max_outstanding_write_requests)
+          || value.max_outstanding_write_requests < 1
+          || value.max_outstanding_write_requests > Number(value.max_outstanding_requests))) {
+      throw new Error("写请求在途上限必须为 null 或不超过总在途上限的正整数；两者使用同一队列范围。");
+    }
     if (!["generic_nand", "ocp_hbf_0_7"].includes(value.protocol_mode)) {
       throw new Error("请选择逻辑页服务或 OCP HBF 0.7 完整页事务模式。");
     }
@@ -5170,8 +5206,9 @@ function validatePhysicalMemoryConfig(value, component) {
       kind !== "HBF" || Number(value.page_bytes) !== 4096 || Number(value.host_granularity_bytes) !== 64
       || value.host_full_duplex !== true || value.read_cache_pages_per_bank !== 2
       || Number(value.host_channels) > 16 || Number(value.write_buffer_bytes) !== 0
+      || value.queue_scope !== "host_channel" || value.parallel_units != null || value.planes_independent !== true
     )) {
-      throw new Error("OCP HBF 0.7 模式要求 4 KiB 页、64 B 读粒度、最多 16 个全双工主机通道、每 bank 两页读缓存，并关闭主机早确认缓冲。");
+      throw new Error("OCP HBF 0.7 模式要求 4 KiB 页、64 B 读粒度、最多 16 个全双工主机通道、每 bank 两页读缓存、每主机通道队列及独立 bank；parallel_units 必须为 null，并关闭主机早确认缓冲。");
     }
   }
   if (!nand && !(
@@ -5231,6 +5268,19 @@ function hbmGeometryMarkup(config) {
     <p class="muted">地址映射：${escapeHtml(config.address_mapping)}；请求调度：${escapeHtml(config.scheduler)}；调度窗口：${escapeHtml(config.scheduler_window)}；队列范围：${escapeHtml(config.queue_scope)}。这些是控制器假设，并非 JEDEC 指定算法。</p>
     ${metadata.hbm_parameter_profile ? `<p class="muted">时序参数组：${escapeHtml(metadata.hbm_parameter_profile.name)}。参数范围用于敏感性分析，尚未标定具体厂商器件。</p>` : ""}
     <p class="muted">${standard ? "标准组织不等于已验证的厂商器件，时序假设与几何来源分别记录。" : "这些参数不能作为 JEDEC 或厂商真实规格。"}${unknown.length ? ` 未确认：${escapeHtml(unknown.join("、"))}。` : ""}</p>
+  </div>`;
+}
+
+function nandQueueMarkup(config) {
+  if (!config || !["SSD", "HBF"].includes(String(config.kind || "").toUpperCase())) return "";
+  const scope = config.queue_scope === "host_channel" ? "每个主机通道" : "整个设备";
+  const writeLimit = config.max_outstanding_write_requests == null
+    ? "与读请求共用总额" : `最多 ${config.max_outstanding_write_requests} 个`;
+  const banks = Number(config.channels) * Number(config.targets_per_channel) * Number(config.dies_per_target)
+    * Number(config.luns_per_die) * (config.planes_independent ? Number(config.planes_per_lun) : 1);
+  return `<div class="nand-queue-provenance">
+    <p class="muted">队列按${scope}计：读写合计最多 ${escapeHtml(config.max_outstanding_requests)} 个在途请求；其中写请求${escapeHtml(writeLimit)}。写请求额度包含在总额内。</p>
+    ${config.protocol_mode === "ocp_hbf_0_7" ? `<p class="muted">独立 bank 数由几何派生：${escapeHtml(banks)}；不接受 parallel_units 覆盖。当前参数是研究参考，尚未校准真实器件。</p>` : ""}
   </div>`;
 }
 
@@ -9283,6 +9333,7 @@ function renderComponentInspector(componentId) {
       <h3>物理内存核心配置（Canonical physical_memory_config）</h3>
       <p class="muted">只有显式配置且通过后端几何校验，才会启用 DDR / LPDDR / HBM / SSD / HBF 物理核心。组件容量、带宽和旧 profile 不会自动转换为物理配置。</p>
       ${hbmGeometryMarkup(physicalMemoryConfig)}
+      ${nandQueueMarkup(physicalMemoryConfig)}
       <textarea data-inspector-physical-config rows="12" spellcheck="false" aria-label="physical_memory_config JSON">${escapeHtml(physicalMemoryConfig ? JSON.stringify(physicalMemoryConfig, null, 2) : "")}</textarea>
       ${dramBankGroupTimingMarkup(physicalMemoryConfig)}
       ${physicalMemoryConfig
@@ -16565,6 +16616,7 @@ function stepTraceEvent(direction) {
 function traceFidelityLabel(fidelity) {
   return {
     exact: uiText("精确事件", "Exact events"),
+    approximate: uiText("快速估算", "Approximate forecast"),
     representative: uiText("代表性事件", "Representative events"),
     aggregate: uiText("聚合事件", "Aggregate events"),
     unavailable: uiText("无 Trace", "Trace unavailable"),
@@ -18841,12 +18893,98 @@ function runManifestMarkup(report) {
   const assumptions = asArray(manifest[language === "en" ? "assumptions_en" : "assumptions_zh"])
     .map(String)
     .filter(Boolean);
+  const approximation = asObject(report?.approximation);
+  const predicted = approximation.effective_mode === "fast" || (report?.trace_fidelity === "approximate" && approximation.effective_mode !== "detailed");
+  const detailedFallback = report?.simulation_mode === "fast" && approximation.effective_mode === "detailed";
   const taskCount = formatResultNumber(summary.task_count);
+  const taskCountMarkup = summary.task_count == null
+    ? escapeHtml(predicted ? localText("全量任务数未统计", "Full-run task count not estimated") : localText("任务数不可用", "Task count unavailable"))
+    : `${taskCount.html} ${escapeHtml(localText("个任务", "Tasks"))}`;
+  let simulationNotice = "";
+  if (predicted) {
+    const rawTarget = approximation.target_relative_error;
+    const target = typeof rawTarget === "number" && Number.isFinite(rawTarget) && rawTarget > 0 && rawTarget <= .10 ? rawTarget : .10;
+    const targetPercent = formatResultNumber(target * 100).text;
+    const sampled = formatResultNumber(approximation.sampled_decode_steps).html;
+    const forecast = formatResultNumber(approximation.predicted_decode_steps).html;
+    simulationNotice = `<section class="run-simulation-notice is-approximate" role="note" data-simulation-mode="fast" data-i18n-skip>
+      <strong>${escapeHtml(localText("快速估算", "Fast estimate"))}</strong>
+      <p>${escapeHtml(localText(`误差目标≤${targetPercent}%；本次结果尚无完整详细对照验证。`, `Error target ≤${targetPercent}%; this result has not been validated against a complete detailed run.`))}</p>
+      <p>${escapeHtml(localText("详细采样 Decode", "Detailed Decode samples"))}：${sampled} ${escapeHtml(localText("步", "steps"))} · ${escapeHtml(localText("预测 Decode", "Predicted Decode"))}：${forecast} ${escapeHtml(localText("步", "steps"))}</p>
+      <p>${escapeHtml(localText("Prefill 保持详细执行。物理统计只覆盖已详细执行的前缀；预测尾段没有逐事务记录，全量资源利用率未估算。", "Prefill remains detailed. Physical statistics cover the detailed prefix only; the forecast suffix has no transaction records, and full-run resource utilization is not estimated."))}</p>
+    </section>`;
+  } else if (detailedFallback) {
+    const reasonLabels = {
+      fast_mode_requires_single_request: ["快速模式目前只支持单请求", "Fast mode currently requires a single request"],
+      fast_mode_requires_nonempty_prompt: ["快速模式需要非空输入", "Fast mode requires a nonempty prompt"],
+      fast_mode_requires_single_rank: ["快速模式目前只支持单个并行 Rank", "Fast mode currently requires a single rank"],
+      fast_tail_requires_single_rank: ["快速模式目前只支持单个并行 Rank", "Fast mode currently requires a single rank"],
+      speculative_decode_requires_detailed_mode: ["推测解码需要详细执行", "Speculative Decode requires detailed execution"],
+      mtp_requires_detailed_execution: ["多 Token 预测需要详细执行", "Multi-Token prediction requires detailed execution"],
+      fast_mode_requires_contiguous_generic_kv: ["当前 KV 布局需要详细执行", "The current KV layout requires detailed execution"],
+      fast_tail_requires_contiguous_generic_kv: ["当前 KV 布局需要详细执行", "The current KV layout requires detailed execution"],
+      kv_offload_or_prefetch_requires_detailed_mode: ["KV 卸载或预取需要详细执行", "KV offload or prefetch requires detailed execution"],
+      kv_offload_or_prefetch_requires_detailed_execution: ["KV 卸载或预取需要详细执行", "KV offload or prefetch requires detailed execution"],
+      linear_attention_requires_detailed_mode: ["线性注意力需要详细执行", "Linear attention requires detailed execution"],
+      linear_attention_requires_detailed_execution: ["线性注意力需要详细执行", "Linear attention requires detailed execution"],
+      fast_mode_requires_dense_layers: ["快速模式目前只支持稠密模型层", "Fast mode currently requires dense model layers"],
+      fast_mode_requires_bf16_unquantized_layers: ["快速模式目前只支持未量化的 BF16 模型层", "Fast mode currently requires unquantized BF16 model layers"],
+      fast_mode_requires_bf16_kv: ["快速模式目前只支持 BF16 KV 缓存", "Fast mode currently requires a BF16 KV cache"],
+      fast_mode_requires_resident_weights: ["快速模式需要权重预先驻留", "Fast mode requires resident weights"],
+      fast_mode_requires_flash_attention: ["快速模式需要启用 Flash Attention", "Fast mode requires Flash Attention"],
+      fast_mode_requires_one_gpu_for_model_operators: ["快速模式需要全部模型算子在同一张 GPU 上执行", "Fast mode requires all model operators to execute on one GPU"],
+      fast_mode_requires_physical_hbm_or_hbf: ["快速模式需要完整的 HBM 或 HBF 物理配置", "Fast mode requires a physical HBM or HBF configuration"],
+      fast_mode_requires_ocp_hbf_protocol: ["快速模式目前只支持 OCP HBF 0.7 协议", "Fast mode currently requires the OCP HBF 0.7 protocol"],
+      stateful_gpu_cache_requires_detailed_mode: ["有状态 GPU 缓存需要详细执行", "A stateful GPU cache requires detailed execution"],
+      llama_runtime_requires_detailed_mode: ["llama.cpp 运行时需要详细执行", "The llama.cpp runtime requires detailed execution"],
+      shared_residency_requires_detailed_mode: ["共享驻留状态需要详细执行", "Shared residency requires detailed execution"],
+      custom_batch_lowerer_requires_detailed_mode: ["自定义执行流程需要详细执行", "Custom execution requires detailed execution"],
+      stateful_serving_extension_requires_detailed_mode: ["有状态服务扩展需要详细执行", "Stateful serving extensions require detailed execution"],
+      retained_or_agent_kv_requires_detailed_mode: ["保留的请求状态需要详细执行", "Retained request state requires detailed execution"],
+      request_extensions_require_detailed_mode: ["当前请求扩展需要详细执行", "The current request extensions require detailed execution"],
+      output_shorter_than_calibration_budget: ["输出较短，详细执行比采样预测更合适", "The output is too short to benefit from sampling"],
+      context_growth_exceeds_fast_domain: ["上下文增长超出快速模式范围", "Context growth exceeds the fast-mode domain"],
+      request_completed_during_calibration: ["采样期间已完成整个请求", "The complete request finished during sampling"],
+      no_remaining_decode_steps: ["没有剩余 Decode 需要预测", "No remaining Decode steps require prediction"],
+      prefix_calibration_exceeds_error_budget: ["样本波动超出误差预算", "Sample variation exceeds the error budget"],
+      hbf_erase_observations_unavailable: ["缺少 HBF 擦除观测，无法估计尾段", "HBF erase observations are unavailable for forecasting"],
+      maintenance_recalibration_exceeds_sample_budget: ["擦除后的校准窗口超出采样预算", "Calibration after an erase exceeds the sampling budget"],
+      calibration_does_not_cover_hbf_kv_page_period: ["采样窗口尚未覆盖完整 HBF KV 页写入周期", "The sampling window does not cover a complete HBF KV page-write period"],
+      detailed_decode_step_count_does_not_match_runtime: ["详细 Decode 步数与当前运行状态不一致", "The detailed Decode step count does not match runtime state"],
+      exact_prefill_and_first_token_required: ["需要完整的详细 Prefill 与首 Token", "Detailed Prefill and the first Token are required"],
+      request_not_running_or_finished: ["当前请求状态不适合预测", "The current request state is unsuitable for prediction"],
+      final_kv_exceeds_logical_capacity: ["预计 KV 容量超限，需要详细执行", "Projected KV capacity exceeds the limit"],
+      unsupported_kv_owner_or_offload: ["当前 KV 存储方案需要详细执行", "The current KV storage requires detailed execution"],
+      hbf_kv_rows_require_aligned_page_period: ["HBF KV 写入周期未满足页对齐条件", "The HBF KV write period does not meet page-alignment requirements"],
+      hbf_full_kv_extent_not_reserved: ["HBF 尚未预留完整 KV 地址空间", "The complete HBF KV extent is not reserved"],
+      hbf_staging_state_unavailable: ["HBF 暂存状态不足以支持预测", "HBF staging state is unavailable for prediction"],
+      hbf_logical_page_headroom_exhausted: ["HBF 剩余逻辑页不足", "HBF logical page headroom is insufficient"],
+      hbf_decode_media_budget_uncalibrated: ["HBF 媒体写入量尚未校准", "The HBF media write budget is not calibrated"],
+      hbf_program_headroom_may_require_gc: ["HBF 后续写入可能触发垃圾回收", "Later HBF writes may trigger garbage collection"],
+      hbf_nand_program_frontier_unavailable: ["HBF 页写入状态不足以支持预测", "HBF page-program state is unavailable for prediction"],
+      hbf_free_block_reuse_may_require_erase: ["HBF 后续可能需要擦除存储块", "Later HBF execution may require block erasure"],
+      hbf_host_tail_slots_may_require_pressure_flush: ["HOST 尾页暂存可能触发压力刷写", "HOST tail-page staging may require a pressure flush"],
+    };
+    const reasons = asArray(approximation.fallback_reasons).map((reason) => {
+      const code = String(reason).split(":", 1)[0];
+      const pair = reasonLabels[code];
+      const label = pair ? localText(...pair) : code.startsWith("hbf_observed_")
+        ? localText("HBF 已观察到需要详细执行的存储维护事件", "HBF observed storage maintenance that requires detailed execution")
+        : String(reason);
+      return `<li>${escapeHtml(label)}</li>`;
+    }).join("");
+    simulationNotice = `<section class="run-simulation-notice is-detailed" role="note" data-simulation-mode="detailed" data-i18n-skip>
+      <strong>${escapeHtml(localText("本场景使用详细执行", "This scenario used detailed execution"))}</strong>
+      <p>${escapeHtml(localText("已选择快速模式，但本次未采用预测尾段，结果保留详细执行语义。", "Fast mode was requested, but no suffix was predicted; this result retains detailed-execution semantics."))}</p>
+      ${reasons ? `<ul>${reasons}</ul>` : ""}
+    </section>`;
+  }
   const fact = (label, value, className = "") => `<div class="${className}"><dt>${escapeHtml(label)}</dt><dd data-i18n-skip>${escapeHtml(value ?? "—")}</dd></div>`;
   return `
+    ${simulationNotice}
     <div class="run-manifest-summary run-manifest-bar-help" data-concept-help="analytical_report">
       <strong data-i18n-skip>${escapeHtml(evidence)}</strong>
-      <span data-i18n-skip>${taskCount.html} ${escapeHtml(localText("个任务", "Tasks"))}</span>
+      <span data-i18n-skip>${taskCountMarkup}</span>
     </div>
     <details class="run-technical-details">
       <summary data-concept-help="run_manifest">${escapeHtml(localText("运行技术详情", "Technical Details"))}</summary>
@@ -19541,9 +19679,13 @@ function renderUtilization(report) {
   const bottleneckValue = Number(bottleneck?.utilization);
   dom.bottleneckMeta.innerHTML = bottleneck
     ? `${escapeHtml(bottleneck.resource_id)} · ${formatResultNumber((Number.isFinite(bottleneckValue) ? Math.min(1, Math.max(0, bottleneckValue)) : 0) * 100).html}%`
-    : escapeHtml(uiText("无资源占用", "No utilization data"));
+    : escapeHtml(report?.approximation?.effective_mode === "fast"
+      ? uiText("全量资源利用率未估算", "Full-run utilization not estimated")
+      : uiText("无资源占用", "No utilization data"));
   if (!utilization.length) {
-    dom.utilizationList.innerHTML = `<p class="muted">${escapeHtml(uiText("报告未返回资源利用率。", "The report did not return resource utilization."))}</p>`;
+    dom.utilizationList.innerHTML = `<p class="muted">${escapeHtml(report?.approximation?.effective_mode === "fast"
+      ? uiText("快速估算不提供全量资源利用率；已详细执行前缀的物理统计不能代表完整请求。", "Fast estimates do not provide full-run utilization; physical statistics from the detailed prefix do not represent the complete request.")
+      : uiText("报告未返回资源利用率。", "The report did not return resource utilization."))}</p>`;
     return;
   }
   dom.utilizationList.innerHTML = utilization.map(([resourceId, value]) => {
@@ -19603,15 +19745,19 @@ function renderRequestResults(requests) {
     const tpot = formatResultDurationNs(tpotValue);
     const e2e = formatResultDurationNs(e2eValue);
     const status = String(request.status ?? "—");
+    const statusLabel = status === "forecast_completed" ? uiText("预测完成", "Forecast completed") : status;
+    const tbtTitle = status === "forecast_completed"
+      ? uiText("快速模式预测平均 TPOT，未生成完整逐 Token 间隔。", "Fast mode predicts mean TPOT without generating every Token interval.")
+      : uiText("原始 tbt_ns 数组含 {count} 项", "Raw tbt_ns array contains {count} items", { count: formatResultNumber(tbt.length).text });
     const rejectionReason = request.rejection_reason ?? "—";
     const statusClass = slug(status);
     return `<tr>
       <td${dataLabel("请求（Request）", "Request")}><span class="mono-readout">${escapeHtml(requestId)}</span></td>
-      <td${dataLabel("状态（Status）", "Status")}><span class="request-status is-${escapeHtml(statusClass)}">${escapeHtml(status)}</span></td>
+      <td${dataLabel("状态（Status）", "Status")}><span class="request-status is-${escapeHtml(statusClass)}">${escapeHtml(statusLabel)}</span></td>
       <td${dataLabel("拒绝原因（Rejection Reason）", "Rejection Reason")} class="request-rejection-reason" title="${escapeHtml(rejectionReason)}">${escapeHtml(rejectionReason)}</td>
       <td${dataLabel("到达时间（Arrival）", "Arrival")} title="${escapeHtml(resultWithUnit(request.arrival_ns, "ns").text)}">${arrival.html}</td>
       <td${dataLabel(`首 Token 延迟（TTFT · ${boundaryLabel}）`, `Time to First Token (TTFT) · ${boundaryLabel}`)} title="${escapeHtml(resultWithUnit(ttftValue, "ns").text)}">${ttft.html}</td>
-      <td${dataLabel("Token 间延迟（TBT）p50 / p95", "Time Between Tokens (TBT) p50 / p95")} title="${escapeHtml(uiText("原始 tbt_ns 数组含 {count} 项", "Raw tbt_ns array contains {count} items", { count: formatResultNumber(tbt.length).text }))}">${tbt50.html} / ${tbt95.html}</td>
+      <td${dataLabel("Token 间延迟（TBT）p50 / p95", "Time Between Tokens (TBT) p50 / p95")} title="${escapeHtml(tbtTitle)}">${tbt50.html} / ${tbt95.html}</td>
       <td${dataLabel(`每输出 Token 时间（TPOT · ${boundaryLabel}）`, `Time per Output Token (TPOT) · ${boundaryLabel}`)} title="${escapeHtml(resultWithUnit(tpotValue, "ns").text)}">${tpot.html}</td>
       <td${dataLabel(`端到端延迟（E2E · ${boundaryLabel}）`, `End-to-End Latency (E2E) · ${boundaryLabel}`)} title="${escapeHtml(resultWithUnit(e2eValue, "ns").text)}">${e2e.html}</td>
       <td${dataLabel("可见 Token 数（Visible Tokens）", "Visible Tokens")}>${formatResultNumber(request.visible_output_tokens).html}</td>
@@ -20025,7 +20171,7 @@ function cacheDom() {
     "customWorkspaceEnabled", "workspaceBackgroundInput", "compactLayoutInput", "topologyGridInput", "reduceMotionInput", "resetSettingsButton",
     "architectureScanButton", "architectureScanDialog", "closeArchitectureScanButton", "architectureScanBackend", "architectureScanTopN", "runArchitectureScanButton", "architectureScanStatus", "architectureScanSummary", "architectureScanBody", "architectureScanDiagnostics",
     "kvAnalysisButton", "kvAnalysisDialog", "closeKvAnalysisButton", "runKvAnalysisButton", "kvAnalysisScope", "kvAnalysisStatus", "kvAnalysisSummary", "kvAnalysisBody", "kvAnalysisNote",
-    "runJobDialog", "closeRunJobDialogButton", "runEstimateRisk", "runEstimateSummary", "runEstimateWarnings", "runNativeReferenceInput", "r0ReferenceInput", "directScoreButton", "openDirectScoreButton", "directScoreDialog", "closeDirectScoreButton", "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount", "runProgressBar", "runProgressMessage", "dismissRunJobButton", "cancelRunJobButton", "startRunJobButton",
+    "runJobDialog", "closeRunJobDialogButton", "runSimulationMode", "runEstimateRisk", "runEstimateSummary", "runEstimateWarnings", "runNativeReferenceInput", "r0ReferenceInput", "directScoreButton", "openDirectScoreButton", "directScoreDialog", "closeDirectScoreButton", "runJobProgressPanel", "runJobStatus", "runProgressStage", "runProgressCount", "runProgressBar", "runProgressMessage", "dismissRunJobButton", "cancelRunJobButton", "startRunJobButton",
     "toastRegion", "busyOverlay", "busyTitle", "busyDetail",
   ];
   ids.forEach((id) => { dom[id] = document.getElementById(id); });
@@ -20093,6 +20239,7 @@ function bindStaticEvents() {
   dom.runKvAnalysisButton.addEventListener("click", () => { void runKvAnalysis(); });
   dom.closeKvAnalysisButton.addEventListener("click", () => dom.kvAnalysisDialog.close("close"));
   dom.startRunJobButton.addEventListener("click", () => { void startRunJob(); });
+  dom.runSimulationMode.addEventListener("change", () => { void changeRunSimulationMode(); });
   dom.openDirectScoreButton.addEventListener("click", openDirectScoreDialog);
   dom.closeDirectScoreButton.addEventListener("click", () => dom.directScoreDialog.close("close"));
   dom.directScoreButton.addEventListener("click", () => { void runDirectSimulationScore(); });

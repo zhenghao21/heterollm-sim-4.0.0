@@ -914,6 +914,14 @@ PLACEHOLDERS / BOUNDARIES
         <button type="button" class="icon-button" id="closeRunJobDialogButton" aria-label="关闭后台仿真窗口">×</button>
       </header>
       <section class="run-estimate-card" aria-labelledby="runEstimateTitle">
+        <label class="field" for="runSimulationMode">
+          <span data-i18n-zh="仿真模式" data-i18n-en="Simulation mode">仿真模式</span>
+          <select id="runSimulationMode" aria-describedby="runSimulationModeHelp">
+            <option value="detailed" data-i18n-zh="详细模式（逐 Token、逐事务）" data-i18n-en="Detailed (every Token and transaction)">详细模式（逐 Token、逐事务）</option>
+            <option value="fast" data-i18n-zh="快速模式（采样预测 Decode）" data-i18n-en="Fast (sampled Decode prediction)">快速模式（采样预测 Decode）</option>
+          </select>
+        </label>
+        <p class="muted" id="runSimulationModeHelp" data-i18n-zh="快速模式保留详细 Prefill，通过少量详细 Decode 样本预测其余输出；10% 是相对详细仿真的误差目标，需要独立对照验证，不代表逐事务精确或真机精度。" data-i18n-en="Fast mode keeps detailed Prefill and predicts remaining output from detailed Decode samples. The 10% error target is relative to detailed simulation and requires independent validation; it does not imply exact transactions or hardware accuracy.">快速模式保留详细 Prefill，通过少量详细 Decode 样本预测其余输出；10% 是相对详细仿真的误差目标，需要独立对照验证，不代表逐事务精确或真机精度。</p>
         <div class="run-job-section-head">
           <div><h3 id="runEstimateTitle">运行规模估算（Run Estimate）</h3></div>
           <strong class="run-risk-badge is-low" id="runEstimateRisk">正在估算</strong>

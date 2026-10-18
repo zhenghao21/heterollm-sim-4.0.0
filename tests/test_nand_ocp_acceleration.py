@@ -44,11 +44,11 @@ def _links(timeline, program, arrival):
 
 
 def test_numeric_program_cache_observes_route_timing_and_direction_changes(monkeypatch):
-    from heterollm_sim import _compiled_nand
+    from heterollm_sim import _nand_execution
     configured = replace(resolve_physical_config("hbf_ocp_0_7"), channels=2,
         host_channels=2, capacity_bytes=None)
     old, new = (NandCore(configured, capture_details=False) for _ in range(2))
-    cached = _compiled_nand._numeric_program
+    cached = _nand_execution._numeric_program
     addresses = np.arange(16, dtype=np.int64) * 4096
     route = [["link", "read", [["wire", .1, 4096], ["credit", .3, 64]]]]
     for index in range(8):
@@ -58,7 +58,7 @@ def test_numeric_program_cache_observes_route_timing_and_direction_changes(monke
         for core in (old, new):
             core.config = replace(core.config, page_read_ns=10. + index * 1.25)
         with monkeypatch.context() as patch:
-            patch.setattr(_compiled_nand, "_numeric_program", cached.__wrapped__)
+            patch.setattr(_nand_execution, "_numeric_program", cached.__wrapped__)
             expected = old.submit_read_pages(addresses, index * .7, link_program=route)
         actual = new.submit_read_pages(addresses, index * .7, link_program=route)
         assert np.array_equal(actual[0], expected[0])
@@ -70,7 +70,7 @@ def test_numeric_program_cache_observes_route_timing_and_direction_changes(monke
 
 
 def test_single_lane_packing_rereads_mutated_calendars_and_preserves_all_counters():
-    from heterollm_sim import _compiled_nand
+    from heterollm_sim import _nand_execution
 
     config = replace(resolve_physical_config("hbf_ocp_0_7"), channels=2, host_channels=2,
                      capacity_bytes=None)
@@ -79,7 +79,7 @@ def test_single_lane_packing_rereads_mutated_calendars_and_preserves_all_counter
     addresses = np.arange(64, dtype=np.int64) * 4096
     for core in (reference, actual):
         core.submit_read_pages(addresses, 0., link_program=route)
-    pack = _compiled_nand._single_lane_timeline_state
+    pack = _nand_execution._single_lane_timeline_state
     fast_calls = []
     def observed(*args):
         value = pack(*args)
@@ -96,9 +96,9 @@ def test_single_lane_packing_rereads_mutated_calendars_and_preserves_all_counter
             timeline.directions["wire"] = "write"
             # One-lane histories are intentionally ignored by ResourceTimeline.
             timeline.lane_directions["wire"] = ["stale-history"]
-        with patch.object(_compiled_nand, "_single_lane_timeline_state", return_value=None):
+        with patch.object(_nand_execution, "_single_lane_timeline_state", return_value=None):
             expected = reference.submit_read_pages(addresses, wave * 100., link_program=route)
-        with patch.object(_compiled_nand, "_single_lane_timeline_state", side_effect=observed):
+        with patch.object(_nand_execution, "_single_lane_timeline_state", side_effect=observed):
             result = actual.submit_read_pages(addresses, wave * 100., link_program=route)
         assert np.array_equal(result[0], expected[0])
         assert result[1:] == expected[1:]
@@ -111,7 +111,7 @@ def test_single_lane_packing_rereads_mutated_calendars_and_preserves_all_counter
 
 @pytest.mark.parametrize("unusual", ["shared", "multilane", "custom_direction", "nonfinite"])
 def test_single_lane_packing_leaves_unusual_calendars_to_the_general_path(unusual):
-    from heterollm_sim._compiled_nand import _single_lane_timeline_state
+    from heterollm_sim._nand_execution import _single_lane_timeline_state
 
     timeline = ResourceTimeline(lane_available={"a": [0.], "b": [1.]})
     if unusual == "shared":
@@ -129,24 +129,25 @@ def test_single_lane_packing_leaves_unusual_calendars_to_the_general_path(unusua
 
 @pytest.mark.parametrize("depth", [1, 3, 32])
 @pytest.mark.parametrize("resident", [False, True])
-def test_admission_queue_preserves_overtaking_mixed_directions_and_submission_order(depth, resident):
+@pytest.mark.parametrize("write_limit", [None, 1])
+def test_admission_queue_preserves_overtaking_mixed_directions_and_submission_order(depth, resident, write_limit):
     from random import Random
 
-    config = replace(resolve_physical_config("hbf_ocp_0_7"), max_outstanding_requests=depth)
+    config = replace(resolve_physical_config("hbf_ocp_0_7"), max_outstanding_requests=depth,
+                     max_outstanding_write_requests=write_limit)
     expected, actual = (NandCore(config, capture_details=False) for _ in range(2))
     actual._nand_numeric_enabled = resident
     # Start with a non-monotone mixed queue and one slow bank. Later cache
     # hits can also overtake misses, so both ordered and heap states occur.
     for core in (expected, actual):
-        core._inflight = [7000., 2000., 5000.]
-        core._inflight_operations = [(7000., Operation.READ), (2000., Operation.WRITE),
-                                     (5000., Operation.READ)]
+        core._host_inflight = {0: [(7000., Operation.READ), (2000., Operation.WRITE),
+                                  (5000., Operation.READ)]}
         core.timeline.lane_available["nand:array:0"] = [100000.]
     rng = Random(817)
     for wave in range(24):
         operation = Operation.READ if wave % 3 else Operation.WRITE
         count = rng.randrange(2, 20)
-        addresses = [((rng.randrange(4) * config.pages_per_block * config.channels
+        addresses = [((rng.randrange(4) * config.pages_per_block * config.array_units
                        + rng.randrange(8)) * 4096) for _ in range(count)]
         arrivals = [rng.choice((0., 12.5, 4000., 90000.)) for _ in addresses]
         expected_pages = [_reference_submit(expected, AccessRequest(str(index), operation,
@@ -155,8 +156,8 @@ def test_admission_queue_preserves_overtaking_mixed_directions_and_submission_or
         immutable = np.frombuffer(np.asarray(addresses, dtype=np.int64).tobytes(), dtype=np.int64)
         completed, bill, _ = getattr(actual, "submit_" + operation.value + "_pages")(immutable, arrivals)
         assert completed.tolist() == [result.completion_ns for result in expected_pages]
-        assert actual._inflight == expected._inflight
-        assert actual._inflight_operations == expected._inflight_operations
+        assert actual._host_inflight == expected._host_inflight
+        assert actual._host_acceptance_ns == expected._host_acceptance_ns
         for name in ("queue_wait_ns", "host_transfer_bytes", "internal_transfer_bytes"):
             # Preserve the page machine's left-to-right additions; Python's
             # compensated sum would itself change floating-point rounding.
@@ -174,7 +175,8 @@ def test_admission_queue_preserves_overtaking_mixed_directions_and_submission_or
 
 @pytest.mark.parametrize("host_lanes", [1, 3])
 def test_single_page_summary_preserves_cache_writes_admission_and_complete_state(host_lanes):
-    config = replace(resolve_physical_config("hbf_ocp_0_7"), max_outstanding_requests=3)
+    config = replace(resolve_physical_config("hbf_ocp_0_7"), max_outstanding_requests=3,
+                     max_outstanding_write_requests=None)
     timeline = ResourceTimeline(lane_available={"nand:host:0:read": [0.] * host_lanes})
     expected = NandCore(config, deepcopy(timeline), capture_details=False)
     actual = NandCore(config, deepcopy(timeline), capture_details=False)
@@ -188,16 +190,45 @@ def test_single_page_summary_preserves_cache_writes_admission_and_complete_state
     assert vars(actual) == vars(expected)
 
 
-@pytest.mark.parametrize("independent,parallel", [(False, None), (True, 3), (True, None)])
-def test_compiled_pages_preserve_each_completion_cache_slots_and_multilane_links(independent, parallel):
+def test_compiled_preset_write_credits_are_64_per_host_and_match_the_page_machine():
+    config = resolve_physical_config("hbf_ocp_0_7")
+    expected, actual = (NandCore(config, capture_details=False) for _ in range(2))
+    # Five consecutive pages in each of 16 banks, first on host 0, then host 1.
+    addresses = [((page * config.array_units + plane * config.channels + host) * config.page_bytes)
+                 for host in (0, 1) for page in range(5) for plane in range(16)]
+    expected_pages = [_reference_submit(expected, AccessRequest(str(index), "write", address, 4096, 0.))
+                      for index, address in enumerate(addresses)]
+    completed, bill, _ = actual.submit_write_pages(addresses, 0.)
+    assert completed.tolist() == [page.completion_ns for page in expected_pages]
+    assert bill.counters["host_write_outstanding_at_admission_peak"] == 64
+    assert bill.counters["host_outstanding_at_admission_peak"] == 64
+    assert bill.counters["host_admission_samples"] == len(addresses)
+    assert set(actual._host_inflight) == {0, 1}
+    assert all(len(queue) == 64 for queue in actual._host_inflight.values())
+    assert actual._host_inflight == expected._host_inflight
+    assert actual._host_acceptance_ns == expected._host_acceptance_ns
+    for name in ("resource_busy_ns", "resource_bytes"):
+        assert bill.counters[name] == _sum_metric(expected_pages, name)
+    for name in ("queue_wait_ns", "pages_programmed", "erase_operations",
+                 "host_transfer_bytes", "internal_transfer_bytes"):
+        total = 0
+        for page in expected_pages:
+            total += page.counters[name]
+        assert bill.counters[name] == total
+    actual._nand_before_reference()
+    assert vars(actual) == vars(expected)
+
+
+@pytest.mark.parametrize("planes", [1, 2, 3])
+def test_compiled_pages_preserve_each_completion_cache_slots_and_multilane_links(planes):
     config = NandConfig(kind="HBF", protocol_mode="ocp_hbf_0_7", channels=2, page_bytes=4096,
         host_granularity_bytes=64,
-        targets_per_channel=2, dies_per_target=2, luns_per_die=1, planes_per_lun=2,
+        targets_per_channel=2, dies_per_target=2, luns_per_die=1, planes_per_lun=planes,
         blocks_per_plane=8, pages_per_block=8, host_channels=2, host_full_duplex=True,
         read_cache_pages_per_bank=2, host_bandwidth_gb_s=128., host_read_bandwidth_gb_s=128.,
         host_write_bandwidth_gb_s=32., internal_bandwidth_gb_s=2048., page_read_ns=100.,
         page_program_ns=1000., block_erase_ns=2000., front_ns=7., max_outstanding_requests=3,
-        planes_independent=independent, parallel_units=parallel)
+        planes_independent=True, parallel_units=None, queue_scope="host_channel")
     program = (("package", "hbf->gpu", (("wire", 4096 / 13., 4096), ("credit", 4096 / 13. + 71., 4096))),
                ("fabric", "switch->gpu", (("wire2", 4096 / 19., 4096), ("credit2", 4096 / 19. + 30., 0))))
     timeline = ResourceTimeline(lane_available={"wire": [4.], "credit": [20., 5., 2.],
@@ -269,11 +300,12 @@ def test_compiled_zero_array_latency_still_materializes_the_same_calendar():
     assert vars(actual) == vars(expected)
 
 
-@pytest.mark.parametrize("independent", [False, True])
-def test_compiled_programs_preserve_incoming_links_erases_invalidation_and_page_order(independent):
+@pytest.mark.parametrize("planes", [1, 2])
+def test_compiled_programs_preserve_incoming_links_erases_invalidation_and_page_order(planes):
     config = NandConfig(kind="HBF", protocol_mode="ocp_hbf_0_7", page_bytes=4096,
-        host_granularity_bytes=64, channels=2, host_channels=2, planes_per_lun=2,
-        planes_independent=independent, parallel_units=1, pages_per_block=4, blocks_per_plane=32,
+        host_granularity_bytes=64, channels=2, host_channels=2, planes_per_lun=planes,
+        planes_independent=True, parallel_units=None, queue_scope="host_channel",
+        pages_per_block=4, blocks_per_plane=32,
         host_full_duplex=True, read_cache_pages_per_bank=2, max_outstanding_requests=3,
         page_read_ns=100., page_program_ns=1000., block_erase_ns=2000.)
     program = (("incoming", "gpu->hbf", (("write-wire", 4096 / 31., 4096),
@@ -313,7 +345,8 @@ def test_compiled_program_order_rejection_keeps_the_entire_live_state():
     core = NandCore(resolve_physical_config("hbf_ocp_0_7"), capture_details=False)
     before = deepcopy(vars(core))
     with pytest.raises(ValueError, match="write order violation"):
-        core.submit_write_pages([64 * 4096, 65 * 4096], [0., 10.])
+        page1 = core.config.array_units * 4096
+        core.submit_write_pages([page1, page1 + 4096], [0., 10.])
     assert vars(core) == before
 
 

@@ -13,7 +13,8 @@ from heterollm_sim.physical_presets import resolve_physical_config
 
 def setup(*, capacity=8192, host_capacity=65536, bandwidth=32.0):
     flash = resolve_physical_config("hbf_ocp_0_7", overrides={
-        "channels": 1, "parallel_units": 1, "host_channels": 1,
+        "channels": 1, "parallel_units": None, "host_channels": 1,
+        "planes_per_lun": 1, "planes_independent": True,
         "pages_per_block": 4, "blocks_per_plane": 16, "capacity_bytes": 262144})
     host = make_ddr_config(capacity_bytes=host_capacity)
     def hop(name):
@@ -116,7 +117,7 @@ def test_slower_actual_host_link_delays_kv_acceptance():
 
 def test_cached_link_demands_recheck_parameters_aliases_and_actual_lane_capacity():
     from types import SimpleNamespace
-    from heterollm_sim.hbf_staging_runtime import _PhysicalIO
+    from heterollm_sim._io_execution import _PhysicalIO
     from heterollm_sim.memory_transfer import ResourceTimeline
 
     _, binding = setup()
@@ -146,7 +147,7 @@ def test_cached_link_demands_recheck_parameters_aliases_and_actual_lane_capacity
 def test_summary_link_retention_keeps_all_counters_and_calendar_state(monkeypatch):
     from copy import deepcopy
     from types import SimpleNamespace
-    import heterollm_sim.hbf_staging_runtime as staging
+    import heterollm_sim._io_execution as staging
     from heterollm_sim.memory_transfer import ResourceTimeline
 
     _, binding = setup()
@@ -219,8 +220,8 @@ def test_summary_link_retention_preserves_kernel_events_and_physical_state():
     for key in ("ready_ns", "busy_ns", "bytes_moved", "last_intervals", "lane_available", "lane_directions", "directions"):
         assert getattr(old.timeline, key) == getattr(new.timeline, key)
     assert old.runtimes["host"].core._banks == new.runtimes["host"].core._banks
-    for key in ("_array_ready", "_buffer_ready", "_next_program_page", "_acceptance_ns",
-                "_inflight", "_inflight_operations", "_read_cache", "_cache_use"):
+    for key in ("_array_ready", "_buffer_ready", "_next_program_page", "_host_acceptance_ns",
+                "_host_inflight", "_read_cache", "_cache_use"):
         assert getattr(old.runtimes["flash"].core, key) == getattr(new.runtimes["flash"].core, key)
 
 
@@ -276,7 +277,7 @@ def test_preloaded_weights_are_read_without_host_or_program_cost():
 
 @pytest.mark.parametrize("unrelated_aliases", [False, True])
 def test_compiled_preload_keeps_page_link_order_counters_and_live_state(monkeypatch, unrelated_aliases):
-    from heterollm_sim.hbf_staging_runtime import _PhysicalIO
+    from heterollm_sim._io_execution import _PhysicalIO
 
     config, binding = setup()
     accesses = (
@@ -330,13 +331,13 @@ def test_compiled_preload_keeps_page_link_order_counters_and_live_state(monkeypa
     for owner in reference.runtimes:
         if owner != "flash":
             continue
-        for key in ("_array_ready", "_buffer_ready", "_next_program_page", "_acceptance_ns",
-                    "_inflight", "_inflight_operations", "_read_cache", "_cache_use"):
+        for key in ("_array_ready", "_buffer_ready", "_next_program_page", "_host_acceptance_ns",
+                    "_host_inflight", "_read_cache", "_cache_use"):
             assert getattr(compiled.runtimes[owner].core, key) == getattr(reference.runtimes[owner].core, key)
 
 
 def test_compiled_dynamic_pages_preserve_dirty_tail_overwrite_and_per_page_ready(monkeypatch):
-    from heterollm_sim.hbf_staging_runtime import _PhysicalIO
+    from heterollm_sim._io_execution import _PhysicalIO
 
     config, binding = setup(capacity=16384)
     config = replace(config, blocks_per_plane=128, capacity_bytes=2 * 1024 * 1024)
@@ -386,13 +387,13 @@ def test_compiled_dynamic_pages_preserve_dirty_tail_overwrite_and_per_page_ready
     assert actual.hbf_staging["flash"]["controller"].snapshot() == expected.hbf_staging["flash"]["controller"].snapshot()
     for name in ("ready_ns", "busy_ns", "bytes_moved", "last_intervals", "lane_available", "lane_directions", "directions"):
         assert getattr(actual.timeline, name) == getattr(expected.timeline, name), name
-    for name in ("_array_ready", "_buffer_ready", "_next_program_page", "_acceptance_ns",
-                 "_inflight", "_inflight_operations", "_read_cache", "_cache_use"):
+    for name in ("_array_ready", "_buffer_ready", "_next_program_page", "_host_acceptance_ns",
+                 "_host_inflight", "_read_cache", "_cache_use"):
         assert getattr(actual.runtimes["flash"].core, name) == getattr(expected.runtimes["flash"].core, name), name
 
 
 def test_compiled_write_failure_restores_core_and_controller_allocation(monkeypatch):
-    from heterollm_sim.hbf_staging_runtime import _PhysicalIO
+    from heterollm_sim._io_execution import _PhysicalIO
 
     config, binding = setup()
     runtime = PhysicalRuntimeContext(capture_details=False)
@@ -410,7 +411,7 @@ def test_compiled_write_failure_restores_core_and_controller_allocation(monkeypa
 
 
 def test_gc_after_compiled_full_pages_preserves_live_mapping_and_timing(monkeypatch):
-    from heterollm_sim.hbf_staging_runtime import _PhysicalIO
+    from heterollm_sim._io_execution import _PhysicalIO
 
     config, binding = setup()
     original = _PhysicalIO.write_flash_pages
@@ -464,7 +465,7 @@ def test_numeric_ready_read_failure_restores_media_and_cached_controller(monkeyp
 
 @pytest.mark.parametrize("overlap", [False, True])
 def test_host_task_scope_keeps_interleaved_link_aliases_and_all_operation_records(overlap):
-    from heterollm_sim import hbf_staging_runtime as staging
+    from heterollm_sim import _io_execution as staging
 
     config, binding = setup()
     old, new = (PhysicalRuntimeContext(capture_details=False) for _ in range(2))
@@ -505,7 +506,7 @@ def test_host_task_scope_keeps_interleaved_link_aliases_and_all_operation_record
 
 
 def test_failed_host_task_discards_pending_arrays_before_existing_transaction_rollback(monkeypatch):
-    from heterollm_sim import hbf_staging_runtime as staging, _dram_numeric
+    from heterollm_sim import _io_execution as staging, _dram_numeric
     config, binding = setup()
     runtime = PhysicalRuntimeContext(capture_details=False)
     state = staging.configure(runtime, "flash", config, binding)
@@ -527,7 +528,7 @@ def test_failed_host_task_discards_pending_arrays_before_existing_transaction_ro
 @pytest.mark.parametrize("bulk", (False, True))
 @pytest.mark.parametrize("overlap", ("none", "media_alias", "link_alias", "shared_name", "lane_alias"))
 def test_host_scope_survives_only_disjoint_media_and_preserves_every_record(bulk, overlap):
-    from heterollm_sim import hbf_staging_runtime as staging
+    from heterollm_sim import _io_execution as staging
     from heterollm_sim.memory_mapping import map_nand_address
     from heterollm_sim.memory_types import Operation
 
@@ -584,7 +585,7 @@ def test_host_scope_survives_only_disjoint_media_and_preserves_every_record(bulk
 
 
 def test_disjoint_page_program_keeps_pending_host_and_failure_still_rolls_back():
-    from heterollm_sim import hbf_staging_runtime as staging
+    from heterollm_sim import _io_execution as staging
 
     config, binding = setup()
     runtime = PhysicalRuntimeContext(capture_details=False)

@@ -81,6 +81,7 @@ _NAND_REQUIRED = frozenset({
     "page_read_ns", "page_program_ns", "block_erase_ns", "front_ns",
     "planes_independent", "partial_page_policy", "max_outstanding_requests",
     "protocol_mode", "host_channels", "host_full_duplex", "read_cache_pages_per_bank",
+    "queue_scope",
 })
 
 
@@ -136,6 +137,8 @@ def parse_required_physical_config(component_id, kind, raw):
         raise ValueError(prefix + "physical_memory_config is required; reload a complete hardware preset or configure the physical memory core. Aggregate-cost fallback is disabled")
     required = _NAND_REQUIRED if kind in NAND_COMPONENT_KINDS else _DRAM_REQUIRED
     missing = sorted(name for name in required if raw.get(name) is None)
+    if kind in NAND_COMPONENT_KINDS and "max_outstanding_write_requests" not in raw:
+        missing.append("max_outstanding_write_requests")  # Explicit None shares the combined limit.
     if raw.get("control_mode") == "jedec_hbm":
         missing += sorted(name for name in (*HBM_CONTROL_TIMING_FIELDS, "activated_row_msb", "refresh_policy")
                           if name not in raw)
@@ -380,6 +383,24 @@ def reconfigure_physical_config(config, *, overrides=None, expand_geometry=False
                 metadata["control_basis"] = "explicit analytical model selection; JEDEC command rules are not executed"
             elif changed:
                 metadata["control_status"] = "jedec_command_model_on_custom_geometry"
+            metadata["parameter_provenance"] = provenance
+            payload["metadata"] = metadata
+    if isinstance(parsed, NandConfig):
+        changed = {item.name for item in fields(parsed)
+                   if item.name != "metadata" and payload[item.name] != getattr(parsed, item.name)}
+        if changed:
+            metadata = deepcopy(payload["metadata"])
+            provenance = dict(metadata.get("parameter_provenance", {}))
+            for name in changed:
+                provenance[name] = {
+                    "value": payload[name], "status": "explicit_assumption",
+                    "source": "capacity_expansion" if name == "blocks_per_plane" and name not in updates else "physical_config_override",
+                }
+            if changed.intersection({"channels", "targets_per_channel", "dies_per_target", "luns_per_die",
+                                     "planes_per_lun", "planes_independent", "parallel_units",
+                                     "blocks_per_plane", "pages_per_block", "page_bytes", "host_channels"}):
+                metadata["geometry_status"] = "explicit_assumption"
+                metadata["geometry_basis"] = "explicitly modified NAND organization; reference sources describe the original preset only"
             metadata["parameter_provenance"] = provenance
             payload["metadata"] = metadata
     # A complete serialized round-trip deliberately reuses the same strict

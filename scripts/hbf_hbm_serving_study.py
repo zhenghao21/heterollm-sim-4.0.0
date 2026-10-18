@@ -288,7 +288,7 @@ def physical_capacity_failure(error):
                 ("buffer_id", "size_bytes", "allocation_size_bytes", "generation", "allocation_generation")
                 if k in declaration}
         if frame.f_code.co_name == "_find_first_fit":
-            candidates = [a for a in local.get("candidates", ()) if a.alias_of is None]
+            candidates = [a for a in local["failure_allocations"] if a.alias_of is None]
             lower, upper = local["lower"], local["upper"]
             extent = [(max(lower,a.base_address), min(upper,a.base_address+a.size_bytes))
                       for a in candidates if a.base_address < upper and a.base_address+a.size_bytes > lower]

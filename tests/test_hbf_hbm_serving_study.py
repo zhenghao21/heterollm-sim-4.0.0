@@ -56,6 +56,22 @@ class ServingStudyTests(unittest.TestCase):
                 self.assertEqual(failure['arena_end_bytes'], arena_end)
                 self.assertEqual(allocator.allocations(), before)
 
+    def test_capacity_failure_preserves_failed_extents_after_release(self):
+        allocator = PhysicalAddressAllocator(1024, alignment_bytes=64)
+        allocator.allocate('resident', 800)
+        try:
+            allocator.allocate('does_not_fit', 200)
+        except AllocationError as error:
+            allocator.release('resident')
+            self.assertEqual(allocator.allocations(), ())
+            failure = study.physical_capacity_failure(error)
+        else:
+            self.fail('the physical allocator must actually reject the extent')
+        self.assertEqual(failure['occupied_bytes_at_failure'], 800)
+        self.assertEqual(failure['free_bytes_at_failure'], 224)
+        self.assertEqual(failure['largest_free_extent_bytes'], 192)
+        self.assertEqual(failure['same_layout_minimum_capacity_bytes'], 1032)
+
     def test_capacity_classification_does_not_swallow_other_allocation_errors(self):
         import hbf_hbm_experiments as experiments
         message = 'unable to allocate 200 bytes in capacity 1024'

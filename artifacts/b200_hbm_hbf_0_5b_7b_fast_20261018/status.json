@@ -1,0 +1,14 @@
+{
+  "status": "ready",
+  "updated_at": "2026-10-18T02:32:17.420889+00:00",
+  "total": 72,
+  "simulation_mode": "fast",
+  "completed": 0,
+  "forecast_completed": 0,
+  "capacity_rejected": 0,
+  "forecast_rejected": 0,
+  "failed": 0,
+  "pending": 72,
+  "running": [],
+  "reason": null
+}

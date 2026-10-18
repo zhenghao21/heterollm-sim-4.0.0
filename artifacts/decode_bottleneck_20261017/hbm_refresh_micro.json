@@ -1,0 +1,214 @@
+{
+  "checks": [
+    "python:normal",
+    "python:none",
+    "python:missing",
+    "python:alias",
+    "python:invalid_length",
+    "python:custom_len_none_retry",
+    "python:custom_len_edits_earlier",
+    "python:invalid_length_then_custom_exception",
+    "python:custom_len_second_exception",
+    "python:custom_len_typeerror_twice",
+    "python:custom_mapping",
+    "python:signed_zero",
+    "python:nan",
+    "python:overflow_bytes",
+    "python:bad_float",
+    "python:repeated-in_place",
+    "python:repeated-length",
+    "python:repeated-alias",
+    "python:repeated-replace",
+    "python:repeated-delete",
+    "native:normal",
+    "native:none",
+    "native:missing",
+    "native:alias",
+    "native:invalid_length",
+    "native:custom_len_none_retry",
+    "native:custom_len_edits_earlier",
+    "native:invalid_length_then_custom_exception",
+    "native:custom_len_second_exception",
+    "native:custom_len_typeerror_twice",
+    "native:custom_mapping",
+    "native:signed_zero",
+    "native:nan",
+    "native:overflow_bytes",
+    "native:bad_float",
+    "native:repeated-in_place",
+    "native:repeated-length",
+    "native:repeated-alias",
+    "native:repeated-replace",
+    "native:repeated-delete"
+  ],
+  "micro": [
+    {
+      "name": "32B",
+      "iterations_per_block": 1000,
+      "baseline_median_ns": 21633.1,
+      "candidate_median_ns": 18368.800000000003,
+      "median_speedup": 1.1777089412482031,
+      "sum_speedup": 1.1704332711995873,
+      "samples": [
+        {
+          "version": "A",
+          "ns_per_call": 21272.5
+        },
+        {
+          "version": "B",
+          "ns_per_call": 18021.6
+        },
+        {
+          "version": "B",
+          "ns_per_call": 19113.7
+        },
+        {
+          "version": "A",
+          "ns_per_call": 21686.1
+        },
+        {
+          "version": "A",
+          "ns_per_call": 21924.6
+        },
+        {
+          "version": "B",
+          "ns_per_call": 18571.4
+        },
+        {
+          "version": "B",
+          "ns_per_call": 18166.2
+        },
+        {
+          "version": "A",
+          "ns_per_call": 21580.1
+        }
+      ]
+    },
+    {
+      "name": "4KiB",
+      "iterations_per_block": 1000,
+      "baseline_median_ns": 94022.25,
+      "candidate_median_ns": 81921.2,
+      "median_speedup": 1.147715731703149,
+      "sum_speedup": 1.1434857433053858,
+      "samples": [
+        {
+          "version": "A",
+          "ns_per_call": 94717.2
+        },
+        {
+          "version": "B",
+          "ns_per_call": 81280.0
+        },
+        {
+          "version": "B",
+          "ns_per_call": 82562.4
+        },
+        {
+          "version": "A",
+          "ns_per_call": 93327.3
+        },
+        {
+          "version": "A",
+          "ns_per_call": 93322.1
+        },
+        {
+          "version": "B",
+          "ns_per_call": 84396.3
+        },
+        {
+          "version": "B",
+          "ns_per_call": 80996.1
+        },
+        {
+          "version": "A",
+          "ns_per_call": 95108.7
+        }
+      ]
+    },
+    {
+      "name": "64MiB",
+      "iterations_per_block": 1000,
+      "baseline_median_ns": 65028.75,
+      "candidate_median_ns": 62820.15,
+      "median_speedup": 1.035157509175002,
+      "sum_speedup": 1.0350599111387138,
+      "samples": [
+        {
+          "version": "A",
+          "ns_per_call": 63374.0
+        },
+        {
+          "version": "B",
+          "ns_per_call": 63027.9
+        },
+        {
+          "version": "B",
+          "ns_per_call": 62612.4
+        },
+        {
+          "version": "A",
+          "ns_per_call": 65073.1
+        },
+        {
+          "version": "A",
+          "ns_per_call": 65224.9
+        },
+        {
+          "version": "B",
+          "ns_per_call": 60682.9
+        },
+        {
+          "version": "B",
+          "ns_per_call": 63571.9
+        },
+        {
+          "version": "A",
+          "ns_per_call": 64984.4
+        }
+      ]
+    },
+    {
+      "name": "batch32x32B",
+      "iterations_per_block": 1000,
+      "baseline_median_ns": 64845.1,
+      "candidate_median_ns": 52382.3,
+      "median_speedup": 1.2379200607838907,
+      "sum_speedup": 1.2449271863958755,
+      "samples": [
+        {
+          "version": "A",
+          "ns_per_call": 64669.0
+        },
+        {
+          "version": "B",
+          "ns_per_call": 51909.7
+        },
+        {
+          "version": "B",
+          "ns_per_call": 54392.0
+        },
+        {
+          "version": "A",
+          "ns_per_call": 65021.2
+        },
+        {
+          "version": "A",
+          "ns_per_call": 67920.0
+        },
+        {
+          "version": "B",
+          "ns_per_call": 52854.9
+        },
+        {
+          "version": "B",
+          "ns_per_call": 50879.7
+        },
+        {
+          "version": "A",
+          "ns_per_call": 63869.7
+        }
+      ]
+    }
+  ]
+}

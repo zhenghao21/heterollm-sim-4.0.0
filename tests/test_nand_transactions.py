@@ -18,7 +18,7 @@ def test_frontier_journal_covers_all_write_executors(executor):
     initial = dict(core._next_program_page)
     token = core.begin_transaction()
     assert not token.program_frontiers
-    addresses = [config.channels * 4096, 4096]
+    addresses = [config.array_units * 4096, 4096]
     if executor == "compiled":
         assert core.submit_write_pages(addresses, 0.) is not None
     else:
@@ -59,7 +59,7 @@ def test_wear_journal_restores_existing_rows_and_removes_new_blocks():
     original_rows = dict(core._block_wear_state)
     token = core.begin_transaction()
     core.submit(AccessRequest("rewrite", "write", 0, 4096))
-    core.submit(AccessRequest("new-block", "write", config.channels * config.pages_per_block * 4096, 4096))
+    core.submit(AccessRequest("new-block", "write", config.array_units * config.pages_per_block * 4096, 4096))
     assert len(token.block_wear) == 2
     core.rollback_transaction(token)
     assert core._block_wear_state == initial
@@ -74,10 +74,10 @@ def test_public_snapshot_restores_active_nand_token_identity(finish):
     core.submit(AccessRequest("seed", "write", 0, 4096))
     initial = dict(core._next_program_page)
     token = core.begin_transaction()
-    core.submit(AccessRequest("page-1", "write", config.channels * 4096, 4096))
+    core.submit(AccessRequest("page-1", "write", config.array_units * 4096, 4096))
     saved = runtime.snapshot()
     middle = dict(core._next_program_page)
-    core.submit(AccessRequest("page-2", "write", config.channels * 8192, 4096))
+    core.submit(AccessRequest("page-2", "write", config.array_units * 8192, 4096))
     getattr(core, finish + "_transaction")(token)
     runtime.restore(saved)
     assert core._nand_transactions[-1] is token

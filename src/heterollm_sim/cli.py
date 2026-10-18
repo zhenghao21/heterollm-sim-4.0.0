@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import re
 import sys
 from pathlib import Path
@@ -84,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="运行场景仿真")
     run_parser.add_argument("scenario", type=Path)
+    _add_simulation_mode_argument(run_parser)
     run_parser.add_argument(
         "--retention-policy",
         choices=("exact", "streaming", "aggregate"),
@@ -105,6 +107,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     demo_parser = subparsers.add_parser("demo", help="运行内置参考场景")
+    _add_simulation_mode_argument(demo_parser)
     demo_parser.add_argument(
         "--retention-policy",
         choices=("exact", "streaming", "aggregate"),
@@ -117,6 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare_parser = subparsers.add_parser(
         "compare-gpu", help="将当前场景与纯 GPU 映射进行比较"
     )
+    _add_simulation_mode_argument(compare_parser)
     compare_parser.add_argument(
         "scenario", nargs="?", type=Path, default=None
     )
@@ -261,6 +265,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             scenario = build_reference_scenario()
         else:
             scenario = load_scenario(args.scenario)
+        if getattr(args, "simulation_mode", None) is not None:
+            scenario = replace(scenario, simulation=replace(
+                scenario.simulation, mode=args.simulation_mode))
         from .llama_scenario import prepare_llama_scenario
         scenario = prepare_llama_scenario(scenario)
         if args.command == "validate":
@@ -320,6 +327,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except (OSError, ValueError, TypeError, KeyError) as exc:
         print("错误：{}".format(_exception_message_zh(exc)), file=sys.stderr)
         return 2
+
+
+def _add_simulation_mode_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--simulation-mode", choices=("detailed", "fast"), default=None,
+        help="仿真模式：detailed 逐 Token/事务；fast 详细 Prefill＋采样预测 Decode（覆盖场景设置）",
+    )
 
 
 def _add_catalog_cache_argument(parser: argparse.ArgumentParser) -> None:

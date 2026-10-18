@@ -44,6 +44,7 @@ from .ir import (
     normalize_component_kind,
 )
 from .serde import read_json
+from .simulation_options import FastDecodeConfig, SimulationConfig, simulation_from_dict
 from .kernel_model import kernel_model_from_dict
 from .precision import dtype_bits
 from .physical_contract import (
@@ -365,6 +366,7 @@ class ScenarioConfig:
     # Kept at the end so existing positional ScenarioConfig construction keeps
     # its historical field order.
     llama_cpp_config: Optional[LlamaCppRuntimeConfig] = None
+    simulation: SimulationConfig = field(default_factory=SimulationConfig)
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -383,6 +385,8 @@ class ScenarioConfig:
             raise ValueError("placement must be a PlacementSpec")
         if not isinstance(self.workload, WorkloadSpec):
             raise ValueError("workload must be a WorkloadSpec")
+        if not isinstance(self.simulation, SimulationConfig):
+            raise ValueError("simulation must be a SimulationConfig")
         if self.cim_interconnect is not None and not isinstance(self.cim_interconnect, InterconnectProfile):
             raise ValueError("cim_interconnect must be an InterconnectProfile or None")
         if not isinstance(self.component_profiles, Mapping):
@@ -2606,6 +2610,7 @@ def scenario_from_dict(
             "profiles",
             "weights_resident",
             "assumptions",
+            "simulation",
         ),
     )
     if "schema_version" not in data:
@@ -2699,6 +2704,7 @@ def scenario_from_dict(
             else None
         ),
         weights_resident=_boolean(data.get("weights_resident", True), "weights_resident"),
+        simulation=simulation_from_dict(data.get("simulation", {})),
         schema_version=scenario_schema_version,
         assumptions=tuple(
             str(item) for item in _array(data.get("assumptions", []), "assumptions")
@@ -2719,6 +2725,8 @@ __all__ = [
     "ControllerProfile",
     "LlamaCppRuntimeConfig",
     "ScenarioConfig",
+    "SimulationConfig",
+    "FastDecodeConfig",
     "hardware_from_dict",
     "load_scenario",
     "model_from_dict",

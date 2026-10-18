@@ -11,12 +11,14 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import repeat
+import sys
 from threading import Lock
 from typing import Callable, Hashable
 
 import numpy as np
 
 from .memory_types import NandConfig
+from . import _hbf_page_state
 
 
 PAGE = 4096
@@ -405,8 +407,7 @@ class HbfStagingController:
         self.config = config
         self.host_capacity_bytes = host_capacity_bytes
         self.host_reserved_bytes = PAGE
-        self._lanes = (config.channels * config.targets_per_channel * config.dies_per_target
-                       * config.luns_per_die * config.planes_per_lun)
+        self._lanes = config.array_units
         # Only complete physical blocks may be reused: a truncated capacity
         # must not let page-0 erasure reach outside the declared medium.
         stripe, tail = divmod(config.effective_capacity_bytes // PAGE,
@@ -582,10 +583,13 @@ class HbfStagingController:
         if size > 2 * len(indexes):
             return None  # Sparse offsets retain the ordinary sparse page map.
         state = _BufferReadState(size)
-        for index in indexes:
-            page = self._pages[(*owner, index)]
-            address = -1 if page.flash is None else self._address(*page.flash)
-            state.update(index, page, address)
+        if _use_page_helpers(self, *owner, 0, size):
+            _hbf_page_state.initialize_read_state(self, owner, indexes, state)
+        else:
+            for index in indexes:
+                page = self._pages[(*owner, index)]
+                address = -1 if page.flash is None else self._address(*page.flash)
+                state.update(index, page, address)
         self._read_states[owner] = state
         return state
 
@@ -793,7 +797,11 @@ class HbfStagingController:
         if (buffer_id, generation) in self._preloads:
             raise ValueError("preloaded weights are immutable; release before reusing their generation")
         first, stop = offset // PAGE, (offset + byte_count + PAGE - 1) // PAGE
-        new_pages = sum((buffer_id, generation, index) not in self._pages for index in range(first, stop))
+        if _use_page_helpers(self, buffer_id, generation, first, stop):
+            new_pages = _hbf_page_state.count_missing_pages(
+                self._pages, buffer_id, generation, first, stop)
+        else:
+            new_pages = sum((buffer_id, generation, index) not in self._pages for index in range(first, stop))
         if self.occupied_bytes + new_pages * PAGE > self.usable_capacity_bytes:
             raise MemoryError("HBF logical capacity exhausted, including GC reserve")
         completion = float(time_ns)
@@ -865,18 +873,24 @@ class HbfStagingController:
                      + sum(self.config.pages_per_block - self._used[block] for block in self._active))
         if stop - first > available:
             return None
+        native = _use_page_helpers(self, buffer_id, generation, first, stop)
         token = self.begin_transaction()
         locations, arrivals, old_ready = [], [], []
         try:
-            for index in range(first, stop):
-                key = (buffer_id, generation, index)
-                page = self._pages.get(key)
-                ready = max(time_ns, page.ready_ns if page is not None else 0.0)
-                physical, arrival = self._allocate(ready, io, key)
-                locations.append(physical)
-                arrivals.append(arrival)
-                old_ready.append(ready)
-            completions = bulk_write([self._address(*location) for location in locations], arrivals)
+            if native:
+                locations, addresses, arrivals, old_ready = _hbf_page_state.prepare_full_write(
+                    self, buffer_id, generation, first, stop, time_ns, _MISSING)
+            else:
+                for index in range(first, stop):
+                    key = (buffer_id, generation, index)
+                    page = self._pages.get(key)
+                    ready = max(time_ns, page.ready_ns if page is not None else 0.0)
+                    physical, arrival = self._allocate(ready, io, key)
+                    locations.append(physical)
+                    arrivals.append(arrival)
+                    old_ready.append(ready)
+                addresses = [self._address(*location) for location in locations]
+            completions = bulk_write(addresses, arrivals)
         except BaseException:
             self.rollback_transaction(token)
             raise
@@ -888,32 +902,37 @@ class HbfStagingController:
         indexes = self._buffer_pages.setdefault((buffer_id, generation), {})
         if isinstance(completions, np.ndarray):
             completions = completions.tolist()
-        for index, physical, ready, time in zip(range(first, stop), locations, old_ready, completions):
-            key = (buffer_id, generation, index)
-            self._touch_page(key)
-            page = self._pages.get(key)
-            if page is None:
-                self._pages[key] = _Page([(0, PAGE)], [], None, physical, time)
-                indexes[index] = None
-            else:
-                if page.flash is not None:
-                    self._touch_owners(page.flash[0])
-                    self._owners.get(page.flash[0], {}).pop(page.flash[1], None)
-                if page.slot is not None:
-                    self._slot_ready[page.slot] = ready
-                    self._touch_slots()
-                    self._slots.append(page.slot)
-                    self._resident.pop(key)
-                page.flash = physical
-                page.slot = None
-                page.valid = [(0, PAGE)]
-                page.dirty = []
-                page.ready_ns = time
-            self._touch_owners(physical[0])
-            self._owners.setdefault(physical[0], {})[physical[1]] = key
-            self._refresh_read_state(key, self._pages[key])
-            self._block_ready[physical[0]] = max(time, self._block_ready.get(physical[0], 0.0))
-            completion = max(completion, time)
+        if native and type(completions) is list:
+            completion = _hbf_page_state.commit_full_write(
+                self, buffer_id, generation, first, locations, old_ready,
+                completions, time_ns, _Page, _MISSING)
+        else:
+            for index, physical, ready, time in zip(range(first, stop), locations, old_ready, completions):
+                key = (buffer_id, generation, index)
+                self._touch_page(key)
+                page = self._pages.get(key)
+                if page is None:
+                    self._pages[key] = _Page([(0, PAGE)], [], None, physical, time)
+                    indexes[index] = None
+                else:
+                    if page.flash is not None:
+                        self._touch_owners(page.flash[0])
+                        self._owners.get(page.flash[0], {}).pop(page.flash[1], None)
+                    if page.slot is not None:
+                        self._slot_ready[page.slot] = ready
+                        self._touch_slots()
+                        self._slots.append(page.slot)
+                        self._resident.pop(key)
+                    page.flash = physical
+                    page.slot = None
+                    page.valid = [(0, PAGE)]
+                    page.dirty = []
+                    page.ready_ns = time
+                self._touch_owners(physical[0])
+                self._owners.setdefault(physical[0], {})[physical[1]] = key
+                self._refresh_read_state(key, self._pages[key])
+                self._block_ready[physical[0]] = max(time, self._block_ready.get(physical[0], 0.0))
+                completion = max(completion, time)
         self._count("flash_write_bytes", (stop - first) * PAGE)
         self._count("write_hbf_bytes", (stop - first) * PAGE)
         self._count("direct_write_pages", stop - first)
@@ -1031,7 +1050,8 @@ class HbfStagingController:
             self._count("flash_read_bytes", (stop - first) * PAGE)
             self._count("read_hbf_bytes", (stop - first) * PAGE)
             ready = np.full(len(blocks), -np.inf)
-            np.maximum.at(ready, inverse, completions)
+            from ._nand_pack import ordered_indexed_maximum
+            ordered_indexed_maximum(ready, inverse, completions)
             self._block_ready.update_max(blocks, ready)
             return max(time_ns, float(ready.max()))
         pages = [
@@ -1149,6 +1169,60 @@ class HbfStagingController:
         self._read_states.pop(owner, None)
         self._count("released_buffers")
         return time
+
+
+# Inline helpers are valid only for the authored metadata representation.
+# A custom controller, monkeypatch or mapping retains the ordinary observable
+# methods, rather than having its hooks silently bypassed by native loops.
+_PAGE_HELPER_METHODS = {
+    name: getattr(HbfStagingController, name) for name in (
+        "_allocate", "_address", "_touch_page", "_touch_owners", "_touch_slots",
+        "_ready_before", "_refresh_read_state")}
+_PAGE_HELPER_JOURNAL_SET = _JournalDict.__setitem__
+_PAGE_HELPER_JOURNAL_REMEMBER = _JournalDict._remember
+_PAGE_HELPER_JOURNAL_READS = {
+    name: getattr(_JournalDict, name) for name in ("__getitem__", "get", "__contains__")}
+_PAGE_HELPER_BLOCK_POP = _BlockPool.popleft
+_PAGE_HELPER_PAGE_TYPE = _Page
+_PAGE_HELPER_READ_UPDATE = _BufferReadState.update
+
+
+def _use_page_helpers(controller, buffer_id, generation, first, stop):
+    if (not _hbf_page_state.COMPILED
+            or type(controller) is not HbfStagingController
+            or type(buffer_id) is not str or type(generation) is not int
+            or not 0 <= first <= stop <= sys.maxsize
+            or type(controller._pages) is not dict
+            or type(controller._buffer_pages) is not dict
+            or type(controller._owners) is not dict
+            or type(controller._read_states) is not dict
+            or type(controller._transaction_stack) is not list
+            or type(controller._used) is not _JournalDict
+            or type(controller._block_ready) is not _JournalDict
+            or type(controller._slot_ready) is not _JournalDict
+            or type(controller._active) is not deque
+            or type(controller._slots) is not deque
+            or type(controller._resident) is not OrderedDict
+            or type(controller._free_blocks) is not _BlockPool
+            or type(controller.config) is not NandConfig
+            or _JournalDict.__setitem__ is not _PAGE_HELPER_JOURNAL_SET
+            or _JournalDict._remember is not _PAGE_HELPER_JOURNAL_REMEMBER
+            or _BlockPool.popleft is not _PAGE_HELPER_BLOCK_POP
+            or _BufferReadState.update is not _PAGE_HELPER_READ_UPDATE
+            or _Page is not _PAGE_HELPER_PAGE_TYPE):
+        return False
+    indexes = controller._buffer_pages.get((buffer_id, generation))
+    if indexes is not None and type(indexes) is not dict:
+        return False
+    if any(getattr(_JournalDict, name) is not method
+           for name, method in _PAGE_HELPER_JOURNAL_READS.items()):
+        return False
+    if any(type(mapping._journals) is not list
+           for mapping in (controller._used, controller._block_ready, controller._slot_ready)):
+        return False
+    return all(name not in controller.__dict__
+               and getattr(HbfStagingController, name) is method
+               for name, method in _PAGE_HELPER_METHODS.items())
 
 
 __all__ = ["HbfStagingController", "HbfStagingIO"]

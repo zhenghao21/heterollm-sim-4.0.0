@@ -1,0 +1,91 @@
+{
+  "architecture": "HBF",
+  "model_id": "qwen2_5-7b",
+  "prompt_tokens": 65536,
+  "output_tokens": 5120,
+  "requested_mode": "detailed",
+  "simulation_config": {
+    "mode": "detailed",
+    "fast_decode": {
+      "warmup_tokens": 8,
+      "calibration_tokens": 32,
+      "validation_tokens": 16,
+      "max_sample_tokens": 128,
+      "target_relative_error": 0.1,
+      "max_context_growth": 0.2,
+      "segment_tokens": 256
+    }
+  },
+  "request_id": "scan-request",
+  "request_status": "finished",
+  "visible_output_tokens": 5120,
+  "ttft_ns": 40726826225.69565,
+  "tpot_ns": 488653255.435813,
+  "latency_boundary": "arrival",
+  "e2e_ns": 2542142840801.6226,
+  "wall_seconds": 15093.28088169999,
+  "cpu_seconds": 14975.5625,
+  "decode_wall_seconds": 14438.257083299977,
+  "wall_to_first_token_seconds": 655.0237984000123,
+  "decode_wall_scope": "after final Prefill cohort through run_scenario return; includes reduction/forecast",
+  "report_wall_seconds": 2.7300033252686262e-05,
+  "report_scope": "request_endpoint_only; full_report_not_constructed",
+  "affinity": null,
+  "gc_thresholds": [
+    7000,
+    100,
+    100
+  ],
+  "instrumented": false,
+  "process_id": 40552,
+  "approximation": {
+    "effective_mode": "detailed"
+  },
+  "report": {
+    "requests": {
+      "scan-request": {
+        "request_id": "scan-request",
+        "status": "finished",
+        "arrival_ns": 0.0,
+        "first_token_ns": 40726826225.69565,
+        "finish_ns": 2542142840801.6226,
+        "ttft_ns": 40726826225.69565,
+        "tpot_ns": 488653255.435813,
+        "e2e_ns": 2542142840801.6226,
+        "visible_output_tokens": 5120,
+        "latency_boundary": "arrival"
+      }
+    },
+    "simulation_mode": "detailed",
+    "result_semantics": {
+      "precision": "detailed",
+      "latency": {
+        "primary_boundary": "arrival"
+      },
+      "transactions": "complete_detailed_execution"
+    },
+    "trace_fidelity": "aggregate",
+    "projection_scope": "request_endpoint_only; resource_and_batch_reports_not_constructed"
+  },
+  "finished_at": "2026-10-18T00:45:09.461839+00:00",
+  "purpose": "fast mode complete request diagnostics; not a formal scan",
+  "timing_breakdown": {
+    "measurement": "existing_public_progress_boundaries; no_profiler_or_kernel_hooks",
+    "setup_to_serving_start_seconds": 0.5770755999838002,
+    "prefill_cohorts_wall_seconds": 654.4467228000285,
+    "decode_cohorts_wall_seconds": 14437.195215799962,
+    "after_last_cohort_seconds": 1.0618675000150688,
+    "endpoint_extraction_seconds": 2.7300033252686262e-05,
+    "prefill_steps": 32,
+    "decode_steps": 5119,
+    "control_plane": {
+      "runtime": "dynamic_hardware_dag",
+      "makespan_ns": 15707.557333333332,
+      "completed_task_count": 15,
+      "placement_status": "feasible",
+      "placement_fingerprint": "22eef2681faacb8e85494b8a75b51571904c5af3bd4f413be54547d6b2e6daf9"
+    },
+    "wall_to_first_token_seconds": 655.0237984000123,
+    "decode_window_scope": "cohort completion intervals including public callback overhead"
+  }
+}

@@ -40,6 +40,8 @@ def test_immutable_preload_plan_matches_fragmented_scalar_page_mapping(lanes, pa
 
 def config(**updates):
     values = dict(kind="HBF", protocol_mode="ocp_hbf_0_7", channels=1,
+                  queue_scope="host_channel", planes_independent=True,
+                  planes_per_lun=1, parallel_units=None,
                   blocks_per_plane=8, pages_per_block=4, page_bytes=PAGE,
                   host_granularity_bytes=64, host_full_duplex=True,
                   read_cache_pages_per_bank=2, host_bandwidth_gb_s=64.,
@@ -493,7 +495,7 @@ def test_complete_pages_stripe_concurrently_without_using_host_staging():
 
 
 def test_large_device_and_preload_have_constant_size_static_snapshot_state():
-    cfg = config(channels=256, host_channels=16, blocks_per_plane=2048,
+    cfg = config(channels=16, planes_per_lun=16, host_channels=16, blocks_per_plane=2048,
                  pages_per_block=256)
     staging = HbfStagingController(cfg, 4 * PAGE)
     assert cfg.effective_capacity_bytes == 512 * 1024 ** 3

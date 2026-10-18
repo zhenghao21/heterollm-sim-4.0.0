@@ -56,6 +56,7 @@ from .event_kernel import (
     _validated_phase_sequence,
 )
 from .execution_control import ExecutionControl
+from ._token_binding import AuthoredTokenProgram
 from .llama_graph_runtime import LlamaGraphRuntime
 from .cuda_graph_serving import CudaGraphServingRuntime
 from .retained_kv_state import (
@@ -1109,6 +1110,37 @@ class _ExecutionStageMetadataCache:
         ] = OrderedDict()
         self._isolated_duration_hits = 0
         self._isolated_duration_misses = 0
+        # Physical Token programs retain wiring only.  Fresh cohort payloads
+        # must not enter the large immutable-stage identity caches above.
+        self._authored_token_programs: OrderedDict[
+            _ExecutionStageLayoutKey, AuthoredTokenProgram
+        ] = OrderedDict()
+
+    def authored_token_program(
+        self,
+        metadata: Mapping[str, Any],
+        stages: Sequence[_ExecutionStage],
+        build_specs: Callable,
+    ) -> Optional[AuthoredTokenProgram]:
+        """Bind fresh physical DAGs to one resident, exact position graph."""
+
+        if _trusted_execution_stages(metadata.get("execution_stages")) is None:
+            return None
+        key = self._final_layout_key(stages)
+        if key is None:
+            return None
+        program = self._authored_token_programs.get(key)
+        if program is not None:
+            self._authored_token_programs.move_to_end(key)
+            return program
+        program = AuthoredTokenProgram.compile(stages, build_specs)
+        self._authored_token_programs[key] = program
+        # Changes at KV/page/controller boundaries can create new topology.
+        # Those shapes are compiled independently, never coerced to an old DAG.
+        while len(self._authored_token_programs) > 8:
+            self._authored_token_programs.popitem(last=False)
+        return program
+
     @staticmethod
     def _final_layout_key(
         stages: Sequence[_ExecutionStage],
@@ -1276,6 +1308,34 @@ class _ExecutionStageMetadataCache:
         self, metadata: Mapping[str, Any]
     ) -> Tuple[Tuple[_ExecutionStage, ...], Optional[str]]:
         raw_stages = metadata.get("execution_stages")
+        if metadata.get("execution_stage_source") == "deferred_physical_task_dag":
+            prepared_stages = _trusted_execution_stages(raw_stages)
+            if prepared_stages is not None:
+                # This changes only the typed planner handoff.  The source's
+                # existing host/fence/duration interpretation remains intact.
+                # Its historical JSON parser also normalizes demand scalar
+                # types. Preserve that conversion even for integer-valued
+                # services/work, without rebuilding already-normalized rows.
+                normalized = []
+                for stage in prepared_stages:
+                    tasks = []
+                    stage_changed = False
+                    for task in stage.execution_tasks:
+                        demands = tuple(
+                            demand if (type(demand.service_ns) is float
+                                       and type(demand.work_units) is float
+                                       and type(demand.bytes_moved) is int)
+                            else replace(demand, service_ns=float(demand.service_ns),
+                                work_units=float(demand.work_units),
+                                bytes_moved=int(demand.bytes_moved))
+                            for demand in task.demands)
+                        if any(left is not right for left, right in zip(task.demands, demands)):
+                            task = replace(task, demands=demands)
+                            stage_changed = True
+                        tasks.append(task)
+                    normalized.append(replace(stage, execution_tasks=tuple(tasks))
+                        if stage_changed else stage)
+                return tuple(normalized), None
         if (
             not _declares_explicit_task_dag(metadata)
             or not isinstance(raw_stages, tuple)
@@ -1293,11 +1353,10 @@ class _ExecutionStageMetadataCache:
             else _execution_stages_from_metadata(metadata)
         )
         if parsed[0] and _has_live_physical_tasks(parsed[0]):
-            # Physical cohorts replay against live allocator/DRAM state and
-            # already bypass the immutable replay-layout cache. Their fresh
-            # source tuples cannot hit this identity memo, but retaining 512
-            # of them keeps every full task DAG alive in aggregate runs.
-            # Return the same parsed stages without changing their contents.
+            # Physical cohorts bind fresh payloads against live allocator/DRAM
+            # state.  Their structure has its own small Token-program cache;
+            # retaining these fresh source tuples in the identity memo would
+            # keep full historical payload DAGs alive without producing hits.
             return parsed
         if len(self._values) >= self.max_entries:
             # Dict insertion order gives a small, deterministic FIFO bound.
@@ -5667,6 +5726,8 @@ class _OnlineRuntime:
         self._service_sequence = 0
         self._admission_sequence = 0
         self.rounds = 0
+        self._run_initialized = False
+        self._completed_decode_steps = 0
         self.idle_ns = self.now
         self.preemptions = 0
         self.priority_preemptions = 0
@@ -9962,19 +10023,48 @@ class _OnlineRuntime:
                 self.events.append(ServingEvent(info["resume_ns"], "request_arrival", request_id))
                 del self._agent_paused[request_id]
 
-    def run(self) -> ServingResult:
+    def run_until_decode_steps(self, target: int) -> bool:
+        """Advance the original request budget to a resumable exact boundary.
+
+        ``target`` counts completed ordinary Decode cohorts cumulatively.
+        Zero runs Prefill before stopping.  A prefix never manufactures a
+        completion or releases request allocations; ``run`` resumes this
+        same runtime, including all physical controller calendars.
+        """
+        if isinstance(target, bool) or not isinstance(target, int):
+            raise TypeError("target must be a non-negative integer")
+        if target < 0:
+            raise ValueError("target must be a non-negative integer")
+        return self._run_until_decode_steps(target)
+
+    def _run_until_decode_steps(self, target: Optional[int]) -> bool:
         self.execution_control.raise_if_cancelled()
-        self.execution_control.report(
-            "serving_cohorts",
-            0,
-            message="online serving started",
-            simulated_time_ns=self.now,
-            metadata={"request_count": self._request_count},
-        )
-        self._reject_impossible_requests()
+        if not self._run_initialized:
+            self.execution_control.report(
+                "serving_cohorts",
+                0,
+                message="online serving started",
+                simulated_time_ns=self.now,
+                metadata={"request_count": self._request_count},
+            )
+            self._reject_impossible_requests()
+            self._run_initialized = True
         safety_limit = max(10_000, sum(state.spec.prompt_tokens + state.spec.output_tokens + 1 for state in self._state_values) * 32)
         while not self._terminal():
             self.execution_control.raise_if_cancelled()
+            if (
+                target is not None
+                and self._completed_decode_steps >= target
+                and all(
+                    state.status in _TERMINAL_STATUSES
+                    or (
+                        state.status is RequestStatus.RUNNING
+                        and state.prefill_cursor >= state.spec.prompt_tokens
+                    )
+                    for state in self._state_values
+                )
+            ):
+                return False
             self.rounds += 1
             if self.rounds > safety_limit:
                 raise RuntimeError("online scheduler made no progress")
@@ -9984,6 +10074,8 @@ class _OnlineRuntime:
             if cohort is not None:
                 self._record_schedule_trace("decision", selected=cohort)
                 self._execute(cohort)
+                if cohort.kind == "decode":
+                    self._completed_decode_steps += 1
                 self._sync_paged_pool_events()
                 self.execution_control.report(
                     "serving_cohorts",
@@ -10007,6 +10099,10 @@ class _OnlineRuntime:
                 continue
             break
         self.execution_control.raise_if_cancelled()
+        return self._terminal()
+
+    def run(self) -> ServingResult:
+        self._run_until_decode_steps(None)
         self._cuda_graph_runtime.assert_complete()
         result = self._result()
         self.execution_control.report(
@@ -13252,6 +13348,59 @@ class _OnlineRuntime:
             for stage in stages
         }
 
+    def _replay_authored_token_program(
+        self,
+        stages: Sequence[_ExecutionStage],
+        ready_by_stage: Mapping[str, float],
+        namespace: str,
+        program: AuthoredTokenProgram,
+    ) -> Mapping[str, Tuple[float, float]]:
+        """Execute live physical tasks with resident dependency positions."""
+
+        kernel = self._execution_resource_kernel
+        specs = program.bind(stages, ready_by_stage, namespace, _live_task_metadata)
+        minimum: Dict[str, float] = {}
+        maximum: Dict[str, float] = {}
+        completed_ids: List[str] = []
+        live_metrics = self._live_cohort_metrics
+        control = self.execution_control
+
+        def submitted():
+            control.raise_if_cancelled()
+            control.report("cohort_tasks", 0, len(specs),
+                message="正在连续物理状态上执行当前批次")
+
+        def observe(event):
+            if live_metrics is not None:
+                live_metrics.observe(event)
+            stage_id = event.task.metadata["execution_stage_id"]
+            minimum[stage_id] = min(minimum.get(stage_id, event.start_ns), event.start_ns)
+            maximum[stage_id] = max(maximum.get(stage_id, event.end_ns), event.end_ns)
+            completed_ids.append(event.task.task_id)
+            completed = len(completed_ids)
+            if completed == len(specs) or completed % 256 == 0:
+                control.raise_if_cancelled()
+                control.report("cohort_tasks", completed, len(specs),
+                    message="正在连续物理状态上执行当前批次", simulated_time_ns=event.end_ns)
+
+        kernel._drain_prevalidated_compiled(
+            specs, program.compiled, validate_tasks=False,
+            event_observer=observe,
+            index_physical_allocations=live_metrics is not None,
+            on_submitted=submitted,
+            before_step=(self._advance_prefetches_before_kernel_step
+                         if self._pending_prefetches else None),
+        )
+        for task_id in completed_ids:
+            kernel.release_completed(task_id)
+        return {
+            stage.stage_id: (
+                minimum.get(stage.stage_id, ready_by_stage[stage.stage_id]),
+                maximum.get(stage.stage_id, ready_by_stage[stage.stage_id]),
+            )
+            for stage in stages
+        }
+
     @staticmethod
     def _replay_prevalidated_execution_layout(
         kernel: UnifiedEventKernel,
@@ -14500,7 +14649,19 @@ class _OnlineRuntime:
                 origin_ns=uniform_origin_ns,
             )
         self._execution_task_sequence += 1
-        if replay_layout is None:
+        authored_program = (
+            self._execution_stage_metadata_cache.authored_token_program(
+                cost.metadata, scheduled_stages, self._stage_task_specs,
+            )
+            if live_physical else None
+        )
+        if authored_program is not None:
+            stage_envelopes = self._replay_authored_token_program(
+                scheduled_stages, ready_by_stage,
+                "serving.online.{:08d}".format(self._execution_task_sequence),
+                authored_program,
+            )
+        elif replay_layout is None:
             stage_envelopes = self._replay_execution_stage_tasks(
                 self._execution_resource_kernel,
                 scheduled_stages,

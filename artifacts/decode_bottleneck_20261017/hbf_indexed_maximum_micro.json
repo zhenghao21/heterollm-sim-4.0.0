@@ -1,0 +1,451 @@
+{
+  "purpose": "real captured 7B HBF Decode indexed maximum primitive; no end-to-end speedup claim",
+  "candidate": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\_nand_pack.cp312-win_amd64.pyd",
+  "reset_scope": "preallocated target only; read-only inputs reused",
+  "exact_captured_cases": 5,
+  "total_calls_per_decode": 113,
+  "estimated_primitive_baseline_seconds": 0.143451318,
+  "estimated_primitive_candidate_seconds": 0.005978768,
+  "cases": [
+    {
+      "pages": 6272,
+      "blocks": 25,
+      "calls_per_decode": 28,
+      "exact_output_and_inputs": true,
+      "baseline_ns": 311158.0,
+      "candidate_ns": 20078.0,
+      "speedup": 15.497459906365176,
+      "abba_speedups": [
+        18.278015564202335,
+        16.285247524752474,
+        18.96845978622744
+      ],
+      "samples": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 373992.0,
+          "target_reset_ns_per_call": 528.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 20872.0,
+          "target_reset_ns_per_call": 436.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 20248.0,
+          "target_reset_ns_per_call": 432.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 377600.0,
+          "target_reset_ns_per_call": 468.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 409600.0,
+          "target_reset_ns_per_call": 664.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 20492.0,
+          "target_reset_ns_per_call": 436.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 19908.0,
+          "target_reset_ns_per_call": 432.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 248324.0,
+          "target_reset_ns_per_call": 336.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 214028.0,
+          "target_reset_ns_per_call": 288.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 11592.0,
+          "target_reset_ns_per_call": 284.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 11236.0,
+          "target_reset_ns_per_call": 264.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 218984.0,
+          "target_reset_ns_per_call": 364.0
+        }
+      ]
+    },
+    {
+      "pages": 8064,
+      "blocks": 32,
+      "calls_per_decode": 28,
+      "exact_output_and_inputs": true,
+      "baseline_ns": 481738.0,
+      "candidate_ns": 23408.0,
+      "speedup": 20.580058099794943,
+      "abba_speedups": [
+        21.274436090225564,
+        18.725696594427244,
+        25.813504823151124
+      ],
+      "samples": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 481092.0,
+          "target_reset_ns_per_call": 540.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 23772.0,
+          "target_reset_ns_per_call": 476.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 23044.0,
+          "target_reset_ns_per_call": 500.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 514892.0,
+          "target_reset_ns_per_call": 688.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 485360.0,
+          "target_reset_ns_per_call": 540.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 26256.0,
+          "target_reset_ns_per_call": 436.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 25424.0,
+          "target_reset_ns_per_call": 436.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 482384.0,
+          "target_reset_ns_per_call": 488.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 457180.0,
+          "target_reset_ns_per_call": 1632.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 14744.0,
+          "target_reset_ns_per_call": 304.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 13868.0,
+          "target_reset_ns_per_call": 272.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 281396.0,
+          "target_reset_ns_per_call": 320.0
+        }
+      ]
+    },
+    {
+      "pages": 33152,
+      "blocks": 130,
+      "calls_per_decode": 28,
+      "exact_output_and_inputs": true,
+      "baseline_ns": 1430886.0,
+      "candidate_ns": 52690.0,
+      "speedup": 27.156690074017842,
+      "abba_speedups": [
+        25.232612598548123,
+        20.267125057133203,
+        26.236629341431012
+      ],
+      "samples": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 1129040.0,
+          "target_reset_ns_per_call": 608.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 51428.0,
+          "target_reset_ns_per_call": 288.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 51060.0,
+          "target_reset_ns_per_call": 272.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 1457000.0,
+          "target_reset_ns_per_call": 788.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 2013952.0,
+          "target_reset_ns_per_call": 1080.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 101500.0,
+          "target_reset_ns_per_call": 488.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 99784.0,
+          "target_reset_ns_per_call": 548.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 2065496.0,
+          "target_reset_ns_per_call": 1300.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 1360044.0,
+          "target_reset_ns_per_call": 696.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 52416.0,
+          "target_reset_ns_per_call": 268.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 52964.0,
+          "target_reset_ns_per_call": 308.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 1404772.0,
+          "target_reset_ns_per_call": 824.0
+        }
+      ]
+    },
+    {
+      "pages": 66304,
+      "blocks": 259,
+      "calls_per_decode": 28,
+      "exact_output_and_inputs": true,
+      "baseline_ns": 2569054.0,
+      "candidate_ns": 102542.0,
+      "speedup": 25.053675567084706,
+      "abba_speedups": [
+        30.28204096491732,
+        25.60144696456332,
+        23.170169741984406
+      ],
+      "samples": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 3373916.0,
+          "target_reset_ns_per_call": 1284.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 106532.0,
+          "target_reset_ns_per_call": 592.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 102232.0,
+          "target_reset_ns_per_call": 552.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 2947884.0,
+          "target_reset_ns_per_call": 2076.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 2450264.0,
+          "target_reset_ns_per_call": 1596.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 100900.0,
+          "target_reset_ns_per_call": 480.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 99796.0,
+          "target_reset_ns_per_call": 476.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 2687844.0,
+          "target_reset_ns_per_call": 2524.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 2428128.0,
+          "target_reset_ns_per_call": 2340.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 102852.0,
+          "target_reset_ns_per_call": 560.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 102872.0,
+          "target_reset_ns_per_call": 536.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 2338532.0,
+          "target_reset_ns_per_call": 1036.0
+        }
+      ]
+    },
+    {
+      "pages": 266112,
+      "blocks": 1040,
+      "calls_per_decode": 1,
+      "exact_output_and_inputs": true,
+      "baseline_ns": 9251910.0,
+      "candidate_ns": 414664.0,
+      "speedup": 22.311823548704492,
+      "abba_speedups": [
+        22.885259133595294,
+        22.293651097743208,
+        21.671846478779017
+      ],
+      "samples": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 9403780.0,
+          "target_reset_ns_per_call": 2640.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 414204.0,
+          "target_reset_ns_per_call": 820.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 413400.0,
+          "target_reset_ns_per_call": 796.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 9536152.0,
+          "target_reset_ns_per_call": 2868.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 9100040.0,
+          "target_reset_ns_per_call": 2604.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 422244.0,
+          "target_reset_ns_per_call": 740.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 412924.0,
+          "target_reset_ns_per_call": 632.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 9518904.0,
+          "target_reset_ns_per_call": 3560.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 9077760.0,
+          "target_reset_ns_per_call": 3624.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 421972.0,
+          "target_reset_ns_per_call": 732.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 415124.0,
+          "target_reset_ns_per_call": 788.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 9063656.0,
+          "target_reset_ns_per_call": 2460.0
+        }
+      ]
+    }
+  ]
+}

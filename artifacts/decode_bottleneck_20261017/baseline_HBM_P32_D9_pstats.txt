@@ -1,0 +1,128 @@
+Sat Oct 17 15:24:58 2026    artifacts\decode_bottleneck_20261017\baseline_HBM_P32_D9.prof
+
+         9467194 function calls (9240102 primitive calls) in 10.305 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1227 to 65 due to restriction <65>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      5/4    0.000    0.000    5.072    1.268 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py:15034(_execute)
+      5/4    0.014    0.003    5.071    1.268 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py:15174(_execute_cohort)
+        8    0.098    0.012    4.324    0.541 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:1961(_drain_prevalidated_compiled)
+      5/4    0.003    0.001    4.215    1.054 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py:14338(_schedule_execution_stages)
+      5/4    5.132    1.026    4.205    1.051 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py:13314(_replay_authored_token_program)
+     8528    0.054    0.000    3.482    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:2459(_resolve_task_execution)
+     1568    0.001    0.000    3.073    0.002 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:885(resolve_physical_task)
+     1568    0.001    0.000    3.073    0.002 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:919(_resolve_physical_task)
+     1568    0.009    0.000    3.071    0.002 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:1027(_execute_physical_task)
+     1568    0.276    0.000    2.729    0.002 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:1037(execute_prepared_physical_task)
+     3012    0.033    0.000    2.123    0.001 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:613(execute_hbm_numeric_many)
+     4100    0.025    0.000    1.563    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\dram_core.py:400(_submit_validated)
+      872    0.006    0.000    1.431    0.002 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\dram_core.py:443(submit_many)
+      872    0.004    0.000    1.412    0.002 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\dram_core.py:487(_submit_many_ordered)
+     4076    0.005    0.000    1.310    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:623(execute)
+     4076    0.045    0.000    1.147    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:403(execute)
+     4076    0.159    0.000    0.985    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_hbm_numeric.py:942(run_hbm_numeric)
+        4    0.000    0.000    0.881    0.220 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py:16329(_lower_cost)
+        4    0.000    0.000    0.881    0.220 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:27766(estimate)
+        4    0.000    0.000    0.881    0.220 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:27776(_estimate_exact_in_context)
+        4    0.000    0.000    0.881    0.220 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\scalable_serving.py:523(get_or_create)
+        4    0.007    0.002    0.881    0.220 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:27793(<lambda>)
+        4    0.007    0.002    0.874    0.218 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:29677(_estimate_serving_cohort_cost)
+      392    0.005    0.000    0.782    0.002 C:\Users\A\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\concurrent\futures\_base.py:263(wait)
+      392    0.001    0.000    0.766    0.002 C:\Users\A\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\threading.py:637(wait)
+      527    0.003    0.000    0.765    0.001 C:\Users\A\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\threading.py:323(wait)
+ 3136/392    0.018    0.000    0.752    0.002 C:\Users\A\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\concurrent\futures\thread.py:54(run)
+     2164    0.009    0.000    0.744    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\dram_core.py:347(submit)
+     4280    0.002    0.000    0.738    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:1160(<genexpr>)
+     3012    0.028    0.000    0.432    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:77(_pack_hbm_numeric)
+        4    0.000    0.000    0.408    0.102 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:30037(_lower_serving_cohort)
+     8528    0.157    0.000    0.372    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:2463(_account_task_execution)
+     3012    0.207    0.000    0.367    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:308(refresh_resources)
+     1568    0.030    0.000    0.334    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:938(prepare_physical_task)
+        4    0.000    0.000    0.252    0.063 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:26458(_compile_or_replay_serving_invocation)
+        4    0.031    0.008    0.251    0.063 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:6792(replay)
+     1568    0.008    0.000    0.240    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:797(register_physical_allocations)
+        4    0.012    0.003    0.209    0.052 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\scalable_serving.py:180(execute_cost_schedule)
+     3708    0.014    0.000    0.198    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:846(_register_physical_allocation)
+     6736    0.020    0.000    0.196    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:304(runtime)
+     1568    0.001    0.000    0.190    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:512(begin_transaction)
+     1568    0.114    0.000    0.189    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:376(snapshot)
+        4    0.036    0.009    0.172    0.043 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\live_execution_metrics.py:171(metadata)
+     4076    0.165    0.000    0.167    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:592(finish)
+     4260    0.008    0.000    0.163    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py:13336(observe)
+820059/770043    0.088    0.000    0.162    0.000 {built-in method builtins.isinstance}
+     4076    0.135    0.000    0.157    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:535(commit_timeline)
+     1568    0.151    0.000    0.152    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:779(_publish_physical_summary)
+     4260    0.104    0.000    0.151    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\live_execution_metrics.py:108(observe)
+33742/29518    0.036    0.000    0.147    0.000 {built-in method builtins.any}
+    15228    0.045    0.000    0.145    0.000 C:\Users\A\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\dataclasses.py:1540(replace)
+  1310113    0.139    0.000    0.139    0.000 {method 'get' of 'dict' objects}
+     6744    0.011    0.000    0.138    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:278(_owner_config)
+        4    0.005    0.001    0.125    0.031 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:28960(_compact_execution_stages)
+     8528    0.005    0.000    0.111    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:745(_validate_event_timing)
+        8    0.087    0.011    0.106    0.013 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:29994(_summarize_dram_task_traffic)
+    18988    0.016    0.000    0.104    0.000 {method 'update' of 'set' objects}
+     4076    0.011    0.000    0.103    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:386(checkpoint)
+        4    0.020    0.005    0.099    0.025 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:7212(_physical_task_metadata)
+     7730    0.007    0.000    0.093    0.000 {built-in method builtins.all}
+     9880    0.008    0.000    0.088    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:232(parse_config)
+   133452    0.059    0.000    0.088    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:350(<genexpr>)
+    28532    0.043    0.000    0.082    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:434(<genexpr>)
+        4    0.007    0.002    0.082    0.021 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:10126(_add_gpu_consumer_frontends)
+    67228    0.082    0.000    0.082    0.000 {method 'copy' of 'numpy.ndarray' objects}
+
+
+Sat Oct 17 15:24:58 2026    artifacts\decode_bottleneck_20261017\baseline_HBM_P32_D9.prof
+
+         9467194 function calls (9240102 primitive calls) in 10.305 seconds
+
+   Ordered by: internal time
+   List reduced from 1227 to 45 due to restriction <45>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      5/4    5.132    1.026    4.205    1.051 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\serving.py:13314(_replay_authored_token_program)
+ 3136/392    0.588    0.000    0.023    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_hbm_numeric.py:966(execute_channel)
+     1568    0.276    0.000    2.729    0.002 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:1037(execute_prepared_physical_task)
+     3012    0.207    0.000    0.367    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:308(refresh_resources)
+     4076    0.165    0.000    0.167    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:592(finish)
+     4076    0.159    0.000    0.985    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_hbm_numeric.py:942(run_hbm_numeric)
+     8528    0.157    0.000    0.372    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:2463(_account_task_execution)
+     1568    0.151    0.000    0.152    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:779(_publish_physical_summary)
+  1310113    0.139    0.000    0.139    0.000 {method 'get' of 'dict' objects}
+     4076    0.135    0.000    0.157    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:535(commit_timeline)
+     1568    0.114    0.000    0.189    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:376(snapshot)
+     4260    0.104    0.000    0.151    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\live_execution_metrics.py:108(observe)
+        8    0.098    0.012    4.324    0.541 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:1961(_drain_prevalidated_compiled)
+820059/770043    0.088    0.000    0.162    0.000 {built-in method builtins.isinstance}
+        8    0.087    0.011    0.106    0.013 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:29994(_summarize_dram_task_traffic)
+ 2993/310    0.084    0.000    0.013    0.000 {method 'get' of '_queue.SimpleQueue' objects}
+    67228    0.082    0.000    0.082    0.000 {method 'copy' of 'numpy.ndarray' objects}
+   405760    0.062    0.000    0.081    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:746(<genexpr>)
+   133452    0.059    0.000    0.088    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:350(<genexpr>)
+     8528    0.054    0.000    3.482    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\event_kernel.py:2459(_resolve_task_execution)
+    15228    0.045    0.000    0.145    0.000 C:\Users\A\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\dataclasses.py:1540(replace)
+    31544    0.045    0.000    0.045    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+     4076    0.045    0.000    1.147    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:403(execute)
+51844/4200    0.044    0.000    0.055    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:6201(_task_segment_clone_metadata_plan_node)
+    28532    0.043    0.000    0.082    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:434(<genexpr>)
+    18038    0.042    0.000    0.065    0.000 {built-in method builtins.sorted}
+     9896    0.041    0.000    0.065    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\physical_contract.py:88(_validate_standard_hbm_organization)
+     9012    0.040    0.000    0.044    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\contracts.py:288(__post_init__)
+        4    0.036    0.009    0.172    0.043 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\live_execution_metrics.py:171(metadata)
+33742/29518    0.036    0.000    0.147    0.000 {built-in method builtins.any}
+203958/203928    0.034    0.000    0.040    0.000 {built-in method builtins.max}
+     3012    0.033    0.000    2.123    0.001 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:613(execute_hbm_numeric_many)
+    43740    0.032    0.000    0.052    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:392(<genexpr>)
+        4    0.031    0.008    0.251    0.063 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\planner.py:6792(replay)
+    11216    0.031    0.000    0.057    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\scalable_serving.py:119(compact_execution_metadata)
+     1676    0.030    0.000    0.047    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\memory_allocator.py:149(_find_first_fit)
+     1568    0.030    0.000    0.334    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:938(prepare_physical_task)
+    43336    0.028    0.000    0.064    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\data_motion.py:625(_memory_accesses)
+     3012    0.028    0.000    0.432    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\_compiled_hbm.py:77(_pack_hbm_numeric)
+   289533    0.027    0.000    0.027    0.000 {built-in method builtins.getattr}
+   196614    0.027    0.000    0.049    0.000 <frozen abc>:117(__instancecheck__)
+   457055    0.025    0.000    0.025    0.000 {built-in method math.isfinite}
+     4100    0.025    0.000    1.563    0.000 F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\dram_core.py:400(_submit_validated)
+   109293    0.024    0.000    0.040    0.000 <frozen importlib._bootstrap>:645(parent)
+   196614    0.023    0.000    0.023    0.000 {built-in method _abc._abc_instancecheck}

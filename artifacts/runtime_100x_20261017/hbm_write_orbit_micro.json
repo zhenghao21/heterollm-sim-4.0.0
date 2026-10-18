@@ -1,0 +1,126 @@
+{
+  "candidate": "WRITE integer ticks and exact within-row translation orbit",
+  "clock_ns": 0.512,
+  "cases": [
+    {
+      "operation": "write",
+      "mib": 64,
+      "arrival_ns": 0.0,
+      "case": "cold",
+      "baseline_seconds": [
+        0.054089800018118694,
+        0.05023960000835359,
+        0.04763089999323711,
+        0.04820580000523478
+      ],
+      "candidate_seconds": [
+        0.008990000002086163,
+        0.007036299997707829,
+        0.007159900007536635,
+        0.007460100023308769
+      ],
+      "speedup": 6.733611477830876,
+      "all_results_and_arrays_bitwise_equal": true
+    },
+    {
+      "operation": "write",
+      "mib": 64,
+      "arrival_ns": 0.0,
+      "case": "continued",
+      "baseline_seconds": [
+        0.05100599999423139,
+        0.0454858000157401,
+        0.06273480001254939,
+        0.046588699973654
+      ],
+      "candidate_seconds": [
+        0.007278200006112456,
+        0.00739169999724254,
+        0.0074881999753415585,
+        0.007184500020230189
+      ],
+      "speedup": 6.65271746539278,
+      "all_results_and_arrays_bitwise_equal": true
+    },
+    {
+      "operation": "write",
+      "mib": 64,
+      "arrival_ns": 400000000.0,
+      "case": "cold",
+      "baseline_seconds": [
+        0.04879359999904409,
+        0.052497099997708574,
+        0.04963769999449141,
+        0.0487468000210356
+      ],
+      "candidate_seconds": [
+        0.006999600009294227,
+        0.007597899995744228,
+        0.007076600013533607,
+        0.007038899988401681
+      ],
+      "speedup": 6.973277601221366,
+      "all_results_and_arrays_bitwise_equal": true
+    },
+    {
+      "operation": "write",
+      "mib": 64,
+      "arrival_ns": 400000000.0,
+      "case": "continued",
+      "baseline_seconds": [
+        0.048103999986778945,
+        0.05672140000388026,
+        0.04797730001155287,
+        0.0482592000043951
+      ],
+      "candidate_seconds": [
+        0.007585199986351654,
+        0.0073901999858208,
+        0.007182700006524101,
+        0.008411700022406876
+      ],
+      "speedup": 6.434766361515405,
+      "all_results_and_arrays_bitwise_equal": true
+    },
+    {
+      "operation": "read",
+      "mib": 64,
+      "arrival_ns": 400000000.0,
+      "case": "cold",
+      "baseline_seconds": [
+        0.007181900000432506,
+        0.007190499978605658,
+        0.007349199993768707,
+        0.007281600002897903
+      ],
+      "candidate_seconds": [
+        0.007187799987150356,
+        0.007455499988282099,
+        0.007223599997814745,
+        0.00964519998524338
+      ],
+      "speedup": 0.9858983176905027,
+      "all_results_and_arrays_bitwise_equal": true
+    },
+    {
+      "operation": "read",
+      "mib": 64,
+      "arrival_ns": 400000000.0,
+      "case": "continued",
+      "baseline_seconds": [
+        0.007725300005404279,
+        0.007507200003601611,
+        0.007346500002313405,
+        0.007125599979190156
+      ],
+      "candidate_seconds": [
+        0.00766430000658147,
+        0.007391099992673844,
+        0.0074708000174723566,
+        0.009586700005456805
+      ],
+      "speedup": 0.9814074556698278,
+      "all_results_and_arrays_bitwise_equal": true
+    }
+  ]
+}

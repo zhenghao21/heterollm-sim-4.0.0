@@ -408,6 +408,11 @@ def reduce_physical_results(physical_results: list, arrival_ns, optional_fields,
             elif key in peak_fields:
                 if isinstance(value, (int, float)) and not isinstance(value, bool):
                     row[key] = max(row.get(key, 0), value)
+            elif key == "host_admission_depth_scope" and isinstance(value, str):
+                scopes = row.setdefault("host_admission_depth_scopes", [])
+                if value not in scopes:
+                    scopes.append(value)
+                row[key] = scopes[0] if len(scopes) == 1 else "mixed admission scopes: " + "; ".join(scopes)
     for owner, row in execution_by_owner.items():
         for key, count in optional_observed_by_owner[owner].items():
             if count != row["operation_count"]:

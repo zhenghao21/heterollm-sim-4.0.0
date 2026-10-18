@@ -36,6 +36,8 @@ from .planner import (
     _compilation_scope,
     _summarize_nand_task_traffic,
     _summarize_dram_task_traffic,
+    _merge_nand_queue_scopes,
+    _nand_queue_scope_description,
     iter_request_task_chunks,
 )
 
@@ -700,9 +702,11 @@ def _merge_storage_traffic(target: Dict[str, object], source: Mapping[str, objec
             "status", "recorded" if observations is not None else "not_recorded")
         merge_status(key, status)
         target[key] = target["nand_observations"][metric] if target["nand_observations"] else None
-    for key in ("queue_depth_scope", "page_utilization_scope"):
-        if key in source:
-            target[key] = source[key]
+    scopes = target.setdefault("queue_depth_scopes_by_owner", {})
+    _merge_nand_queue_scopes(scopes, source.get("queue_depth_scopes_by_owner", {}))
+    target["queue_depth_scope"] = _nand_queue_scope_description(scopes)
+    if "page_utilization_scope" in source:
+        target["page_utilization_scope"] = source["page_utilization_scope"]
     operation_counts = target["operation_counts"]
     for key, value in (source.get("operation_counts", {}) or {}).items():
         operation_counts[str(key)] = operation_counts.get(str(key), 0) + int(value)

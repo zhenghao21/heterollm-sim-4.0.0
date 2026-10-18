@@ -1,0 +1,340 @@
+{
+  "attempted_candidates": 4,
+  "completed_candidates": 3,
+  "total_candidates": 4,
+  "comparisons": {
+    "qwen2_5-0_5b": {
+      "purpose": "fast mode diagnostics; not a formal scan",
+      "target_relative_error": 0.1,
+      "cases": {
+        "HBM": {
+          "architecture": "HBM",
+          "model_id": "qwen2_5-0_5b",
+          "prompt_tokens": 65536,
+          "output_tokens": 5120,
+          "target_relative_error": 0.1,
+          "valid_comparison": true,
+          "within_target": true,
+          "relative_errors": {
+            "ttft_ns": 0.0,
+            "tpot_ns": 0.011389325966794067
+          },
+          "invalid_reasons": [],
+          "latency_ns": {
+            "ttft_ns": {
+              "detailed": 400130162.53257143,
+              "fast": 400130162.53257143
+            },
+            "tpot_ns": {
+              "detailed": 1242308.418062903,
+              "fast": 1256457.4735875137
+            }
+          },
+          "wall_seconds": {
+            "detailed": 8989.847194300004,
+            "fast": 103.16516849998152
+          },
+          "speedup": {
+            "total_wall": 87.14033355455251,
+            "decode_wall": 500.0378963588702
+          },
+          "effective_mode": "fast",
+          "sampled_decode_steps": 16,
+          "predicted_decode_steps": 5103,
+          "fallback_reasons": [],
+          "prefix_validation_relative_error": 4.2186908695697395e-05,
+          "model_relative_half_width": 0.019250155854286466,
+          "full_request_validation_status": "within_target_for_this_request",
+          "transaction_equivalence_claimed": false,
+          "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled",
+          "previous_fast_wall_seconds": 147.4155683000281,
+          "previous_fast_over_current_fast": 1.4289277131365758,
+          "optimization_comparison": {
+            "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled",
+            "valid_comparison": true,
+            "previous_fast": {
+              "total_wall_seconds": 147.4155683000281,
+              "prefill_wall_seconds": 84.97268980002264,
+              "real_decode_wall_seconds": 61.69614489999367,
+              "sampled_decode_steps": 56,
+              "effective_mode": "fast"
+            },
+            "adaptive_fast": {
+              "total_wall_seconds": 103.16516849998152,
+              "prefill_wall_seconds": 84.70741659996565,
+              "real_decode_wall_seconds": 17.7428307000082,
+              "sampled_decode_steps": 16,
+              "effective_mode": "fast"
+            },
+            "previous_over_adaptive": {
+              "total_wall_seconds": 1.4289277131365758,
+              "prefill_wall_seconds": 1.0031316407783955,
+              "real_decode_wall_seconds": 3.4772436226855934
+            },
+            "real_decode_scope": "measured ordinary Decode cohort intervals only; excludes forecast/reduction after the final cohort",
+            "sample_counts_are": "actually executed Decode cohorts; not predicted output tokens"
+          }
+        },
+        "HBF": {
+          "architecture": "HBF",
+          "model_id": "qwen2_5-0_5b",
+          "prompt_tokens": 65536,
+          "output_tokens": 5120,
+          "target_relative_error": 0.1,
+          "valid_comparison": false,
+          "within_target": false,
+          "relative_errors": {
+            "ttft_ns": null,
+            "tpot_ns": null
+          },
+          "invalid_reasons": [
+            "different_public_latency_boundary",
+            "incomplete_request_or_wrong_output_budget",
+            "invalid_latency_metric",
+            "unmatched_or_instrumented_timing_environment"
+          ],
+          "latency_ns": {
+            "ttft_ns": {
+              "detailed": 10528480132.556366,
+              "fast": null
+            },
+            "tpot_ns": {
+              "detailed": 123495410.06350726,
+              "fast": null
+            }
+          },
+          "wall_seconds": {
+            "detailed": 5047.799101599987,
+            "fast": 212.01759189995937
+          },
+          "speedup": {
+            "total_wall": null,
+            "decode_wall": null
+          },
+          "effective_mode": null,
+          "sampled_decode_steps": null,
+          "predicted_decode_steps": null,
+          "fallback_reasons": [],
+          "prefix_validation_relative_error": null,
+          "model_relative_half_width": null,
+          "full_request_validation_status": "failed_or_invalid_for_this_request",
+          "transaction_equivalence_claimed": false,
+          "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled",
+          "previous_fast_wall_seconds": 226.29222599999048,
+          "previous_fast_over_current_fast": null,
+          "optimization_comparison": {
+            "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled",
+            "valid_comparison": false,
+            "previous_fast": {
+              "total_wall_seconds": 226.29222599999048,
+              "prefill_wall_seconds": 175.67190739998478,
+              "real_decode_wall_seconds": 49.820972699992126,
+              "sampled_decode_steps": 56,
+              "effective_mode": "fast"
+            },
+            "adaptive_fast": {
+              "total_wall_seconds": 212.01759189995937,
+              "prefill_wall_seconds": null,
+              "real_decode_wall_seconds": null,
+              "sampled_decode_steps": 100,
+              "effective_mode": null
+            },
+            "previous_over_adaptive": {
+              "total_wall_seconds": null,
+              "prefill_wall_seconds": null,
+              "real_decode_wall_seconds": null
+            },
+            "real_decode_scope": "measured ordinary Decode cohort intervals only; excludes forecast/reduction after the final cohort",
+            "sample_counts_are": "actually executed Decode cohorts; not predicted output tokens"
+          }
+        }
+      },
+      "ratio_comparison": {
+        "ttft_ns": {
+          "hbf_over_hbm": {
+            "detailed": 26.31263803237859,
+            "fast": null
+          },
+          "relative_error": null,
+          "within_target": false
+        },
+        "tpot_ns": {
+          "hbf_over_hbm": {
+            "detailed": 99.40801194607553,
+            "fast": null
+          },
+          "relative_error": null,
+          "within_target": false
+        }
+      },
+      "all_within_target": false,
+      "accuracy_scope": "these complete requests only; no global error guarantee",
+      "speedup_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled"
+    },
+    "qwen2_5-7b": {
+      "purpose": "fast mode diagnostics; not a formal scan",
+      "target_relative_error": 0.1,
+      "cases": {
+        "HBM": {
+          "architecture": "HBM",
+          "model_id": "qwen2_5-7b",
+          "prompt_tokens": 65536,
+          "output_tokens": 5120,
+          "target_relative_error": 0.1,
+          "valid_comparison": true,
+          "within_target": true,
+          "relative_errors": {
+            "ttft_ns": 0.0,
+            "tpot_ns": 0.012577767011483077
+          },
+          "invalid_reasons": [],
+          "latency_ns": {
+            "ttft_ns": {
+              "detailed": 1602504449.3805716,
+              "fast": 1602504449.3805716
+            },
+            "tpot_ns": {
+              "detailed": 7588505.002283259,
+              "fast": 7683951.450167452
+            }
+          },
+          "wall_seconds": {
+            "detailed": 25008.404403100023,
+            "fast": 291.10629859997425
+          },
+          "speedup": {
+            "total_wall": 85.90815287533677,
+            "decode_wall": 441.57551833166366
+          },
+          "effective_mode": "fast",
+          "sampled_decode_steps": 16,
+          "predicted_decode_steps": 5103,
+          "fallback_reasons": [],
+          "prefix_validation_relative_error": 2.303111454807834e-05,
+          "model_relative_half_width": 0.019250155854286577,
+          "full_request_validation_status": "within_target_for_this_request",
+          "transaction_equivalence_claimed": false,
+          "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled",
+          "previous_fast_wall_seconds": 429.08949410001514,
+          "previous_fast_over_current_fast": 1.4739959120213042,
+          "optimization_comparison": {
+            "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled",
+            "valid_comparison": true,
+            "previous_fast": {
+              "total_wall_seconds": 429.08949410001514,
+              "prefill_wall_seconds": 232.7166457999847,
+              "real_decode_wall_seconds": 195.4861860999954,
+              "sampled_decode_steps": 56,
+              "effective_mode": "fast"
+            },
+            "adaptive_fast": {
+              "total_wall_seconds": 291.10629859997425,
+              "prefill_wall_seconds": 234.22352330002468,
+              "real_decode_wall_seconds": 56.046090900024865,
+              "sampled_decode_steps": 16,
+              "effective_mode": "fast"
+            },
+            "previous_over_adaptive": {
+              "total_wall_seconds": 1.4739959120213042,
+              "prefill_wall_seconds": 0.9935664980237284,
+              "real_decode_wall_seconds": 3.4879539850282164
+            },
+            "real_decode_scope": "measured ordinary Decode cohort intervals only; excludes forecast/reduction after the final cohort",
+            "sample_counts_are": "actually executed Decode cohorts; not predicted output tokens"
+          }
+        },
+        "HBF": {
+          "architecture": "HBF",
+          "model_id": "qwen2_5-7b",
+          "prompt_tokens": 65536,
+          "output_tokens": 5120,
+          "target_relative_error": 0.1,
+          "valid_comparison": true,
+          "within_target": true,
+          "relative_errors": {
+            "ttft_ns": 0.0,
+            "tpot_ns": 0.007761767481778164
+          },
+          "invalid_reasons": [],
+          "latency_ns": {
+            "ttft_ns": {
+              "detailed": 40726826225.69565,
+              "fast": 40726826225.69565
+            },
+            "tpot_ns": {
+              "detailed": 488653255.435813,
+              "fast": 492446068.38371974
+            }
+          },
+          "wall_seconds": {
+            "detailed": 15093.28088169999,
+            "fast": 526.6340891
+          },
+          "speedup": {
+            "total_wall": 28.65990104722218,
+            "decode_wall": 353.2954458645223
+          },
+          "effective_mode": "fast",
+          "sampled_decode_steps": 16,
+          "predicted_decode_steps": 5103,
+          "fallback_reasons": [],
+          "prefix_validation_relative_error": 2.4917624090509535e-05,
+          "model_relative_half_width": 0.019250155854286355,
+          "full_request_validation_status": "within_target_for_this_request",
+          "transaction_equivalence_claimed": false,
+          "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled",
+          "previous_fast_wall_seconds": 775.2850347000058,
+          "previous_fast_over_current_fast": 1.4721512540613197,
+          "optimization_comparison": {
+            "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled",
+            "valid_comparison": true,
+            "previous_fast": {
+              "total_wall_seconds": 775.2850347000058,
+              "prefill_wall_seconds": 636.7689145000186,
+              "real_decode_wall_seconds": 136.86308399998234,
+              "sampled_decode_steps": 56,
+              "effective_mode": "fast"
+            },
+            "adaptive_fast": {
+              "total_wall_seconds": 526.6340891,
+              "prefill_wall_seconds": 485.1768769000191,
+              "real_decode_wall_seconds": 39.87518969998928,
+              "sampled_decode_steps": 16,
+              "effective_mode": "fast"
+            },
+            "previous_over_adaptive": {
+              "total_wall_seconds": 1.4721512540613197,
+              "prefill_wall_seconds": 1.312446954538681,
+              "real_decode_wall_seconds": 3.4322867183756403
+            },
+            "real_decode_scope": "measured ordinary Decode cohort intervals only; excludes forecast/reduction after the final cohort",
+            "sample_counts_are": "actually executed Decode cohorts; not predicted output tokens"
+          }
+        }
+      },
+      "ratio_comparison": {
+        "ttft_ns": {
+          "hbf_over_hbm": {
+            "detailed": 25.414485583137132,
+            "fast": 25.414485583137132
+          },
+          "relative_error": 0.0,
+          "within_target": true
+        },
+        "tpot_ns": {
+          "hbf_over_hbm": {
+            "detailed": 64.39387669755573,
+            "fast": 64.0876079940599
+          },
+          "relative_error": 0.004756177438024273,
+          "within_target": true
+        }
+      },
+      "all_within_target": true,
+      "accuracy_scope": "these complete requests only; no global error guarantee",
+      "speedup_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled"
+    }
+  },
+  "all_within_target": false,
+  "wall_comparison_scope": "historical measurements on this machine with the same request, affinity and GC; not an interleaved ABBA experiment; ambient background load was not controlled"
+}

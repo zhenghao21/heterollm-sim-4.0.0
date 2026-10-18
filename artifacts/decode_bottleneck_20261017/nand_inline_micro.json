@@ -1,0 +1,852 @@
+{
+  "purpose": "isolated helper-inline micro; not an end-to-end speedup",
+  "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tmp\\decode_bottleneck_baseline\\src\\heterollm_sim\\_compiled_nand.py",
+  "candidate_change": "inline='always' on _reserve/_transfer_links only",
+  "numba_fastmath": false,
+  "order": "ABBA",
+  "cases": [
+    {
+      "name": "cold_9bank_2130page",
+      "banks": 9,
+      "pages": 2130,
+      "geometry_banks": 256,
+      "route_queue_depth": {
+        "gpu_hbf0.inflight": 1
+      },
+      "route": [
+        [
+          "gpu_hbf0",
+          "read",
+          [
+            [
+              "gpu_hbf0",
+              2.6666666666666665,
+              4096
+            ],
+            [
+              "gpu_hbf0.inflight",
+              102.66666666666667,
+              0
+            ]
+          ]
+        ]
+      ],
+      "arrival_kind": "scalar",
+      "exact_return_fields": 11,
+      "exact_all_input_arrays": true,
+      "cache_hits": 0,
+      "cache_misses": 2130,
+      "metrics": {
+        "kernel_ns_per_call": {
+          "A": 461294.0,
+          "B": 712188.0,
+          "speedup": 0.6477138059051823
+        },
+        "copy_ns_per_call": {
+          "A": 6440.0,
+          "B": 7066.0,
+          "speedup": 0.911406736484574
+        },
+        "combined_ns_per_call": {
+          "A": 467760.0,
+          "B": 719330.0,
+          "speedup": 0.650271780684804
+        }
+      },
+      "abba_kernel_speedups": [
+        0.6598061186091313,
+        0.6444589562216586,
+        0.6454645879187385
+      ],
+      "blocks": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 477852.0,
+          "copy_ns_per_call": 6492.0,
+          "combined_ns_per_call": 484576.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 712792.0,
+          "copy_ns_per_call": 6592.0,
+          "combined_ns_per_call": 719604.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 711584.0,
+          "copy_ns_per_call": 7180.0,
+          "combined_ns_per_call": 719056.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 461960.0,
+          "copy_ns_per_call": 6372.0,
+          "combined_ns_per_call": 468500.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 460628.0,
+          "copy_ns_per_call": 6220.0,
+          "combined_ns_per_call": 467020.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 713272.0,
+          "copy_ns_per_call": 6952.0,
+          "combined_ns_per_call": 720440.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 707796.0,
+          "copy_ns_per_call": 6624.0,
+          "combined_ns_per_call": 714624.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 455192.0,
+          "copy_ns_per_call": 6588.0,
+          "combined_ns_per_call": 461972.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 474444.0,
+          "copy_ns_per_call": 6388.0,
+          "combined_ns_per_call": 481024.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 711408.0,
+          "copy_ns_per_call": 7204.0,
+          "combined_ns_per_call": 718804.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 726124.0,
+          "copy_ns_per_call": 7652.0,
+          "combined_ns_per_call": 733992.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 453432.0,
+          "copy_ns_per_call": 10668.0,
+          "combined_ns_per_call": 464512.0
+        }
+      ]
+    },
+    {
+      "name": "cold_55bank_16384page",
+      "banks": 55,
+      "pages": 16384,
+      "geometry_banks": 256,
+      "route_queue_depth": {
+        "gpu_hbf0.inflight": 1
+      },
+      "route": [
+        [
+          "gpu_hbf0",
+          "read",
+          [
+            [
+              "gpu_hbf0",
+              2.6666666666666665,
+              4096
+            ],
+            [
+              "gpu_hbf0.inflight",
+              102.66666666666667,
+              0
+            ]
+          ]
+        ]
+      ],
+      "arrival_kind": "scalar",
+      "exact_return_fields": 11,
+      "exact_all_input_arrays": true,
+      "cache_hits": 0,
+      "cache_misses": 16384,
+      "metrics": {
+        "kernel_ns_per_call": {
+          "A": 3719456.0,
+          "B": 5490934.0,
+          "speedup": 0.6773812979722575
+        },
+        "copy_ns_per_call": {
+          "A": 10002.0,
+          "B": 11260.0,
+          "speedup": 0.8882770870337477
+        },
+        "combined_ns_per_call": {
+          "A": 3731792.0,
+          "B": 5502846.0,
+          "speedup": 0.67815672108578
+        }
+      },
+      "abba_kernel_speedups": [
+        0.6953913153323625,
+        0.6657113200767955,
+        0.6746884098061801
+      ],
+      "blocks": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 3781480.0,
+          "copy_ns_per_call": 10056.0,
+          "combined_ns_per_call": 3791940.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 5386296.0,
+          "copy_ns_per_call": 10612.0,
+          "combined_ns_per_call": 5397300.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 5411492.0,
+          "copy_ns_per_call": 9944.0,
+          "combined_ns_per_call": 5421844.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 3727208.0,
+          "copy_ns_per_call": 9468.0,
+          "combined_ns_per_call": 3737056.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 3694952.0,
+          "copy_ns_per_call": 9536.0,
+          "combined_ns_per_call": 3704812.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 5544692.0,
+          "copy_ns_per_call": 11200.0,
+          "combined_ns_per_call": 5556424.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 5476788.0,
+          "copy_ns_per_call": 11320.0,
+          "combined_ns_per_call": 5488652.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 3642172.0,
+          "copy_ns_per_call": 11448.0,
+          "combined_ns_per_call": 3654160.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 3716200.0,
+          "copy_ns_per_call": 9948.0,
+          "combined_ns_per_call": 3726528.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 5520620.0,
+          "copy_ns_per_call": 12352.0,
+          "combined_ns_per_call": 5533584.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 5505080.0,
+          "copy_ns_per_call": 11440.0,
+          "combined_ns_per_call": 5517040.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 3722712.0,
+          "copy_ns_per_call": 14204.0,
+          "combined_ns_per_call": 3737600.0
+        }
+      ]
+    },
+    {
+      "name": "cold_256bank_16384page",
+      "banks": 256,
+      "pages": 16384,
+      "geometry_banks": 256,
+      "route_queue_depth": {
+        "gpu_hbf0.inflight": 1
+      },
+      "route": [
+        [
+          "gpu_hbf0",
+          "read",
+          [
+            [
+              "gpu_hbf0",
+              2.6666666666666665,
+              4096
+            ],
+            [
+              "gpu_hbf0.inflight",
+              102.66666666666667,
+              0
+            ]
+          ]
+        ]
+      ],
+      "arrival_kind": "scalar",
+      "exact_return_fields": 11,
+      "exact_all_input_arrays": true,
+      "cache_hits": 0,
+      "cache_misses": 16384,
+      "metrics": {
+        "kernel_ns_per_call": {
+          "A": 3674016.0,
+          "B": 5639254.0,
+          "speedup": 0.6515074511628666
+        },
+        "copy_ns_per_call": {
+          "A": 11840.0,
+          "B": 13770.0,
+          "speedup": 0.859840232389252
+        },
+        "combined_ns_per_call": {
+          "A": 3686824.0,
+          "B": 5653680.0,
+          "speedup": 0.6521104837910883
+        }
+      },
+      "abba_kernel_speedups": [
+        0.6093510078142647,
+        0.6305805696994673,
+        0.6882467858969896
+      ],
+      "blocks": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 3791248.0,
+          "copy_ns_per_call": 11020.0,
+          "combined_ns_per_call": 3802716.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 5681076.0,
+          "copy_ns_per_call": 14964.0,
+          "combined_ns_per_call": 5696668.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 5900820.0,
+          "copy_ns_per_call": 17348.0,
+          "combined_ns_per_call": 5918796.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 3266192.0,
+          "copy_ns_per_call": 14916.0,
+          "combined_ns_per_call": 3281704.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 3510640.0,
+          "copy_ns_per_call": 12660.0,
+          "combined_ns_per_call": 3523864.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 5636364.0,
+          "copy_ns_per_call": 13900.0,
+          "combined_ns_per_call": 5650920.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 5642144.0,
+          "copy_ns_per_call": 13640.0,
+          "combined_ns_per_call": 5656440.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 3601368.0,
+          "copy_ns_per_call": 14084.0,
+          "combined_ns_per_call": 3616044.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 3746664.0,
+          "copy_ns_per_call": 10564.0,
+          "combined_ns_per_call": 3757604.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 5485912.0,
+          "copy_ns_per_call": 11600.0,
+          "combined_ns_per_call": 5498004.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 5476400.0,
+          "copy_ns_per_call": 10576.0,
+          "combined_ns_per_call": 5487424.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 3798112.0,
+          "copy_ns_per_call": 10340.0,
+          "combined_ns_per_call": 3808828.0
+        }
+      ]
+    },
+    {
+      "name": "vector_55bank_16384page",
+      "banks": 55,
+      "pages": 16384,
+      "vector_arrival": true,
+      "geometry_banks": 256,
+      "route_queue_depth": {
+        "gpu_hbf0.inflight": 1
+      },
+      "route": [
+        [
+          "gpu_hbf0",
+          "read",
+          [
+            [
+              "gpu_hbf0",
+              2.6666666666666665,
+              4096
+            ],
+            [
+              "gpu_hbf0.inflight",
+              102.66666666666667,
+              0
+            ]
+          ]
+        ]
+      ],
+      "arrival_kind": "vector",
+      "exact_return_fields": 11,
+      "exact_all_input_arrays": true,
+      "cache_hits": 0,
+      "cache_misses": 16384,
+      "metrics": {
+        "kernel_ns_per_call": {
+          "A": 3760042.0,
+          "B": 5489562.0,
+          "speedup": 0.6849438989850192
+        },
+        "copy_ns_per_call": {
+          "A": 13408.0,
+          "B": 13012.0,
+          "speedup": 1.0304334460498001
+        },
+        "combined_ns_per_call": {
+          "A": 3774040.0,
+          "B": 5503000.0,
+          "speedup": 0.6858150099945485
+        }
+      },
+      "abba_kernel_speedups": [
+        0.6897638128959452,
+        0.6865795703203069,
+        0.6687023457631579
+      ],
+      "blocks": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 3759316.0,
+          "copy_ns_per_call": 14628.0,
+          "combined_ns_per_call": 3774356.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 5478736.0,
+          "copy_ns_per_call": 12760.0,
+          "combined_ns_per_call": 5491908.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 5470380.0,
+          "copy_ns_per_call": 11948.0,
+          "combined_ns_per_call": 5482708.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 3792988.0,
+          "copy_ns_per_call": 12876.0,
+          "combined_ns_per_call": 3806328.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 3755820.0,
+          "copy_ns_per_call": 12776.0,
+          "combined_ns_per_call": 3769044.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 5500388.0,
+          "copy_ns_per_call": 13264.0,
+          "combined_ns_per_call": 5514092.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 5447488.0,
+          "copy_ns_per_call": 12600.0,
+          "combined_ns_per_call": 5460536.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 3760768.0,
+          "copy_ns_per_call": 12548.0,
+          "combined_ns_per_call": 3773724.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 3704000.0,
+          "copy_ns_per_call": 14620.0,
+          "combined_ns_per_call": 3719192.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 5613444.0,
+          "copy_ns_per_call": 18208.0,
+          "combined_ns_per_call": 5632456.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 5572340.0,
+          "copy_ns_per_call": 15420.0,
+          "combined_ns_per_call": 5588320.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 3775960.0,
+          "copy_ns_per_call": 13940.0,
+          "combined_ns_per_call": 3790328.0
+        }
+      ]
+    },
+    {
+      "name": "cache_hit_9bank_2130page_vector",
+      "banks": 9,
+      "pages": 2130,
+      "vector_arrival": true,
+      "cache_hits": 2130,
+      "geometry_banks": 256,
+      "route_queue_depth": {
+        "gpu_hbf0.inflight": 1
+      },
+      "route": [
+        [
+          "gpu_hbf0",
+          "read",
+          [
+            [
+              "gpu_hbf0",
+              2.6666666666666665,
+              4096
+            ],
+            [
+              "gpu_hbf0.inflight",
+              102.66666666666667,
+              0
+            ]
+          ]
+        ]
+      ],
+      "arrival_kind": "vector",
+      "exact_return_fields": 11,
+      "exact_all_input_arrays": true,
+      "cache_misses": 0,
+      "metrics": {
+        "kernel_ns_per_call": {
+          "A": 393682.0,
+          "B": 589898.0,
+          "speedup": 0.6673730034683962
+        },
+        "copy_ns_per_call": {
+          "A": 6724.0,
+          "B": 6912.0,
+          "speedup": 0.9728009259259259
+        },
+        "combined_ns_per_call": {
+          "A": 400570.0,
+          "B": 596980.0,
+          "speedup": 0.6709940031491842
+        }
+      },
+      "abba_kernel_speedups": [
+        0.667880936083117,
+        0.6693781934848665,
+        0.6601816970175033
+      ],
+      "blocks": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 395120.0,
+          "copy_ns_per_call": 6652.0,
+          "combined_ns_per_call": 401948.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 589664.0,
+          "copy_ns_per_call": 7084.0,
+          "combined_ns_per_call": 596928.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 590744.0,
+          "copy_ns_per_call": 7216.0,
+          "combined_ns_per_call": 598136.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 393252.0,
+          "copy_ns_per_call": 6636.0,
+          "combined_ns_per_call": 400040.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 394112.0,
+          "copy_ns_per_call": 6796.0,
+          "combined_ns_per_call": 401072.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 588048.0,
+          "copy_ns_per_call": 6588.0,
+          "combined_ns_per_call": 594800.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 590132.0,
+          "copy_ns_per_call": 6728.0,
+          "combined_ns_per_call": 597032.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 394536.0,
+          "copy_ns_per_call": 6552.0,
+          "combined_ns_per_call": 401268.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 393036.0,
+          "copy_ns_per_call": 6840.0,
+          "combined_ns_per_call": 400068.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 592632.0,
+          "copy_ns_per_call": 7144.0,
+          "combined_ns_per_call": 600020.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 583832.0,
+          "copy_ns_per_call": 6740.0,
+          "combined_ns_per_call": 590780.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 383644.0,
+          "copy_ns_per_call": 7540.0,
+          "combined_ns_per_call": 391404.0
+        }
+      ]
+    },
+    {
+      "name": "stress_55bank_16384page_128credit",
+      "banks": 55,
+      "pages": 16384,
+      "credit_lanes": 128,
+      "geometry_banks": 256,
+      "route_queue_depth": {
+        "gpu_hbf0.inflight": 128
+      },
+      "route": [
+        [
+          "gpu_hbf0",
+          "read",
+          [
+            [
+              "gpu_hbf0",
+              2.6666666666666665,
+              4096
+            ],
+            [
+              "gpu_hbf0.inflight",
+              102.66666666666667,
+              0
+            ]
+          ]
+        ]
+      ],
+      "arrival_kind": "scalar",
+      "exact_return_fields": 11,
+      "exact_all_input_arrays": true,
+      "cache_hits": 0,
+      "cache_misses": 16384,
+      "metrics": {
+        "kernel_ns_per_call": {
+          "A": 5841376.0,
+          "B": 7737878.0,
+          "speedup": 0.7549067069809061
+        },
+        "copy_ns_per_call": {
+          "A": 11086.0,
+          "B": 13236.0,
+          "speedup": 0.8375642187972197
+        },
+        "combined_ns_per_call": {
+          "A": 5854440.0,
+          "B": 7751504.0,
+          "speedup": 0.7552650427581538
+        }
+      },
+      "abba_kernel_speedups": [
+        0.7569045713363872,
+        0.7393362617883115,
+        0.7541574059451441
+      ],
+      "blocks": [
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 5835028.0,
+          "copy_ns_per_call": 11236.0,
+          "combined_ns_per_call": 5846664.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 7708604.0,
+          "copy_ns_per_call": 11396.0,
+          "combined_ns_per_call": 7720520.0
+        },
+        {
+          "variant": "B",
+          "repeat": 1,
+          "kernel_ns_per_call": 7713932.0,
+          "copy_ns_per_call": 13504.0,
+          "combined_ns_per_call": 7727968.0
+        },
+        {
+          "variant": "A",
+          "repeat": 1,
+          "kernel_ns_per_call": 5838360.0,
+          "copy_ns_per_call": 14244.0,
+          "combined_ns_per_call": 5853236.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 5844392.0,
+          "copy_ns_per_call": 10828.0,
+          "combined_ns_per_call": 5855644.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 8039752.0,
+          "copy_ns_per_call": 15876.0,
+          "combined_ns_per_call": 8056504.0
+        },
+        {
+          "variant": "B",
+          "repeat": 2,
+          "kernel_ns_per_call": 7792032.0,
+          "copy_ns_per_call": 12968.0,
+          "combined_ns_per_call": 7805632.0
+        },
+        {
+          "variant": "A",
+          "repeat": 2,
+          "kernel_ns_per_call": 5860620.0,
+          "copy_ns_per_call": 11024.0,
+          "combined_ns_per_call": 5872108.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 5825672.0,
+          "copy_ns_per_call": 10444.0,
+          "combined_ns_per_call": 5836504.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 7715592.0,
+          "copy_ns_per_call": 11716.0,
+          "combined_ns_per_call": 7727828.0
+        },
+        {
+          "variant": "B",
+          "repeat": 3,
+          "kernel_ns_per_call": 7760164.0,
+          "copy_ns_per_call": 14212.0,
+          "combined_ns_per_call": 7775040.0
+        },
+        {
+          "variant": "A",
+          "repeat": 3,
+          "kernel_ns_per_call": 5845484.0,
+          "copy_ns_per_call": 11148.0,
+          "combined_ns_per_call": 5857096.0
+        }
+      ]
+    }
+  ]
+}

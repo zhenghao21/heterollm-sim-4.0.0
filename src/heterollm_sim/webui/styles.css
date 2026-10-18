@@ -2791,6 +2791,31 @@ td.concept-help-title {
   overflow-wrap: anywhere;
 }
 
+.run-simulation-notice {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--line-strong);
+  border-left-width: 4px;
+  background: var(--surface-input);
+  color: var(--text-soft);
+  font-family: var(--display);
+  font-size: .6875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.run-simulation-notice.is-approximate {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface-input));
+}
+
+.run-simulation-notice.is-detailed { border-left-color: var(--cyan-bright); }
+.run-simulation-notice strong { color: var(--text); font-size: .8125rem; letter-spacing: 0; }
+.run-simulation-notice.is-approximate strong { color: var(--warning); }
+.run-simulation-notice p { margin: 4px 0 0; }
+.run-simulation-notice ul { margin: 5px 0 0; padding-left: 1.4em; }
+
 .run-technical-details {
   min-width: 0;
   flex: 1 1 100%;
@@ -5428,6 +5453,11 @@ dialog.model-presets-dialog.is-viewport-fullscreen .preset-dialog-shell {
   border-color: #8a574d;
   border-color: color-mix(in srgb, var(--danger) 52%, var(--line));
   color: var(--danger);
+}
+
+.request-status.is-forecast_completed {
+  border-color: var(--warning);
+  color: var(--warning);
 }
 
 .request-rejection-reason {

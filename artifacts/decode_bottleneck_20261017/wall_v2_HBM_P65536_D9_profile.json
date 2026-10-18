@@ -1,0 +1,5285 @@
+{
+  "profile_version": 2,
+  "scope": "Decode cohort wall intervals; main thread exclusive nested timers",
+  "timing_valid_for_speedup": false,
+  "units": "integer wall nanoseconds",
+  "coverage_notes": [
+    "Categories sum exactly to cohort wall time, including explicit unattributed residual.",
+    "Zero closure error proves interval accounting only; call counts disclose hook coverage.",
+    "Unattributed includes scheduler gaps and the preceding cohort report/printing overhead.",
+    "Native Cython internals are charged to their nearest instrumented public boundary.",
+    "HBM numeric wall includes channel launch and waiting; parallel worker times are never added.",
+    "HOST/DRAM single and batch numeric work is included in its adapter boundary; Numba globals are untouched.",
+    "NAND bulk numeric includes its authored per-page fabric link reservations.",
+    "NAND scalar Python execution is included in nand_adapter, with state publication split out.",
+    "First Decode includes graph capture and binding warmup; steady means all subsequent Decode steps.",
+    "Timing hooks add overhead; compare a separate uninstrumented run before interpreting percentages.",
+    "Hook presence does not prove a call path used it; each boundary reports observed Decode calls."
+  ],
+  "windows": {
+    "first": {
+      "steps": 1,
+      "wall_ns": 1419099600,
+      "seconds_per_step": 1.4190996,
+      "closure_error_ns": 0,
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 433008400,
+          "percent": 30.5128970510597
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 330336400,
+          "percent": 23.27788690800843
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 217935700,
+          "percent": 15.357322347212275
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 102944200,
+          "percent": 7.2541913196226675
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 74563300,
+          "percent": 5.254268269824049
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 43797400,
+          "percent": 3.0862809065692076
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 34710800,
+          "percent": 2.4459734891053455
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 33324000,
+          "percent": 2.348249552039899
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 31120700,
+          "percent": 2.1929891319819976
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 30661600,
+          "percent": 2.160637632481892
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 24294400,
+          "percent": 1.7119587659668145
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 24000300,
+          "percent": 1.6912343573347495
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 17784000,
+          "percent": 1.2531889939226253
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 9185300,
+          "percent": 0.647262531819472
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 6473500,
+          "percent": 0.456169531722791
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 3287800,
+          "percent": 0.23168211730874985
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 1455700,
+          "percent": 0.1025791283430705
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 148900,
+          "percent": 0.010492568668189322
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 67200,
+          "percent": 0.004735397008074698
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 433008400,
+          "exclusive_ns": 433008400
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 336984900,
+          "exclusive_ns": 327799600
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 752123800,
+          "exclusive_ns": 101179700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 74563300,
+          "exclusive_ns": 74563300
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 650944100,
+          "exclusive_ns": 64954300
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 58601400,
+          "exclusive_ns": 58601400
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 35472800,
+          "exclusive_ns": 35472800
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 34550100,
+          "exclusive_ns": 34550100
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 991378600,
+          "exclusive_ns": 33383300
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 31084400,
+          "exclusive_ns": 31084400
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 462897800,
+          "exclusive_ns": 29889400
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 29161400,
+          "exclusive_ns": 28903700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 852347600,
+          "exclusive_ns": 24000300
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 20168000,
+          "exclusive_ns": 20168000
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 17810800,
+          "exclusive_ns": 17810800
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 69808400,
+          "exclusive_ns": 11207000
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 10260200,
+          "exclusive_ns": 10260200
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10254000,
+          "exclusive_ns": 10254000
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 24294400,
+          "exclusive_ns": 9710800
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 43797400,
+          "exclusive_ns": 9247300
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 10453,
+          "inclusive_ns": 9185300,
+          "exclusive_ns": 9185300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 14583600,
+          "exclusive_ns": 9014000
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 7530000,
+          "exclusive_ns": 7530000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 6466500,
+          "exclusive_ns": 5857000
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 4006100,
+          "exclusive_ns": 4006100
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1418883500,
+          "exclusive_ns": 3287800
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 383086700,
+          "exclusive_ns": 2482800
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1764500,
+          "exclusive_ns": 1764500
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 1563500,
+          "exclusive_ns": 1563500
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 1455700,
+          "exclusive_ns": 1455700
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1500200,
+          "exclusive_ns": 1348800
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 993913200,
+          "exclusive_ns": 1078900
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 796985100,
+          "exclusive_ns": 1063900
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 797685700,
+          "exclusive_ns": 700600
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 609500,
+          "exclusive_ns": 609500
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 478400,
+          "exclusive_ns": 478400
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 31819700,
+          "exclusive_ns": 475100
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 257700,
+          "exclusive_ns": 257700
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 1000628300,
+          "exclusive_ns": 248600
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 214100,
+          "exclusive_ns": 214100
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 151400,
+          "exclusive_ns": 151400
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1418950700,
+          "exclusive_ns": 67200
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 383140700,
+          "exclusive_ns": 54000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 7000,
+          "exclusive_ns": 7000
+        }
+      ]
+    },
+    "steady": {
+      "steps": 7,
+      "wall_ns": 7709256300,
+      "seconds_per_step": 1.1013223285714286,
+      "closure_error_ns": 0,
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 2906349900,
+          "percent": 37.69948470905034
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 1530968400,
+          "percent": 19.858833854051525
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 694976300,
+          "percent": 9.01482935519993
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 529855300,
+          "percent": 6.8729755424008925
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 302436000,
+          "percent": 3.9230243259651387
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 245171600,
+          "percent": 3.1802237525816857
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 238291700,
+          "percent": 3.090981681332867
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 230079800,
+          "percent": 2.984461678878156
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 217131500,
+          "percent": 2.8165038435678937
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 215761200,
+          "percent": 2.798729106982732
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 172627600,
+          "percent": 2.2392250728517094
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 166573500,
+          "percent": 2.160694800093752
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 119527600,
+          "percent": 1.550442680184339
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 87412700,
+          "percent": 1.1338668296707168
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 30304900,
+          "percent": 0.39309758063174005
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 13560300,
+          "percent": 0.1758963442426995
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 6608500,
+          "percent": 0.08572162790851823
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 1191700,
+          "percent": 0.015458041004551892
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 427800,
+          "percent": 0.005549173400811697
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 7133,
+          "inclusive_ns": 2906349900,
+          "exclusive_ns": 2906349900
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 2744,
+          "inclusive_ns": 5120411000,
+          "exclusive_ns": 683092700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 7455,
+          "inclusive_ns": 529855300,
+          "exclusive_ns": 529855300
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 5271,
+          "inclusive_ns": 4437318300,
+          "exclusive_ns": 455804400
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 5271,
+          "inclusive_ns": 413683800,
+          "exclusive_ns": 413683800
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 7133,
+          "inclusive_ns": 251400600,
+          "exclusive_ns": 251400600
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 2744,
+          "inclusive_ns": 242230700,
+          "exclusive_ns": 242230700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 7,
+          "inclusive_ns": 6814346400,
+          "exclusive_ns": 237332100
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 7455,
+          "inclusive_ns": 224039600,
+          "exclusive_ns": 224039600
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 7133,
+          "inclusive_ns": 3116359300,
+          "exclusive_ns": 210009400
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 2744,
+          "inclusive_ns": 205030900,
+          "exclusive_ns": 203268100
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 7455,
+          "inclusive_ns": 5823119400,
+          "exclusive_ns": 172627600
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 14,
+          "inclusive_ns": 149118800,
+          "exclusive_ns": 149118800
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 7133,
+          "inclusive_ns": 123254100,
+          "exclusive_ns": 123254100
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 7,
+          "inclusive_ns": 206516400,
+          "exclusive_ns": 119103700
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 5271,
+          "inclusive_ns": 490499900,
+          "exclusive_ns": 76816100
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 7,
+          "inclusive_ns": 282051900,
+          "exclusive_ns": 75535500
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 14,
+          "inclusive_ns": 74403200,
+          "exclusive_ns": 74403200
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 7,
+          "inclusive_ns": 115599700,
+          "exclusive_ns": 73480000
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 7,
+          "inclusive_ns": 72756600,
+          "exclusive_ns": 72756600
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 7350,
+          "inclusive_ns": 64118600,
+          "exclusive_ns": 64118600
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 2744,
+          "inclusive_ns": 302436000,
+          "exclusive_ns": 60205300
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 7,
+          "inclusive_ns": 166573500,
+          "exclusive_ns": 50973800
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 7,
+          "inclusive_ns": 46771000,
+          "exclusive_ns": 46771000
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 7,
+          "inclusive_ns": 7707636800,
+          "exclusive_ns": 30304900
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 7469,
+          "inclusive_ns": 29812400,
+          "exclusive_ns": 29812400
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 5999,
+          "inclusive_ns": 23294100,
+          "exclusive_ns": 23294100
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 7,
+          "inclusive_ns": 601575300,
+          "exclusive_ns": 22127800
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 7,
+          "inclusive_ns": 13560300,
+          "exclusive_ns": 13560300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 7469,
+          "inclusive_ns": 12307300,
+          "exclusive_ns": 12307300
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 7,
+          "inclusive_ns": 10570800,
+          "exclusive_ns": 10570800
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 2744,
+          "inclusive_ns": 10730300,
+          "exclusive_ns": 9641700
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 2744,
+          "inclusive_ns": 5430300500,
+          "exclusive_ns": 7453500
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 7,
+          "inclusive_ns": 6834205300,
+          "exclusive_ns": 6298600
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 7,
+          "inclusive_ns": 5058500,
+          "exclusive_ns": 5058500
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 14,
+          "inclusive_ns": 4623300,
+          "exclusive_ns": 4623300
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 2744,
+          "inclusive_ns": 5434730600,
+          "exclusive_ns": 4430100
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 7,
+          "inclusive_ns": 233037400,
+          "exclusive_ns": 3681300
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 7,
+          "inclusive_ns": 1934500,
+          "exclusive_ns": 1934500
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 2744,
+          "inclusive_ns": 1762800,
+          "exclusive_ns": 1762800
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 7,
+          "inclusive_ns": 6842294800,
+          "exclusive_ns": 1540900
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 7,
+          "inclusive_ns": 6548600,
+          "exclusive_ns": 1490100
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 2744,
+          "inclusive_ns": 1088600,
+          "exclusive_ns": 1088600
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 7,
+          "inclusive_ns": 7708064600,
+          "exclusive_ns": 427800
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 7,
+          "inclusive_ns": 601939800,
+          "exclusive_ns": 364500
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 7,
+          "inclusive_ns": 59900,
+          "exclusive_ns": 59900
+        }
+      ]
+    },
+    "all": {
+      "steps": 8,
+      "wall_ns": 9128355900,
+      "seconds_per_step": 1.1410444875,
+      "closure_error_ns": 0,
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 3339358300,
+          "percent": 36.5822535468846
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 1748904100,
+          "percent": 19.159026216320072
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 797920500,
+          "percent": 8.741119526244589
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 604418600,
+          "percent": 6.621330353694908
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 547467900,
+          "percent": 5.997442540556509
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 346233400,
+          "percent": 3.7929436997521098
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 279882400,
+          "percent": 3.066076772926875
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 271615700,
+          "percent": 2.9755161058082757
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 261200500,
+          "percent": 2.86141888924379
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 246422800,
+          "percent": 2.699531029459533
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 196627900,
+          "percent": 2.1540341125393674
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 190867900,
+          "percent": 2.0909340311764137
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 137311600,
+          "percent": 1.5042314465412112
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 96598000,
+          "percent": 1.058219038107399
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 33592700,
+          "percent": 0.3680038373613369
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 15016000,
+          "percent": 0.16449840655314502
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 13082000,
+          "percent": 0.14331167784551432
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 1340600,
+          "percent": 0.014686105742218049
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 495000,
+          "percent": 0.0054226632421288485
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 8152,
+          "inclusive_ns": 3339358300,
+          "exclusive_ns": 3339358300
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 3136,
+          "inclusive_ns": 5872534800,
+          "exclusive_ns": 784272400
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 8520,
+          "inclusive_ns": 604418600,
+          "exclusive_ns": 604418600
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 6024,
+          "inclusive_ns": 5088262400,
+          "exclusive_ns": 520758700
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 6024,
+          "inclusive_ns": 472285200,
+          "exclusive_ns": 472285200
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 8,
+          "inclusive_ns": 619036800,
+          "exclusive_ns": 403335100
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 8152,
+          "inclusive_ns": 286873400,
+          "exclusive_ns": 286873400
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 3136,
+          "inclusive_ns": 276780800,
+          "exclusive_ns": 276780800
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 8,
+          "inclusive_ns": 7805725000,
+          "exclusive_ns": 270715400
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 8520,
+          "inclusive_ns": 255124000,
+          "exclusive_ns": 255124000
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 8152,
+          "inclusive_ns": 3579257100,
+          "exclusive_ns": 239898800
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 3136,
+          "inclusive_ns": 234192300,
+          "exclusive_ns": 232171800
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 8520,
+          "inclusive_ns": 6675467000,
+          "exclusive_ns": 196627900
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 16,
+          "inclusive_ns": 169286800,
+          "exclusive_ns": 169286800
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 8152,
+          "inclusive_ns": 141064900,
+          "exclusive_ns": 141064900
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 7,
+          "inclusive_ns": 206516400,
+          "exclusive_ns": 119103700
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 6024,
+          "inclusive_ns": 560308300,
+          "exclusive_ns": 88023100
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 16,
+          "inclusive_ns": 84663400,
+          "exclusive_ns": 84663400
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 8,
+          "inclusive_ns": 83010600,
+          "exclusive_ns": 83010600
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 8,
+          "inclusive_ns": 130183300,
+          "exclusive_ns": 82494000
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 17803,
+          "inclusive_ns": 73303900,
+          "exclusive_ns": 73303900
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 3136,
+          "inclusive_ns": 346233400,
+          "exclusive_ns": 69452600
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 8,
+          "inclusive_ns": 190867900,
+          "exclusive_ns": 60684600
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 8,
+          "inclusive_ns": 54301000,
+          "exclusive_ns": 54301000
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 8536,
+          "inclusive_ns": 33818500,
+          "exclusive_ns": 33818500
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 8,
+          "inclusive_ns": 9126520300,
+          "exclusive_ns": 33592700
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 8,
+          "inclusive_ns": 984662000,
+          "exclusive_ns": 24610600
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 5999,
+          "inclusive_ns": 23294100,
+          "exclusive_ns": 23294100
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 8,
+          "inclusive_ns": 15016000,
+          "exclusive_ns": 15016000
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 8536,
+          "inclusive_ns": 13870800,
+          "exclusive_ns": 13870800
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 8,
+          "inclusive_ns": 12335300,
+          "exclusive_ns": 12335300
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 3136,
+          "inclusive_ns": 12230500,
+          "exclusive_ns": 10990500
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 3136,
+          "inclusive_ns": 6227285600,
+          "exclusive_ns": 8517400
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 8,
+          "inclusive_ns": 7828118500,
+          "exclusive_ns": 7377500
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 8,
+          "inclusive_ns": 13015100,
+          "exclusive_ns": 7347100
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 8,
+          "inclusive_ns": 5668000,
+          "exclusive_ns": 5668000
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 3136,
+          "inclusive_ns": 6232416300,
+          "exclusive_ns": 5130700
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 16,
+          "inclusive_ns": 5101700,
+          "exclusive_ns": 5101700
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 8,
+          "inclusive_ns": 264857100,
+          "exclusive_ns": 4156400
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 8,
+          "inclusive_ns": 2148600,
+          "exclusive_ns": 2148600
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 3136,
+          "inclusive_ns": 2020500,
+          "exclusive_ns": 2020500
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 8,
+          "inclusive_ns": 7842923100,
+          "exclusive_ns": 1789500
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 3136,
+          "inclusive_ns": 1240000,
+          "exclusive_ns": 1240000
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 8,
+          "inclusive_ns": 9127015300,
+          "exclusive_ns": 495000
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 8,
+          "inclusive_ns": 985080500,
+          "exclusive_ns": 418500
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 8,
+          "inclusive_ns": 66900,
+          "exclusive_ns": 66900
+        }
+      ]
+    }
+  },
+  "cohorts": [
+    {
+      "completed": 33,
+      "decode_index": 1,
+      "window": "first",
+      "wall_ns": 1419099600,
+      "simulated_time_ns": 401598941.0285714,
+      "classified_ns": 1418950700,
+      "unattributed_ns": 148900,
+      "closure_error_ns": 0,
+      "observations": {
+        "provider_template_cache": {
+          "hits": 0,
+          "misses": 33,
+          "size": 33
+        }
+      },
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 433008400,
+          "percent": 30.5128970510597
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 330336400,
+          "percent": 23.27788690800843
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 217935700,
+          "percent": 15.357322347212275
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 102944200,
+          "percent": 7.2541913196226675
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 74563300,
+          "percent": 5.254268269824049
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 43797400,
+          "percent": 3.0862809065692076
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 34710800,
+          "percent": 2.4459734891053455
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 33324000,
+          "percent": 2.348249552039899
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 31120700,
+          "percent": 2.1929891319819976
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 30661600,
+          "percent": 2.160637632481892
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 24294400,
+          "percent": 1.7119587659668145
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 24000300,
+          "percent": 1.6912343573347495
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 17784000,
+          "percent": 1.2531889939226253
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 9185300,
+          "percent": 0.647262531819472
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 6473500,
+          "percent": 0.456169531722791
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 3287800,
+          "percent": 0.23168211730874985
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 1455700,
+          "percent": 0.1025791283430705
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 148900,
+          "percent": 0.010492568668189322
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 67200,
+          "percent": 0.004735397008074698
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 433008400,
+          "exclusive_ns": 433008400
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 336984900,
+          "exclusive_ns": 327799600
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 752123800,
+          "exclusive_ns": 101179700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 74563300,
+          "exclusive_ns": 74563300
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 650944100,
+          "exclusive_ns": 64954300
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 58601400,
+          "exclusive_ns": 58601400
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 35472800,
+          "exclusive_ns": 35472800
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 34550100,
+          "exclusive_ns": 34550100
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 991378600,
+          "exclusive_ns": 33383300
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 31084400,
+          "exclusive_ns": 31084400
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 462897800,
+          "exclusive_ns": 29889400
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 29161400,
+          "exclusive_ns": 28903700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 852347600,
+          "exclusive_ns": 24000300
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 20168000,
+          "exclusive_ns": 20168000
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 17810800,
+          "exclusive_ns": 17810800
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 69808400,
+          "exclusive_ns": 11207000
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 10260200,
+          "exclusive_ns": 10260200
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10254000,
+          "exclusive_ns": 10254000
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 24294400,
+          "exclusive_ns": 9710800
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 43797400,
+          "exclusive_ns": 9247300
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 10453,
+          "inclusive_ns": 9185300,
+          "exclusive_ns": 9185300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 14583600,
+          "exclusive_ns": 9014000
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 7530000,
+          "exclusive_ns": 7530000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 6466500,
+          "exclusive_ns": 5857000
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 4006100,
+          "exclusive_ns": 4006100
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1418883500,
+          "exclusive_ns": 3287800
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 383086700,
+          "exclusive_ns": 2482800
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1764500,
+          "exclusive_ns": 1764500
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 1563500,
+          "exclusive_ns": 1563500
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 1455700,
+          "exclusive_ns": 1455700
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1500200,
+          "exclusive_ns": 1348800
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 993913200,
+          "exclusive_ns": 1078900
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 796985100,
+          "exclusive_ns": 1063900
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 797685700,
+          "exclusive_ns": 700600
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 609500,
+          "exclusive_ns": 609500
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 478400,
+          "exclusive_ns": 478400
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 31819700,
+          "exclusive_ns": 475100
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 257700,
+          "exclusive_ns": 257700
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 1000628300,
+          "exclusive_ns": 248600
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 214100,
+          "exclusive_ns": 214100
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 151400,
+          "exclusive_ns": 151400
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1418950700,
+          "exclusive_ns": 67200
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 383140700,
+          "exclusive_ns": 54000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 7000,
+          "exclusive_ns": 7000
+        }
+      ]
+    },
+    {
+      "completed": 34,
+      "decode_index": 2,
+      "window": "steady",
+      "wall_ns": 1100883800,
+      "simulated_time_ns": 402830569.82857144,
+      "classified_ns": 1100709500,
+      "unattributed_ns": 174300,
+      "closure_error_ns": 0,
+      "observations": {
+        "provider_template_cache": {
+          "hits": 0,
+          "misses": 34,
+          "size": 34
+        }
+      },
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 424881600,
+          "percent": 38.594591000430746
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 214296300,
+          "percent": 19.465841899026945
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 98431100,
+          "percent": 8.941098052310334
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 74792800,
+          "percent": 6.793886875254228
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 42461100,
+          "percent": 3.8570010749545047
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 34464100,
+          "percent": 3.1305847174788113
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 33527100,
+          "percent": 3.045471284071943
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 32605900,
+          "percent": 2.9617930611750305
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 32359400,
+          "percent": 2.9394019604975568
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 30507900,
+          "percent": 2.7712189061188837
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 24371100,
+          "percent": 2.213775877163421
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 22180300,
+          "percent": 2.0147721312639897
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 16197100,
+          "percent": 1.471281528531894
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 13169400,
+          "percent": 1.196257043658922
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 3572900,
+          "percent": 0.3245483310772672
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 1991300,
+          "percent": 0.1808819423085343
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 839800,
+          "percent": 0.07628416368739371
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 174300,
+          "percent": 0.015832733663625535
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 60300,
+          "percent": 0.0054774173259702795
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 424881600,
+          "exclusive_ns": 424881600
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 735924600,
+          "exclusive_ns": 96746700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 74792800,
+          "exclusive_ns": 74792800
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 639177900,
+          "exclusive_ns": 63977900
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 58090900,
+          "exclusive_ns": 58090900
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 35523700,
+          "exclusive_ns": 35523700
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 33954000,
+          "exclusive_ns": 33954000
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 974924800,
+          "exclusive_ns": 33447600
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 31735300,
+          "exclusive_ns": 31735300
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 454261300,
+          "exclusive_ns": 29379700
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 28985900,
+          "exclusive_ns": 28732600
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 834949100,
+          "exclusive_ns": 24371100
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 21453800,
+          "exclusive_ns": 21453800
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 31820600,
+          "exclusive_ns": 18651200
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 17374300,
+          "exclusive_ns": 17374300
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 42433300,
+          "exclusive_ns": 10612700
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10296600,
+          "exclusive_ns": 10296600
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 9977000,
+          "exclusive_ns": 9977000
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 68040700,
+          "exclusive_ns": 9949800
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 15118800,
+          "exclusive_ns": 9644600
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 1050,
+          "inclusive_ns": 9268000,
+          "exclusive_ns": 9268000
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 42461100,
+          "exclusive_ns": 8507100
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 22180300,
+          "exclusive_ns": 7061500
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 5900500,
+          "exclusive_ns": 5900500
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 857,
+          "inclusive_ns": 3901400,
+          "exclusive_ns": 3901400
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 3859500,
+          "exclusive_ns": 3859500
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1100649200,
+          "exclusive_ns": 3572900
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 85696400,
+          "exclusive_ns": 3295100
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 1991300,
+          "exclusive_ns": 1991300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 1614700,
+          "exclusive_ns": 1614700
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1522000,
+          "exclusive_ns": 1365900
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1301800,
+          "exclusive_ns": 1301800
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 779431800,
+          "exclusive_ns": 1046100
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 977711200,
+          "exclusive_ns": 795100
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 670000,
+          "exclusive_ns": 670000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 651200,
+          "exclusive_ns": 651200
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 780070100,
+          "exclusive_ns": 638300
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 32560600,
+          "exclusive_ns": 490000
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 258600,
+          "exclusive_ns": 258600
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 253300,
+          "exclusive_ns": 253300
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 978764800,
+          "exclusive_ns": 221400
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 832200,
+          "exclusive_ns": 181000
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 156100,
+          "exclusive_ns": 156100
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1100709500,
+          "exclusive_ns": 60300
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 85743300,
+          "exclusive_ns": 46900
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 7600,
+          "exclusive_ns": 7600
+        }
+      ]
+    },
+    {
+      "completed": 35,
+      "decode_index": 3,
+      "window": "steady",
+      "wall_ns": 1083503600,
+      "simulated_time_ns": 404062198.6285714,
+      "classified_ns": 1083333500,
+      "unattributed_ns": 170100,
+      "closure_error_ns": 0,
+      "observations": {
+        "provider_template_cache": {
+          "hits": 0,
+          "misses": 35,
+          "size": 35
+        }
+      },
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 408064400,
+          "percent": 37.661563837905106
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 215772200,
+          "percent": 19.91430393032381
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 96475000,
+          "percent": 8.903985182882641
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 72536200,
+          "percent": 6.694597046101185
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 42095200,
+          "percent": 3.8851001510285705
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 35870700,
+          "percent": 3.3106212106724886
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 34797100,
+          "percent": 3.21153524547588
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 33098700,
+          "percent": 3.054784497255016
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 31502500,
+          "percent": 2.9074661127106545
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 30158500,
+          "percent": 2.783424069841577
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 23631800,
+          "percent": 2.1810541284772844
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 22835200,
+          "percent": 2.107533375985091
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 18200100,
+          "percent": 1.6797452265040929
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 10874200,
+          "percent": 1.003614570362295
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 4172300,
+          "percent": 0.38507486269542623
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 2179700,
+          "percent": 0.20117145895961952
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 1012900,
+          "percent": 0.0934837687664351
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 170100,
+          "percent": 0.015699071050617644
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 56800,
+          "percent": 0.005242253002205069
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 408064400,
+          "exclusive_ns": 408064400
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 718679500,
+          "exclusive_ns": 94842900
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 72536200,
+          "exclusive_ns": 72536200
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 623836600,
+          "exclusive_ns": 64172700
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 58129200,
+          "exclusive_ns": 58129200
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 35041900,
+          "exclusive_ns": 35041900
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 953424200,
+          "exclusive_ns": 33740400
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 33616600,
+          "exclusive_ns": 33616600
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 30950500,
+          "exclusive_ns": 30950500
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 437830100,
+          "exclusive_ns": 29765700
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 28669600,
+          "exclusive_ns": 28418200
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 23917000,
+          "exclusive_ns": 23917000
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 816197100,
+          "exclusive_ns": 23631800
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 28896800,
+          "exclusive_ns": 18022600
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 17394100,
+          "exclusive_ns": 17394100
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 69397800,
+          "exclusive_ns": 11268600
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10863200,
+          "exclusive_ns": 10863200
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 10795100,
+          "exclusive_ns": 10795100
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 39243200,
+          "exclusive_ns": 10346400
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 15812500,
+          "exclusive_ns": 10211800
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 42095200,
+          "exclusive_ns": 8478600
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 1050,
+          "inclusive_ns": 7638800,
+          "exclusive_ns": 7638800
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 7336900,
+          "exclusive_ns": 7336900
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 22835200,
+          "exclusive_ns": 7022700
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1083276700,
+          "exclusive_ns": 4172300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 3948800,
+          "exclusive_ns": 3948800
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 857,
+          "inclusive_ns": 3235400,
+          "exclusive_ns": 3235400
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 84936800,
+          "exclusive_ns": 3086600
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 2179700,
+          "exclusive_ns": 2179700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 1651900,
+          "exclusive_ns": 1651900
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1611100,
+          "exclusive_ns": 1611100
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1488900,
+          "exclusive_ns": 1338100
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 761792300,
+          "exclusive_ns": 1017600
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 909700,
+          "exclusive_ns": 909700
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 956443700,
+          "exclusive_ns": 839800
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 667000,
+          "exclusive_ns": 667000
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 762406800,
+          "exclusive_ns": 614500
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 36447200,
+          "exclusive_ns": 537100
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 1006000,
+          "exclusive_ns": 339000
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 251400,
+          "exclusive_ns": 251400
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 248900,
+          "exclusive_ns": 248900
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 957666600,
+          "exclusive_ns": 216900
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 150800,
+          "exclusive_ns": 150800
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1083333500,
+          "exclusive_ns": 56800
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 84983700,
+          "exclusive_ns": 46900
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 6900,
+          "exclusive_ns": 6900
+        }
+      ]
+    },
+    {
+      "completed": 36,
+      "decode_index": 4,
+      "window": "steady",
+      "wall_ns": 1091520300,
+      "simulated_time_ns": 405293827.4285714,
+      "classified_ns": 1091350300,
+      "unattributed_ns": 170000,
+      "closure_error_ns": 0,
+      "observations": {
+        "provider_template_cache": {
+          "hits": 0,
+          "misses": 36,
+          "size": 36
+        }
+      },
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 416608300,
+          "percent": 38.16770975308476
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 217162500,
+          "percent": 19.895415596026936
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 98676200,
+          "percent": 9.040253305412643
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 75355700,
+          "percent": 6.903737841614123
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 43011200,
+          "percent": 3.940485577776245
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 34136300,
+          "percent": 3.1274086244662604
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 33680400,
+          "percent": 3.0856411923809386
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 31418900,
+          "percent": 2.8784531080182383
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 30530700,
+          "percent": 2.7970803657980525
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 29108600,
+          "percent": 2.666794195215609
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 24524300,
+          "percent": 2.2468020063392315
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 20876400,
+          "percent": 1.9125984189208391
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 17100500,
+          "percent": 1.566668068381321
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 12515700,
+          "percent": 1.146630071836502
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 3983200,
+          "percent": 0.36492220987552865
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 1732800,
+          "percent": 0.1587510557522384
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 859700,
+          "percent": 0.07876170511899779
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 170000,
+          "percent": 0.015574607270244997
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 68900,
+          "percent": 0.006312296711293413
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 416608300,
+          "exclusive_ns": 416608300
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 730785000,
+          "exclusive_ns": 97014200
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 75355700,
+          "exclusive_ns": 75355700
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 633770800,
+          "exclusive_ns": 64564600
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 58114500,
+          "exclusive_ns": 58114500
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 36046800,
+          "exclusive_ns": 36046800
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 34472000,
+          "exclusive_ns": 34472000
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 970506400,
+          "exclusive_ns": 33072900
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 31564600,
+          "exclusive_ns": 31564600
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 446446700,
+          "exclusive_ns": 29838400
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 29012900,
+          "exclusive_ns": 28763300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 830513200,
+          "exclusive_ns": 24524300
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 20588900,
+          "exclusive_ns": 20588900
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 17440100,
+          "exclusive_ns": 17440100
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 28440300,
+          "exclusive_ns": 15924600
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 69272600,
+          "exclusive_ns": 11158100
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 38866700,
+          "exclusive_ns": 10426400
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10155500,
+          "exclusive_ns": 10155500
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 10111500,
+          "exclusive_ns": 10111500
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 1050,
+          "inclusive_ns": 9283100,
+          "exclusive_ns": 9283100
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 14276100,
+          "exclusive_ns": 8941700
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 43011200,
+          "exclusive_ns": 8539200
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 6945000,
+          "exclusive_ns": 6945000
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 20876400,
+          "exclusive_ns": 6600300
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1091281400,
+          "exclusive_ns": 3983200
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 3737800,
+          "exclusive_ns": 3737800
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 857,
+          "inclusive_ns": 3232600,
+          "exclusive_ns": 3232600
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 80929600,
+          "exclusive_ns": 2704800
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 1732800,
+          "exclusive_ns": 1732800
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 1596600,
+          "exclusive_ns": 1596600
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1588200,
+          "exclusive_ns": 1588200
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1517800,
+          "exclusive_ns": 1365100
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 774837900,
+          "exclusive_ns": 1041700
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 973093100,
+          "exclusive_ns": 853900
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 665900,
+          "exclusive_ns": 665900
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 775458200,
+          "exclusive_ns": 620300
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 542600,
+          "exclusive_ns": 542600
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 32153500,
+          "exclusive_ns": 527600
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 249600,
+          "exclusive_ns": 249600
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 974154700,
+          "exclusive_ns": 209500
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 852100,
+          "exclusive_ns": 186200
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 175900,
+          "exclusive_ns": 175900
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 152700,
+          "exclusive_ns": 152700
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1091350300,
+          "exclusive_ns": 68900
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 80982400,
+          "exclusive_ns": 52800
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 7600,
+          "exclusive_ns": 7600
+        }
+      ]
+    },
+    {
+      "completed": 37,
+      "decode_index": 5,
+      "window": "steady",
+      "wall_ns": 1117743200,
+      "simulated_time_ns": 406525456.2285714,
+      "classified_ns": 1117590100,
+      "unattributed_ns": 153100,
+      "closure_error_ns": 0,
+      "observations": {
+        "provider_template_cache": {
+          "hits": 0,
+          "misses": 37,
+          "size": 37
+        }
+      },
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 412261800,
+          "percent": 36.88340935556575
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 224541100,
+          "percent": 20.088791414700623
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 100720700,
+          "percent": 9.011076962937462
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 79447600,
+          "percent": 7.107858048252944
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 43875700,
+          "percent": 3.9253828607501258
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 36412200,
+          "percent": 3.257653457431009
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 35658900,
+          "percent": 3.190258728480746
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 32718300,
+          "percent": 2.9271750434267907
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 31154200,
+          "percent": 2.7872412912017714
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 29898300,
+          "percent": 2.6748809565560316
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 28099500,
+          "percent": 2.5139495368882585
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 25379300,
+          "percent": 2.2705841556450532
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 17887200,
+          "percent": 1.6002960250619283
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 12691100,
+          "percent": 1.1354218035054922
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 3985300,
+          "percent": 0.3565488029808636
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 1905600,
+          "percent": 0.17048638721309153
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 897400,
+          "percent": 0.08028677785738263
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 153100,
+          "percent": 0.013697242801387653
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 55900,
+          "percent": 0.005001148743289156
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 412261800,
+          "exclusive_ns": 412261800
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 735816600,
+          "exclusive_ns": 99013700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 79447600,
+          "exclusive_ns": 79447600
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 636802900,
+          "exclusive_ns": 66674800
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 60792900,
+          "exclusive_ns": 60792900
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 36992600,
+          "exclusive_ns": 36992600
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 35223600,
+          "exclusive_ns": 35223600
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 986080900,
+          "exclusive_ns": 35182500
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 33518000,
+          "exclusive_ns": 33518000
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 442918600,
+          "exclusive_ns": 30656800
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 29590700,
+          "exclusive_ns": 29335900
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 837932800,
+          "exclusive_ns": 25379300
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 21199700,
+          "exclusive_ns": 21199700
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 17947900,
+          "exclusive_ns": 17947900
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 28962900,
+          "exclusive_ns": 16271800
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 19879700,
+          "exclusive_ns": 12635800
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 72269000,
+          "exclusive_ns": 11476100
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 10612100,
+          "exclusive_ns": 10612100
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10551800,
+          "exclusive_ns": 10551800
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 39294800,
+          "exclusive_ns": 10331900
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 1050,
+          "inclusive_ns": 9552100,
+          "exclusive_ns": 9552100
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 43875700,
+          "exclusive_ns": 8652100
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 28099500,
+          "exclusive_ns": 8219800
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 7335400,
+          "exclusive_ns": 7335400
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 5136900,
+          "exclusive_ns": 5136900
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1117534200,
+          "exclusive_ns": 3985300
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 90419200,
+          "exclusive_ns": 3247100
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 857,
+          "inclusive_ns": 3139000,
+          "exclusive_ns": 3139000
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 2107000,
+          "exclusive_ns": 2107000
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 1905600,
+          "exclusive_ns": 1905600
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1564300,
+          "exclusive_ns": 1564300
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1563500,
+          "exclusive_ns": 1407200
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 780754300,
+          "exclusive_ns": 1062000
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 988999400,
+          "exclusive_ns": 1012900
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 694700,
+          "exclusive_ns": 694700
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 781399300,
+          "exclusive_ns": 645000
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 32968600,
+          "exclusive_ns": 576600
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 524300,
+          "exclusive_ns": 524300
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 382200,
+          "exclusive_ns": 382200
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 254800,
+          "exclusive_ns": 254800
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 990102700,
+          "exclusive_ns": 216800
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 886500,
+          "exclusive_ns": 191800
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 156300,
+          "exclusive_ns": 156300
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1117590100,
+          "exclusive_ns": 55900
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 90466700,
+          "exclusive_ns": 47500
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 10900,
+          "exclusive_ns": 10900
+        }
+      ]
+    },
+    {
+      "completed": 38,
+      "decode_index": 6,
+      "window": "steady",
+      "wall_ns": 1086954200,
+      "simulated_time_ns": 407757085.0285714,
+      "classified_ns": 1086786300,
+      "unattributed_ns": 167900,
+      "closure_error_ns": 0,
+      "observations": {
+        "provider_template_cache": {
+          "hits": 0,
+          "misses": 38,
+          "size": 38
+        }
+      },
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 411995000,
+          "percent": 37.903620962134376
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 214854100,
+          "percent": 19.766619421499083
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 97358800,
+          "percent": 8.957028732213372
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 71819200,
+          "percent": 6.6073805133647765
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 42943000,
+          "percent": 3.9507644388328416
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 33714600,
+          "percent": 3.101749825337627
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 33639700,
+          "percent": 3.0948590106188467
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 32645200,
+          "percent": 3.003364815187245
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 30779700,
+          "percent": 2.831738448593326
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 30395900,
+          "percent": 2.7964287731718596
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 24360400,
+          "percent": 2.24116158712115
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 24088100,
+          "percent": 2.2161099336108183
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 16825000,
+          "percent": 1.5479033063214622
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 12439700,
+          "percent": 1.144454844555548
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 5989700,
+          "percent": 0.5510535770504406
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 1965200,
+          "percent": 0.1807987861862073
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 912100,
+          "percent": 0.08391337923897806
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 167900,
+          "percent": 0.015446832994435276
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 60900,
+          "percent": 0.005602811967606363
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 411995000,
+          "exclusive_ns": 411995000
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 722572400,
+          "exclusive_ns": 95723300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 71819200,
+          "exclusive_ns": 71819200
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 626849100,
+          "exclusive_ns": 64304300
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 58079300,
+          "exclusive_ns": 58079300
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 34832000,
+          "exclusive_ns": 34832000
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 34455100,
+          "exclusive_ns": 34455100
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 956568400,
+          "exclusive_ns": 32649400
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 30464900,
+          "exclusive_ns": 30464900
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 441491000,
+          "exclusive_ns": 29496000
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 28887300,
+          "exclusive_ns": 28639400
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 821634900,
+          "exclusive_ns": 24088100
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 21911400,
+          "exclusive_ns": 21911400
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 17123800,
+          "exclusive_ns": 17123800
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 29084600,
+          "exclusive_ns": 16644900
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 69098000,
+          "exclusive_ns": 11018700
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 40072900,
+          "exclusive_ns": 10988300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 16951000,
+          "exclusive_ns": 10725700
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 10618800,
+          "exclusive_ns": 10618800
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10617000,
+          "exclusive_ns": 10617000
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 1050,
+          "inclusive_ns": 9285500,
+          "exclusive_ns": 9285500
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 42943000,
+          "exclusive_ns": 8487900
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 24360400,
+          "exclusive_ns": 7409400
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 6208000,
+          "exclusive_ns": 6208000
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1086725400,
+          "exclusive_ns": 5989700
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 4424700,
+          "exclusive_ns": 4424700
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 857,
+          "inclusive_ns": 3154200,
+          "exclusive_ns": 3154200
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 85828400,
+          "exclusive_ns": 3091500
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 1965200,
+          "exclusive_ns": 1965200
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 1800600,
+          "exclusive_ns": 1800600
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1590700,
+          "exclusive_ns": 1590700
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1508600,
+          "exclusive_ns": 1354800
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 766537100,
+          "exclusive_ns": 1021700
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 897100,
+          "exclusive_ns": 897100
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 959377600,
+          "exclusive_ns": 844000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 698100,
+          "exclusive_ns": 698100
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 767150900,
+          "exclusive_ns": 613800
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 34341400,
+          "exclusive_ns": 589600
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 247900,
+          "exclusive_ns": 247900
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 960502800,
+          "exclusive_ns": 221200
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 212400,
+          "exclusive_ns": 212400
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 904000,
+          "exclusive_ns": 205900
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 153800,
+          "exclusive_ns": 153800
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1086786300,
+          "exclusive_ns": 60900
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 85883400,
+          "exclusive_ns": 55000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 8100,
+          "exclusive_ns": 8100
+        }
+      ]
+    },
+    {
+      "completed": 39,
+      "decode_index": 7,
+      "window": "steady",
+      "wall_ns": 1106463700,
+      "simulated_time_ns": 408988713.82857144,
+      "classified_ns": 1106287600,
+      "unattributed_ns": 176100,
+      "closure_error_ns": 0,
+      "observations": {
+        "provider_template_cache": {
+          "hits": 0,
+          "misses": 39,
+          "size": 39
+        }
+      },
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 415168600,
+          "percent": 37.52211663157137
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 218937000,
+          "percent": 19.78709287977545
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 100052500,
+          "percent": 9.042546990018742
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 76718900,
+          "percent": 6.9337023889712786
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 43179300,
+          "percent": 3.9024597011180755
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 35342400,
+          "percent": 3.1941761849033097
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 34171300,
+          "percent": 3.088334483996176
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 33103800,
+          "percent": 2.991855946110116
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 31154100,
+          "percent": 2.8156459177106306
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 30204600,
+          "percent": 2.7298319863543647
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 26892700,
+          "percent": 2.430509017150766
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 24941300,
+          "percent": 2.254145346114834
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 16770400,
+          "percent": 1.515675570739465
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 12052000,
+          "percent": 1.0892359143820083
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 4479200,
+          "percent": 0.4048212336292641
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 2005800,
+          "percent": 0.18128023540220975
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 1048900,
+          "percent": 0.09479750668729575
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 176100,
+          "percent": 0.015915569575395923
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 64800,
+          "percent": 0.005856495789242792
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 415168600,
+          "exclusive_ns": 415168600
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 732355400,
+          "exclusive_ns": 98249800
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 76718900,
+          "exclusive_ns": 76718900
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 634105600,
+          "exclusive_ns": 65145200
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 58934600,
+          "exclusive_ns": 58934600
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 35687500,
+          "exclusive_ns": 35687500
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 34644300,
+          "exclusive_ns": 34644300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 976331800,
+          "exclusive_ns": 33995900
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 32184200,
+          "exclusive_ns": 32184200
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 445367800,
+          "exclusive_ns": 30199200
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 29612700,
+          "exclusive_ns": 29365100
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 833432800,
+          "exclusive_ns": 24941300
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 20287100,
+          "exclusive_ns": 20287100
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 17589800,
+          "exclusive_ns": 17589800
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 27764600,
+          "exclusive_ns": 15712600
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 19134200,
+          "exclusive_ns": 12222300
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 11740600,
+          "exclusive_ns": 11740600
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 70315300,
+          "exclusive_ns": 11380700
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 38364500,
+          "exclusive_ns": 10599900
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10173600,
+          "exclusive_ns": 10173600
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 1050,
+          "inclusive_ns": 8971300,
+          "exclusive_ns": 8971300
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 43179300,
+          "exclusive_ns": 8535000
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 26892700,
+          "exclusive_ns": 7758500
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 6596800,
+          "exclusive_ns": 6596800
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 4912200,
+          "exclusive_ns": 4912200
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1106222800,
+          "exclusive_ns": 4479200
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 87809400,
+          "exclusive_ns": 3832700
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 857,
+          "inclusive_ns": 3080700,
+          "exclusive_ns": 3080700
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 2005800,
+          "exclusive_ns": 2005800
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 1999700,
+          "exclusive_ns": 1999700
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1492000,
+          "exclusive_ns": 1492000
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1541400,
+          "exclusive_ns": 1381900
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 776714600,
+          "exclusive_ns": 1179900
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 979442500,
+          "exclusive_ns": 1104900
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 845200,
+          "exclusive_ns": 845200
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 777337400,
+          "exclusive_ns": 622800
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 604500,
+          "exclusive_ns": 604500
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 33141800,
+          "exclusive_ns": 495100
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 471600,
+          "exclusive_ns": 471600
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 247600,
+          "exclusive_ns": 247600
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 980722100,
+          "exclusive_ns": 241600
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 1038000,
+          "exclusive_ns": 192800
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 159500,
+          "exclusive_ns": 159500
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1106287600,
+          "exclusive_ns": 64800
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 87868800,
+          "exclusive_ns": 59400
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 10900,
+          "exclusive_ns": 10900
+        }
+      ]
+    },
+    {
+      "completed": 40,
+      "decode_index": 8,
+      "window": "steady",
+      "wall_ns": 1122187500,
+      "simulated_time_ns": 410220342.6285714,
+      "classified_ns": 1122007300,
+      "unattributed_ns": 180200,
+      "closure_error_ns": 0,
+      "observations": {
+        "provider_template_cache": {
+          "hits": 0,
+          "misses": 40,
+          "size": 40
+        }
+      },
+      "categories": [
+        {
+          "category": "hbm_numeric_and_thread_wait",
+          "exclusive_ns": 417370200,
+          "percent": 37.192554720133664
+        },
+        {
+          "category": "hbm_adapter",
+          "exclusive_ns": 225405200,
+          "percent": 20.086233361180728
+        },
+        {
+          "category": "physical_execution_accounting",
+          "exclusive_ns": 103262000,
+          "percent": 9.201849067112224
+        },
+        {
+          "category": "physical_event_accounting",
+          "exclusive_ns": 79184900,
+          "percent": 7.056298524087998
+        },
+        {
+          "category": "physical_validation_lowering",
+          "exclusive_ns": 44870500,
+          "percent": 3.9984851016429963
+        },
+        {
+          "category": "live_dispatch",
+          "exclusive_ns": 36304900,
+          "percent": 3.2351901977165136
+        },
+        {
+          "category": "live_metrics_summary",
+          "exclusive_ns": 35510100,
+          "percent": 3.1643642439431914
+        },
+        {
+          "category": "planner_lowering_binding",
+          "exclusive_ns": 33031900,
+          "percent": 2.943527708159287
+        },
+        {
+          "category": "physical_transaction_snapshot",
+          "exclusive_ns": 31859900,
+          "percent": 2.839088833194096
+        },
+        {
+          "category": "metrics_summary",
+          "exclusive_ns": 30969000,
+          "percent": 2.7596992481203007
+        },
+        {
+          "category": "physical_dispatch",
+          "exclusive_ns": 25691700,
+          "percent": 2.2894302422723474
+        },
+        {
+          "category": "preview_schedule",
+          "exclusive_ns": 21329000,
+          "percent": 1.9006627680311892
+        },
+        {
+          "category": "planner_stage_serialization",
+          "exclusive_ns": 16547300,
+          "percent": 1.4745575048732944
+        },
+        {
+          "category": "planner_metadata_copy",
+          "exclusive_ns": 13670600,
+          "percent": 1.218209969367864
+        },
+        {
+          "category": "serving_prepare_commit",
+          "exclusive_ns": 4122300,
+          "percent": 0.3673450292397661
+        },
+        {
+          "category": "live_token_binding",
+          "exclusive_ns": 1779900,
+          "percent": 0.15860985797827903
+        },
+        {
+          "category": "live_stage_binding",
+          "exclusive_ns": 1037700,
+          "percent": 0.09247117794486215
+        },
+        {
+          "category": "unattributed",
+          "exclusive_ns": 180200,
+          "percent": 0.016057922584238375
+        },
+        {
+          "category": "serving_rollback_and_control",
+          "exclusive_ns": 60200,
+          "percent": 0.005364522417153996
+        }
+      ],
+      "functions": [
+        {
+          "function": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+          "category": "hbm_numeric_and_thread_wait",
+          "calls": 1019,
+          "inclusive_ns": 417370200,
+          "exclusive_ns": 417370200
+        },
+        {
+          "function": "heterollm_sim.data_motion.execute_prepared_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 744277500,
+          "exclusive_ns": 101502100
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "physical_event_accounting",
+          "calls": 1065,
+          "inclusive_ns": 79184900,
+          "exclusive_ns": 79184900
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 642775400,
+          "exclusive_ns": 66964900
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.refresh_resources",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 61542400,
+          "exclusive_ns": 61542400
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.commit_timeline",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 37276100,
+          "exclusive_ns": 37276100
+        },
+        {
+          "function": "heterollm_sim.data_motion.register_physical_allocations",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 35865100,
+          "exclusive_ns": 35865100
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 996509900,
+          "exclusive_ns": 35243400
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.observe",
+          "category": "live_metrics_summary",
+          "calls": 1065,
+          "inclusive_ns": 33622100,
+          "exclusive_ns": 33622100
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.execute",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 448043800,
+          "exclusive_ns": 30673600
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 30271800,
+          "exclusive_ns": 30013600
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "physical_dispatch",
+          "calls": 1065,
+          "inclusive_ns": 848459500,
+          "exclusive_ns": 25691700
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_dram_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 19760900,
+          "exclusive_ns": 19760900
+        },
+        {
+          "function": "_compiled_hbm._HBMNumericState.checkpoint",
+          "category": "hbm_adapter",
+          "calls": 1019,
+          "inclusive_ns": 18384100,
+          "exclusive_ns": 18384100
+        },
+        {
+          "function": "planner._TaskSegmentTemplate.replay",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 31546600,
+          "exclusive_ns": 17876000
+        },
+        {
+          "function": "heterollm_sim.planner._lower_serving_cohort",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 43776500,
+          "exclusive_ns": 12229900
+        },
+        {
+          "function": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+          "category": "hbm_adapter",
+          "calls": 753,
+          "inclusive_ns": 72106500,
+          "exclusive_ns": 10564100
+        },
+        {
+          "function": "heterollm_sim.planner._resource_busy_by_direction",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 10548100,
+          "exclusive_ns": 10548100
+        },
+        {
+          "function": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+          "category": "planner_metadata_copy",
+          "calls": 1050,
+          "inclusive_ns": 10119800,
+          "exclusive_ns": 10119800
+        },
+        {
+          "function": "heterollm_sim.planner._compact_execution_stages",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 10098900,
+          "exclusive_ns": 10098900
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 14427400,
+          "exclusive_ns": 9098100
+        },
+        {
+          "function": "heterollm_sim.data_motion.prepare_physical_task",
+          "category": "physical_validation_lowering",
+          "calls": 392,
+          "inclusive_ns": 44870500,
+          "exclusive_ns": 9005400
+        },
+        {
+          "function": "scalable_serving.execute_cost_schedule",
+          "category": "preview_schedule",
+          "calls": 1,
+          "inclusive_ns": 21329000,
+          "exclusive_ns": 6901600
+        },
+        {
+          "function": "heterollm_sim.planner._physical_task_metadata",
+          "category": "planner_stage_serialization",
+          "calls": 1,
+          "inclusive_ns": 6448400,
+          "exclusive_ns": 6448400
+        },
+        {
+          "function": "serving._OnlineRuntime._execute_cohort",
+          "category": "serving_prepare_commit",
+          "calls": 1,
+          "inclusive_ns": 1121947100,
+          "exclusive_ns": 4122300
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._account_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 3792500,
+          "exclusive_ns": 3792500
+        },
+        {
+          "function": "_physical_binding.StaticPhysicalBinding.bind",
+          "category": "planner_metadata_copy",
+          "calls": 857,
+          "inclusive_ns": 3550800,
+          "exclusive_ns": 3550800
+        },
+        {
+          "function": "heterollm_sim.planner._estimate_serving_cohort_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 85955500,
+          "exclusive_ns": 2870000
+        },
+        {
+          "function": "_token_binding.AuthoredTokenProgram.bind",
+          "category": "live_token_binding",
+          "calls": 1,
+          "inclusive_ns": 1779900,
+          "exclusive_ns": 1779900
+        },
+        {
+          "function": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+          "category": "preview_schedule",
+          "calls": 1067,
+          "inclusive_ns": 1536800,
+          "exclusive_ns": 1536800
+        },
+        {
+          "function": "data_motion.PhysicalRuntimeContext.commit_transaction",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 1588100,
+          "exclusive_ns": 1428700
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.summary",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 1422700,
+          "exclusive_ns": 1422700
+        },
+        {
+          "function": "heterollm_sim.data_motion._execute_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 790232500,
+          "exclusive_ns": 1084500
+        },
+        {
+          "function": "serving._OnlineRuntime._replay_authored_token_program",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 999137800,
+          "exclusive_ns": 848000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache._final_layout_key",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 836400,
+          "exclusive_ns": 836400
+        },
+        {
+          "function": "heterollm_sim.data_motion.resolve_physical_task",
+          "category": "physical_execution_accounting",
+          "calls": 392,
+          "inclusive_ns": 790907900,
+          "exclusive_ns": 675400
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_nand_task_traffic",
+          "category": "metrics_summary",
+          "calls": 2,
+          "inclusive_ns": 475100,
+          "exclusive_ns": 475100
+        },
+        {
+          "function": "live_execution_metrics.LiveCohortMetrics.metadata",
+          "category": "live_metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 31424300,
+          "exclusive_ns": 465300
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.snapshot",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 258200,
+          "exclusive_ns": 258200
+        },
+        {
+          "function": "serving._OnlineRuntime._schedule_execution_stages",
+          "category": "live_dispatch",
+          "calls": 1,
+          "inclusive_ns": 1000381100,
+          "exclusive_ns": 213500
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.authored_token_program",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 1029800,
+          "exclusive_ns": 193400
+        },
+        {
+          "function": "heterollm_sim.planner._summarize_kv_task_traffic",
+          "category": "metrics_summary",
+          "calls": 1,
+          "inclusive_ns": 184900,
+          "exclusive_ns": 184900
+        },
+        {
+          "function": "heterollm_sim.hbf_staging_runtime.commit",
+          "category": "physical_transaction_snapshot",
+          "calls": 392,
+          "inclusive_ns": 159400,
+          "exclusive_ns": 159400
+        },
+        {
+          "function": "serving._OnlineRuntime._execute",
+          "category": "serving_rollback_and_control",
+          "calls": 1,
+          "inclusive_ns": 1122007300,
+          "exclusive_ns": 60200
+        },
+        {
+          "function": "heterollm_sim.serving._lower_cost",
+          "category": "planner_lowering_binding",
+          "calls": 1,
+          "inclusive_ns": 86011500,
+          "exclusive_ns": 56000
+        },
+        {
+          "function": "serving._ExecutionStageMetadataCache.resolve",
+          "category": "live_stage_binding",
+          "calls": 1,
+          "inclusive_ns": 7900,
+          "exclusive_ns": 7900
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "label": "heterollm_sim.serving._lower_cost",
+      "category": "planner_lowering_binding",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "heterollm_sim.planner._estimate_serving_cohort_cost",
+      "category": "planner_lowering_binding",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "heterollm_sim.planner._lower_serving_cohort",
+      "category": "planner_lowering_binding",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "heterollm_sim.planner._task_segment_clone_metadata",
+      "category": "planner_metadata_copy",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "heterollm_sim.planner._task_segment_clone_metadata_with_plan",
+      "category": "planner_metadata_copy",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 17803
+    },
+    {
+      "label": "_physical_binding.StaticPhysicalBinding.bind",
+      "category": "planner_metadata_copy",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 5999
+    },
+    {
+      "label": "planner._TaskSegmentTemplate.replay",
+      "category": "planner_lowering_binding",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 7
+    },
+    {
+      "label": "scalable_serving.execute_cost_schedule",
+      "category": "preview_schedule",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "scalable_serving.execute_cost_schedule",
+      "category": "preview_schedule",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "heterollm_sim.planner._physical_task_metadata",
+      "category": "planner_stage_serialization",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "heterollm_sim.planner._compact_execution_stages",
+      "category": "planner_stage_serialization",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "serving._OnlineRuntime._execute_cohort",
+      "category": "serving_prepare_commit",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "serving._OnlineRuntime._schedule_execution_stages",
+      "category": "live_dispatch",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "serving._OnlineRuntime._replay_authored_token_program",
+      "category": "live_dispatch",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "serving._ExecutionStageMetadataCache.resolve",
+      "category": "live_stage_binding",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "serving._ExecutionStageMetadataCache.authored_token_program",
+      "category": "live_stage_binding",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "serving._ExecutionStageMetadataCache._final_layout_key",
+      "category": "live_stage_binding",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "_token_binding.AuthoredTokenProgram.bind",
+      "category": "live_token_binding",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "event_kernel.UnifiedEventKernel._drain_prevalidated_compiled",
+      "category": "live_dispatch",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 16
+    },
+    {
+      "label": "event_kernel.UnifiedEventKernel._resolve_task_execution",
+      "category": "physical_dispatch",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 17056
+    },
+    {
+      "label": "event_kernel.UnifiedEventKernel._account_task_execution",
+      "category": "physical_event_accounting",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 17056
+    },
+    {
+      "label": "data_motion.PhysicalRuntimeContext.snapshot",
+      "category": "physical_transaction_snapshot",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "data_motion.PhysicalRuntimeContext.commit_transaction",
+      "category": "physical_transaction_snapshot",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "data_motion.PhysicalRuntimeContext.restore",
+      "category": "physical_transaction_snapshot",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "heterollm_sim.data_motion.register_physical_allocations",
+      "category": "physical_validation_lowering",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "heterollm_sim.data_motion.prepare_physical_task",
+      "category": "physical_validation_lowering",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "heterollm_sim.data_motion.lower_physical_allocations",
+      "category": "physical_validation_lowering",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "heterollm_sim.data_motion.resolve_physical_task",
+      "category": "physical_execution_accounting",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "heterollm_sim.data_motion._execute_physical_task",
+      "category": "physical_execution_accounting",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "heterollm_sim.data_motion.execute_prepared_physical_task",
+      "category": "physical_execution_accounting",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "hbf_staging.HbfStagingController.read",
+      "category": "hbf_staging",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "hbf_staging.HbfStagingController.write",
+      "category": "hbf_staging",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "hbf_staging.HbfStagingController.flush",
+      "category": "hbf_staging",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "hbf_staging.HbfStagingController.release",
+      "category": "hbf_staging",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "hbf_staging.HbfStagingController._read_full_pages",
+      "category": "hbf_page_mapping_and_state",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "hbf_staging.HbfStagingController._write_full_pages",
+      "category": "hbf_page_mapping_and_state",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "hbf_staging.HbfStagingController._transfer",
+      "category": "hbf_link_accounting",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "_io_execution._PhysicalIO.transfer",
+      "category": "hbf_link_accounting",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "_io_execution._PhysicalIO._route",
+      "category": "hbf_link_accounting",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "_io_execution._PhysicalIO._memory",
+      "category": "hbf_io_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "_io_execution._PhysicalIO._flash_pages",
+      "category": "hbf_io_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "heterollm_sim.hbf_staging_runtime.snapshot",
+      "category": "physical_transaction_snapshot",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "heterollm_sim.hbf_staging_runtime.commit",
+      "category": "physical_transaction_snapshot",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 3136
+    },
+    {
+      "label": "heterollm_sim.hbf_staging_runtime.restore",
+      "category": "physical_transaction_snapshot",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "_compiled_dram.execute_compiled",
+      "category": "host_dram_adapter_and_numeric",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "_compiled_dram.execute_compiled_many",
+      "category": "host_dram_adapter_and_numeric",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "_compiled_dram.execute_compiled",
+      "category": "host_dram_adapter_and_numeric",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "heterollm_sim._compiled_hbm.execute_hbm_numeric",
+      "category": "hbm_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "heterollm_sim._compiled_hbm.execute_hbm_numeric_many",
+      "category": "hbm_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 6024
+    },
+    {
+      "label": "heterollm_sim._compiled_hbm._pack_hbm_numeric",
+      "category": "hbm_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 6024
+    },
+    {
+      "label": "_compiled_hbm._HBMNumericState.execute",
+      "category": "hbm_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8152
+    },
+    {
+      "label": "_compiled_hbm._HBMNumericState.refresh_resources",
+      "category": "hbm_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 6024
+    },
+    {
+      "label": "_compiled_hbm._HBMNumericState.commit_timeline",
+      "category": "hbm_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8152
+    },
+    {
+      "label": "_compiled_hbm._HBMNumericState.commit_controller",
+      "category": "hbm_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "_compiled_hbm._HBMNumericState.checkpoint",
+      "category": "hbm_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8152
+    },
+    {
+      "label": "heterollm_sim._hbm_numeric.run_hbm_numeric",
+      "category": "hbm_numeric_and_thread_wait",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8152
+    },
+    {
+      "label": "heterollm_sim._nand_execution.execute_pages",
+      "category": "nand_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "nand_core.NandCore.submit",
+      "category": "nand_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "nand_core.NandCore.submit_read_pages",
+      "category": "nand_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "nand_core.NandCore.submit_write_pages",
+      "category": "nand_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "nand_core.NandCore._submit_ocp_single_page_summary",
+      "category": "nand_adapter",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "nand_core.NandCore._nand_publish_numeric",
+      "category": "nand_state_publication",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "heterollm_sim._compiled_nand._run",
+      "category": "nand_numeric",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 0
+    },
+    {
+      "label": "live_execution_metrics.LiveCohortMetrics.observe",
+      "category": "live_metrics_summary",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8520
+    },
+    {
+      "label": "live_execution_metrics.LiveCohortMetrics.summary",
+      "category": "live_metrics_summary",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "live_execution_metrics.LiveCohortMetrics.metadata",
+      "category": "live_metrics_summary",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "heterollm_sim.planner._resource_busy_by_direction",
+      "category": "metrics_summary",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 16
+    },
+    {
+      "label": "heterollm_sim.planner._summarize_dram_task_traffic",
+      "category": "metrics_summary",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 16
+    },
+    {
+      "label": "heterollm_sim.planner._summarize_nand_task_traffic",
+      "category": "metrics_summary",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 16
+    },
+    {
+      "label": "heterollm_sim.planner._summarize_kv_task_traffic",
+      "category": "metrics_summary",
+      "hooked": true,
+      "mechanism": "public Python call boundary",
+      "observed_decode_calls": 8
+    },
+    {
+      "label": "serving._OnlineRuntime._execute",
+      "category": "serving_rollback_and_control",
+      "hooked": true,
+      "mechanism": "activates diagnostics only for Decode",
+      "observed_decode_calls": 8
+    }
+  ],
+  "point": {
+    "architecture": "HBM",
+    "model_id": "qwen2_5-0_5b",
+    "prompt_tokens": 65536,
+    "output_tokens": 9
+  }
+}

@@ -19,6 +19,9 @@ def config(**updates):
                   host_write_bandwidth_gb_s=64., internal_bandwidth_gb_s=4096.,
                   page_read_ns=100., page_program_ns=1000., block_erase_ns=2000.,
                   host_full_duplex=True, read_cache_pages_per_bank=2)
+    if updates.get("protocol_mode") == "ocp_hbf_0_7":
+        values.update(queue_scope="host_channel", planes_independent=True,
+                      planes_per_lun=1, parallel_units=None)
     values.update(updates)
     return NandConfig(**values)
 
@@ -35,6 +38,9 @@ def stage(result, name):
     {"host_channels": 2}, {"host_channels": True},
     {"read_cache_pages_per_bank": -1}, {"host_full_duplex": 1},
     {"protocol_mode": "legacy_hbf"},
+    {"queue_scope": "channel"}, {"max_outstanding_write_requests": 0},
+    {"max_outstanding_write_requests": True},
+    {"max_outstanding_requests": 2, "max_outstanding_write_requests": 3},
 ])
 def test_invalid_transport_configuration_is_rejected(update):
     with pytest.raises(ValueError):
@@ -136,6 +142,7 @@ def test_flush_invalidates_read_cache_created_while_partial_write_is_staged():
     {"page_bytes": 16384}, {"host_granularity_bytes": 4096},
     {"host_full_duplex": False}, {"read_cache_pages_per_bank": 0},
     {"write_buffer_bytes": PAGE}, {"channels": 32, "host_channels": 32},
+    {"queue_scope": "device"}, {"parallel_units": 1}, {"planes_independent": False},
 ])
 def test_ocp_contract_rejects_inconsistent_physical_settings(updates):
     with pytest.raises(ValueError, match="ocp_hbf_0_7"):
@@ -193,6 +200,7 @@ def test_ocp_striped_aggregate_write_tracks_order_per_physical_block():
     result = core.submit(request("stripe", "write", count=4 * PAGE))
     assert result.pages_programmed == 4
     assert result.erase_operations == 2
+    assert result.counters["host_admission_samples"] == 4
     assert set(core._next_program_page.values()) == {2}
 
 
@@ -211,3 +219,5 @@ def test_summary_and_detail_execute_same_host_cache_and_protocol_state():
             assert a.counters[name] == b.counters[name]
     assert detailed._read_cache == summary._read_cache
     assert detailed._next_program_page == summary._next_program_page
+    assert detailed._host_inflight == summary._host_inflight
+    assert detailed._host_acceptance_ns == summary._host_acceptance_ns

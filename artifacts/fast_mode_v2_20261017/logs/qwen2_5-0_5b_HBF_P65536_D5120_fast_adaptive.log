@@ -1,0 +1,68 @@
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 1, "kind": "prefill", "wall_seconds": 4.257314399990719}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 2, "kind": "prefill", "wall_seconds": 7.959228299965616}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 3, "kind": "prefill", "wall_seconds": 11.66419899999164}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 4, "kind": "prefill", "wall_seconds": 15.336931400001049}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 5, "kind": "prefill", "wall_seconds": 19.107879199960735}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 6, "kind": "prefill", "wall_seconds": 22.960491799982265}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 7, "kind": "prefill", "wall_seconds": 26.84596499998588}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 8, "kind": "prefill", "wall_seconds": 30.656653899990488}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 9, "kind": "prefill", "wall_seconds": 34.420014999981504}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 10, "kind": "prefill", "wall_seconds": 38.18406379997032}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 11, "kind": "prefill", "wall_seconds": 42.093895700003486}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 12, "kind": "prefill", "wall_seconds": 45.957012499973644}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 13, "kind": "prefill", "wall_seconds": 49.63454719999572}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 14, "kind": "prefill", "wall_seconds": 53.59279699996114}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 15, "kind": "prefill", "wall_seconds": 57.468398900004104}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 16, "kind": "prefill", "wall_seconds": 61.37179349997314}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 17, "kind": "prefill", "wall_seconds": 65.36656070000026}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 18, "kind": "prefill", "wall_seconds": 69.10771219996968}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 19, "kind": "prefill", "wall_seconds": 73.09913579997374}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 20, "kind": "prefill", "wall_seconds": 77.07335029996466}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 21, "kind": "prefill", "wall_seconds": 80.88847519998671}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 22, "kind": "prefill", "wall_seconds": 84.95509730000049}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 23, "kind": "prefill", "wall_seconds": 88.91935539996484}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 24, "kind": "prefill", "wall_seconds": 93.00488099997165}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 25, "kind": "prefill", "wall_seconds": 97.02490339998621}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 26, "kind": "prefill", "wall_seconds": 100.59682989999419}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 27, "kind": "prefill", "wall_seconds": 105.38100120000308}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 28, "kind": "prefill", "wall_seconds": 109.11964270001044}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 29, "kind": "prefill", "wall_seconds": 113.08783719997155}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 30, "kind": "prefill", "wall_seconds": 117.1326463999576}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 31, "kind": "prefill", "wall_seconds": 121.37077069998486}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 32, "kind": "prefill", "wall_seconds": 125.70997919997899}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 48, "kind": "decode", "wall_seconds": 139.5911251999787}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 64, "kind": "decode", "wall_seconds": 153.39660709997406}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 80, "kind": "decode", "wall_seconds": 167.2066346000065}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 96, "kind": "decode", "wall_seconds": 180.96268369996687}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 112, "kind": "decode", "wall_seconds": 194.76254610001342}
+{"architecture": "HBF", "mode": "fast", "stage": "serving_cohorts", "completed": 128, "kind": "decode", "wall_seconds": 208.4732339999755}
+Traceback (most recent call last):
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\scripts\benchmark_fast_mode.py", line 550, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\scripts\benchmark_fast_mode.py", line 509, in main
+    benchmark_case(args)
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\scripts\benchmark_fast_mode.py", line 374, in benchmark_case
+    return _benchmark_case(args, progress_state)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\scripts\benchmark_fast_mode.py", line 416, in _benchmark_case
+    result = run_scenario(scenario, retention_policy="aggregate",
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\reporting.py", line 227, in run_scenario
+    return _run_scenario_in_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\reporting.py", line 265, in _run_scenario_in_context
+    simulation = simulation_runner(
+                 ^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\fast_simulation.py", line 442, in simulate_fast
+    return detailed("prefix_calibration_exceeds_error_budget")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\fast_simulation.py", line 339, in detailed
+    control.report("fast_mode_fallback", runtime._completed_decode_steps,
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\src\heterollm_sim\execution_control.py", line 94, in report
+    self.progress_callback(
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\scripts\benchmark_fast_mode.py", line 403, in progress
+    progress_state.observe(event)
+  File "F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\scripts\benchmark_fast_mode.py", line 199, in observe
+    raise FastForecastUnavailable(
+FastForecastUnavailable: fast forecast rejected: prefix_calibration_exceeds_error_budget

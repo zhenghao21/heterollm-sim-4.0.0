@@ -3,8 +3,9 @@
 Usage: python scripts/b200_hbm_hbf_scan_report.py OUTPUT_DIRECTORY
 
 The directory contains manifest.json and one result row per points/*.json file.
-Only completed, positive measurements are plotted. Missing model points break
-curves instead of becoming zeros or interpolated observations.
+Only successful, positive timings are plotted. Fast-mode TTFT is detailed and
+TPOT includes a forecast tail; rejected forecasts never become measurements.
+Missing model points break curves instead of becoming interpolated observations.
 """
 from __future__ import annotations
 
@@ -23,9 +24,15 @@ from typing import Any
 
 BASE_COLUMNS = (
     "point_id", "model_id", "architecture", "prompt_tokens", "output_tokens",
-    "status", "ttft_ns", "tpot_ns", "ttft_s", "tpot_ms", "wall_seconds", "reason",
+    "status", "simulation_mode", "ttft_fidelity", "tpot_fidelity",
+    "physical_execution_scope", "ttft_ns", "tpot_ns", "ttft_s", "tpot_ms",
+    "sampled_decode_steps", "predicted_decode_steps", "method",
+    "target_relative_error", "conditional_relative_error_budget", "validation_status",
+    "wall_seconds", "reason", "fallback_reasons", "sampling_attempts",
+    "sampling_resets", "error_budget_breakdown", "approximation",
 )
-TERMINAL_STATUSES = {"completed", "failed", "capacity_rejected"}
+SUCCESS_STATUSES = {"completed", "forecast_completed"}
+TERMINAL_STATUSES = SUCCESS_STATUSES | {"forecast_rejected", "failed", "capacity_rejected"}
 COLORS = (
     "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00",
     "#4B3E8A", "#1C7B78", "#8C564B", "#68732D",
@@ -41,6 +48,30 @@ def _key(row: dict[str, Any]) -> tuple[str, str, int, int]:
 def _positive_number(value: Any) -> bool:
     return (isinstance(value, (int, float)) and not isinstance(value, bool)
             and math.isfinite(value) and value > 0)
+
+
+def _summary_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Keep forecast diagnostics in CSV and leave unavailable timings empty."""
+    values = dict(row)
+    approximation = row.get("approximation") or {}
+    forecast = row.get("status") == "forecast_completed"
+    success = row.get("status") in SUCCESS_STATUSES
+    fidelity = row.get("metric_fidelity") or {}
+    values.setdefault("simulation_mode", "fast" if forecast or row.get("status") == "forecast_rejected" else "detailed")
+    values["ttft_fidelity"] = fidelity.get("ttft", "detailed" if success else None)
+    values["tpot_fidelity"] = fidelity.get("tpot", "estimated" if forecast else "detailed" if success else None)
+    for key in ("sampled_decode_steps", "predicted_decode_steps", "method",
+                "target_relative_error", "conditional_relative_error_budget", "validation_status",
+                "fallback_reasons", "sampling_attempts", "sampling_resets", "error_budget_breakdown"):
+        if key not in values:
+            values[key] = approximation.get(key)
+    if forecast:
+        values.setdefault("physical_execution_scope", "detailed_prefill_and_decode_prefix_only")
+    for metric, converted, scale in (("ttft_ns", "ttft_s", 1e9), ("tpot_ns", "tpot_ms", 1e6)):
+        value = row.get(metric)
+        values[metric] = value if success and _positive_number(value) else None
+        values[converted] = value / scale if values[metric] is not None else None
+    return values
 
 
 def _cell(value: Any) -> Any:
@@ -131,16 +162,27 @@ def _running_progress(output_dir: Path, point: dict[str, Any], chunk_tokens: int
         cohorts = event.get("completed", cohorts)
     prompt = int(point["prompt_tokens"])
     chunks = math.ceil(prompt / chunk_tokens)
-    if cohorts is None:
+    def real_steps(name: str, fallback: int | None) -> int | None:
+        value = progress.get(name)
+        return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else fallback
+
+    prefill_steps = real_steps("real_prefill_steps", min(cohorts, chunks) if cohorts is not None else None)
+    decode_steps = real_steps("real_decode_steps", max(0, cohorts - chunks) if cohorts is not None else None)
+    if prefill_steps is not None and decode_steps is not None:
+        cohorts = prefill_steps + decode_steps
+    if prefill_steps is None:
         phase, prefill, decode = "准备启动", "尚未记录已完成块", "尚未记录"
     else:
-        done = min(cohorts, chunks)
+        done = min(prefill_steps, chunks)
         input_done = min(done * chunk_tokens, prompt)
         prefill = f"{done}/{chunks} 块；{input_done:,}/{prompt:,} token（Prefill {input_done / prompt:.1%}）"
         phase = f"Prefill 第 {done + 1}/{chunks} 块" if done < chunks else "Prefill 完成；Decode 阶段"
-        decode = "尚未进入" if cohorts < chunks else f"已完成 {cohorts - chunks} 个后续步骤"
+        decode = "尚未进入" if done < chunks else f"已完成 {decode_steps if decode_steps is not None else '尚未记录'} 个后续步骤"
     stage = event.get("stage", "")
     message = str(event.get("message", ""))
+    if (progress.get("simulation_mode", point.get("simulation_mode")) == "fast"
+            and prefill_steps is not None and prefill_steps >= chunks):
+        decode = f"真实执行 {decode_steps if decode_steps is not None else '尚未记录'} 个后续步骤（仅采样；尾段尚未执行）"
     if stage == "cohort_tasks":
         scope = "实际物理执行" if "连续物理状态" in message else "准备/估算"
         detail = f"{scope}：当前批次任务 {event.get('completed', '?')}/{event.get('total', '?')}"
@@ -148,6 +190,10 @@ def _running_progress(output_dir: Path, point: dict[str, Any], chunk_tokens: int
         detail = "上一批次已完成，等待下一批次进度"
     else:
         detail = {"control_plane": "准备控制配置", "validation": "验证配置",
+                  "fast_calibration": "核对真实采样的条件误差预算",
+                  "fast_recalibration": "擦除及清理后重新采集校准窗口",
+                  "fast_forecast_complete": "预测尾段完成，正在整理；预测步数不计作真实执行",
+                  "fast_mode_fallback": "预测安全检查拒绝，正在记录原因",
                   "serving_complete": "服务执行完成，正在整理结果"}.get(stage, message or "等待进度记录")
     return {"phase": phase, "prefill": prefill, "decode": decode, "detail": detail,
             "updated_at": _local_time(progress.get("updated_at")), "completed_cohorts": cohorts}
@@ -191,27 +237,27 @@ def _read_inputs(output_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]
             raise ValueError(f"Point is outside the manifest: {source.name}")
         if key in rows_by_key:
             raise ValueError(f"Duplicate point for {key}: {source.name}")
-        if row.get("status") == "completed":
+        if row.get("status") in SUCCESS_STATUSES:
             for metric in ("ttft_ns", "tpot_ns"):
                 if not _positive_number(row.get(metric)):
-                    raise ValueError(f"Completed point has invalid {metric}: {source.name}")
+                    raise ValueError(f"Successful point has invalid {metric}: {source.name}")
         rows_by_key[key] = row
     rows = sorted(rows_by_key.values(), key=lambda row: order[_key(row)])
     return manifest, rows, len(expected)
 
 
-def _write_csv(output_dir: Path, completed: list[dict[str, Any]]) -> None:
-    nested_columns = {key for row in completed for key, value in row.items()
+def _write_csv(output_dir: Path, rows: list[dict[str, Any]]) -> None:
+    summaries = [_summary_row(row) for row in rows if row.get("status") in TERMINAL_STATUSES]
+    nested_columns = {key for row in summaries for key, value in row.items()
                       if isinstance(value, (dict, list, tuple))}
-    extra_columns = sorted({key for row in completed for key in row}
+    extra_columns = sorted({key for row in summaries for key in row}
                            - set(BASE_COLUMNS) - nested_columns)
     columns = [*BASE_COLUMNS, *extra_columns]
     with (output_dir / "summary.csv").open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=columns)
         writer.writeheader()
-        for row in completed:
-            values = dict(row, ttft_s=row["ttft_ns"] / 1e9, tpot_ms=row["tpot_ns"] / 1e6)
-            writer.writerow({key: values.get(key) for key in columns})
+        for row in summaries:
+            writer.writerow({key: _cell(row.get(key)) for key in columns})
 
 
 def _plot(output_dir: Path, manifest: dict[str, Any], completed: list[dict[str, Any]], total: int) -> None:
@@ -266,9 +312,13 @@ def _plot(output_dir: Path, manifest: dict[str, Any], completed: list[dict[str, 
                 axis.set_ylim(observed[0] / 1.6, observed[0] * 1.6)
             axis.margins(x=0.06)
 
-        title = f"B200 single-request baseline | {len(completed)}/{total} points completed"
+        title = f"B200 single-request scan | {len(completed)}/{total} points successful"
         figure.suptitle(title, fontsize=17, fontweight="bold", y=0.965)
-        figure.text(0.5, 0.914, "HBM3E vs. OCP HBF 0.7.0  |  BF16 weights and KV  |  K = 1024 tokens",
+        has_forecasts = any(row.get("status") == "forecast_completed" for row in completed)
+        subtitle = "HBM3E vs. OCP HBF 0.7.0  |  BF16 weights and KV  |  K = 1024 tokens"
+        if has_forecasts:
+            subtitle += "\nFast mode: detailed TTFT; mean TPOT includes a forecast tail"
+        figure.text(0.5, 0.902 if has_forecasts else 0.914, subtitle,
                     ha="center", fontsize=10.5, color="#57667B")
         lengths = [Line2D([0], [0], color=COLORS[index % len(COLORS)], linewidth=2.8,
                           label=f"P {_tokens(prompt)} / D {_tokens(decode)}")
@@ -283,7 +333,7 @@ def _plot(output_dir: Path, manifest: dict[str, Any], completed: list[dict[str, 
                          for name in manifest["architectures"]]
         figure.legend(handles=architectures, loc="lower right", bbox_to_anchor=(0.96, 0.095),
                       frameon=False, title="Memory placement", handlelength=3)
-        figure.text(0.5, 0.018, "Missing, failed and capacity-rejected points are omitted; gaps are not interpolated.",
+        figure.text(0.5, 0.018, "Missing, failed, forecast-rejected and capacity-rejected points are omitted; gaps are not interpolated.",
                     ha="center", fontsize=9, color="#637187")
         figure.subplots_adjust(left=0.075, right=0.975, bottom=0.30, top=0.84, wspace=0.25)
         figure.savefig(output_dir / "comparison.png", dpi=180)
@@ -292,10 +342,19 @@ def _plot(output_dir: Path, manifest: dict[str, Any], completed: list[dict[str, 
 
 
 def _parameter_rows(manifest: dict[str, Any]) -> list[tuple[str, Any]]:
-    parameters = manifest.get("parameters", {})
+    parameters = dict(manifest.get("parameters", {}))
+    simulation = manifest.get("simulation", {})
+    if "mode" in simulation:
+        parameters.setdefault("simulation_mode", simulation["mode"])
+    fast_decode = simulation.get("fast_decode", {})
+    for key in ("sampling_strategy", "target_relative_error", "max_sample_tokens"):
+        if key in fast_decode:
+            parameters.setdefault(key, fast_decode[key])
     result = []
     labels = {
         "gpu_preset": "GPU 预设", "gpu_compute_peak_bf16_tflops": "GPU BF16 峰值（TFLOPS）",
+        "simulation_mode": "仿真模式", "sampling_strategy": "Decode 采样策略",
+        "target_relative_error": "误差目标（非逐点实测保证）", "max_sample_tokens": "Decode 真实采样上限（步）",
         "request_count": "请求数", "batch_size": "Batch size",
         "weights_dtype": "权重精度", "kv_dtype": "KV 精度", "activation_dtype": "激活精度",
         "prefill_chunk_tokens": "Prefill 分块（token）", "weights_resident": "权重预驻留",
@@ -306,11 +365,20 @@ def _parameter_rows(manifest: dict[str, Any]) -> list[tuple[str, Any]]:
     for key, label in labels.items():
         if key in parameters:
             value = parameters[key]
+            if key == "target_relative_error":
+                value = f"{value:.1%}"
             result.append((label, "是" if value is True else "否" if value is False else value))
     for group, labels in (
-        ("hbf_parameters", {"capacity_bytes": "HBF 容量（byte）", "array_units": "HBF 阵列单元数",
-                            "read_bandwidth_gb_s": "HBF 读取带宽（GB/s）",
-                            "write_bandwidth_gb_s": "HBF 写入带宽（GB/s）",
+        ("hbf_parameters", {"capacity_bytes": "HBF 容量（byte）", "array_units": "HBF 独立 bank 数",
+                            "host_channels": "HBF 主机通道数",
+                            "read_bandwidth_gb_s": "HBF 读接口预算（GB/s）",
+                            "write_bandwidth_gb_s": "HBF 写接口预算（GB/s）",
+                            "internal_bandwidth_gb_s_per_channel": "HBF 每内部通道数据带宽（GB/s）",
+                            "max_outstanding_requests_per_host_channel": "HBF 每主机通道在途总上限（研究假设）",
+                            "max_outstanding_write_requests_per_host_channel": "HBF 每主机通道在途写上限（包含在总额内）",
+                            "geometry_basis": "HBF 几何依据",
+                            "timing_basis": "HBF 时序假设",
+                            "queue_basis": "HBF 队列假设",
                             "page_bytes": "HBF 编程页（byte）",
                             "read_granularity_bytes": "HBF 读取粒度（byte）",
                             "page_read_ns": "HBF 读页延迟（ns）",
@@ -332,21 +400,33 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
     lines = [
         "# B200 HBM/HBF 单请求扫描", "",
         f"报告刷新时间：**{datetime.now(BEIJING).strftime('%Y-%m-%d %H:%M:%S')}（北京时间 UTC+08:00）**。", "",
-        f"已完成 **{counts['completed']}/{counts['total']}** 个配置点；"
+        f"已成功 **{counts['completed']}/{counts['total']}** 个配置点"
+        f"（详细完成 {counts['detailed_completed']}，预测完成 {counts['forecast_completed']}）；"
+        f"预测安全检查拒绝 {counts['forecast_rejected']} 个；"
         f"失败 {counts['failed']} 个；容量不满足 {counts['capacity_rejected']} 个；"
         f"尚未完成 {counts['pending']} 个。", "",
     ]
     if queue_status is not None:
-        status_label = {"running": "运行中", "completed": "已结束", "paused": "已暂停", "needs_attention": "需要处理"}.get(
+        status_label = {"ready": "待启动", "running": "运行中", "completed": "已全部成功结束",
+                        "completed_with_rejections": "已结束（含拒绝点）",
+                        "paused": "已暂停", "needs_attention": "需要处理"}.get(
             queue_status.get("status"), queue_status.get("status", "未知"))
         lines.extend([f"队列状态：**{_markdown(status_label)}**；"
                       f"队列记录已完成 {queue_status.get('completed', 0)}/{queue_status.get('total', counts['total'])}；"
                       f"等待运行 {queue_status.get('pending', 0)} 个。"
                       f"队列更新时间：{_markdown(_local_time(queue_status.get('updated_at')))}（北京时间）。", ""])
         if queue_status.get("reason"):
-            reason = {"stop_requested": "按要求暂停，未自动恢复扫描"}.get(
+            reason = {"stop_requested": "按要求暂停，未自动恢复扫描",
+                      "requested_group_completed": "64K/5K 配置已全部完成，按要求暂停后续扫描"}.get(
                 queue_status["reason"], queue_status["reason"])
             lines.extend([f"队列说明：{_markdown(reason)}。", ""])
+        group = queue_status.get("pause_after_group")
+        if group:
+            lines.extend([
+                f"按要求，仅继续 **{_tokens(group['prompt_tokens'])}/{_tokens(group['output_tokens'])}** 配置；"
+                f"本组已完成 **{group['completed']}/{group['total']}**，全部完成后自动暂停。"
+                "后续输入/输出长度保持待运行。", "",
+            ])
         if queue_status.get("optimization_report"):
             lines.extend([f"仿真器优化结果：[耗时对比与适用范围]({queue_status['optimization_report']})。", ""])
         running = queue_status.get("running", [])
@@ -385,13 +465,42 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                   "独立 RoPE 每次生成并写入按 Q/K 广播展开的 sin/cos 表，两种部署均计入这项开销。",
                   "超过模型原生上下文的长度仅用于性能外推，不验证输出质量。", "",
                   "数据单位：原始 TTFT/TPOT 为 ns；图中 TTFT 为秒，TPOT 为毫秒/token。", ""])
+    if (manifest.get("simulation", {}).get("mode") == "fast" or manifest.get("simulation_mode") == "fast"
+            or manifest.get("parameters", {}).get("simulation_mode") == "fast") or any(
+            row.get("simulation_mode") == "fast" or row.get("status") in {"forecast_completed", "forecast_rejected"}
+            for row in rows):
+        lines.extend([
+            "**快速模式口径：Prefill 和 Decode 采样前缀为详细物理执行，尾段为预测。** "
+            "TTFT 为详细结果，平均 TPOT 包含估算；资源占用、事务及物理状态只覆盖已执行前缀，"
+            "不能当作完整逐 Token、逐事务结果。", "",
+            "10% 是误差目标；条件误差预算依赖模型假设，不能替代每个配置与完整详细模式的实测对照。"
+            "未做完整详细对照的点保留原始 validation_status，不标为全请求误差验证通过。"
+            "预测拒绝和容量拒绝是已处理终态，保留原因并继续后续点；代码执行失败需要处理。", "",
+        ])
     if counts["completed"]:
         lines.extend(["![TTFT 和 TPOT 扫描结果](comparison.png)", "",
                       "每个面板用颜色区分 9 种输入/输出长度组合，用实线表示 HBM、虚线表示 HBF。"
-                      "横轴为模型参数量，纵轴为对数刻度；未完成和失败点留空。", ""])
+                      "横轴为模型参数量，纵轴为对数刻度；未完成、预测拒绝、容量拒绝和失败点留空。"
+                      "快速完成点的 TPOT 曲线为预测结果。", ""])
     else:
         lines.extend(["当前没有已完成的测量点，尚未生成曲线图。", ""])
-    unsuccessful = [row for row in rows if row.get("status") in {"failed", "capacity_rejected"}]
+    successful = [_summary_row(row) for row in rows if row.get("status") in SUCCESS_STATUSES]
+    if successful:
+        lines.extend(["## 已成功的配置", "", "| 模型 | 存储 | 输入/输出 | 模式 | TTFT（s） | TPOT（ms/token） | 真实/预测 Decode 步数 | 条件预算 | 完整对照状态 |",
+                      "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"])
+        for row in successful:
+            sampled, predicted = row.get("sampled_decode_steps"), row.get("predicted_decode_steps")
+            steps = "未记录" if sampled is None else f"{sampled}/{predicted or 0}"
+            budget = row.get("conditional_relative_error_budget")
+            values = (row["model_id"], row["architecture"],
+                f"{_tokens(row['prompt_tokens'])}/{_tokens(row['output_tokens'])}",
+                "fast（TPOT 估算）" if row["status"] == "forecast_completed" else "detailed",
+                f"{row['ttft_s']:.6g}", f"{row['tpot_ms']:.6g}", steps,
+                f"{budget:.3%}" if isinstance(budget, (int, float)) else "未记录",
+                row.get("validation_status") or "detailed_execution")
+            lines.append("| " + " | ".join(_markdown(value) for value in values) + " |")
+        lines.append("")
+    unsuccessful = [row for row in rows if row.get("status") in {"failed", "capacity_rejected", "forecast_rejected"}]
     if unsuccessful:
         lines.extend(["## 未成功的配置", "", "| 模型 | 存储 | 输入/输出 | 状态 | 原因 |", "| --- | --- | --- | --- | --- |"])
         for row in unsuccessful:
@@ -399,15 +508,17 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                          f"{_tokens(row['prompt_tokens'])}/{_tokens(row['output_tokens'])} | "
                          f"{_markdown(row['status'])} | {_markdown(row.get('reason', ''))} |")
         lines.append("")
-    lines.extend(["文件：[summary.csv](summary.csv) 仅含已完成点的主指标和其他标量；"
+    lines.extend(["文件：[summary.csv](summary.csv) 保留全部终态的主指标、精度口径、采样记录、条件预算及拒绝原因（无指标时留空）；"
                   "[results.json](results.json) 保留全部结果、详细数据和参数。", ""])
     _atomic_text(output_dir / "report.md", "\n".join(lines))
 
 
 def _counts(rows: list[dict[str, Any]], total: int) -> dict[str, int]:
     counts = {"total": total, **{status: sum(row.get("status") == status for row in rows)
-                                for status in ("completed", "failed", "capacity_rejected")}}
+                                for status in TERMINAL_STATUSES}}
+    counts["detailed_completed"] = counts["completed"]
     counts["pending"] = total - sum(counts[status] for status in TERMINAL_STATUSES)
+    counts["completed"] += counts["forecast_completed"]
     return counts
 
 
@@ -426,11 +537,12 @@ def write_report(output_dir: str | Path) -> dict[str, int]:
     output_dir = Path(output_dir)
     manifest, rows, total = _read_inputs(output_dir)
     queue_status = _read_optional_json(output_dir / "status.json")
-    completed = [row for row in rows if row.get("status") == "completed"]
+    completed = [row for row in rows if row.get("status") in SUCCESS_STATUSES]
     counts = _counts(rows, total)
-    _write_csv(output_dir, completed)
+    _write_csv(output_dir, rows)
     (output_dir / "results.json").write_text(json.dumps(
-        {"manifest": manifest, "counts": counts, "queue_status": queue_status, "rows": rows},
+        {"manifest": manifest, "counts": counts, "queue_status": queue_status,
+         "rows": [_summary_row(row) for row in rows]},
         ensure_ascii=False, indent=2, allow_nan=False,
     ) + "\n", encoding="utf-8")
     if completed:
@@ -469,7 +581,7 @@ def watch_report(output_dir: str | Path, interval: float = 60) -> None:
             counts = refresh_markdown(output_dir)
             print(json.dumps({"refreshed_at": datetime.now(BEIJING).isoformat(), **counts}), flush=True)
             status = _read_optional_json(output_dir / "status.json") or {}
-            if status.get("status") in {"completed", "needs_attention", "paused"}:
+            if status.get("status") in {"completed", "completed_with_rejections", "needs_attention", "paused"}:
                 refresh_markdown(output_dir)
                 return
             time.sleep(interval)

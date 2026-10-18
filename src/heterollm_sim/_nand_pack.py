@@ -24,6 +24,62 @@ except ImportError:
     cython = _PythonMode()
 
 
+def ordered_indexed_maximum(target, indexes, values):
+    """Apply the ordinary maximum.at operation to finite contiguous pages.
+
+    Validate the complete plain-array case before its first write. Other
+    NumPy protocols, including exceptional/partially mutating cases, still
+    enter the original ufunc with the original arguments.
+    """
+    if (cython.compiled and type(target) is np.ndarray and type(indexes) is np.ndarray
+            and type(values) is np.ndarray
+            and target.ndim == indexes.ndim == values.ndim == 1
+            and target.dtype == values.dtype == np.dtype(np.float64)
+            and indexes.dtype == np.dtype(np.int64)
+            and target.flags.c_contiguous and indexes.flags.c_contiguous
+            and values.flags.c_contiguous and target.flags.aligned
+            and indexes.flags.aligned and values.flags.aligned
+            and target.flags.writeable and len(indexes) == len(values)
+            and not np.shares_memory(target, indexes)
+            and not np.shares_memory(target, values)):
+        output: cython.double[::1] = target
+        positions: cython.const[cython.longlong][::1] = indexes
+        incoming: cython.const[cython.double][::1] = values
+        # Inspect exponent bits without floating-point operations: declining
+        # a signalling NaN must not quiet it or change its payload first.
+        target_bits: cython.const[cython.ulonglong][::1] = target.view(np.uint64)
+        value_bits: cython.const[cython.ulonglong][::1] = values.view(np.uint64)
+        exponent: cython.ulonglong = 0x7ff0000000000000
+        negative_infinity: cython.ulonglong = 0xfff0000000000000
+        bits: cython.ulonglong
+        index: cython.Py_ssize_t
+        position: cython.longlong
+        size: cython.Py_ssize_t = len(target)
+        count: cython.Py_ssize_t = len(indexes)
+        valid: cython.bint = True
+        for index in range(size):
+            bits = target_bits[index]
+            if bits & exponent == exponent and bits != negative_infinity:
+                valid = False
+                break
+        if valid:
+            for index in range(count):
+                position = positions[index]
+                if (position < 0 or position >= size
+                        or value_bits[index] & exponent == exponent):
+                    valid = False
+                    break
+        if valid:
+            for index in range(count):
+                position = positions[index]
+                # maximum selects the later operand on a finite tie. Store
+                # it as-is so +0/-0 follow the original input order.
+                if incoming[index] >= output[position]:
+                    output[position] = incoming[index]
+            return None
+    return np.maximum.at(target, indexes, values)
+
+
 @cython.cfunc
 @cython.inline
 def _get(mapping: object, key: object, default: object = None) -> object:
@@ -247,3 +303,99 @@ def publish_timeline(timeline, names, state_values: list, moved_values: list,
             cython.cast(dict, lane_direction_map).pop(name, None)
         else:
             lane_direction_map.pop(name, None)
+
+
+@cython.cfunc
+@cython.inline
+def _admission_clock(value: object) -> cython.double:
+    if type(value) is float or type(value) is int:
+        return value
+    # Single-cell ndarray assignment rejects Python sequences which np.float64
+    # construction can accept. Retain that original public-state conversion.
+    scalar = np.empty(1, dtype=np.float64)
+    scalar[0] = value
+    return float(scalar[0])
+
+
+def pack_host_admission(queues, acceptances, acceptance, host_channels,
+                        outstanding_limit, read_operation):
+    """Pack every public FIFO in order without NumPy scalar assignments.
+
+    The queue remains public controller state. No cached copy is trusted
+    across physical submissions, including a caller replacing a queue.
+    """
+    width = max(outstanding_limit,
+                max((len(queue) for queue in queues.values()), default=0)) + 1
+    admission = np.zeros((host_channels, width), dtype=np.float64)
+    operations = np.zeros((host_channels, width), dtype=np.int64)
+    counts = np.zeros(host_channels, dtype=np.int64)
+    frontiers = np.zeros(host_channels, dtype=np.float64)
+    times: cython.double[:, ::1] = admission
+    kinds: cython.longlong[:, ::1] = operations
+    sizes: cython.longlong[::1] = counts
+    ready: cython.double[::1] = frontiers
+    host: cython.Py_ssize_t
+    index: cython.Py_ssize_t
+    queue: object
+    end: object
+    operation: object
+    value: object
+    for host in range(host_channels):
+        queue = _get(queues, host, ())
+        sizes[host] = len(queue)
+        value = max(_get(acceptances, host, 0.), acceptance)
+        ready[host] = _admission_clock(value)
+        for index, (end, operation) in enumerate(queue):
+            times[host, index] = _admission_clock(end)
+            kinds[host, index] = 1 if operation is read_operation else 2
+    return admission, operations, counts, frontiers
+
+
+def host_admission_mask(banks_touched, arrays_touched,
+                        base_units: cython.Py_ssize_t,
+                        per_channel: cython.Py_ssize_t,
+                        host_channels: cython.Py_ssize_t):
+    """Reduce the existing READ-bank and WRITE-unit masks to their hosts.
+
+    Every READ marks its bank, including a page-cache hit; every WRITE marks
+    its array unit. Shared-plane unit IDs retain the same base-unit modulo.
+    Keeping this reduction outside the page machine leaves its numeric loop
+    unchanged and touches each controller bank at most once here.
+    """
+    result = np.zeros(host_channels, dtype=np.bool_)
+    banks: cython.uchar[::1] = banks_touched.view(np.uint8)
+    units: cython.uchar[::1] = arrays_touched.view(np.uint8)
+    active: cython.uchar[::1] = result.view(np.uint8)
+    index: cython.Py_ssize_t
+    for index in range(len(banks_touched)):
+        if banks[index]:
+            active[(index % base_units) // per_channel % host_channels] = 1
+    for index in range(len(arrays_touched)):
+        if units[index]:
+            active[(index % base_units) // per_channel % host_channels] = 1
+    return result
+
+
+def publish_host_admission(queues, acceptances, admission, operations,
+                           counts, frontiers, touched, read_operation,
+                           write_operation):
+    """Publish independent FIFO lists, including all per-command ends."""
+    times: cython.double[:, ::1] = admission
+    kinds: cython.longlong[:, ::1] = operations
+    sizes: cython.longlong[::1] = counts
+    ready: cython.double[::1] = frontiers
+    active: cython.uchar[::1] = touched.view(np.uint8)
+    host: cython.Py_ssize_t
+    index: cython.Py_ssize_t
+    size: cython.Py_ssize_t
+    row: list
+    for host in range(len(counts)):
+        if not active[host]:
+            continue
+        size = sizes[host]
+        row = []
+        for index in range(size):
+            row.append((float(times[host, index]),
+                        read_operation if kinds[host, index] == 1 else write_operation))
+        _put(queues, host, row)
+        _put(acceptances, host, float(ready[host]))

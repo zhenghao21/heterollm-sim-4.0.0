@@ -1,0 +1,3038 @@
+{
+  "architecture": "HBF",
+  "model_id": "qwen2_5-7b",
+  "prompt_tokens": 32,
+  "output_tokens": 17,
+  "status": "completed",
+  "ttft_ns": 403560972.7257067,
+  "tpot_ns": 391133036.7184115,
+  "request_metrics": {
+    "request_id": "scan-request",
+    "status": "finished",
+    "arrival_ns": 0.0,
+    "start_ns": 15707.557333333332,
+    "first_token_ns": 403560972.7257067,
+    "finish_ns": 6661689560.220291,
+    "queue_delay_ns": 15707.557333333332,
+    "ttft_ns": 403560972.7257067,
+    "tpot_ns": 391133036.7184115,
+    "prompt_tokens": 32,
+    "requested_output_tokens": 17,
+    "visible_output_tokens": 17,
+    "proposed_tokens": 17,
+    "accepted_tokens": 17,
+    "preemptions": 0,
+    "swaps": 0,
+    "recomputes": 0,
+    "deadline_met": null,
+    "rejection_reason": null,
+    "engine_start_ns": null
+  },
+  "batch_count": 17,
+  "physical_execution_scope": "persistent_live_kernel",
+  "resource_busy_ns": {
+    "component.hbf0.dma": 13607.125,
+    "cpu0.control_cache": 204.0,
+    "cpu0.h2d_dma": 14662.5,
+    "cpu0.iommu": 4250.0,
+    "cpu0.l1d": 34.0,
+    "cpu0.l2": 136.0,
+    "cpu0.l3": 612.0,
+    "cpu0.pack": 576.0,
+    "cpu0.pipeline": 3303.8703703703713,
+    "cpu0.scheduler": 9807.0,
+    "gpu0.command_processor": 85000.0,
+    "gpu0.command_queue": 4250.0,
+    "gpu0.frontend": 7684000.0,
+    "gpu0.l1_shared": 10140005.258666668,
+    "gpu0.l2": 20738010.688,
+    "gpu0.mmu_tlb": 541200.0,
+    "gpu0.scalar": 19525.110975378328,
+    "gpu0.sfu": 16190.986115785568,
+    "gpu0.tensor_core": 3266275.122685169,
+    "hbf0.memory:nand:array:0": 934703000.0,
+    "hbf0.memory:nand:array:1": 917635000.0,
+    "hbf0.memory:nand:array:10": 917267000.0,
+    "hbf0.memory:nand:array:100": 935446000.0,
+    "hbf0.memory:nand:array:101": 935390000.0,
+    "hbf0.memory:nand:array:102": 935354000.0,
+    "hbf0.memory:nand:array:103": 935158000.0,
+    "hbf0.memory:nand:array:104": 935146000.0,
+    "hbf0.memory:nand:array:105": 935102000.0,
+    "hbf0.memory:nand:array:106": 935066000.0,
+    "hbf0.memory:nand:array:107": 934958000.0,
+    "hbf0.memory:nand:array:108": 934942000.0,
+    "hbf0.memory:nand:array:109": 934890000.0,
+    "hbf0.memory:nand:array:11": 917283000.0,
+    "hbf0.memory:nand:array:110": 934866000.0,
+    "hbf0.memory:nand:array:111": 934974000.0,
+    "hbf0.memory:nand:array:112": 934982000.0,
+    "hbf0.memory:nand:array:113": 934918000.0,
+    "hbf0.memory:nand:array:114": 934882000.0,
+    "hbf0.memory:nand:array:115": 917915000.0,
+    "hbf0.memory:nand:array:116": 917835000.0,
+    "hbf0.memory:nand:array:117": 917755000.0,
+    "hbf0.memory:nand:array:118": 934727000.0,
+    "hbf0.memory:nand:array:119": 917759000.0,
+    "hbf0.memory:nand:array:12": 934271000.0,
+    "hbf0.memory:nand:array:120": 917683000.0,
+    "hbf0.memory:nand:array:121": 917687000.0,
+    "hbf0.memory:nand:array:122": 934667000.0,
+    "hbf0.memory:nand:array:123": 917679000.0,
+    "hbf0.memory:nand:array:124": 917599000.0,
+    "hbf0.memory:nand:array:125": 917611000.0,
+    "hbf0.memory:nand:array:126": 934599000.0,
+    "hbf0.memory:nand:array:127": 917607000.0,
+    "hbf0.memory:nand:array:128": 917551000.0,
+    "hbf0.memory:nand:array:129": 917571000.0,
+    "hbf0.memory:nand:array:13": 934695000.0,
+    "hbf0.memory:nand:array:130": 934535000.0,
+    "hbf0.memory:nand:array:131": 917551000.0,
+    "hbf0.memory:nand:array:132": 917463000.0,
+    "hbf0.memory:nand:array:133": 917483000.0,
+    "hbf0.memory:nand:array:134": 934435000.0,
+    "hbf0.memory:nand:array:135": 917531000.0,
+    "hbf0.memory:nand:array:136": 917463000.0,
+    "hbf0.memory:nand:array:137": 917415000.0,
+    "hbf0.memory:nand:array:138": 934387000.0,
+    "hbf0.memory:nand:array:139": 917491000.0,
+    "hbf0.memory:nand:array:14": 934607000.0,
+    "hbf0.memory:nand:array:140": 917343000.0,
+    "hbf0.memory:nand:array:141": 917283000.0,
+    "hbf0.memory:nand:array:142": 934239000.0,
+    "hbf0.memory:nand:array:143": 934755000.0,
+    "hbf0.memory:nand:array:144": 934635000.0,
+    "hbf0.memory:nand:array:145": 934563000.0,
+    "hbf0.memory:nand:array:146": 934343000.0,
+    "hbf0.memory:nand:array:147": 934811000.0,
+    "hbf0.memory:nand:array:148": 934663000.0,
+    "hbf0.memory:nand:array:149": 934631000.0,
+    "hbf0.memory:nand:array:15": 934615000.0,
+    "hbf0.memory:nand:array:150": 934399000.0,
+    "hbf0.memory:nand:array:151": 934823000.0,
+    "hbf0.memory:nand:array:152": 934671000.0,
+    "hbf0.memory:nand:array:153": 934679000.0,
+    "hbf0.memory:nand:array:154": 934463000.0,
+    "hbf0.memory:nand:array:155": 934895000.0,
+    "hbf0.memory:nand:array:156": 934739000.0,
+    "hbf0.memory:nand:array:157": 934747000.0,
+    "hbf0.memory:nand:array:158": 934527000.0,
+    "hbf0.memory:nand:array:159": 934959000.0,
+    "hbf0.memory:nand:array:16": 951846000.0,
+    "hbf0.memory:nand:array:160": 934823000.0,
+    "hbf0.memory:nand:array:161": 934843000.0,
+    "hbf0.memory:nand:array:162": 934599000.0,
+    "hbf0.memory:nand:array:163": 935075000.0,
+    "hbf0.memory:nand:array:164": 934923000.0,
+    "hbf0.memory:nand:array:165": 934903000.0,
+    "hbf0.memory:nand:array:166": 934659000.0,
+    "hbf0.memory:nand:array:167": 935171000.0,
+    "hbf0.memory:nand:array:168": 935091000.0,
+    "hbf0.memory:nand:array:169": 935019000.0,
+    "hbf0.memory:nand:array:17": 952270000.0,
+    "hbf0.memory:nand:array:170": 934791000.0,
+    "hbf0.memory:nand:array:171": 934915000.0,
+    "hbf0.memory:nand:array:172": 934827000.0,
+    "hbf0.memory:nand:array:173": 934755000.0,
+    "hbf0.memory:nand:array:174": 934747000.0,
+    "hbf0.memory:nand:array:175": 934807000.0,
+    "hbf0.memory:nand:array:176": 934819000.0,
+    "hbf0.memory:nand:array:177": 934779000.0,
+    "hbf0.memory:nand:array:178": 917755000.0,
+    "hbf0.memory:nand:array:179": 917699000.0,
+    "hbf0.memory:nand:array:18": 952098000.0,
+    "hbf0.memory:nand:array:180": 917687000.0,
+    "hbf0.memory:nand:array:181": 934703000.0,
+    "hbf0.memory:nand:array:182": 917679000.0,
+    "hbf0.memory:nand:array:183": 917631000.0,
+    "hbf0.memory:nand:array:184": 917615000.0,
+    "hbf0.memory:nand:array:185": 934627000.0,
+    "hbf0.memory:nand:array:186": 917611000.0,
+    "hbf0.memory:nand:array:187": 917555000.0,
+    "hbf0.memory:nand:array:188": 917543000.0,
+    "hbf0.memory:nand:array:189": 934555000.0,
+    "hbf0.memory:nand:array:19": 952110000.0,
+    "hbf0.memory:nand:array:190": 917523000.0,
+    "hbf0.memory:nand:array:191": 917535000.0,
+    "hbf0.memory:nand:array:192": 917527000.0,
+    "hbf0.memory:nand:array:193": 934503000.0,
+    "hbf0.memory:nand:array:194": 917475000.0,
+    "hbf0.memory:nand:array:195": 917515000.0,
+    "hbf0.memory:nand:array:196": 917503000.0,
+    "hbf0.memory:nand:array:197": 934431000.0,
+    "hbf0.memory:nand:array:198": 917395000.0,
+    "hbf0.memory:nand:array:199": 917443000.0,
+    "hbf0.memory:nand:array:2": 917483000.0,
+    "hbf0.memory:nand:array:20": 951894000.0,
+    "hbf0.memory:nand:array:200": 917423000.0,
+    "hbf0.memory:nand:array:201": 934351000.0,
+    "hbf0.memory:nand:array:202": 917343000.0,
+    "hbf0.memory:nand:array:203": 917311000.0,
+    "hbf0.memory:nand:array:204": 917295000.0,
+    "hbf0.memory:nand:array:205": 934203000.0,
+    "hbf0.memory:nand:array:206": 934603000.0,
+    "hbf0.memory:nand:array:207": 934563000.0,
+    "hbf0.memory:nand:array:208": 934619000.0,
+    "hbf0.memory:nand:array:209": 934419000.0,
+    "hbf0.memory:nand:array:21": 952334000.0,
+    "hbf0.memory:nand:array:210": 934815000.0,
+    "hbf0.memory:nand:array:211": 934695000.0,
+    "hbf0.memory:nand:array:212": 934679000.0,
+    "hbf0.memory:nand:array:213": 934487000.0,
+    "hbf0.memory:nand:array:214": 934859000.0,
+    "hbf0.memory:nand:array:215": 934743000.0,
+    "hbf0.memory:nand:array:216": 934727000.0,
+    "hbf0.memory:nand:array:217": 934539000.0,
+    "hbf0.memory:nand:array:218": 934919000.0,
+    "hbf0.memory:nand:array:219": 934803000.0,
+    "hbf0.memory:nand:array:22": 952158000.0,
+    "hbf0.memory:nand:array:220": 934783000.0,
+    "hbf0.memory:nand:array:221": 934611000.0,
+    "hbf0.memory:nand:array:222": 934987000.0,
+    "hbf0.memory:nand:array:223": 934955000.0,
+    "hbf0.memory:nand:array:224": 934963000.0,
+    "hbf0.memory:nand:array:225": 934687000.0,
+    "hbf0.memory:nand:array:226": 935067000.0,
+    "hbf0.memory:nand:array:227": 935043000.0,
+    "hbf0.memory:nand:array:228": 935031000.0,
+    "hbf0.memory:nand:array:229": 934763000.0,
+    "hbf0.memory:nand:array:23": 952270000.0,
+    "hbf0.memory:nand:array:230": 935139000.0,
+    "hbf0.memory:nand:array:231": 935175000.0,
+    "hbf0.memory:nand:array:232": 935171000.0,
+    "hbf0.memory:nand:array:233": 934887000.0,
+    "hbf0.memory:nand:array:234": 934867000.0,
+    "hbf0.memory:nand:array:235": 934807000.0,
+    "hbf0.memory:nand:array:236": 934799000.0,
+    "hbf0.memory:nand:array:237": 934823000.0,
+    "hbf0.memory:nand:array:238": 934799000.0,
+    "hbf0.memory:nand:array:239": 934807000.0,
+    "hbf0.memory:nand:array:24": 952058000.0,
+    "hbf0.memory:nand:array:240": 934811000.0,
+    "hbf0.memory:nand:array:241": 917831000.0,
+    "hbf0.memory:nand:array:242": 917743000.0,
+    "hbf0.memory:nand:array:243": 917771000.0,
+    "hbf0.memory:nand:array:244": 934751000.0,
+    "hbf0.memory:nand:array:245": 917755000.0,
+    "hbf0.memory:nand:array:246": 917651000.0,
+    "hbf0.memory:nand:array:247": 917663000.0,
+    "hbf0.memory:nand:array:248": 934651000.0,
+    "hbf0.memory:nand:array:249": 917683000.0,
+    "hbf0.memory:nand:array:25": 952390000.0,
+    "hbf0.memory:nand:array:250": 917583000.0,
+    "hbf0.memory:nand:array:251": 917691000.0,
+    "hbf0.memory:nand:array:252": 934683000.0,
+    "hbf0.memory:nand:array:253": 917619000.0,
+    "hbf0.memory:nand:array:254": 917519000.0,
+    "hbf0.memory:nand:array:255": 917623000.0,
+    "hbf0.memory:nand:array:26": 952226000.0,
+    "hbf0.memory:nand:array:27": 952338000.0,
+    "hbf0.memory:nand:array:28": 952122000.0,
+    "hbf0.memory:nand:array:29": 952462000.0,
+    "hbf0.memory:nand:array:3": 917591000.0,
+    "hbf0.memory:nand:array:30": 952306000.0,
+    "hbf0.memory:nand:array:31": 952410000.0,
+    "hbf0.memory:nand:array:32": 952222000.0,
+    "hbf0.memory:nand:array:33": 952550000.0,
+    "hbf0.memory:nand:array:34": 952390000.0,
+    "hbf0.memory:nand:array:35": 952402000.0,
+    "hbf0.memory:nand:array:36": 952182000.0,
+    "hbf0.memory:nand:array:37": 952606000.0,
+    "hbf0.memory:nand:array:38": 952514000.0,
+    "hbf0.memory:nand:array:39": 952526000.0,
+    "hbf0.memory:nand:array:4": 934575000.0,
+    "hbf0.memory:nand:array:40": 952306000.0,
+    "hbf0.memory:nand:array:41": 952310000.0,
+    "hbf0.memory:nand:array:42": 952234000.0,
+    "hbf0.memory:nand:array:43": 952262000.0,
+    "hbf0.memory:nand:array:44": 951766000.0,
+    "hbf0.memory:nand:array:45": 951770000.0,
+    "hbf0.memory:nand:array:46": 951750000.0,
+    "hbf0.memory:nand:array:47": 951770000.0,
+    "hbf0.memory:nand:array:48": 934774000.0,
+    "hbf0.memory:nand:array:49": 934726000.0,
+    "hbf0.memory:nand:array:5": 917491000.0,
+    "hbf0.memory:nand:array:50": 934694000.0,
+    "hbf0.memory:nand:array:51": 951806000.0,
+    "hbf0.memory:nand:array:52": 934786000.0,
+    "hbf0.memory:nand:array:53": 934646000.0,
+    "hbf0.memory:nand:array:54": 934606000.0,
+    "hbf0.memory:nand:array:55": 951718000.0,
+    "hbf0.memory:nand:array:56": 934698000.0,
+    "hbf0.memory:nand:array:57": 934558000.0,
+    "hbf0.memory:nand:array:58": 934546000.0,
+    "hbf0.memory:nand:array:59": 951658000.0,
+    "hbf0.memory:nand:array:6": 917399000.0,
+    "hbf0.memory:nand:array:60": 917774000.0,
+    "hbf0.memory:nand:array:61": 917618000.0,
+    "hbf0.memory:nand:array:62": 917606000.0,
+    "hbf0.memory:nand:array:63": 934638000.0,
+    "hbf0.memory:nand:array:64": 917638000.0,
+    "hbf0.memory:nand:array:65": 917582000.0,
+    "hbf0.memory:nand:array:66": 917562000.0,
+    "hbf0.memory:nand:array:67": 934570000.0,
+    "hbf0.memory:nand:array:68": 917562000.0,
+    "hbf0.memory:nand:array:69": 917506000.0,
+    "hbf0.memory:nand:array:7": 917415000.0,
+    "hbf0.memory:nand:array:70": 917474000.0,
+    "hbf0.memory:nand:array:71": 934498000.0,
+    "hbf0.memory:nand:array:72": 917474000.0,
+    "hbf0.memory:nand:array:73": 917354000.0,
+    "hbf0.memory:nand:array:74": 917334000.0,
+    "hbf0.memory:nand:array:75": 934350000.0,
+    "hbf0.memory:nand:array:76": 934742000.0,
+    "hbf0.memory:nand:array:77": 934694000.0,
+    "hbf0.memory:nand:array:78": 934666000.0,
+    "hbf0.memory:nand:array:79": 934774000.0,
+    "hbf0.memory:nand:array:8": 934411000.0,
+    "hbf0.memory:nand:array:80": 935194000.0,
+    "hbf0.memory:nand:array:81": 934986000.0,
+    "hbf0.memory:nand:array:82": 934950000.0,
+    "hbf0.memory:nand:array:83": 934862000.0,
+    "hbf0.memory:nand:array:84": 935254000.0,
+    "hbf0.memory:nand:array:85": 935054000.0,
+    "hbf0.memory:nand:array:86": 935014000.0,
+    "hbf0.memory:nand:array:87": 934914000.0,
+    "hbf0.memory:nand:array:88": 935314000.0,
+    "hbf0.memory:nand:array:89": 935102000.0,
+    "hbf0.memory:nand:array:9": 917415000.0,
+    "hbf0.memory:nand:array:90": 935090000.0,
+    "hbf0.memory:nand:array:91": 934918000.0,
+    "hbf0.memory:nand:array:92": 935310000.0,
+    "hbf0.memory:nand:array:93": 935174000.0,
+    "hbf0.memory:nand:array:94": 935158000.0,
+    "hbf0.memory:nand:array:95": 934970000.0,
+    "hbf0.memory:nand:array:96": 935378000.0,
+    "hbf0.memory:nand:array:97": 935250000.0,
+    "hbf0.memory:nand:array:98": 935230000.0,
+    "hbf0.memory:nand:array:99": 935058000.0,
+    "hbf0.memory:nand:channel:0": 157019178.66760778,
+    "hbf0.memory:nand:channel:1": 156833877.3343176,
+    "hbf0.memory:nand:channel:10": 156634965.3343639,
+    "hbf0.memory:nand:channel:11": 156640512.00102928,
+    "hbf0.memory:nand:channel:12": 156636501.33436355,
+    "hbf0.memory:nand:channel:13": 156817536.00098807,
+    "hbf0.memory:nand:channel:14": 156998784.00094587,
+    "hbf0.memory:nand:channel:15": 157012224.00094274,
+    "hbf0.memory:nand:channel:2": 156647296.0010277,
+    "hbf0.memory:nand:channel:3": 156657152.0010254,
+    "hbf0.memory:nand:channel:4": 156654592.001026,
+    "hbf0.memory:nand:channel:5": 156651434.6676934,
+    "hbf0.memory:nand:channel:6": 156646357.33436126,
+    "hbf0.memory:nand:channel:7": 156656768.0010255,
+    "hbf0.memory:nand:channel:8": 156651050.6676935,
+    "hbf0.memory:nand:channel:9": 156642688.00102878,
+    "hbf0.memory:nand:host:0:read": 156902176.0009684,
+    "hbf0.memory:nand:host:0:write": 112938.66666667056,
+    "hbf0.memory:nand:host:10:read": 156518261.33439112,
+    "hbf0.memory:nand:host:10:write": 112896.00000000389,
+    "hbf0.memory:nand:host:11:read": 156527312.0010557,
+    "hbf0.memory:nand:host:11:write": 112896.00000000389,
+    "hbf0.memory:nand:host:12:read": 156519530.66772416,
+    "hbf0.memory:nand:host:12:write": 112896.00000000389,
+    "hbf0.memory:nand:host:13:read": 156705050.66768098,
+    "hbf0.memory:nand:host:13:write": 112896.00000000389,
+    "hbf0.memory:nand:host:14:read": 156881258.66763994,
+    "hbf0.memory:nand:host:14:write": 112896.00000000389,
+    "hbf0.memory:nand:host:15:read": 156898288.00096932,
+    "hbf0.memory:nand:host:15:write": 112896.00000000389,
+    "hbf0.memory:nand:host:1:read": 156720144.0010108,
+    "hbf0.memory:nand:host:1:write": 112938.66666667056,
+    "hbf0.memory:nand:host:2:read": 156529653.3343885,
+    "hbf0.memory:nand:host:2:write": 112938.66666667056,
+    "hbf0.memory:nand:host:3:read": 156543056.001052,
+    "hbf0.memory:nand:host:3:write": 112896.00000000389,
+    "hbf0.memory:nand:host:4:read": 156536544.00105354,
+    "hbf0.memory:nand:host:4:write": 112896.00000000389,
+    "hbf0.memory:nand:host:5:read": 156537285.33438674,
+    "hbf0.memory:nand:host:5:write": 112896.00000000389,
+    "hbf0.memory:nand:host:6:read": 156528752.00105536,
+    "hbf0.memory:nand:host:6:write": 112896.00000000389,
+    "hbf0.memory:nand:host:7:read": 156542842.66771868,
+    "hbf0.memory:nand:host:7:write": 112896.00000000389,
+    "hbf0.memory:nand:host:8:read": 156533898.6677208,
+    "hbf0.memory:nand:host:8:write": 112896.00000000389,
+    "hbf0.memory:nand:host:9:read": 156529520.00105518,
+    "hbf0.memory:nand:host:9:write": 112896.00000000389,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:0": 46578.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:1": 46550.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:2": 46522.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:0:3": 46522.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:0": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:1": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:2": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:1:3": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:2:0": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:2:1": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:2:2": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:2:3": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:3:0": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:3:1": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:3:2": 45682.0,
+    "hostmem0.memory:dram:bank:0:0:0:0:3:3": 45682.0,
+    "hostmem0.memory:dram:command:0": 619855.714284411,
+    "hostmem0.memory:dram:data:0": 619855.714284411,
+    "interrupt": 0.0,
+    "link.cpu_gpu_pcie.cpu0->gpu0": 219243.23852539062,
+    "link.cpu_gpu_pcie.cpu0->gpu0.inflight": 4928043.238525391,
+    "link.cpu_gpu_pcie.gpu0->cpu0": 220328.19580078125,
+    "link.cpu_gpu_pcie.gpu0->cpu0.inflight": 5672328.195800781,
+    "link.cpu_hostmem_ddr.cpu0->hostmem0": 309912.1875000002,
+    "link.cpu_hostmem_ddr.cpu0->hostmem0.inflight": 855112.1874999991,
+    "link.cpu_hostmem_ddr.hostmem0->cpu0": 308386.0937500001,
+    "link.cpu_hostmem_ddr.hostmem0->cpu0.inflight": 779266.0937499998,
+    "link.gpu_hbf0.gpu0->hbf0": 112903.99999999997,
+    "link.gpu_hbf0.gpu0->hbf0.inflight": 4346804.000000009,
+    "link.gpu_hbf0.hbf0->gpu0": 156622098.33328786,
+    "link.gpu_hbf0.hbf0->gpu0.inflight": 6030268798.336689
+  },
+  "storage_traffic": {
+    "schema_version": "heterollm.nand-traffic/v1",
+    "task_count": 7348,
+    "logical_bytes": 240744963584,
+    "host_transfer_bytes": 240744963584,
+    "physical_bytes": 240748888064,
+    "physical_read_bytes": 240575467520,
+    "physical_write_bytes": 173420544,
+    "queue_wait_ns": 30914381441749.094,
+    "erase_operations": 256,
+    "service_ns": 3009863274.358994,
+    "logical_read_bytes": 240571543040,
+    "logical_write_bytes": 173420544,
+    "internal_transfer_bytes": 240748888064,
+    "pages_read": 58734245,
+    "pages_programmed": 42339,
+    "pages_touched": 58778806,
+    "media_waves": null,
+    "read_cache_hits": 2222,
+    "read_cache_misses": 58734245,
+    "read_operations": 58734245,
+    "program_operations": 42339,
+    "rmw_read_operations": 0,
+    "page_access_payload_bytes": 240744963584,
+    "page_access_capacity_bytes": 240757989376,
+    "host_admission_samples": 58778806,
+    "host_queue_wait_ns": null,
+    "media_queue_wait_ns": null,
+    "host_outstanding_at_admission_peak": 256,
+    "host_read_outstanding_at_admission_peak": 256,
+    "host_write_outstanding_at_admission_peak": 19,
+    "page_access_payload_utilization": 0.9999458967403999,
+    "nand_observations": null,
+    "nand_read_queue_depth": null,
+    "nand_program_queue_depth": null,
+    "queue_depth_scope": "max across physical owners: outstanding page commands per host channel sampled at admission, including the admitted command",
+    "queue_depth_scopes_by_owner": {
+      "hbf0.memory": [
+        "outstanding page commands per host channel sampled at admission, including the admitted command"
+      ]
+    },
+    "page_utilization_scope": "logical payload / sum of per-access page-rounded spans; repeated accesses count again; not unique resident capacity utilization",
+    "metric_availability": {
+      "nand_read_queue_depth": {
+        "status": "not_recorded",
+        "reason": "page-level observation is opt-in; host requests are separate"
+      },
+      "nand_program_queue_depth": {
+        "status": "not_recorded",
+        "reason": "page-level observation is opt-in; host writes are separate"
+      },
+      "logical_read_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "logical_write_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "internal_transfer_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "pages_read": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "pages_programmed": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "pages_touched": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "media_waves": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "read_cache_hits": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "read_cache_misses": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "read_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "program_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "rmw_read_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "page_access_payload_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "page_access_capacity_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "host_admission_samples": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "host_queue_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "media_queue_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "host_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "host_read_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "host_write_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "organization_profiles": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      }
+    },
+    "operation_counts": {
+      "read": 1277,
+      "read_write": 5483,
+      "write": 588
+    },
+    "resource_totals": {
+      "hbf0.memory:nand:array:0": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934703000.0
+      },
+      "hbf0.memory:nand:array:1": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917635000.0
+      },
+      "hbf0.memory:nand:array:10": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917267000.0
+      },
+      "hbf0.memory:nand:array:100": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935446000.0
+      },
+      "hbf0.memory:nand:array:101": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935390000.0
+      },
+      "hbf0.memory:nand:array:102": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935354000.0
+      },
+      "hbf0.memory:nand:array:103": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935158000.0
+      },
+      "hbf0.memory:nand:array:104": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935146000.0
+      },
+      "hbf0.memory:nand:array:105": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935102000.0
+      },
+      "hbf0.memory:nand:array:106": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935066000.0
+      },
+      "hbf0.memory:nand:array:107": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934958000.0
+      },
+      "hbf0.memory:nand:array:108": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934942000.0
+      },
+      "hbf0.memory:nand:array:109": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934890000.0
+      },
+      "hbf0.memory:nand:array:11": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917283000.0
+      },
+      "hbf0.memory:nand:array:110": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934866000.0
+      },
+      "hbf0.memory:nand:array:111": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934974000.0
+      },
+      "hbf0.memory:nand:array:112": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934982000.0
+      },
+      "hbf0.memory:nand:array:113": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934918000.0
+      },
+      "hbf0.memory:nand:array:114": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934882000.0
+      },
+      "hbf0.memory:nand:array:115": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917915000.0
+      },
+      "hbf0.memory:nand:array:116": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917835000.0
+      },
+      "hbf0.memory:nand:array:117": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917755000.0
+      },
+      "hbf0.memory:nand:array:118": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934727000.0
+      },
+      "hbf0.memory:nand:array:119": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917759000.0
+      },
+      "hbf0.memory:nand:array:12": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934271000.0
+      },
+      "hbf0.memory:nand:array:120": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917683000.0
+      },
+      "hbf0.memory:nand:array:121": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917687000.0
+      },
+      "hbf0.memory:nand:array:122": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934667000.0
+      },
+      "hbf0.memory:nand:array:123": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917679000.0
+      },
+      "hbf0.memory:nand:array:124": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917599000.0
+      },
+      "hbf0.memory:nand:array:125": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917611000.0
+      },
+      "hbf0.memory:nand:array:126": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934599000.0
+      },
+      "hbf0.memory:nand:array:127": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917607000.0
+      },
+      "hbf0.memory:nand:array:128": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917551000.0
+      },
+      "hbf0.memory:nand:array:129": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917571000.0
+      },
+      "hbf0.memory:nand:array:13": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934695000.0
+      },
+      "hbf0.memory:nand:array:130": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934535000.0
+      },
+      "hbf0.memory:nand:array:131": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917551000.0
+      },
+      "hbf0.memory:nand:array:132": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917463000.0
+      },
+      "hbf0.memory:nand:array:133": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917483000.0
+      },
+      "hbf0.memory:nand:array:134": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934435000.0
+      },
+      "hbf0.memory:nand:array:135": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917531000.0
+      },
+      "hbf0.memory:nand:array:136": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917463000.0
+      },
+      "hbf0.memory:nand:array:137": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917415000.0
+      },
+      "hbf0.memory:nand:array:138": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934387000.0
+      },
+      "hbf0.memory:nand:array:139": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917491000.0
+      },
+      "hbf0.memory:nand:array:14": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934607000.0
+      },
+      "hbf0.memory:nand:array:140": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917343000.0
+      },
+      "hbf0.memory:nand:array:141": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917283000.0
+      },
+      "hbf0.memory:nand:array:142": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934239000.0
+      },
+      "hbf0.memory:nand:array:143": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934755000.0
+      },
+      "hbf0.memory:nand:array:144": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934635000.0
+      },
+      "hbf0.memory:nand:array:145": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934563000.0
+      },
+      "hbf0.memory:nand:array:146": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934343000.0
+      },
+      "hbf0.memory:nand:array:147": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934811000.0
+      },
+      "hbf0.memory:nand:array:148": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934663000.0
+      },
+      "hbf0.memory:nand:array:149": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934631000.0
+      },
+      "hbf0.memory:nand:array:15": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934615000.0
+      },
+      "hbf0.memory:nand:array:150": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934399000.0
+      },
+      "hbf0.memory:nand:array:151": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934823000.0
+      },
+      "hbf0.memory:nand:array:152": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934671000.0
+      },
+      "hbf0.memory:nand:array:153": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934679000.0
+      },
+      "hbf0.memory:nand:array:154": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934463000.0
+      },
+      "hbf0.memory:nand:array:155": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934895000.0
+      },
+      "hbf0.memory:nand:array:156": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934739000.0
+      },
+      "hbf0.memory:nand:array:157": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934747000.0
+      },
+      "hbf0.memory:nand:array:158": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934527000.0
+      },
+      "hbf0.memory:nand:array:159": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934959000.0
+      },
+      "hbf0.memory:nand:array:16": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951846000.0
+      },
+      "hbf0.memory:nand:array:160": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934823000.0
+      },
+      "hbf0.memory:nand:array:161": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934843000.0
+      },
+      "hbf0.memory:nand:array:162": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934599000.0
+      },
+      "hbf0.memory:nand:array:163": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935075000.0
+      },
+      "hbf0.memory:nand:array:164": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934923000.0
+      },
+      "hbf0.memory:nand:array:165": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934903000.0
+      },
+      "hbf0.memory:nand:array:166": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934659000.0
+      },
+      "hbf0.memory:nand:array:167": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935171000.0
+      },
+      "hbf0.memory:nand:array:168": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935091000.0
+      },
+      "hbf0.memory:nand:array:169": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935019000.0
+      },
+      "hbf0.memory:nand:array:17": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952270000.0
+      },
+      "hbf0.memory:nand:array:170": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934791000.0
+      },
+      "hbf0.memory:nand:array:171": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934915000.0
+      },
+      "hbf0.memory:nand:array:172": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934827000.0
+      },
+      "hbf0.memory:nand:array:173": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934755000.0
+      },
+      "hbf0.memory:nand:array:174": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934747000.0
+      },
+      "hbf0.memory:nand:array:175": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934807000.0
+      },
+      "hbf0.memory:nand:array:176": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934819000.0
+      },
+      "hbf0.memory:nand:array:177": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934779000.0
+      },
+      "hbf0.memory:nand:array:178": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917755000.0
+      },
+      "hbf0.memory:nand:array:179": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917699000.0
+      },
+      "hbf0.memory:nand:array:18": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952098000.0
+      },
+      "hbf0.memory:nand:array:180": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917687000.0
+      },
+      "hbf0.memory:nand:array:181": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934703000.0
+      },
+      "hbf0.memory:nand:array:182": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917679000.0
+      },
+      "hbf0.memory:nand:array:183": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917631000.0
+      },
+      "hbf0.memory:nand:array:184": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917615000.0
+      },
+      "hbf0.memory:nand:array:185": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934627000.0
+      },
+      "hbf0.memory:nand:array:186": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917611000.0
+      },
+      "hbf0.memory:nand:array:187": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917555000.0
+      },
+      "hbf0.memory:nand:array:188": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917543000.0
+      },
+      "hbf0.memory:nand:array:189": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934555000.0
+      },
+      "hbf0.memory:nand:array:19": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952110000.0
+      },
+      "hbf0.memory:nand:array:190": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917523000.0
+      },
+      "hbf0.memory:nand:array:191": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917535000.0
+      },
+      "hbf0.memory:nand:array:192": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917527000.0
+      },
+      "hbf0.memory:nand:array:193": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934503000.0
+      },
+      "hbf0.memory:nand:array:194": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917475000.0
+      },
+      "hbf0.memory:nand:array:195": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917515000.0
+      },
+      "hbf0.memory:nand:array:196": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917503000.0
+      },
+      "hbf0.memory:nand:array:197": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934431000.0
+      },
+      "hbf0.memory:nand:array:198": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917395000.0
+      },
+      "hbf0.memory:nand:array:199": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917443000.0
+      },
+      "hbf0.memory:nand:array:2": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917483000.0
+      },
+      "hbf0.memory:nand:array:20": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951894000.0
+      },
+      "hbf0.memory:nand:array:200": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917423000.0
+      },
+      "hbf0.memory:nand:array:201": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934351000.0
+      },
+      "hbf0.memory:nand:array:202": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917343000.0
+      },
+      "hbf0.memory:nand:array:203": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917311000.0
+      },
+      "hbf0.memory:nand:array:204": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917295000.0
+      },
+      "hbf0.memory:nand:array:205": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934203000.0
+      },
+      "hbf0.memory:nand:array:206": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934603000.0
+      },
+      "hbf0.memory:nand:array:207": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934563000.0
+      },
+      "hbf0.memory:nand:array:208": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934619000.0
+      },
+      "hbf0.memory:nand:array:209": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934419000.0
+      },
+      "hbf0.memory:nand:array:21": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952334000.0
+      },
+      "hbf0.memory:nand:array:210": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934815000.0
+      },
+      "hbf0.memory:nand:array:211": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934695000.0
+      },
+      "hbf0.memory:nand:array:212": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934679000.0
+      },
+      "hbf0.memory:nand:array:213": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934487000.0
+      },
+      "hbf0.memory:nand:array:214": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934859000.0
+      },
+      "hbf0.memory:nand:array:215": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934743000.0
+      },
+      "hbf0.memory:nand:array:216": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934727000.0
+      },
+      "hbf0.memory:nand:array:217": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934539000.0
+      },
+      "hbf0.memory:nand:array:218": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934919000.0
+      },
+      "hbf0.memory:nand:array:219": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934803000.0
+      },
+      "hbf0.memory:nand:array:22": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952158000.0
+      },
+      "hbf0.memory:nand:array:220": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934783000.0
+      },
+      "hbf0.memory:nand:array:221": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934611000.0
+      },
+      "hbf0.memory:nand:array:222": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934987000.0
+      },
+      "hbf0.memory:nand:array:223": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934955000.0
+      },
+      "hbf0.memory:nand:array:224": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934963000.0
+      },
+      "hbf0.memory:nand:array:225": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934687000.0
+      },
+      "hbf0.memory:nand:array:226": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935067000.0
+      },
+      "hbf0.memory:nand:array:227": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935043000.0
+      },
+      "hbf0.memory:nand:array:228": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935031000.0
+      },
+      "hbf0.memory:nand:array:229": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934763000.0
+      },
+      "hbf0.memory:nand:array:23": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952270000.0
+      },
+      "hbf0.memory:nand:array:230": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935139000.0
+      },
+      "hbf0.memory:nand:array:231": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935175000.0
+      },
+      "hbf0.memory:nand:array:232": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935171000.0
+      },
+      "hbf0.memory:nand:array:233": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934887000.0
+      },
+      "hbf0.memory:nand:array:234": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934867000.0
+      },
+      "hbf0.memory:nand:array:235": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934807000.0
+      },
+      "hbf0.memory:nand:array:236": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934799000.0
+      },
+      "hbf0.memory:nand:array:237": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934823000.0
+      },
+      "hbf0.memory:nand:array:238": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934799000.0
+      },
+      "hbf0.memory:nand:array:239": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934807000.0
+      },
+      "hbf0.memory:nand:array:24": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952058000.0
+      },
+      "hbf0.memory:nand:array:240": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934811000.0
+      },
+      "hbf0.memory:nand:array:241": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917831000.0
+      },
+      "hbf0.memory:nand:array:242": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917743000.0
+      },
+      "hbf0.memory:nand:array:243": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917771000.0
+      },
+      "hbf0.memory:nand:array:244": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934751000.0
+      },
+      "hbf0.memory:nand:array:245": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917755000.0
+      },
+      "hbf0.memory:nand:array:246": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917651000.0
+      },
+      "hbf0.memory:nand:array:247": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917663000.0
+      },
+      "hbf0.memory:nand:array:248": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934651000.0
+      },
+      "hbf0.memory:nand:array:249": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917683000.0
+      },
+      "hbf0.memory:nand:array:25": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952390000.0
+      },
+      "hbf0.memory:nand:array:250": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917583000.0
+      },
+      "hbf0.memory:nand:array:251": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917691000.0
+      },
+      "hbf0.memory:nand:array:252": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934683000.0
+      },
+      "hbf0.memory:nand:array:253": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917619000.0
+      },
+      "hbf0.memory:nand:array:254": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917519000.0
+      },
+      "hbf0.memory:nand:array:255": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917623000.0
+      },
+      "hbf0.memory:nand:array:26": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952226000.0
+      },
+      "hbf0.memory:nand:array:27": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952338000.0
+      },
+      "hbf0.memory:nand:array:28": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952122000.0
+      },
+      "hbf0.memory:nand:array:29": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952462000.0
+      },
+      "hbf0.memory:nand:array:3": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917591000.0
+      },
+      "hbf0.memory:nand:array:30": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952306000.0
+      },
+      "hbf0.memory:nand:array:31": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952410000.0
+      },
+      "hbf0.memory:nand:array:32": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952222000.0
+      },
+      "hbf0.memory:nand:array:33": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952550000.0
+      },
+      "hbf0.memory:nand:array:34": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952390000.0
+      },
+      "hbf0.memory:nand:array:35": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952402000.0
+      },
+      "hbf0.memory:nand:array:36": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952182000.0
+      },
+      "hbf0.memory:nand:array:37": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952606000.0
+      },
+      "hbf0.memory:nand:array:38": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952514000.0
+      },
+      "hbf0.memory:nand:array:39": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952526000.0
+      },
+      "hbf0.memory:nand:array:4": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934575000.0
+      },
+      "hbf0.memory:nand:array:40": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952306000.0
+      },
+      "hbf0.memory:nand:array:41": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952310000.0
+      },
+      "hbf0.memory:nand:array:42": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952234000.0
+      },
+      "hbf0.memory:nand:array:43": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 952262000.0
+      },
+      "hbf0.memory:nand:array:44": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951766000.0
+      },
+      "hbf0.memory:nand:array:45": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951770000.0
+      },
+      "hbf0.memory:nand:array:46": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951750000.0
+      },
+      "hbf0.memory:nand:array:47": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951770000.0
+      },
+      "hbf0.memory:nand:array:48": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934774000.0
+      },
+      "hbf0.memory:nand:array:49": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934726000.0
+      },
+      "hbf0.memory:nand:array:5": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917491000.0
+      },
+      "hbf0.memory:nand:array:50": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934694000.0
+      },
+      "hbf0.memory:nand:array:51": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951806000.0
+      },
+      "hbf0.memory:nand:array:52": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934786000.0
+      },
+      "hbf0.memory:nand:array:53": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934646000.0
+      },
+      "hbf0.memory:nand:array:54": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934606000.0
+      },
+      "hbf0.memory:nand:array:55": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951718000.0
+      },
+      "hbf0.memory:nand:array:56": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934698000.0
+      },
+      "hbf0.memory:nand:array:57": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934558000.0
+      },
+      "hbf0.memory:nand:array:58": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934546000.0
+      },
+      "hbf0.memory:nand:array:59": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 951658000.0
+      },
+      "hbf0.memory:nand:array:6": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917399000.0
+      },
+      "hbf0.memory:nand:array:60": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917774000.0
+      },
+      "hbf0.memory:nand:array:61": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917618000.0
+      },
+      "hbf0.memory:nand:array:62": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917606000.0
+      },
+      "hbf0.memory:nand:array:63": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934638000.0
+      },
+      "hbf0.memory:nand:array:64": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917638000.0
+      },
+      "hbf0.memory:nand:array:65": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917582000.0
+      },
+      "hbf0.memory:nand:array:66": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917562000.0
+      },
+      "hbf0.memory:nand:array:67": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934570000.0
+      },
+      "hbf0.memory:nand:array:68": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917562000.0
+      },
+      "hbf0.memory:nand:array:69": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917506000.0
+      },
+      "hbf0.memory:nand:array:7": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917415000.0
+      },
+      "hbf0.memory:nand:array:70": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917474000.0
+      },
+      "hbf0.memory:nand:array:71": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934498000.0
+      },
+      "hbf0.memory:nand:array:72": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917474000.0
+      },
+      "hbf0.memory:nand:array:73": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917354000.0
+      },
+      "hbf0.memory:nand:array:74": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917334000.0
+      },
+      "hbf0.memory:nand:array:75": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934350000.0
+      },
+      "hbf0.memory:nand:array:76": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934742000.0
+      },
+      "hbf0.memory:nand:array:77": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934694000.0
+      },
+      "hbf0.memory:nand:array:78": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934666000.0
+      },
+      "hbf0.memory:nand:array:79": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934774000.0
+      },
+      "hbf0.memory:nand:array:8": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934411000.0
+      },
+      "hbf0.memory:nand:array:80": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935194000.0
+      },
+      "hbf0.memory:nand:array:81": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934986000.0
+      },
+      "hbf0.memory:nand:array:82": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934950000.0
+      },
+      "hbf0.memory:nand:array:83": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934862000.0
+      },
+      "hbf0.memory:nand:array:84": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935254000.0
+      },
+      "hbf0.memory:nand:array:85": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935054000.0
+      },
+      "hbf0.memory:nand:array:86": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935014000.0
+      },
+      "hbf0.memory:nand:array:87": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934914000.0
+      },
+      "hbf0.memory:nand:array:88": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935314000.0
+      },
+      "hbf0.memory:nand:array:89": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935102000.0
+      },
+      "hbf0.memory:nand:array:9": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 917415000.0
+      },
+      "hbf0.memory:nand:array:90": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935090000.0
+      },
+      "hbf0.memory:nand:array:91": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934918000.0
+      },
+      "hbf0.memory:nand:array:92": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935310000.0
+      },
+      "hbf0.memory:nand:array:93": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935174000.0
+      },
+      "hbf0.memory:nand:array:94": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935158000.0
+      },
+      "hbf0.memory:nand:array:95": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 934970000.0
+      },
+      "hbf0.memory:nand:array:96": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935378000.0
+      },
+      "hbf0.memory:nand:array:97": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935250000.0
+      },
+      "hbf0.memory:nand:array:98": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935230000.0
+      },
+      "hbf0.memory:nand:array:99": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 935058000.0
+      },
+      "hbf0.memory:nand:channel:0": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15073841152,
+        "service_ns": 157019178.66760778
+      },
+      "hbf0.memory:nand:channel:1": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15056052224,
+        "service_ns": 156833877.3343176
+      },
+      "hbf0.memory:nand:channel:10": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15036956672,
+        "service_ns": 156634965.3343639
+      },
+      "hbf0.memory:nand:channel:11": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15037489152,
+        "service_ns": 156640512.00102928
+      },
+      "hbf0.memory:nand:channel:12": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15037104128,
+        "service_ns": 156636501.33436355
+      },
+      "hbf0.memory:nand:channel:13": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15054483456,
+        "service_ns": 156817536.00098807
+      },
+      "hbf0.memory:nand:channel:14": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15071883264,
+        "service_ns": 156998784.00094587
+      },
+      "hbf0.memory:nand:channel:15": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15073173504,
+        "service_ns": 157012224.00094274
+      },
+      "hbf0.memory:nand:channel:2": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15038140416,
+        "service_ns": 156647296.0010277
+      },
+      "hbf0.memory:nand:channel:3": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15039086592,
+        "service_ns": 156657152.0010254
+      },
+      "hbf0.memory:nand:channel:4": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15038840832,
+        "service_ns": 156654592.001026
+      },
+      "hbf0.memory:nand:channel:5": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15038537728,
+        "service_ns": 156651434.6676934
+      },
+      "hbf0.memory:nand:channel:6": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15038050304,
+        "service_ns": 156646357.33436126
+      },
+      "hbf0.memory:nand:channel:7": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15039049728,
+        "service_ns": 156656768.0010255
+      },
+      "hbf0.memory:nand:channel:8": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15038500864,
+        "service_ns": 156651050.6676935
+      },
+      "hbf0.memory:nand:channel:9": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15037698048,
+        "service_ns": 156642688.00102878
+      },
+      "hbf0.memory:nand:host:0:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15062608896,
+        "service_ns": 156902176.0009684
+      },
+      "hbf0.memory:nand:host:0:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10842112,
+        "service_ns": 112938.66666667056
+      },
+      "hbf0.memory:nand:host:10:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15025753088,
+        "service_ns": 156518261.33439112
+      },
+      "hbf0.memory:nand:host:10:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:11:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15026621952,
+        "service_ns": 156527312.0010557
+      },
+      "hbf0.memory:nand:host:11:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:12:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15025874944,
+        "service_ns": 156519530.66772416
+      },
+      "hbf0.memory:nand:host:12:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:13:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15043684864,
+        "service_ns": 156705050.66768098
+      },
+      "hbf0.memory:nand:host:13:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:14:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15060600832,
+        "service_ns": 156881258.66763994
+      },
+      "hbf0.memory:nand:host:14:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:15:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15062235648,
+        "service_ns": 156898288.00096932
+      },
+      "hbf0.memory:nand:host:15:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:1:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15045133824,
+        "service_ns": 156720144.0010108
+      },
+      "hbf0.memory:nand:host:1:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10842112,
+        "service_ns": 112938.66666667056
+      },
+      "hbf0.memory:nand:host:2:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15026846720,
+        "service_ns": 156529653.3343885
+      },
+      "hbf0.memory:nand:host:2:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10842112,
+        "service_ns": 112938.66666667056
+      },
+      "hbf0.memory:nand:host:3:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15028133376,
+        "service_ns": 156543056.001052
+      },
+      "hbf0.memory:nand:host:3:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:4:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15027508224,
+        "service_ns": 156536544.00105354
+      },
+      "hbf0.memory:nand:host:4:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:5:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15027579392,
+        "service_ns": 156537285.33438674
+      },
+      "hbf0.memory:nand:host:5:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:6:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15026760192,
+        "service_ns": 156528752.00105536
+      },
+      "hbf0.memory:nand:host:6:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:7:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15028112896,
+        "service_ns": 156542842.66771868
+      },
+      "hbf0.memory:nand:host:7:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:8:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15027254272,
+        "service_ns": 156533898.6677208
+      },
+      "hbf0.memory:nand:host:8:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      },
+      "hbf0.memory:nand:host:9:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 15026833920,
+        "service_ns": 156529520.00105518
+      },
+      "hbf0.memory:nand:host:9:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 10838016,
+        "service_ns": 112896.00000000389
+      }
+    },
+    "owner_ids": [
+      "hbf0.memory"
+    ],
+    "profile_evidence": [],
+    "background_work": [],
+    "organization_profiles": [],
+    "organization_profile_limit": 32,
+    "accounting_semantics": "host_transfer_bytes is logical host payload; physical_* and pages_read/pages_programmed are NAND media accounting; null means not fully recorded; operation_counts classifies task-owner ledgers, not media operations; service_ns is analytical"
+  },
+  "dram_traffic": {
+    "schema_version": "heterollm.dram-traffic/v1",
+    "task_count": 6463,
+    "logical_read_bytes": 13819345,
+    "logical_write_bytes": 13887782,
+    "physical_read_bytes": 13850944,
+    "physical_write_bytes": 13918592,
+    "physical_bytes": 27769536,
+    "logical_bytes": 27707127,
+    "burst_count": 433899,
+    "row_hits": 407664,
+    "row_misses": 16,
+    "row_conflicts": 26219,
+    "queue_wait_ns": 3280470.667153001,
+    "service_ns": 16552710.728154203,
+    "read_write_switches": null,
+    "scheduler_reordered_requests": 0,
+    "scheduler_batches": 0,
+    "controller_direction_switches": 9151,
+    "refresh_wait_ns": null,
+    "turnaround_wait_ns": null,
+    "row_command_bus_busy_ns": null,
+    "column_command_bus_busy_ns": null,
+    "activate_commands": null,
+    "precharge_commands": null,
+    "read_commands": null,
+    "write_commands": null,
+    "refresh_commands": null,
+    "metric_availability": {
+      "read_write_switches": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "scheduler_reordered_requests": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "scheduler_batches": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "controller_direction_switches": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "refresh_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "turnaround_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "row_command_bus_busy_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "column_command_bus_busy_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "activate_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "precharge_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "read_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "write_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "refresh_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "organization_profiles": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      }
+    },
+    "resource_totals": {
+      "hostmem0.memory:dram:bank:0:0:0:0:0:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 46578.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 46550.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 46522.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 46522.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 45682.0
+      },
+      "hostmem0.memory:dram:command:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 619855.714284411
+      },
+      "hostmem0.memory:dram:data:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 27769536,
+        "service_ns": 619855.714284411
+      }
+    },
+    "owner_ids": [
+      "hostmem0.memory"
+    ],
+    "organization_profiles": [],
+    "organization_profile_limit": 32,
+    "service_time_scope": "service_ns sums per-task/owner completion spans, which may overlap; it is neither elapsed wall time nor data-bus busy time. resource_totals contains actual per-resource occupied time and bytes.",
+    "accounting_semantics": "resolved analytical burst bytes and controller waits; null means not fully recorded; empty organization_profiles is not evidence of complete geometry reporting; no device accuracy claim"
+  },
+  "resolved_placement": {
+    "op_to_component": {
+      "embedding": "gpu0",
+      "layer-000.attention": "gpu0",
+      "layer-000.mlp": "gpu0",
+      "layer-000.input_norm.reduce": "gpu0",
+      "layer-000.input_norm.apply": "gpu0",
+      "layer-000.post_attention_norm.reduce": "gpu0",
+      "layer-000.post_attention_norm.apply": "gpu0",
+      "layer-000.attention.q_bias": "gpu0",
+      "layer-000.attention.k_bias": "gpu0",
+      "layer-000.attention.v_bias": "gpu0",
+      "layer-000.attention.rope": "gpu0",
+      "layer-000.attention.qk": "gpu0",
+      "layer-000.attention.pv": "gpu0",
+      "layer-000.attention.softmax.reduce": "gpu0",
+      "layer-000.attention.softmax.normalize": "gpu0",
+      "layer-000.attention.residual": "gpu0",
+      "layer-000.mlp.activation": "gpu0",
+      "layer-000.mlp.residual": "gpu0",
+      "layer-001.attention": "gpu0",
+      "layer-001.mlp": "gpu0",
+      "layer-001.input_norm.reduce": "gpu0",
+      "layer-001.input_norm.apply": "gpu0",
+      "layer-001.post_attention_norm.reduce": "gpu0",
+      "layer-001.post_attention_norm.apply": "gpu0",
+      "layer-001.attention.q_bias": "gpu0",
+      "layer-001.attention.k_bias": "gpu0",
+      "layer-001.attention.v_bias": "gpu0",
+      "layer-001.attention.rope": "gpu0",
+      "layer-001.attention.qk": "gpu0",
+      "layer-001.attention.pv": "gpu0",
+      "layer-001.attention.softmax.reduce": "gpu0",
+      "layer-001.attention.softmax.normalize": "gpu0",
+      "layer-001.attention.residual": "gpu0",
+      "layer-001.mlp.activation": "gpu0",
+      "layer-001.mlp.residual": "gpu0",
+      "layer-002.attention": "gpu0",
+      "layer-002.mlp": "gpu0",
+      "layer-002.input_norm.reduce": "gpu0",
+      "layer-002.input_norm.apply": "gpu0",
+      "layer-002.post_attention_norm.reduce": "gpu0",
+      "layer-002.post_attention_norm.apply": "gpu0",
+      "layer-002.attention.q_bias": "gpu0",
+      "layer-002.attention.k_bias": "gpu0",
+      "layer-002.attention.v_bias": "gpu0",
+      "layer-002.attention.rope": "gpu0",
+      "layer-002.attention.qk": "gpu0",
+      "layer-002.attention.pv": "gpu0",
+      "layer-002.attention.softmax.reduce": "gpu0",
+      "layer-002.attention.softmax.normalize": "gpu0",
+      "layer-002.attention.residual": "gpu0",
+      "layer-002.mlp.activation": "gpu0",
+      "layer-002.mlp.residual": "gpu0",
+      "layer-003.attention": "gpu0",
+      "layer-003.mlp": "gpu0",
+      "layer-003.input_norm.reduce": "gpu0",
+      "layer-003.input_norm.apply": "gpu0",
+      "layer-003.post_attention_norm.reduce": "gpu0",
+      "layer-003.post_attention_norm.apply": "gpu0",
+      "layer-003.attention.q_bias": "gpu0",
+      "layer-003.attention.k_bias": "gpu0",
+      "layer-003.attention.v_bias": "gpu0",
+      "layer-003.attention.rope": "gpu0",
+      "layer-003.attention.qk": "gpu0",
+      "layer-003.attention.pv": "gpu0",
+      "layer-003.attention.softmax.reduce": "gpu0",
+      "layer-003.attention.softmax.normalize": "gpu0",
+      "layer-003.attention.residual": "gpu0",
+      "layer-003.mlp.activation": "gpu0",
+      "layer-003.mlp.residual": "gpu0",
+      "layer-004.attention": "gpu0",
+      "layer-004.mlp": "gpu0",
+      "layer-004.input_norm.reduce": "gpu0",
+      "layer-004.input_norm.apply": "gpu0",
+      "layer-004.post_attention_norm.reduce": "gpu0",
+      "layer-004.post_attention_norm.apply": "gpu0",
+      "layer-004.attention.q_bias": "gpu0",
+      "layer-004.attention.k_bias": "gpu0",
+      "layer-004.attention.v_bias": "gpu0",
+      "layer-004.attention.rope": "gpu0",
+      "layer-004.attention.qk": "gpu0",
+      "layer-004.attention.pv": "gpu0",
+      "layer-004.attention.softmax.reduce": "gpu0",
+      "layer-004.attention.softmax.normalize": "gpu0",
+      "layer-004.attention.residual": "gpu0",
+      "layer-004.mlp.activation": "gpu0",
+      "layer-004.mlp.residual": "gpu0",
+      "layer-005.attention": "gpu0",
+      "layer-005.mlp": "gpu0",
+      "layer-005.input_norm.reduce": "gpu0",
+      "layer-005.input_norm.apply": "gpu0",
+      "layer-005.post_attention_norm.reduce": "gpu0",
+      "layer-005.post_attention_norm.apply": "gpu0",
+      "layer-005.attention.q_bias": "gpu0",
+      "layer-005.attention.k_bias": "gpu0",
+      "layer-005.attention.v_bias": "gpu0",
+      "layer-005.attention.rope": "gpu0",
+      "layer-005.attention.qk": "gpu0",
+      "layer-005.attention.pv": "gpu0",
+      "layer-005.attention.softmax.reduce": "gpu0",
+      "layer-005.attention.softmax.normalize": "gpu0",
+      "layer-005.attention.residual": "gpu0",
+      "layer-005.mlp.activation": "gpu0",
+      "layer-005.mlp.residual": "gpu0",
+      "layer-006.attention": "gpu0",
+      "layer-006.mlp": "gpu0",
+      "layer-006.input_norm.reduce": "gpu0",
+      "layer-006.input_norm.apply": "gpu0",
+      "layer-006.post_attention_norm.reduce": "gpu0",
+      "layer-006.post_attention_norm.apply": "gpu0",
+      "layer-006.attention.q_bias": "gpu0",
+      "layer-006.attention.k_bias": "gpu0",
+      "layer-006.attention.v_bias": "gpu0",
+      "layer-006.attention.rope": "gpu0",
+      "layer-006.attention.qk": "gpu0",
+      "layer-006.attention.pv": "gpu0",
+      "layer-006.attention.softmax.reduce": "gpu0",
+      "layer-006.attention.softmax.normalize": "gpu0",
+      "layer-006.attention.residual": "gpu0",
+      "layer-006.mlp.activation": "gpu0",
+      "layer-006.mlp.residual": "gpu0",
+      "layer-007.attention": "gpu0",
+      "layer-007.mlp": "gpu0",
+      "layer-007.input_norm.reduce": "gpu0",
+      "layer-007.input_norm.apply": "gpu0",
+      "layer-007.post_attention_norm.reduce": "gpu0",
+      "layer-007.post_attention_norm.apply": "gpu0",
+      "layer-007.attention.q_bias": "gpu0",
+      "layer-007.attention.k_bias": "gpu0",
+      "layer-007.attention.v_bias": "gpu0",
+      "layer-007.attention.rope": "gpu0",
+      "layer-007.attention.qk": "gpu0",
+      "layer-007.attention.pv": "gpu0",
+      "layer-007.attention.softmax.reduce": "gpu0",
+      "layer-007.attention.softmax.normalize": "gpu0",
+      "layer-007.attention.residual": "gpu0",
+      "layer-007.mlp.activation": "gpu0",
+      "layer-007.mlp.residual": "gpu0",
+      "layer-008.attention": "gpu0",
+      "layer-008.mlp": "gpu0",
+      "layer-008.input_norm.reduce": "gpu0",
+      "layer-008.input_norm.apply": "gpu0",
+      "layer-008.post_attention_norm.reduce": "gpu0",
+      "layer-008.post_attention_norm.apply": "gpu0",
+      "layer-008.attention.q_bias": "gpu0",
+      "layer-008.attention.k_bias": "gpu0",
+      "layer-008.attention.v_bias": "gpu0",
+      "layer-008.attention.rope": "gpu0",
+      "layer-008.attention.qk": "gpu0",
+      "layer-008.attention.pv": "gpu0",
+      "layer-008.attention.softmax.reduce": "gpu0",
+      "layer-008.attention.softmax.normalize": "gpu0",
+      "layer-008.attention.residual": "gpu0",
+      "layer-008.mlp.activation": "gpu0",
+      "layer-008.mlp.residual": "gpu0",
+      "layer-009.attention": "gpu0",
+      "layer-009.mlp": "gpu0",
+      "layer-009.input_norm.reduce": "gpu0",
+      "layer-009.input_norm.apply": "gpu0",
+      "layer-009.post_attention_norm.reduce": "gpu0",
+      "layer-009.post_attention_norm.apply": "gpu0",
+      "layer-009.attention.q_bias": "gpu0",
+      "layer-009.attention.k_bias": "gpu0",
+      "layer-009.attention.v_bias": "gpu0",
+      "layer-009.attention.rope": "gpu0",
+      "layer-009.attention.qk": "gpu0",
+      "layer-009.attention.pv": "gpu0",
+      "layer-009.attention.softmax.reduce": "gpu0",
+      "layer-009.attention.softmax.normalize": "gpu0",
+      "layer-009.attention.residual": "gpu0",
+      "layer-009.mlp.activation": "gpu0",
+      "layer-009.mlp.residual": "gpu0",
+      "layer-010.attention": "gpu0",
+      "layer-010.mlp": "gpu0",
+      "layer-010.input_norm.reduce": "gpu0",
+      "layer-010.input_norm.apply": "gpu0",
+      "layer-010.post_attention_norm.reduce": "gpu0",
+      "layer-010.post_attention_norm.apply": "gpu0",
+      "layer-010.attention.q_bias": "gpu0",
+      "layer-010.attention.k_bias": "gpu0",
+      "layer-010.attention.v_bias": "gpu0",
+      "layer-010.attention.rope": "gpu0",
+      "layer-010.attention.qk": "gpu0",
+      "layer-010.attention.pv": "gpu0",
+      "layer-010.attention.softmax.reduce": "gpu0",
+      "layer-010.attention.softmax.normalize": "gpu0",
+      "layer-010.attention.residual": "gpu0",
+      "layer-010.mlp.activation": "gpu0",
+      "layer-010.mlp.residual": "gpu0",
+      "layer-011.attention": "gpu0",
+      "layer-011.mlp": "gpu0",
+      "layer-011.input_norm.reduce": "gpu0",
+      "layer-011.input_norm.apply": "gpu0",
+      "layer-011.post_attention_norm.reduce": "gpu0",
+      "layer-011.post_attention_norm.apply": "gpu0",
+      "layer-011.attention.q_bias": "gpu0",
+      "layer-011.attention.k_bias": "gpu0",
+      "layer-011.attention.v_bias": "gpu0",
+      "layer-011.attention.rope": "gpu0",
+      "layer-011.attention.qk": "gpu0",
+      "layer-011.attention.pv": "gpu0",
+      "layer-011.attention.softmax.reduce": "gpu0",
+      "layer-011.attention.softmax.normalize": "gpu0",
+      "layer-011.attention.residual": "gpu0",
+      "layer-011.mlp.activation": "gpu0",
+      "layer-011.mlp.residual": "gpu0",
+      "layer-012.attention": "gpu0",
+      "layer-012.mlp": "gpu0",
+      "layer-012.input_norm.reduce": "gpu0",
+      "layer-012.input_norm.apply": "gpu0",
+      "layer-012.post_attention_norm.reduce": "gpu0",
+      "layer-012.post_attention_norm.apply": "gpu0",
+      "layer-012.attention.q_bias": "gpu0",
+      "layer-012.attention.k_bias": "gpu0",
+      "layer-012.attention.v_bias": "gpu0",
+      "layer-012.attention.rope": "gpu0",
+      "layer-012.attention.qk": "gpu0",
+      "layer-012.attention.pv": "gpu0",
+      "layer-012.attention.softmax.reduce": "gpu0",
+      "layer-012.attention.softmax.normalize": "gpu0",
+      "layer-012.attention.residual": "gpu0",
+      "layer-012.mlp.activation": "gpu0",
+      "layer-012.mlp.residual": "gpu0",
+      "layer-013.attention": "gpu0",
+      "layer-013.mlp": "gpu0",
+      "layer-013.input_norm.reduce": "gpu0",
+      "layer-013.input_norm.apply": "gpu0",
+      "layer-013.post_attention_norm.reduce": "gpu0",
+      "layer-013.post_attention_norm.apply": "gpu0",
+      "layer-013.attention.q_bias": "gpu0",
+      "layer-013.attention.k_bias": "gpu0",
+      "layer-013.attention.v_bias": "gpu0",
+      "layer-013.attention.rope": "gpu0",
+      "layer-013.attention.qk": "gpu0",
+      "layer-013.attention.pv": "gpu0",
+      "layer-013.attention.softmax.reduce": "gpu0",
+      "layer-013.attention.softmax.normalize": "gpu0",
+      "layer-013.attention.residual": "gpu0",
+      "layer-013.mlp.activation": "gpu0",
+      "layer-013.mlp.residual": "gpu0",
+      "layer-014.attention": "gpu0",
+      "layer-014.mlp": "gpu0",
+      "layer-014.input_norm.reduce": "gpu0",
+      "layer-014.input_norm.apply": "gpu0",
+      "layer-014.post_attention_norm.reduce": "gpu0",
+      "layer-014.post_attention_norm.apply": "gpu0",
+      "layer-014.attention.q_bias": "gpu0",
+      "layer-014.attention.k_bias": "gpu0",
+      "layer-014.attention.v_bias": "gpu0",
+      "layer-014.attention.rope": "gpu0",
+      "layer-014.attention.qk": "gpu0",
+      "layer-014.attention.pv": "gpu0",
+      "layer-014.attention.softmax.reduce": "gpu0",
+      "layer-014.attention.softmax.normalize": "gpu0",
+      "layer-014.attention.residual": "gpu0",
+      "layer-014.mlp.activation": "gpu0",
+      "layer-014.mlp.residual": "gpu0",
+      "layer-015.attention": "gpu0",
+      "layer-015.mlp": "gpu0",
+      "layer-015.input_norm.reduce": "gpu0",
+      "layer-015.input_norm.apply": "gpu0",
+      "layer-015.post_attention_norm.reduce": "gpu0",
+      "layer-015.post_attention_norm.apply": "gpu0",
+      "layer-015.attention.q_bias": "gpu0",
+      "layer-015.attention.k_bias": "gpu0",
+      "layer-015.attention.v_bias": "gpu0",
+      "layer-015.attention.rope": "gpu0",
+      "layer-015.attention.qk": "gpu0",
+      "layer-015.attention.pv": "gpu0",
+      "layer-015.attention.softmax.reduce": "gpu0",
+      "layer-015.attention.softmax.normalize": "gpu0",
+      "layer-015.attention.residual": "gpu0",
+      "layer-015.mlp.activation": "gpu0",
+      "layer-015.mlp.residual": "gpu0",
+      "layer-016.attention": "gpu0",
+      "layer-016.mlp": "gpu0",
+      "layer-016.input_norm.reduce": "gpu0",
+      "layer-016.input_norm.apply": "gpu0",
+      "layer-016.post_attention_norm.reduce": "gpu0",
+      "layer-016.post_attention_norm.apply": "gpu0",
+      "layer-016.attention.q_bias": "gpu0",
+      "layer-016.attention.k_bias": "gpu0",
+      "layer-016.attention.v_bias": "gpu0",
+      "layer-016.attention.rope": "gpu0",
+      "layer-016.attention.qk": "gpu0",
+      "layer-016.attention.pv": "gpu0",
+      "layer-016.attention.softmax.reduce": "gpu0",
+      "layer-016.attention.softmax.normalize": "gpu0",
+      "layer-016.attention.residual": "gpu0",
+      "layer-016.mlp.activation": "gpu0",
+      "layer-016.mlp.residual": "gpu0",
+      "layer-017.attention": "gpu0",
+      "layer-017.mlp": "gpu0",
+      "layer-017.input_norm.reduce": "gpu0",
+      "layer-017.input_norm.apply": "gpu0",
+      "layer-017.post_attention_norm.reduce": "gpu0",
+      "layer-017.post_attention_norm.apply": "gpu0",
+      "layer-017.attention.q_bias": "gpu0",
+      "layer-017.attention.k_bias": "gpu0",
+      "layer-017.attention.v_bias": "gpu0",
+      "layer-017.attention.rope": "gpu0",
+      "layer-017.attention.qk": "gpu0",
+      "layer-017.attention.pv": "gpu0",
+      "layer-017.attention.softmax.reduce": "gpu0",
+      "layer-017.attention.softmax.normalize": "gpu0",
+      "layer-017.attention.residual": "gpu0",
+      "layer-017.mlp.activation": "gpu0",
+      "layer-017.mlp.residual": "gpu0",
+      "layer-018.attention": "gpu0",
+      "layer-018.mlp": "gpu0",
+      "layer-018.input_norm.reduce": "gpu0",
+      "layer-018.input_norm.apply": "gpu0",
+      "layer-018.post_attention_norm.reduce": "gpu0",
+      "layer-018.post_attention_norm.apply": "gpu0",
+      "layer-018.attention.q_bias": "gpu0",
+      "layer-018.attention.k_bias": "gpu0",
+      "layer-018.attention.v_bias": "gpu0",
+      "layer-018.attention.rope": "gpu0",
+      "layer-018.attention.qk": "gpu0",
+      "layer-018.attention.pv": "gpu0",
+      "layer-018.attention.softmax.reduce": "gpu0",
+      "layer-018.attention.softmax.normalize": "gpu0",
+      "layer-018.attention.residual": "gpu0",
+      "layer-018.mlp.activation": "gpu0",
+      "layer-018.mlp.residual": "gpu0",
+      "layer-019.attention": "gpu0",
+      "layer-019.mlp": "gpu0",
+      "layer-019.input_norm.reduce": "gpu0",
+      "layer-019.input_norm.apply": "gpu0",
+      "layer-019.post_attention_norm.reduce": "gpu0",
+      "layer-019.post_attention_norm.apply": "gpu0",
+      "layer-019.attention.q_bias": "gpu0",
+      "layer-019.attention.k_bias": "gpu0",
+      "layer-019.attention.v_bias": "gpu0",
+      "layer-019.attention.rope": "gpu0",
+      "layer-019.attention.qk": "gpu0",
+      "layer-019.attention.pv": "gpu0",
+      "layer-019.attention.softmax.reduce": "gpu0",
+      "layer-019.attention.softmax.normalize": "gpu0",
+      "layer-019.attention.residual": "gpu0",
+      "layer-019.mlp.activation": "gpu0",
+      "layer-019.mlp.residual": "gpu0",
+      "layer-020.attention": "gpu0",
+      "layer-020.mlp": "gpu0",
+      "layer-020.input_norm.reduce": "gpu0",
+      "layer-020.input_norm.apply": "gpu0",
+      "layer-020.post_attention_norm.reduce": "gpu0",
+      "layer-020.post_attention_norm.apply": "gpu0",
+      "layer-020.attention.q_bias": "gpu0",
+      "layer-020.attention.k_bias": "gpu0",
+      "layer-020.attention.v_bias": "gpu0",
+      "layer-020.attention.rope": "gpu0",
+      "layer-020.attention.qk": "gpu0",
+      "layer-020.attention.pv": "gpu0",
+      "layer-020.attention.softmax.reduce": "gpu0",
+      "layer-020.attention.softmax.normalize": "gpu0",
+      "layer-020.attention.residual": "gpu0",
+      "layer-020.mlp.activation": "gpu0",
+      "layer-020.mlp.residual": "gpu0",
+      "layer-021.attention": "gpu0",
+      "layer-021.mlp": "gpu0",
+      "layer-021.input_norm.reduce": "gpu0",
+      "layer-021.input_norm.apply": "gpu0",
+      "layer-021.post_attention_norm.reduce": "gpu0",
+      "layer-021.post_attention_norm.apply": "gpu0",
+      "layer-021.attention.q_bias": "gpu0",
+      "layer-021.attention.k_bias": "gpu0",
+      "layer-021.attention.v_bias": "gpu0",
+      "layer-021.attention.rope": "gpu0",
+      "layer-021.attention.qk": "gpu0",
+      "layer-021.attention.pv": "gpu0",
+      "layer-021.attention.softmax.reduce": "gpu0",
+      "layer-021.attention.softmax.normalize": "gpu0",
+      "layer-021.attention.residual": "gpu0",
+      "layer-021.mlp.activation": "gpu0",
+      "layer-021.mlp.residual": "gpu0",
+      "layer-022.attention": "gpu0",
+      "layer-022.mlp": "gpu0",
+      "layer-022.input_norm.reduce": "gpu0",
+      "layer-022.input_norm.apply": "gpu0",
+      "layer-022.post_attention_norm.reduce": "gpu0",
+      "layer-022.post_attention_norm.apply": "gpu0",
+      "layer-022.attention.q_bias": "gpu0",
+      "layer-022.attention.k_bias": "gpu0",
+      "layer-022.attention.v_bias": "gpu0",
+      "layer-022.attention.rope": "gpu0",
+      "layer-022.attention.qk": "gpu0",
+      "layer-022.attention.pv": "gpu0",
+      "layer-022.attention.softmax.reduce": "gpu0",
+      "layer-022.attention.softmax.normalize": "gpu0",
+      "layer-022.attention.residual": "gpu0",
+      "layer-022.mlp.activation": "gpu0",
+      "layer-022.mlp.residual": "gpu0",
+      "layer-023.attention": "gpu0",
+      "layer-023.mlp": "gpu0",
+      "layer-023.input_norm.reduce": "gpu0",
+      "layer-023.input_norm.apply": "gpu0",
+      "layer-023.post_attention_norm.reduce": "gpu0",
+      "layer-023.post_attention_norm.apply": "gpu0",
+      "layer-023.attention.q_bias": "gpu0",
+      "layer-023.attention.k_bias": "gpu0",
+      "layer-023.attention.v_bias": "gpu0",
+      "layer-023.attention.rope": "gpu0",
+      "layer-023.attention.qk": "gpu0",
+      "layer-023.attention.pv": "gpu0",
+      "layer-023.attention.softmax.reduce": "gpu0",
+      "layer-023.attention.softmax.normalize": "gpu0",
+      "layer-023.attention.residual": "gpu0",
+      "layer-023.mlp.activation": "gpu0",
+      "layer-023.mlp.residual": "gpu0",
+      "layer-024.attention": "gpu0",
+      "layer-024.mlp": "gpu0",
+      "layer-024.input_norm.reduce": "gpu0",
+      "layer-024.input_norm.apply": "gpu0",
+      "layer-024.post_attention_norm.reduce": "gpu0",
+      "layer-024.post_attention_norm.apply": "gpu0",
+      "layer-024.attention.q_bias": "gpu0",
+      "layer-024.attention.k_bias": "gpu0",
+      "layer-024.attention.v_bias": "gpu0",
+      "layer-024.attention.rope": "gpu0",
+      "layer-024.attention.qk": "gpu0",
+      "layer-024.attention.pv": "gpu0",
+      "layer-024.attention.softmax.reduce": "gpu0",
+      "layer-024.attention.softmax.normalize": "gpu0",
+      "layer-024.attention.residual": "gpu0",
+      "layer-024.mlp.activation": "gpu0",
+      "layer-024.mlp.residual": "gpu0",
+      "layer-025.attention": "gpu0",
+      "layer-025.mlp": "gpu0",
+      "layer-025.input_norm.reduce": "gpu0",
+      "layer-025.input_norm.apply": "gpu0",
+      "layer-025.post_attention_norm.reduce": "gpu0",
+      "layer-025.post_attention_norm.apply": "gpu0",
+      "layer-025.attention.q_bias": "gpu0",
+      "layer-025.attention.k_bias": "gpu0",
+      "layer-025.attention.v_bias": "gpu0",
+      "layer-025.attention.rope": "gpu0",
+      "layer-025.attention.qk": "gpu0",
+      "layer-025.attention.pv": "gpu0",
+      "layer-025.attention.softmax.reduce": "gpu0",
+      "layer-025.attention.softmax.normalize": "gpu0",
+      "layer-025.attention.residual": "gpu0",
+      "layer-025.mlp.activation": "gpu0",
+      "layer-025.mlp.residual": "gpu0",
+      "layer-026.attention": "gpu0",
+      "layer-026.mlp": "gpu0",
+      "layer-026.input_norm.reduce": "gpu0",
+      "layer-026.input_norm.apply": "gpu0",
+      "layer-026.post_attention_norm.reduce": "gpu0",
+      "layer-026.post_attention_norm.apply": "gpu0",
+      "layer-026.attention.q_bias": "gpu0",
+      "layer-026.attention.k_bias": "gpu0",
+      "layer-026.attention.v_bias": "gpu0",
+      "layer-026.attention.rope": "gpu0",
+      "layer-026.attention.qk": "gpu0",
+      "layer-026.attention.pv": "gpu0",
+      "layer-026.attention.softmax.reduce": "gpu0",
+      "layer-026.attention.softmax.normalize": "gpu0",
+      "layer-026.attention.residual": "gpu0",
+      "layer-026.mlp.activation": "gpu0",
+      "layer-026.mlp.residual": "gpu0",
+      "layer-027.attention": "gpu0",
+      "layer-027.mlp": "gpu0",
+      "layer-027.input_norm.reduce": "gpu0",
+      "layer-027.input_norm.apply": "gpu0",
+      "layer-027.post_attention_norm.reduce": "gpu0",
+      "layer-027.post_attention_norm.apply": "gpu0",
+      "layer-027.attention.q_bias": "gpu0",
+      "layer-027.attention.k_bias": "gpu0",
+      "layer-027.attention.v_bias": "gpu0",
+      "layer-027.attention.rope": "gpu0",
+      "layer-027.attention.qk": "gpu0",
+      "layer-027.attention.pv": "gpu0",
+      "layer-027.attention.softmax.reduce": "gpu0",
+      "layer-027.attention.softmax.normalize": "gpu0",
+      "layer-027.attention.residual": "gpu0",
+      "layer-027.mlp.activation": "gpu0",
+      "layer-027.mlp.residual": "gpu0",
+      "lm_head": "gpu0"
+    },
+    "tensor_to_component": {
+      "embedding_weights": "hbf0",
+      "layer-000.attention_weights": "hbf0",
+      "layer-000.mlp_weights": "hbf0",
+      "layer-001.attention_weights": "hbf0",
+      "layer-001.mlp_weights": "hbf0",
+      "layer-002.attention_weights": "hbf0",
+      "layer-002.mlp_weights": "hbf0",
+      "layer-003.attention_weights": "hbf0",
+      "layer-003.mlp_weights": "hbf0",
+      "layer-004.attention_weights": "hbf0",
+      "layer-004.mlp_weights": "hbf0",
+      "layer-005.attention_weights": "hbf0",
+      "layer-005.mlp_weights": "hbf0",
+      "layer-006.attention_weights": "hbf0",
+      "layer-006.mlp_weights": "hbf0",
+      "layer-007.attention_weights": "hbf0",
+      "layer-007.mlp_weights": "hbf0",
+      "layer-008.attention_weights": "hbf0",
+      "layer-008.mlp_weights": "hbf0",
+      "layer-009.attention_weights": "hbf0",
+      "layer-009.mlp_weights": "hbf0",
+      "layer-010.attention_weights": "hbf0",
+      "layer-010.mlp_weights": "hbf0",
+      "layer-011.attention_weights": "hbf0",
+      "layer-011.mlp_weights": "hbf0",
+      "layer-012.attention_weights": "hbf0",
+      "layer-012.mlp_weights": "hbf0",
+      "layer-013.attention_weights": "hbf0",
+      "layer-013.mlp_weights": "hbf0",
+      "layer-014.attention_weights": "hbf0",
+      "layer-014.mlp_weights": "hbf0",
+      "layer-015.attention_weights": "hbf0",
+      "layer-015.mlp_weights": "hbf0",
+      "layer-016.attention_weights": "hbf0",
+      "layer-016.mlp_weights": "hbf0",
+      "layer-017.attention_weights": "hbf0",
+      "layer-017.mlp_weights": "hbf0",
+      "layer-018.attention_weights": "hbf0",
+      "layer-018.mlp_weights": "hbf0",
+      "layer-019.attention_weights": "hbf0",
+      "layer-019.mlp_weights": "hbf0",
+      "layer-020.attention_weights": "hbf0",
+      "layer-020.mlp_weights": "hbf0",
+      "layer-021.attention_weights": "hbf0",
+      "layer-021.mlp_weights": "hbf0",
+      "layer-022.attention_weights": "hbf0",
+      "layer-022.mlp_weights": "hbf0",
+      "layer-023.attention_weights": "hbf0",
+      "layer-023.mlp_weights": "hbf0",
+      "layer-024.attention_weights": "hbf0",
+      "layer-024.mlp_weights": "hbf0",
+      "layer-025.attention_weights": "hbf0",
+      "layer-025.mlp_weights": "hbf0",
+      "layer-026.attention_weights": "hbf0",
+      "layer-026.mlp_weights": "hbf0",
+      "layer-027.attention_weights": "hbf0",
+      "layer-027.mlp_weights": "hbf0",
+      "lm_head_weights": "hbf0",
+      "kv_cache": "hbf0"
+    },
+    "active_memory": "hbf0",
+    "kv": "hbf0"
+  },
+  "wall_seconds": 36.39149490001728,
+  "cpu_seconds": 36.203125,
+  "finished_at": "2026-10-17T07:49:26.638523+00:00",
+  "python_executable": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\.venv\\Scripts\\python.exe",
+  "implementation_root": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tmp\\decode_bottleneck_baseline\\src",
+  "preloaded_modules": {
+    "_token_program": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tmp\\decode_bottleneck_baseline\\src\\heterollm_sim\\_token_program.cp312-win_amd64.pyd",
+    "_physical_task": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tmp\\decode_bottleneck_baseline\\src\\heterollm_sim\\_physical_task.cp312-win_amd64.pyd",
+    "_io_execution": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tmp\\decode_bottleneck_baseline\\src\\heterollm_sim\\_io_execution.cp312-win_amd64.pyd",
+    "_nand_execution": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\tmp\\decode_bottleneck_baseline\\src\\heterollm_sim\\_nand_execution.cp312-win_amd64.pyd"
+  },
+  "transaction_capture": null,
+  "source_paths": {},
+  "gc_thresholds": [
+    7000,
+    100,
+    100
+  ],
+  "cohort_timings": [
+    {
+      "completed": 1,
+      "kind": "prefill",
+      "wall_seconds": 9.865240299986908,
+      "elapsed_wall_seconds": 10.446659100009128,
+      "cpu_seconds": 9.75,
+      "profiled": false,
+      "simulated_time_ns": 403560972.7257067
+    },
+    {
+      "completed": 2,
+      "kind": "decode",
+      "wall_seconds": 1.9829605999984778,
+      "elapsed_wall_seconds": 12.429619700007606,
+      "cpu_seconds": 1.953125,
+      "profiled": false,
+      "simulated_time_ns": 794164301.564319
+    },
+    {
+      "completed": 3,
+      "kind": "decode",
+      "wall_seconds": 1.5709997999947518,
+      "elapsed_wall_seconds": 14.000619500002358,
+      "cpu_seconds": 1.5625,
+      "profiled": false,
+      "simulated_time_ns": 1184762834.452764
+    },
+    {
+      "completed": 4,
+      "kind": "decode",
+      "wall_seconds": 1.5962367000174709,
+      "elapsed_wall_seconds": 15.596856200019829,
+      "cpu_seconds": 1.59375,
+      "profiled": false,
+      "simulated_time_ns": 1575363314.26349
+    },
+    {
+      "completed": 5,
+      "kind": "decode",
+      "wall_seconds": 1.6043254999967758,
+      "elapsed_wall_seconds": 17.201181700016605,
+      "cpu_seconds": 1.609375,
+      "profiled": false,
+      "simulated_time_ns": 1968091194.7409604
+    },
+    {
+      "completed": 6,
+      "kind": "decode",
+      "wall_seconds": 1.5762697999889497,
+      "elapsed_wall_seconds": 18.777451500005554,
+      "cpu_seconds": 1.5625,
+      "profiled": false,
+      "simulated_time_ns": 2358691412.8157573
+    },
+    {
+      "completed": 7,
+      "kind": "decode",
+      "wall_seconds": 1.5835084000136703,
+      "elapsed_wall_seconds": 20.360959900019225,
+      "cpu_seconds": 1.578125,
+      "profiled": false,
+      "simulated_time_ns": 2749301542.5615573
+    },
+    {
+      "completed": 8,
+      "kind": "decode",
+      "wall_seconds": 1.5974871999933384,
+      "elapsed_wall_seconds": 21.958447100012563,
+      "cpu_seconds": 1.59375,
+      "profiled": false,
+      "simulated_time_ns": 3139900857.640695
+    },
+    {
+      "completed": 9,
+      "kind": "decode",
+      "wall_seconds": 1.5983924999891315,
+      "elapsed_wall_seconds": 23.556839600001695,
+      "cpu_seconds": 1.609375,
+      "profiled": false,
+      "simulated_time_ns": 3532624206.719373
+    },
+    {
+      "completed": 10,
+      "kind": "decode",
+      "wall_seconds": 1.6553449000057299,
+      "elapsed_wall_seconds": 25.212184500007425,
+      "cpu_seconds": 1.65625,
+      "profiled": false,
+      "simulated_time_ns": 3923233129.798508
+    },
+    {
+      "completed": 11,
+      "kind": "decode",
+      "wall_seconds": 1.5939581000129692,
+      "elapsed_wall_seconds": 26.806142600020394,
+      "cpu_seconds": 1.59375,
+      "profiled": false,
+      "simulated_time_ns": 4313832679.631927
+    },
+    {
+      "completed": 12,
+      "kind": "decode",
+      "wall_seconds": 1.580308199976571,
+      "elapsed_wall_seconds": 28.386450799996965,
+      "cpu_seconds": 1.5625,
+      "profiled": false,
+      "simulated_time_ns": 4704433788.174244
+    },
+    {
+      "completed": 13,
+      "kind": "decode",
+      "wall_seconds": 1.6154539000126533,
+      "elapsed_wall_seconds": 30.001904700009618,
+      "cpu_seconds": 1.609375,
+      "profiled": false,
+      "simulated_time_ns": 5097149481.383813
+    },
+    {
+      "completed": 14,
+      "kind": "decode",
+      "wall_seconds": 1.584209099994041,
+      "elapsed_wall_seconds": 31.58611380000366,
+      "cpu_seconds": 1.59375,
+      "profiled": false,
+      "simulated_time_ns": 5487751308.592775
+    },
+    {
+      "completed": 15,
+      "kind": "decode",
+      "wall_seconds": 1.5800728000176605,
+      "elapsed_wall_seconds": 33.16618660002132,
+      "cpu_seconds": 1.578125,
+      "profiled": false,
+      "simulated_time_ns": 5878350598.468433
+    },
+    {
+      "completed": 16,
+      "kind": "decode",
+      "wall_seconds": 1.6005398999841418,
+      "elapsed_wall_seconds": 34.76672650000546,
+      "cpu_seconds": 1.59375,
+      "profiled": false,
+      "simulated_time_ns": 6268962560.344057
+    },
+    {
+      "completed": 17,
+      "kind": "decode",
+      "wall_seconds": 1.6018407999945339,
+      "elapsed_wall_seconds": 36.368567299999995,
+      "cpu_seconds": 1.609375,
+      "profiled": false,
+      "simulated_time_ns": 6661689560.220291
+    }
+  ],
+  "decode_unprofiled_steps": 16,
+  "decode_unprofiled_wall_seconds": 25.921908199990867,
+  "profiled": false,
+  "purpose": "runtime optimization benchmark; not a formal scan point",
+  "benchmark_timing": {
+    "prefill_before_first_token_cohorts": [
+      1
+    ],
+    "prefill_before_first_token_wall_seconds": 9.865240299986908,
+    "prefill_wall_scope": "sum of Prefill cohort intervals; excludes initial setup/control plane",
+    "wall_to_first_token_seconds": 10.446659100009128,
+    "prefill_all_unprofiled": true,
+    "decode_unprofiled_cohorts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17
+    ],
+    "decode_unprofiled_steps": 16,
+    "decode_unprofiled_wall_seconds": 25.921908199990867,
+    "decode_unprofiled_seconds_per_step": 1.6201192624994292,
+    "total_wall_seconds": 36.39149490001728,
+    "total_cpu_seconds": 36.203125,
+    "transaction_capture": false,
+    "total_contains_profiling": false
+  }
+}

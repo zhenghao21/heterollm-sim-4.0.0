@@ -1,6 +1,8 @@
 # B200 扫描仿真速度优化
 
-日期：2026-10-16。正式的 0.5B～7B、72 点扫描已暂停，完成点数为 **0/72**；本轮没有自动恢复扫描。
+测量日期：2026-10-16；状态更新：2026-10-17。正式的 0.5B～7B、72 点扫描已暂停，本轮正式扫描历史已清空。
+
+HBF 已改为 256-bank 研究参考几何及每主机通道队列。以下仅保留原固定参数下的仿真器速度与实现等价性诊断，不能作为新参数下的速度测量；旧几何下的 TTFT、TPOT 和部署比较不能用于判断 HBM/HBF 硬件优劣。实现等价不证明硬件参数正确，正式扫描尚未恢复。
 
 本轮优化已完成。完整请求基准中，HBM 提速 **13.26 倍**，HBF 提速 **22.39 倍**。以下耗时是运行仿真程序所需的真实时间，和模型推理的预测 TTFT、TPOT 是不同指标。
 
@@ -54,10 +56,12 @@ HBF 的链路忙碌时间因浮点累加顺序发生末位差异：32-token 对�
 
 最终测量使用已有 Numba 编译缓存；首次运行或修改数值内核后，会增加一次编译开销（本机观察约 8 秒）。HBM 通道并行会提高 CPU 占用，其 CPU 累计时间可能大于墙钟时间。未进行整轮 72 点耗时外推。
 
+下列命令保留基准入口。硬件预设修正后，新运行不再是本报告旧几何结果的同配置复现。
+
 ```powershell
 .venv/Scripts/python.exe scripts/benchmark_scan_runtime.py --architecture HBM --prompt 32 --output 3 --result artifacts/scan_runtime_optimization/recheck_HBM_32.json
 .venv/Scripts/python.exe scripts/benchmark_scan_runtime.py --architecture HBF --prompt 32 --output 3 --result artifacts/scan_runtime_optimization/recheck_HBF_32.json
 .venv/Scripts/python.exe scripts/benchmark_scan_runtime.py --architecture HBF --prompt 2048 --output 3 --result artifacts/scan_runtime_optimization/recheck_HBF_2048.json
 ```
 
-[正式扫描状态与实验参数](../b200_hbm_hbf_0_5b_7b_20261016/report.md)。扫描报告已支持运行期间每 60 秒刷新及 Prefill/Decode 阶段进度；暂停期间不会产生新的测量结果。
+本报告及诊断数据保留为优化历史。正式扫描保持暂停，原正式扫描历史已清空；后续扫描须使用修正后的 HBF 几何配置。

@@ -1,0 +1,38 @@
+[
+  {
+    "pages": 2130,
+    "selected_banks": 9,
+    "credit_lanes": 128,
+    "folded_pages": 0,
+    "off_ns": 1080113.3333333335,
+    "on_ns": 1170873.3333333335,
+    "speedup": 0.9224852104696779
+  },
+  {
+    "pages": 16384,
+    "selected_banks": 256,
+    "credit_lanes": 128,
+    "folded_pages": 14336,
+    "off_ns": 1552628.3333333335,
+    "on_ns": 1613451.6666666665,
+    "speedup": 0.9623023517903131
+  },
+  {
+    "pages": 2130,
+    "selected_banks": 9,
+    "credit_lanes": 128,
+    "folded_pages": 0,
+    "off_ns": 1076980.0,
+    "on_ns": 1162768.3333333335,
+    "speedup": 0.9262206143098151
+  },
+  {
+    "pages": 16384,
+    "selected_banks": 256,
+    "credit_lanes": 128,
+    "folded_pages": 14336,
+    "off_ns": 1569725.0,
+    "on_ns": 1623008.3333333333,
+    "speedup": 0.9671700186382285
+  }
+]

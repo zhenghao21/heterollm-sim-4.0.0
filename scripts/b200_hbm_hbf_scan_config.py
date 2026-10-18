@@ -56,8 +56,9 @@ def _hardware_and_profiles(strategy):
         transaction_bytes=physical.burst_bytes if strategy == "HBM" else physical.host_granularity_bytes,
         read_latency_ns=physical.read_latency_ns if strategy == "HBM" else physical.page_read_ns,
         write_latency_ns=physical.write_latency_ns if strategy == "HBM" else physical.page_program_ns,
-        max_outstanding_requests=physical.max_outstanding_requests,
-        parallel_lanes=physical.lane_count if strategy == "HBM" else physical.parallel_units)
+        max_outstanding_requests=physical.max_outstanding_requests * (
+            physical.host_channels if strategy == "HBF" and physical.queue_scope == "host_channel" else 1),
+        parallel_lanes=physical.lane_count if strategy == "HBM" else physical.array_units)
     metadata = {key: value for key, value in memory.metadata.items()
                 if key not in {"memory_service", "physical_composition", "technology", "facts", "provenance"}}
     metadata.update(physical_memory_config=physical, cost_profile_template=profile,
@@ -67,9 +68,13 @@ def _hardware_and_profiles(strategy):
         scan_memory_contract={"strategy": strategy,
             "physical_preset": "hbm3e_reference" if strategy == "HBM" else "hbf_ocp_0_7",
             "organization": "8 x 24 GiB reference stacks (24 Gb x 8H), not vendor disclosed topology" if strategy == "HBM"
-                else "64 equivalent array units and 16 host channels from strict physical preset"})
+                else "FlashLabAE research reference: 16 channels x 1 die/channel x 16 banks/die; "
+                     "2048 blocks/bank x 256 pages/block x 4 KiB = 512 GiB; not vendor geometry"})
     if strategy == "HBF":
         metadata.update(access_mode="memory", writable=True, write_buffer_bytes=0,
+            queue_scope=physical.queue_scope,
+            max_outstanding_requests_per_host_channel=physical.max_outstanding_requests,
+            max_outstanding_write_requests_per_host_channel=physical.max_outstanding_write_requests,
             host_write_staging={"host_component_id": "hostmem0",
                                 "capacity_bytes": HOST_STAGING_BYTES, "reserve_blocks": 1})
     memory = replace(memory, capacity_bytes=physical.capacity_bytes,
@@ -170,7 +175,7 @@ def build_scan_scenario(model_id, architecture, prompt_tokens, output_tokens,
             "Longer-than-native contexts extrapolate performance only, with no model-quality claim.",
             "HBM3E and HBF timing/geometry are explicit analytical presets, not measured vendor devices.",
             "Unfused generic RoPE generates and stores broadcast-expanded sin/cos tables per invocation in both strategies.",
-            f"Prefill chunk limit is {prefill_chunk_tokens} tokens; output is simulated token by token."))
+            f"Prefill chunk limit is {prefill_chunk_tokens} tokens; execution fidelity is selected independently by simulation.mode (detailed by default)."))
     requirements = _derive_requirements(scenario)
     options = {"operator_targets": {item.mapping_key: "gpu0" for item in requirements
             if item.mapping_key and not item.state_tensor},
@@ -199,14 +204,25 @@ def describe_scan_parameters():
         "hbm_timing_scope": "standard reference; timing packs only support 32Gb x 16H and are not applied to this 24Gb x 8H organization",
         "hbm_geometry": {"stacks": 8, "die_density_gbits": 24, "dies_per_stack": 8,
                           "raw_capacity_bytes": 192 * 1024**3},
-        "hbf_parameters": {"capacity_bytes": hbf.capacity_bytes, "array_units": hbf.parallel_units,
+        "hbf_parameters": {"capacity_bytes": hbf.capacity_bytes, "array_units": hbf.array_units,
+            "geometry": {"channels": hbf.channels, "dies_per_channel": hbf.dies_per_target,
+                "banks_per_die": hbf.planes_per_lun, "blocks_per_bank": hbf.blocks_per_plane,
+                "pages_per_block": hbf.pages_per_block},
             "host_channels": hbf.host_channels, "read_bandwidth_gb_s": hbf.host_read_bandwidth_gb_s,
             "write_bandwidth_gb_s": hbf.host_write_bandwidth_gb_s, "page_bytes": hbf.page_bytes,
             "read_granularity_bytes": hbf.host_granularity_bytes,
             "page_read_ns": hbf.page_read_ns, "page_program_ns": hbf.page_program_ns,
             "block_erase_ns": hbf.block_erase_ns, "gc_reserve_blocks": 1,
-            "package_link_bandwidth_gb_s": 1600.0, "package_link_latency_ns": 100.0,
-            "timing_basis": "explicit analytical preset assumptions; not OCP mandated device latencies"},
+            "package_link_bandwidth_gb_s": hbf.host_bandwidth_gb_s, "package_link_latency_ns": 100.0,
+            "queue_scope": hbf.queue_scope,
+            "max_outstanding_requests_per_host_channel": hbf.max_outstanding_requests,
+            "max_outstanding_write_requests_per_host_channel": hbf.max_outstanding_write_requests,
+            "max_outstanding_requests_across_host_channels": hbf.host_channels * hbf.max_outstanding_requests,
+            "internal_bandwidth_gb_s_per_channel": hbf.internal_bandwidth_gb_s,
+            "parameter_basis": hbf.metadata["parameter_basis"],
+            "geometry_basis": hbf.metadata["geometry_basis"],
+            "timing_basis": hbf.metadata["timing_basis"],
+            "queue_basis": hbf.metadata["queue_basis"]},
         "host_parameters": {"cpu_cores": 72, "cpu_frequency_ghz": 3.0,
             "dram_capacity_bytes": 32_000_000_000, "dram_bandwidth_gb_s": 44.8,
             "dram_latency_ns": 100.0, "pcie_generation": "5.0", "pcie_lanes": 16,

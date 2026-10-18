@@ -1,0 +1,155 @@
+{
+  "scope": "exact page metadata only; bulk completion arrays, no physical media execution",
+  "end_to_end_speedup_measured": false,
+  "timing_interference": "ongoing isolated long reference; screen only, not a clean CPU benchmark",
+  "geometry": {
+    "array_units": 256,
+    "pages_per_block": 256,
+    "capacity_bytes": 549755813888
+  },
+  "candidate_extension": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\_hbf_page_state.cp312-win_amd64.pyd",
+  "runs": [
+    {
+      "native": false,
+      "write_ns": 9807000,
+      "first_read_ns": 3304100,
+      "release_ns": 595900,
+      "sum_ns": 13707000,
+      "pages": 4096,
+      "round": 1,
+      "abba_position": 1
+    },
+    {
+      "native": true,
+      "write_ns": 5985600,
+      "first_read_ns": 2303900,
+      "release_ns": 703900,
+      "sum_ns": 8993400,
+      "pages": 4096,
+      "round": 1,
+      "abba_position": 2
+    },
+    {
+      "native": true,
+      "write_ns": 10489200,
+      "first_read_ns": 1727900,
+      "release_ns": 580100,
+      "sum_ns": 12797200,
+      "pages": 4096,
+      "round": 1,
+      "abba_position": 3
+    },
+    {
+      "native": false,
+      "write_ns": 9838900,
+      "first_read_ns": 3332300,
+      "release_ns": 681400,
+      "sum_ns": 13852600,
+      "pages": 4096,
+      "round": 1,
+      "abba_position": 4
+    },
+    {
+      "native": false,
+      "write_ns": 43413500,
+      "first_read_ns": 13780000,
+      "release_ns": 2484700,
+      "sum_ns": 59678200,
+      "pages": 16384,
+      "round": 1,
+      "abba_position": 1
+    },
+    {
+      "native": true,
+      "write_ns": 26140100,
+      "first_read_ns": 10984000,
+      "release_ns": 3102400,
+      "sum_ns": 40226500,
+      "pages": 16384,
+      "round": 1,
+      "abba_position": 2
+    },
+    {
+      "native": true,
+      "write_ns": 18497600,
+      "first_read_ns": 8052500,
+      "release_ns": 4077200,
+      "sum_ns": 30627300,
+      "pages": 16384,
+      "round": 1,
+      "abba_position": 3
+    },
+    {
+      "native": false,
+      "write_ns": 55796800,
+      "first_read_ns": 21363400,
+      "release_ns": 5058900,
+      "sum_ns": 82219100,
+      "pages": 16384,
+      "round": 1,
+      "abba_position": 4
+    }
+  ],
+  "summaries": [
+    {
+      "pages": 4096,
+      "rounds": 1,
+      "all_states_exactly_equal": true,
+      "paired_sum_speedups": [
+        1.524117686303289,
+        1.082471165567468
+      ],
+      "each_pair_improved": true,
+      "write": {
+        "python_mean_ms": 9.82295,
+        "native_mean_ms": 8.2374,
+        "speedup": 1.1924818510695123
+      },
+      "first_read": {
+        "python_mean_ms": 3.3182,
+        "native_mean_ms": 2.0159,
+        "speedup": 1.6460141872116671
+      },
+      "release": {
+        "python_mean_ms": 0.63865,
+        "native_mean_ms": 0.642,
+        "speedup": 0.9947819314641745
+      },
+      "sum": {
+        "python_mean_ms": 13.7798,
+        "native_mean_ms": 10.8953,
+        "speedup": 1.264747184565822
+      }
+    },
+    {
+      "pages": 16384,
+      "rounds": 1,
+      "all_states_exactly_equal": true,
+      "paired_sum_speedups": [
+        1.4835543733608443,
+        2.6845036944164193
+      ],
+      "each_pair_improved": true,
+      "write": {
+        "python_mean_ms": 49.60515,
+        "native_mean_ms": 22.31885,
+        "speedup": 2.222567470994249
+      },
+      "first_read": {
+        "python_mean_ms": 17.5717,
+        "native_mean_ms": 9.51825,
+        "speedup": 1.8461061644735115
+      },
+      "release": {
+        "python_mean_ms": 3.7718,
+        "native_mean_ms": 3.5898,
+        "speedup": 1.0506992032982339
+      },
+      "sum": {
+        "python_mean_ms": 70.94865,
+        "native_mean_ms": 35.4269,
+        "speedup": 2.0026773440521186
+      }
+    }
+  ]
+}

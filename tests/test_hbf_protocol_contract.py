@@ -15,12 +15,50 @@ from heterollm_sim.web import HttpError, physical_memory_config_payload
 from heterollm_sim.data_motion import PhysicalRuntimeContext, resolve_service
 from heterollm_sim.ir import ComponentSpec
 from heterollm_sim.memory_types import AccessRequest
+from heterollm_sim.memory_mapping import map_nand_address
 from heterollm_sim.nand_core import NandCore
 from heterollm_sim.planner import _summarize_nand_task_traffic
 from heterollm_sim.reporting import _sum_batch_storage_traffic
 
 
-FIELDS = ("protocol_mode", "host_channels", "host_full_duplex", "read_cache_pages_per_bank")
+FIELDS = ("protocol_mode", "host_channels", "host_full_duplex", "read_cache_pages_per_bank",
+          "queue_scope", "max_outstanding_write_requests")
+
+
+def test_ocp_preset_declares_256_independent_banks_and_512_gib():
+    config = resolve_physical_config("hbf_ocp_0_7")
+    assert config.channels == config.host_channels == 16
+    assert config.targets_per_channel == config.dies_per_target == config.luns_per_die == 1
+    assert config.planes_per_lun == 16
+    assert config.planes_independent is True and config.parallel_units is None
+    assert config.array_units == 256
+    assert (config.blocks_per_plane, config.pages_per_block, config.page_bytes) == (2048, 256, 4096)
+    assert config.computed_capacity_bytes == config.effective_capacity_bytes == 512 * 1024**3
+    assert config.queue_scope == "host_channel"
+    assert config.max_outstanding_requests == 256
+    assert config.max_outstanding_write_requests == 64
+    assert config.host_read_bandwidth_gb_s == config.host_write_bandwidth_gb_s == 1536.
+    # 101.25 GB/s raw includes the 224-byte OOB alongside each 4096-byte page.
+    assert config.internal_bandwidth_gb_s == 101.25 * 4096 / (4096 + 224) == 96.
+    assert (config.page_read_ns, config.page_program_ns, config.block_erase_ns) == (4000., 75000., 2_000_000.)
+
+
+def test_ocp_mapping_reaches_every_bank_and_uses_its_physical_host_channel():
+    config = resolve_physical_config("hbf_ocp_0_7")
+    core = NandCore(config)
+    first_pages = [map_nand_address(config, index * config.page_bytes)
+                   for index in range(config.array_units)]
+    assert {mapping.unit for mapping in first_pages} == set(range(256))
+    assert {(mapping.channel, mapping.plane) for mapping in first_pages} == {
+        (channel, plane) for channel in range(16) for plane in range(16)}
+    for mapping in first_pages:
+        assert (mapping.page, mapping.block, mapping.page_offset) == (0, 0, 0)
+        assert mapping.unit == mapping.channel + mapping.plane * config.channels
+        assert core._host_id(mapping, "read") == f"nand:host:{mapping.channel}:read"
+    second_page = map_nand_address(config, config.array_units * config.page_bytes)
+    assert (second_page.unit, second_page.page, second_page.block) == (0, 1, 0)
+    last = map_nand_address(config, config.effective_capacity_bytes - 1)
+    assert (last.channel, last.plane, last.block, last.page, last.page_offset) == (15, 15, 2047, 255, 4095)
 
 
 @pytest.mark.parametrize("field", FIELDS)
@@ -29,6 +67,17 @@ def test_serialized_nand_cannot_silently_acquire_protocol_choices(field):
     raw.pop(field)
     with pytest.raises(ValueError, match=field):
         parse_execution_physical_config(raw)
+
+
+def test_explicit_unlimited_write_subset_survives_serialization_and_inspector():
+    raw = asdict(resolve_physical_config("hbf_ocp_0_7"))
+    raw["max_outstanding_write_requests"] = None
+    parsed = parse_execution_physical_config(raw)
+    assert parsed.max_outstanding_write_requests is None
+    assert parsed.queue_scope == "host_channel"
+    updated = physical_memory_config_payload({"config": raw, "overrides": {}})
+    assert "max_outstanding_write_requests" in updated
+    assert updated["max_outstanding_write_requests"] is None
 
 
 def test_inspector_round_trip_keeps_ocp_protocol_and_independent_channels():
@@ -63,14 +112,15 @@ const normalizedComponentKind = kind => kind.toLowerCase();
 """ + required + "\n" + validate + "\nconst raw = " + json.dumps(raw) + ";\n" + """
 const component = {kind: 'hbf', component_id: 'hbf0', capacity_bytes: raw.capacity_bytes};
 assert.deepEqual(validatePhysicalMemoryConfig(raw, component), raw);
-for (const field of ['protocol_mode', 'host_channels', 'host_full_duplex', 'read_cache_pages_per_bank']) {
+for (const field of ['protocol_mode', 'host_channels', 'host_full_duplex', 'read_cache_pages_per_bank', 'queue_scope', 'max_outstanding_write_requests']) {
   const missing = {...raw}; delete missing[field];
   assert.throws(() => validatePhysicalMemoryConfig(missing, component));
 }
 for (const patch of [
   {protocol_mode: 'legacy'}, {page_bytes: 16384}, {host_granularity_bytes: 4096},
   {host_full_duplex: false}, {host_channels: 17}, {read_cache_pages_per_bank: 1},
-  {write_buffer_bytes: 4096},
+  {write_buffer_bytes: 4096}, {queue_scope: 'device'}, {parallel_units: 1},
+  {planes_independent: false}, {max_outstanding_write_requests: 257},
 ]) {
   assert.throws(() => validatePhysicalMemoryConfig({...raw, ...patch}, component));
 }
@@ -85,7 +135,8 @@ console.log(JSON.stringify(validatePhysicalMemoryConfig({...raw, host_channels: 
 
 def test_rollback_restores_ocp_page_order_and_cache_on_repeated_retry():
     config = resolve_physical_config("hbf_ocp_0_7", overrides={
-        "channels": 1, "host_channels": 1, "parallel_units": 1,
+        "channels": 1, "host_channels": 1, "parallel_units": None,
+        "planes_per_lun": 1, "planes_independent": True,
         "capacity_bytes": 65536,
     })
     runtime = PhysicalRuntimeContext()

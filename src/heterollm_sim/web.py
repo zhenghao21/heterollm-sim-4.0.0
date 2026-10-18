@@ -1315,6 +1315,7 @@ def scenario_to_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
         "name": scenario.name,
         "weights_resident": scenario.weights_resident,
         "assumptions": list(scenario.assumptions),
+        "simulation": to_primitive(scenario.simulation),
         "hardware": to_primitive(scenario.hardware),
         "model": to_primitive(scenario.model),
         "placement": placement,

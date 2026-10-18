@@ -1,0 +1,18 @@
+{
+  "purpose": "fast mode diagnostics; not a formal scan",
+  "status": "stopped_before_completion",
+  "architecture": "HBM",
+  "model_id": "qwen2_5-0_5b",
+  "prompt_tokens": 2048,
+  "output_tokens": 257,
+  "requested_mode": "detailed",
+  "affinity": {"logical_cpu": 2},
+  "last_observed_progress": {
+    "completed_cohorts": 32,
+    "kind": "decode",
+    "wall_seconds": 73.04894569999306
+  },
+  "reason": "Single logical CPU serializes HBM channel workers and is not representative of the normal simulator environment. Stopped only this diagnostic process tree; restart uses no explicit affinity in both modes.",
+  "accepted_for_accuracy_or_speedup": false,
+  "complete_result_available": false
+}

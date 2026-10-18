@@ -8,6 +8,9 @@ from heterollm_sim.memory_types import AccessRequest, Operation, make_hbf_config
 from heterollm_sim.nand_core import NandCore
 from heterollm_sim.planner import _summarize_nand_task_traffic
 from heterollm_sim.reporting import _sum_batch_storage_traffic, report_dict, run_scenario
+from heterollm_sim.physical_presets import resolve_physical_config
+from heterollm_sim._resource_ledger import reduce_physical_results
+from heterollm_sim.streaming_des import _merge_storage_traffic
 
 
 PAGE = 4096
@@ -24,9 +27,9 @@ def config(**kwargs):
     return make_hbf_config(**values)
 
 
-def task(name, counters):
+def task(name, counters, owner="hbf0"):
     return SimpleNamespace(task_id=name, demands=(), metadata={
-        "physical_execution_by_owner": {"hbf0": {"kind": "HBF", **counters}}})
+        "physical_execution_by_owner": {owner: {"kind": "HBF", **counters}}})
 
 
 class NandAdmissionMetricsTests(unittest.TestCase):
@@ -108,7 +111,50 @@ class NandAdmissionMetricsTests(unittest.TestCase):
         self.assertLessEqual(summary["page_access_payload_utilization"], 1)
         self.assertIsNone(summary["nand_program_queue_depth"])
         self.assertEqual(summary["metric_availability"]["host_read_outstanding_at_admission_peak"]["status"], "recorded")
-        self.assertIn("not NAND page/program queues", summary["queue_depth_scope"])
+        self.assertIn("not NAND page queues", summary["queue_depth_scope"])
+        self.assertTrue(summary["queue_depth_scopes_by_owner"])
+
+    def test_generic_strict_and_mixed_scopes_survive_owner_batch_and_streaming_aggregation(self):
+        settings = {
+            "generic": config(),
+            "strict": resolve_physical_config("hbf_ocp_0_7"),
+        }
+        scopes = {}
+        ledgers = {}
+        for owner, value in settings.items():
+            result = NandCore(value).submit(AccessRequest(owner, Operation.READ, 0, PAGE))
+            scopes[owner] = result.counters["host_admission_depth_scope"]
+            reduced = reduce_physical_results(
+                [(Operation.READ, owner, value, result)], 0., (),
+                frozenset({"host_admission_samples"}),
+                frozenset({"host_outstanding_at_admission_peak"}), Operation.READ)
+            self.assertEqual(reduced[owner]["host_admission_depth_scope"], scopes[owner])
+            self.assertEqual(reduced[owner]["host_admission_depth_scopes"], [scopes[owner]])
+            ledgers[owner] = _summarize_nand_task_traffic([task(owner, reduced[owner], owner)])
+        for owners in (("generic",), ("strict",), ("generic", "strict")):
+            with self.subTest(owners=owners):
+                batches = [SimpleNamespace(cost=SimpleNamespace(metadata={"storage_traffic": ledgers[owner]}))
+                           for owner in owners]
+                result = SimpleNamespace(serving=SimpleNamespace(runtime_kernel_metrics={}, batches=batches))
+                summary = _sum_batch_storage_traffic(result)
+                streamed = {}
+                for owner in owners:
+                    _merge_storage_traffic(streamed, ledgers[owner])
+                expected = {owner: (scopes[owner],) for owner in owners}
+                self.assertEqual(summary["queue_depth_scopes_by_owner"], expected)
+                self.assertEqual(streamed["queue_depth_scopes_by_owner"], expected)
+                self.assertEqual(streamed["queue_depth_scope"], summary["queue_depth_scope"])
+                for owner in owners:
+                    self.assertIn(scopes[owner], summary["queue_depth_scope"])
+                if len(owners) == 2:
+                    self.assertIn("mixed admission scopes", summary["queue_depth_scope"])
+                    self.assertIn("not a simultaneous device total", summary["queue_depth_scope"])
+
+        both = [task(owner, {"host_admission_depth_scope": scopes[owner]}, owner) for owner in settings]
+        mixed_task_ledger = _summarize_nand_task_traffic(both)
+        self.assertEqual(mixed_task_ledger["queue_depth_scopes_by_owner"],
+                         {owner: (scope,) for owner, scope in scopes.items()})
+        self.assertIn("mixed admission scopes", mixed_task_ledger["queue_depth_scope"])
 
 
 if __name__ == "__main__":
