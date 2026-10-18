@@ -1,0 +1,25 @@
+{
+  "point_id": "qwen2_5-7b__HBF__P65536__D10240",
+  "model_id": "qwen2_5-7b",
+  "architecture": "HBF",
+  "prompt_tokens": 65536,
+  "output_tokens": 10240,
+  "status": "running",
+  "pid": 34492,
+  "physical_weight_semantics": "canonical_shared_resident_weights_v1",
+  "simulation_mode": "fast",
+  "approximation": {},
+  "real_prefill_steps": 4,
+  "real_decode_steps": 0,
+  "updated_at": "2026-10-18T14:30:02.620911+00:00",
+  "wall_seconds": 57.90600000001723,
+  "progress": {
+    "stage": "cohort_tasks",
+    "completed": 768,
+    "total": 1391,
+    "message": "正在连续物理状态上执行当前批次",
+    "simulated_time_ns": 5662207699.068452,
+    "metadata": {},
+    "unit": "schedule_tasks"
+  }
+}
