@@ -65,6 +65,23 @@ def live_projection(**changes):
     return result
 
 
+def warm_zero_projection(*, minimum_context=1001, fallback=512):
+    result = live_projection(initial_warm_read_pages_per_decode_upper=0)
+    result.hbf_devices[0]["gc_projection"]["gc_read_qualification"]["initial_warm_zero_proof"] = {
+        "qualified": True, "physical_state_advanced": False,
+        "minimum_decode_context_tokens": minimum_context,
+        "fallback_pages_per_decode": fallback,
+        "scope": "decode_cohort_with_completed_preceding_decode_cohort"}
+    return result
+
+
+def add_items(runner, contexts):
+    for batch, context in zip(runner.batches, contexts, strict=True):
+        batch.items = (NS(request_id="r0", phase="decode", token_count=1,
+                          context_tokens=context),)
+    return runner
+
+
 def runtime():
     batches = []
     for index, (programs, cycles, copies, erases) in enumerate(
@@ -271,6 +288,76 @@ def test_zero_copy_budget_retains_exact_old_values_and_no_live_read_terms():
     assert maintenance["gc_live_copy_budget_required"] is False
 
 
+def test_initial_warm_zero_scope_preserves_first_decode_previous_cleanup_cost():
+    runner = add_items(runtime(), range(1000, 1005))
+    result = envelope(runner, warm_zero_projection())
+    assert result["gc_observations_available"] is True
+    owner = result["gc_guard_by_owner"][0]
+    rows = owner["prefix_initial_warm_pages_by_cohort"]
+    assert [row["context_tokens"] for row in rows] == list(range(1000, 1005))
+    assert [row["initial_warm_pages_upper_used"] for row in rows] == [512, 0, 0, 0, 0]
+    assert [row["zero_proof_applied"] for row in rows] == [False, True, True, True, True]
+    assert rows[0]["is_previous_cleanup_cohort"] is True
+    assert rows[0]["reason"] == "first_decode_or_unverified_context_uses_fallback"
+    assert owner["prefix_persistent_cache_misses_upper"] == 5 * 3 + 512
+    assert result["prefix_gc_persistent_cache_symmetric_bias_guard_ns"] == pytest.approx(
+        (5 * 3 + 512) * 7. * 100 / 4 * 1.1)
+    json.dumps(result, allow_nan=False)
+
+
+def test_every_qualified_later_decode_records_its_actual_zero_warm_charge():
+    runner = add_items(runtime(), range(1001, 1006))
+    result = envelope(runner, warm_zero_projection())
+    owner = result["gc_guard_by_owner"][0]
+    rows = owner["prefix_initial_warm_pages_by_cohort"]
+    assert all(row["initial_warm_pages_upper_used"] == 0 and row["zero_proof_applied"] for row in rows)
+    assert owner["prefix_persistent_cache_misses_upper"] == 5 * 3  # Repeat term remains.
+    assert result["prefix_gc_persistent_cache_symmetric_bias_guard_ns"] == pytest.approx(15 * 7. * 100 / 4 * 1.1)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda batch: delattr(batch, "items"),
+    lambda batch: setattr(batch, "items", ()),
+    lambda batch: setattr(batch, "items", (batch.items[0], batch.items[0])),
+    lambda batch: setattr(batch.items[0], "phase", "prefill"),
+    lambda batch: setattr(batch.items[0], "context_tokens", None),
+    lambda batch: setattr(batch.items[0], "context_tokens", 1001.),
+    lambda batch: setattr(batch.items[0], "context_tokens", True),
+    lambda batch: setattr(batch.items[0], "context_tokens", 1000),
+    lambda batch: setattr(batch.items[0], "token_count", 2),
+    lambda batch: setattr(batch.items[0], "token_count", True),
+])
+def test_unverified_prefix_item_uses_proved_warm_fallback_instead_of_future_zero(mutation):
+    runner = add_items(runtime(), range(1001, 1006))
+    mutation(runner.batches[2])
+    result = envelope(runner, warm_zero_projection())
+    assert result["gc_observations_available"] is True
+    owner = result["gc_guard_by_owner"][0]
+    rows = owner["prefix_initial_warm_pages_by_cohort"]
+    assert [row["initial_warm_pages_upper_used"] for row in rows] == [0, 0, 512, 0, 0]
+    assert rows[2]["zero_proof_applied"] is False
+    assert owner["prefix_persistent_cache_misses_upper"] == 15 + 512
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda q: q.pop("initial_warm_zero_proof"),
+    lambda q: q["initial_warm_zero_proof"].update(qualified=False),
+    lambda q: q["initial_warm_zero_proof"].update(physical_state_advanced=True),
+    lambda q: q["initial_warm_zero_proof"].update(scope="all_tokens_including_prefill"),
+    lambda q: q["initial_warm_zero_proof"].update(minimum_decode_context_tokens=None),
+    lambda q: q["initial_warm_zero_proof"].update(minimum_decode_context_tokens=True),
+    lambda q: q["initial_warm_zero_proof"].update(fallback_pages_per_decode=None),
+    lambda q: q["initial_warm_zero_proof"].update(fallback_pages_per_decode=-1),
+])
+def test_missing_future_warm_zero_proof_cannot_be_repaired_only_in_prefix(mutation):
+    projected = warm_zero_projection()
+    mutation(projected.hbf_devices[0]["gc_projection"]["gc_read_qualification"])
+    result = envelope(add_items(runtime(), range(1001, 1006)), projected)
+    assert result["gc_observations_available"] is False
+    assert result["gc_budget_unavailable_reason"] == "hbf_gc_initial_warm_zero_proof_unavailable:" + OWNER
+    assert result["prefix_gc_persistent_cache_symmetric_bias_guard_ns"] is None
+
+
 def test_decode_read_geometry_cannot_stand_in_for_previous_prefill_cleanup():
     runner = runtime()
     runner.batches[0].kind = "prefill"
@@ -388,6 +475,9 @@ def gc_harness(monkeypatch, *, missing=False, copy_steps=(), options=None, growt
         def record(self):
             for step, batch in enumerate(self.batches):
                 batch.cost.metadata["storage_traffic"]["pages_programmed"] = 1
+                if batch.kind == "decode":
+                    batch.items = (NS(request_id=request.request_id, phase="decode", token_count=1,
+                        context_tokens=request.prompt_tokens + step - 1),)
                 if not missing:
                     copies = int(step in copy_steps)
                     batch.cost.metadata["storage_gc_observations"] = {OWNER: observation(1, copies)}
@@ -568,6 +658,36 @@ def test_proved_live_domain_keeps_periodic_copy_prefix_without_endless_clean_res
     assert result.diagnostics["error_budget_breakdown"]["symmetric_maintenance_guard_ns"] > 0
     assert result.diagnostics["physical_tail_transactions_recorded"] is False
     assert result.diagnostics["future_physical_state_advanced"] is False
+
+
+def test_forecast_warmup_one_keeps_first_decode_cleanup_fallback_and_exact_prefix(monkeypatch):
+    scenario, request, runners = gc_harness(monkeypatch, growth=.06, copy_steps=(8,),
+        options=FastDecodeConfig(warmup_tokens=1, max_sample_tokens=13))
+    projected = tiny_live_projection()
+    guard = projected.hbf_devices[0]["gc_projection"]
+    guard["initial_warm_read_pages_per_decode_upper"] = 0
+    qualification = guard["gc_read_qualification"]
+    qualification["initial_warm_read_pages_per_decode_upper"] = 0
+    qualification["initial_warm_zero_proof"] = {
+        "qualified": True, "physical_state_advanced": False,
+        "minimum_decode_context_tokens": request.prompt_tokens + 1,
+        "fallback_pages_per_decode": 512,
+        "scope": "decode_cohort_with_completed_preceding_decode_cohort"}
+    monkeypatch.setattr(fast, "project_fast_tail", lambda *args, **kwargs: projected)
+    result = fast.simulate_fast(scenario, batch_lowerer=object())
+    assert result.forecast is not None and result.detailed is None
+    assert runners[0].decode_steps == 13 and runners[0].run_calls == 0
+    assert result.diagnostics["exact_sampled_decode_ns"] == 1300.
+    owner = result.diagnostics["gc_guard_by_owner"][0]
+    rows = owner["prefix_initial_warm_pages_by_cohort"]
+    assert rows[0]["context_tokens"] == request.prompt_tokens
+    assert rows[0]["initial_warm_pages_upper_used"] == 512
+    assert rows[0]["zero_proof_applied"] is False
+    assert all(row["initial_warm_pages_upper_used"] == 0 and row["zero_proof_applied"] for row in rows[1:])
+    assert owner["prefix_persistent_cache_misses_upper"] == len(rows) + 512
+    assert result.diagnostics["paired_budget_decision"]["accepted"] is True
+    assert result.diagnostics["paired_budget_decision"]["target_relative_error"] == .1
+    assert result.diagnostics["physical_tail_transactions_recorded"] is False
 
 
 def test_excess_live_read_uncertainty_still_refuses_at_cap_without_detail(monkeypatch):

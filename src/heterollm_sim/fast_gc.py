@@ -382,6 +382,85 @@ def gc_service_bounds(physical, controller, binding, cutoff_ns):
         "temporary_read_cache_bound_method": "persistent_only_reference_trace_plus_each_temporary_access_lru_insertion_k_plus_1_and_initial_k_distinct_misses_per_bank"}
 
 
+def _validate_initial_warm_zero_proof(controller, proof, immutable_blocks):
+    """Validate a narrow cache-tail certificate against the live geometry.
+
+    The IR certificate establishes the submission order. Here its concrete
+    bank/page evidence must agree with this controller's immutable backing,
+    rather than accepting a bare zero-page count as a measured zero.
+    """
+    if (not isinstance(proof, Mapping) or proof.get("qualified") is not True
+            or proof.get("physical_state_advanced") is not False):
+        return "missing_read_only_qualification"
+    if (proof.get("scope") != "decode_cohort_with_completed_preceding_decode_cohort"
+            or type(proof.get("minimum_decode_context_tokens")) is not int
+            or proof["minimum_decode_context_tokens"] <= 0):
+        return "decode_scope_unqualified"
+    evidence = ("final_full_canonical_preload_scan",
+        "all_other_immutable_read_tasks_are_dag_ancestors",
+        "standard_per_bank_lru_in_submission_order", "immutable_preload_excluded_from_gc")
+    if any(proof.get(name) is not True for name in evidence):
+        return "ordered_immutable_scan_evidence_unqualified"
+    banks, slots = controller.config.array_units, controller.config.read_cache_pages_per_bank
+    if (type(proof.get("bank_count")) is not int or proof["bank_count"] != banks
+            or type(proof.get("cache_slots_per_bank")) is not int
+            or proof["cache_slots_per_bank"] != slots
+            or type(proof.get("fallback_pages_per_decode")) is not int
+            or proof["fallback_pages_per_decode"] != banks * slots):
+        return "live_cache_geometry_does_not_match"
+    if (type(proof.get("next_pre_scan_immutable_tail_overlap_pages")) is not int
+            or proof["next_pre_scan_immutable_tail_overlap_pages"] != 0):
+        return "previous_tail_may_be_read_early"
+    before = proof.get("distinct_non_tail_pages_before_tail_by_bank")
+    if (not isinstance(before, (tuple, list)) or len(before) != banks
+            or any(type(count) is not int or count < slots for count in before)):
+        return "too_few_distinct_pages_before_tail"
+    tags_by_bank = proof.get("actual_tail_tags_by_bank")
+    if not isinstance(tags_by_bank, (tuple, list)) or len(tags_by_bank) != banks:
+        return "actual_tail_bank_tags_unqualified"
+    active = set(controller._active)
+    if any(block in controller._used or block in active or block == controller._spare
+           or block in controller._owners for block in immutable_blocks):
+        return "immutable_backing_can_participate_in_gc"
+    initialized_pages_by_block = {}
+    for preload in controller._preloads.values():
+        count = sum(len(span) for span in preload.block_ranges)
+        rank = 0
+        for span in preload.block_ranges:
+            for bank_tags in tags_by_bank:
+                if not isinstance(bank_tags, (tuple, list)):
+                    continue
+                for tag in bank_tags:
+                    if (not isinstance(tag, (tuple, list)) or len(tag) != 2
+                            or type(tag[0]) is not int or tag[0] not in span):
+                        continue
+                    block_index = rank + tag[0] - span.start
+                    group, lane = divmod(block_index, controller._lanes)
+                    width = min(controller._lanes, count - group * controller._lanes)
+                    last = ((preload.byte_count + PAGE - 1) // PAGE - 1
+                            - group * controller._lanes * controller.config.pages_per_block - lane) // width
+                    initialized_pages_by_block[tag[0]] = min(controller.config.pages_per_block, last + 1)
+            rank += len(span)
+    for bank, tags in enumerate(tags_by_bank):
+        if not isinstance(tags, (tuple, list)) or len(tags) != slots:
+            return "actual_tail_bank_tags_unqualified"
+        unique = set()
+        for tag in tags:
+            if (not isinstance(tag, (tuple, list)) or len(tag) != 2
+                    or any(type(value) is not int for value in tag)):
+                return "actual_tail_tag_format_unqualified"
+            block, page = tag
+            if (block not in immutable_blocks or block < 0 or block >= controller._block_count
+                    or block % banks != bank or page < 0 or page >= controller.config.pages_per_block):
+                return "actual_tail_tag_not_in_immutable_bank"
+            if page >= initialized_pages_by_block.get(block, 0):
+                return "actual_tail_tag_not_initialized_by_preload"
+            unique.add((block, page))
+        if len(unique) != slots:
+            return "actual_tail_tags_not_distinct"
+    return None
+
+
 def project_gc_maintenance(controller, *, program_pages, free_program_pages,
                          geometry_qualified, temporary_read_pages_per_decode=None,
                          remaining_decode_steps=None, service_bounds=None,
@@ -495,6 +574,12 @@ def project_gc_maintenance(controller, *, program_pages, free_program_pages,
             result["future_gc_read_remap_symmetric_guard_ns"] = None
             result["future_gc_persistent_cache_symmetric_guard_ns"] = None
             return result
+        if gc_read_qualification["initial_warm_read_pages_per_decode_upper"] == 0:
+            unavailable = _validate_initial_warm_zero_proof(controller,
+                gc_read_qualification.get("initial_warm_zero_proof"), immutable)
+            if unavailable is not None:
+                result["reason"] = "live_gc_initial_warm_zero_proof_unavailable:" + unavailable
+                return result
         prefix = ordinary_program_prefix_upper_by_decode
         if (not isinstance(prefix, (tuple, list)) or len(prefix) != remaining_decode_steps
                 or any(type(value) is not int or value < 0 for value in prefix)

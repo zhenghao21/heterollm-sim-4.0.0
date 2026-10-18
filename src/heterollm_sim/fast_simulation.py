@@ -541,6 +541,20 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
                     or not all(service(value) for value in (remap_ns, cache_miss_ns,
                         guard.get(symmetric_names[2]), guard.get(symmetric_names[3])))):
                 return unavailable("hbf_gc_persistent_read_remap_bounds_unavailable:" + str(owner))
+            initial_warm_zero = None
+            if initial_warm_reads == 0:
+                initial_warm_zero = qualification.get("initial_warm_zero_proof")
+                if (not isinstance(initial_warm_zero, Mapping)
+                        or initial_warm_zero.get("qualified") is not True
+                        or initial_warm_zero.get("physical_state_advanced") is not False
+                        or initial_warm_zero.get("scope") != "decode_cohort_with_completed_preceding_decode_cohort"
+                        or not counter(initial_warm_zero.get("minimum_decode_context_tokens"))
+                        or initial_warm_zero["minimum_decode_context_tokens"] == 0
+                        or not counter(initial_warm_zero.get("fallback_pages_per_decode"))):
+                    # Prefix fallback alone cannot repair an unproved zero
+                    # already used by the future projection. Reject the
+                    # malformed zero claim rather than guessing its cost.
+                    return unavailable("hbf_gc_initial_warm_zero_proof_unavailable:" + str(owner))
             host_qualification = guard.get("gc_host_state_qualification")
             if (not isinstance(host_qualification, Mapping)
                     or host_qualification.get("qualified") is not True
@@ -600,7 +614,32 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
                 reverse_copies.append(copied_after)
             reverse_copies.reverse()
             remapped_reads = sum(reverse_copies) * kv_multiplicity
-            cache_misses = len(batches) * (repeat_reads + initial_warm_reads)
+            warm_by_cohort = []
+            for position, batch in enumerate(batches):
+                warm = initial_warm_reads
+                context = None
+                zero_applied = False
+                reason = "nonzero_initial_warm_bound_retained"
+                if initial_warm_zero is not None:
+                    warm = initial_warm_zero["fallback_pages_per_decode"]
+                    items = getattr(batch, "items", None)
+                    item = items[0] if isinstance(items, (tuple, list)) and len(items) == 1 else None
+                    context = getattr(item, "context_tokens", None)
+                    if (batch.kind == "decode" and getattr(item, "phase", None) == "decode"
+                            and type(getattr(item, "token_count", None)) is int and item.token_count == 1
+                            and type(context) is int
+                            and context >= initial_warm_zero["minimum_decode_context_tokens"]):
+                        warm, zero_applied = 0, True
+                        reason = "completed_preceding_decode_barrier_scope"
+                    else:
+                        reason = "first_decode_or_unverified_context_uses_fallback"
+                warm_by_cohort.append({"cohort_position_in_guard": position,
+                    "is_previous_cleanup_cohort": position == 0,
+                    "context_tokens": context if type(context) is int else None,
+                    "initial_warm_pages_upper_used": warm,
+                    "zero_proof_applied": zero_applied, "reason": reason})
+            cache_misses = (len(batches) * repeat_reads
+                            + sum(row["initial_warm_pages_upper_used"] for row in warm_by_cohort))
             terms[symmetric_names[0]].append(remapped_reads * remap_ns * scale)
             terms[symmetric_names[1]].append(cache_misses * cache_miss_ns * scale)
             terms[symmetric_names[2]].append(guard[symmetric_names[2]])
@@ -615,6 +654,7 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
                 "prefix_reverse_cumulative_copied_pages": tuple(reverse_copies),
                 "prefix_remapped_kv_page_reads_upper": remapped_reads,
                 "prefix_persistent_cache_misses_upper": cache_misses,
+                "prefix_initial_warm_pages_by_cohort": tuple(warm_by_cohort),
                 "kv_reads_per_page_per_decode_upper": kv_multiplicity,
                 "immutable_repeat_read_pages_per_decode_upper": repeat_reads,
                 "initial_warm_read_pages_per_decode_upper": initial_warm_reads,

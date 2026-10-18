@@ -299,6 +299,7 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
         read_basis = {owner: qualify_gc_read_basis(lowering.schedule.tasks, physical, owner,
             tuple(row for row in kv_buffers if str(row["physical_owner"]) == owner),
             context_tokens=context + 1,
+            minimum_decode_context_tokens=state.spec.prompt_tokens + 1,
             token_boundary_completed=kernel is not None and not kernel.has_active_tasks)
             for owner in owners}
         return {"signature": (tuple(writes), tuple(declarations)), "reads": tuple(reads),

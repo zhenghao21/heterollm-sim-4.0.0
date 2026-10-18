@@ -61,7 +61,8 @@ def low_live_controller(live_per_block=1, *, controller=None, io=None):
     controller = controller or HbfStagingController(config(), 64 * PAGE)
     io = io or callbacks()
     now = 0.
-    pages = (controller._block_count - 1) * controller.config.pages_per_block
+    pages = len(controller._free_blocks) * controller.config.pages_per_block + sum(
+        controller.config.pages_per_block - controller._used[block] for block in controller._active)
     for page in range(pages):
         now = controller.write(("initial", page), 1, 0, PAGE, now, io)
     discarded = [key for owners in controller._owners.values()
@@ -91,6 +92,24 @@ def cold_read_proof():
         "kv_reads_per_page_per_decode_upper": 1,
         "immutable_repeat_read_pages_per_decode_upper": 3,
         "initial_warm_read_pages_per_decode_upper": 4}
+
+
+def warm_zero_fixture(*, preload_pages=8):
+    controller = HbfStagingController(config(), 64 * PAGE)
+    controller.preload("weights", 0, preload_pages * PAGE)
+    low_live_controller(controller=controller)
+    proof = {"qualified": True, "physical_state_advanced": False,
+        "minimum_decode_context_tokens": 65537, "fallback_pages_per_decode": 4,
+        "scope": "decode_cohort_with_completed_preceding_decode_cohort",
+        "final_full_canonical_preload_scan": True,
+        "all_other_immutable_read_tasks_are_dag_ancestors": True,
+        "standard_per_bank_lru_in_submission_order": True,
+        "immutable_preload_excluded_from_gc": True,
+        "bank_count": 2, "cache_slots_per_bank": 2,
+        "actual_tail_tags_by_bank": (((0, 2), (0, 3)), ((1, 2), (1, 3))),
+        "next_pre_scan_immutable_tail_overlap_pages": 0,
+        "distinct_non_tail_pages_before_tail_by_bank": (2, 2)}
+    return controller, proof
 
 
 def live_project(controller, prefix=(0, 3, 6, 9, 12), **updates):
@@ -143,6 +162,98 @@ def test_live_complete_copy_chain_and_two_sided_read_costs_are_not_divided_by_ba
     assert result["gc_copy_cache_pollution_serial_upper_ns"] == 4 * 2 * 2.
     assert result["carry_in_serial_guard_ns"] == 7.
     assert result["gc_read_qualification"] == cold_read_proof()
+
+
+def test_proved_zero_initial_warm_removes_only_initial_warm_cost_and_preserves_repeat_reads():
+    controller, zero = warm_zero_fixture()
+    positive = live_project(controller)
+    proof = {**cold_read_proof(), "initial_warm_read_pages_per_decode_upper": 0,
+             "initial_warm_zero_proof": zero}
+    before = controller.snapshot()
+    result = live_project(controller, gc_read_qualification=proof)
+    assert result["qualified"] and result["live_projection_qualified"]
+    assert result["immutable_repeat_read_pages_per_decode_upper"] == 3
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] == 5 * 3 * 2.
+    assert positive["future_gc_persistent_cache_symmetric_guard_ns"] - result[
+        "future_gc_persistent_cache_symmetric_guard_ns"] == 5 * 4 * 2.
+    for name in ("cycles_upper", "copied_pages_upper", "future_gc_erase_serial_ns",
+            "future_gc_non_erase_serial_ns", "future_write_placement_serial_guard_ns",
+            "future_read_placement_serial_guard_ns", "future_gc_read_remap_symmetric_guard_ns",
+            "future_gc_host_state_symmetric_guard_ns"):
+        assert result[name] == positive[name]
+    assert controller.snapshot() == before
+
+
+@pytest.mark.parametrize("zero", [None, {}, {"qualified": False},
+    {"qualified": True, "physical_state_advanced": False}])
+def test_zero_initial_warm_needs_the_complete_concrete_immutable_scan_proof(zero):
+    controller, _ = warm_zero_fixture()
+    proof = {**cold_read_proof(), "initial_warm_read_pages_per_decode_upper": 0,
+             "initial_warm_zero_proof": zero}
+    result = live_project(controller, gc_read_qualification=proof)
+    assert not result["qualified"] and not result["live_projection_qualified"]
+    assert result["reason"].startswith("live_gc_initial_warm_zero_proof_unavailable:")
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] is None
+
+
+@pytest.mark.parametrize("name,value", [
+    ("physical_state_advanced", True), ("scope", "decode"),
+    ("minimum_decode_context_tokens", 0), ("minimum_decode_context_tokens", True),
+    ("minimum_decode_context_tokens", 65537.),
+    ("fallback_pages_per_decode", 0), ("fallback_pages_per_decode", 4.),
+    ("final_full_canonical_preload_scan", False),
+    ("all_other_immutable_read_tasks_are_dag_ancestors", None),
+    ("standard_per_bank_lru_in_submission_order", 1),
+    ("immutable_preload_excluded_from_gc", False),
+    ("bank_count", 1), ("bank_count", 2.), ("cache_slots_per_bank", 1),
+    ("next_pre_scan_immutable_tail_overlap_pages", 1),
+    ("next_pre_scan_immutable_tail_overlap_pages", False),
+    ("distinct_non_tail_pages_before_tail_by_bank", (2,)),
+    ("distinct_non_tail_pages_before_tail_by_bank", (2, 1)),
+    ("distinct_non_tail_pages_before_tail_by_bank", (2, True)),
+    ("actual_tail_tags_by_bank", (((0, 2), (0, 3)),)),
+    ("actual_tail_tags_by_bank", (((0, 2),), ((1, 2), (1, 3)))),
+    ("actual_tail_tags_by_bank", (((0, 2), (0, 2)), ((1, 2), (1, 3)))),
+    ("actual_tail_tags_by_bank", (((1, 2), (0, 3)), ((1, 2), (1, 3)))),
+    ("actual_tail_tags_by_bank", (((0, -1), (0, 3)), ((1, 2), (1, 3)))),
+    ("actual_tail_tags_by_bank", (((0, 4), (0, 3)), ((1, 2), (1, 3)))),
+    ("actual_tail_tags_by_bank", (((0, 2.), (0, 3)), ((1, 2), (1, 3)))),
+    ("actual_tail_tags_by_bank", (((0, True), (0, 3)), ((1, 2), (1, 3)))),
+    ("actual_tail_tags_by_bank", (((2, 2), (0, 3)), ((1, 2), (1, 3)))),
+])
+def test_zero_initial_warm_rejects_missing_scope_geometry_tags_and_order_evidence(name, value):
+    controller, zero = warm_zero_fixture()
+    proof = {**cold_read_proof(), "initial_warm_read_pages_per_decode_upper": 0,
+        "initial_warm_zero_proof": {**zero, name: value}}
+    result = live_project(controller, gc_read_qualification=proof)
+    assert not result["qualified"] and not result["live_projection_qualified"]
+    assert result["reason"].startswith("live_gc_initial_warm_zero_proof_unavailable:")
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] is None
+
+
+def test_zero_initial_warm_rejects_immutable_backing_that_can_enter_gc():
+    controller, zero = warm_zero_fixture()
+    controller._used[0] = 0
+    result = live_project(controller, gc_read_qualification={**cold_read_proof(),
+        "initial_warm_read_pages_per_decode_upper": 0, "initial_warm_zero_proof": zero})
+    assert not result["qualified"]
+    assert result["reason"].endswith("immutable_backing_can_participate_in_gc")
+
+
+def test_zero_initial_warm_cannot_use_an_uninitialized_tail_of_a_partial_preload_block():
+    controller, zero = warm_zero_fixture(preload_pages=6)
+    result = live_project(controller, gc_read_qualification={**cold_read_proof(),
+        "initial_warm_read_pages_per_decode_upper": 0, "initial_warm_zero_proof": zero})
+    assert not result["qualified"]
+    assert result["reason"].endswith("actual_tail_tag_not_initialized_by_preload")
+
+
+def test_positive_initial_warm_fallback_ignores_unknown_zero_proof_and_keeps_full_cost():
+    controller, _ = low_live_controller()
+    result = live_project(controller, gc_read_qualification={**cold_read_proof(),
+        "initial_warm_read_pages_per_decode_upper": 512, "initial_warm_zero_proof": None})
+    assert result["qualified"]
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] == 5 * (512 + 3) * 2.
 
 
 @pytest.mark.parametrize("proof", [None, {}, {"qualified": False},
@@ -356,6 +467,14 @@ def test_formal_1_5b_host_state_service_is_qualified_after_bootstrap_without_req
     geometry = _fixed_decode_write_geometry(runner, rows, 263167)
     state = physical.hbf_staging["hbf0.memory"]
     assert not state["controller"]._pages
+    from heterollm_sim.fast_gc import _validate_initial_warm_zero_proof
+    warm = geometry["gc_read_qualification_by_owner"]["hbf0.memory"]
+    assert warm["initial_warm_read_pages_per_decode_upper"] == 0
+    assert warm["immutable_repeat_read_pages_per_decode_upper"] == 1
+    immutable_blocks = {block for preload in state["controller"]._preloads.values()
+                        for span in preload.block_ranges for block in span}
+    assert _validate_initial_warm_zero_proof(state["controller"],
+        warm["initial_warm_zero_proof"], immutable_blocks) is None
     bounds = gc_service_bounds(physical, state["controller"],
         geometry["gc_staging_bindings_by_owner"]["hbf0.memory"], bootstrap.makespan_ns)
     proof = bounds["gc_host_state_qualification"]

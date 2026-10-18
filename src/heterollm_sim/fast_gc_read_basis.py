@@ -6,6 +6,9 @@ from collections.abc import Mapping
 
 from .hbf_staging import HbfStagingController
 from ._io_execution import PreparedStagingIO
+from .memory_allocator import PhysicalAddressAllocator
+from .nand_core import NandCore
+from . import _compiled_nand, _io_execution, _nand_execution
 
 PAGE = 4096
 
@@ -15,6 +18,135 @@ PAGE = 4096
 _HOST_ONLY_METHODS = {name: getattr(HbfStagingController, name) for name in (
     "write", "read", "release", "flush", "_new_slot", "_flush_page", "_page_for_write")}
 _STAGING_SUBMIT = PreparedStagingIO.submit
+_COLD_CACHE_METHODS = {name: getattr(NandCore, name) for name in (
+    "submit", "submit_read_pages", "_cache_slot", "_invalidate_cache",
+    "_submit_ocp_single_page_summary", "_submit_ocp_page_commands")}
+_COLD_STAGING_METHODS = {name: getattr(HbfStagingController, name) for name in (
+    "read", "write", "_read_full_pages", "_write_full_pages", "_prepare_empty_gc_write",
+    "_new_slot", "_flush_page", "_collect", "_allocate", "_gc_victim", "preload", "release")}
+_COLD_ORDERED_FUNCTIONS = ((_compiled_nand, "_run", _compiled_nand._run),
+    (_nand_execution, "execute_pages", _nand_execution.execute_pages),
+    (_io_execution, "_io_flash_pages", _io_execution._io_flash_pages),
+    (_io_execution._PhysicalIO, "read_flash", _io_execution._PhysicalIO.read_flash),
+    (_io_execution._PhysicalIO, "read_flash_pages", _io_execution._PhysicalIO.read_flash_pages))
+
+
+def _initial_warm_zero_proof(tasks, physical, owner, immutable, ancestors, kv_ids, *,
+                             minimum_decode_context_tokens):
+    """Prove the previous Decode's immutable cache tags cannot hit again.
+
+    Only the last k pages per bank of a final complete preload scan can
+    remain warm. Inspect at most k candidates per physical block, rather
+    than scanning the full tensor. If the next cohort does not read these
+    tags before its final scan, and that scan replaces k distinct tags
+    first in every bank, even an arbitrary subset of old tail tags misses.
+    """
+    controller = physical.hbf_staging[owner]["controller"]
+    banks, slots = controller.config.array_units, controller.config.read_cache_pages_per_bank
+    result = {"qualified": False, "reason": None,
+        "method": "final_canonical_preload_scan_tail_tags_are_cold_next_decode/v1",
+        "physical_state_advanced": False, "physical_io_executed": False,
+        "minimum_decode_context_tokens": minimum_decode_context_tokens,
+        "fallback_pages_per_decode": banks * slots,
+        "scope": "decode_cohort_with_completed_preceding_decode_cohort"}
+
+    def reject(reason):
+        result["reason"] = reason
+        return result
+
+    if type(minimum_decode_context_tokens) is not int or minimum_decode_context_tokens <= 0:
+        return reject("initial_warm_decode_scope_unavailable")
+    device = getattr(physical, "runtimes", {}).get(owner)
+    core = None if device is None else device.core
+    if (type(core) is not NandCore or core.config.protocol_mode != "ocp_hbf_0_7"
+            or core.config.array_units != banks or core.config.read_cache_pages_per_bank != slots
+            or any(name in core.__dict__ or getattr(NandCore, name) is not method
+                   for name, method in _COLD_CACHE_METHODS.items())
+            or any(getattr(module, name) is not function
+                   for module, name, function in _COLD_ORDERED_FUNCTIONS)
+            or PreparedStagingIO.submit is not _STAGING_SUBMIT):
+        return reject("initial_warm_standard_ordered_lru_required")
+    if (type(controller) is not HbfStagingController
+            or type(physical.allocators[owner]) is not PhysicalAddressAllocator
+            or any(name in controller.__dict__ or getattr(HbfStagingController, name) is not method
+                   for name, method in _COLD_STAGING_METHODS.items())):
+        return reject("initial_warm_immutable_preload_controller_required")
+    if not immutable:
+        return reject("initial_warm_final_preload_scan_unavailable")
+    if any(str(access.get("physical_owner", "")) == owner
+           and str(access.get("buffer_id", "")) not in kv_ids
+           and getattr(access.get("operation"), "value", access.get("operation")) != "read"
+           and not access.get("allocation_generation")
+           for task in tasks for access in task.metadata.get("memory_accesses", ())):
+        return reject("initial_warm_unknown_persistent_mutation")
+    task_index, position, root, generation, first, stop, preload = immutable[-1]
+    access = tasks[task_index].metadata["memory_accesses"][position]
+    if (first != 0 or access.get("offset_bytes") != 0
+            or access.get("byte_count") != preload.byte_count):
+        return reject("initial_warm_final_scan_is_not_complete_canonical_preload")
+    for index, _, _, _, _, _, _ in immutable[:-1]:
+        if index == task_index or not ancestors[task_index] & (1 << index):
+            return reject("initial_warm_other_immutable_read_not_dag_ancestor")
+    if any(tasks[index].metadata["memory_accesses"][offset].get("address_source")
+           != "stable_buffer_tensor_offset" for index, offset, *_ in immutable):
+        return reject("initial_warm_dynamic_or_unknown_immutable_read_offset")
+    # Every block has a unique physical page namespace. Capture only its
+    # final k logical submission indexes, then merge by actual bank order.
+    block_count = sum(len(span) for span in preload.block_ranges)
+    per_block, lanes = controller.config.pages_per_block, controller._lanes
+    candidates = [[] for _ in range(banks)]
+    counts = [0] * banks
+    seen_blocks = set()
+    for block_index, block in enumerate(block for span in preload.block_ranges for block in span):
+        if block in seen_blocks:
+            return reject("initial_warm_preload_has_duplicate_physical_blocks")
+        seen_blocks.add(block)
+        group, lane = divmod(block_index, lanes)
+        width = min(lanes, block_count - group * lanes)
+        base = group * lanes * per_block
+        last = min(per_block - 1, (stop - 1 - base - lane) // width)
+        if last < 0:
+            continue
+        bank = block % banks
+        counts[bank] += last + 1
+        candidates[bank].extend((base + page * width + lane, block, page)
+            for page in range(max(0, last - slots + 1), last + 1))
+        candidates[bank] = sorted(candidates[bank])[-slots:]
+    if any(len(tags) != slots for tags in candidates):
+        return reject("initial_warm_final_scan_does_not_fill_every_bank")
+    before_tail = tuple(count - slots for count in counts)
+    if any(count < slots for count in before_tail):
+        return reject("initial_warm_too_few_distinct_pages_before_tail")
+    tail_pages = {index for tags in candidates for index, _, _ in tags}
+    tail_blocks = {block for tags in candidates for _, block, _ in tags}
+    active = set(controller._active)
+    if any(block in controller._used or block == controller._spare
+           or block in controller._owners or block in active
+           for descriptor in controller._preloads.values()
+           for span in descriptor.block_ranges for block in span):
+        return reject("initial_warm_immutable_preload_can_participate_in_gc")
+    for _, _, other_root, other_generation, lo, hi, other_preload in immutable[:-1]:
+        if (other_root, other_generation) == (root, generation):
+            if any(lo <= page < hi for page in tail_pages):
+                return reject("initial_warm_next_early_read_touches_previous_tail")
+        elif any(block in span for block in tail_blocks for span in other_preload.block_ranges):
+            return reject("initial_warm_other_preload_aliases_previous_tail")
+    result.update(qualified=True,
+        final_full_canonical_preload_scan=True,
+        final_scan_task_id=tasks[task_index].task_id,
+        final_scan_access_position=position,
+        final_scan_canonical_buffer_id=root,
+        final_scan_canonical_generation=generation,
+        final_scan_pages=stop,
+        all_other_immutable_read_tasks_are_dag_ancestors=True,
+        standard_per_bank_lru_in_submission_order=True,
+        immutable_preload_excluded_from_gc=True,
+        bank_count=banks, cache_slots_per_bank=slots,
+        actual_tail_tags_by_bank=tuple(tuple((block, page) for _, block, page in tags)
+                                      for tags in candidates),
+        next_pre_scan_immutable_tail_overlap_pages=0,
+        distinct_non_tail_pages_before_tail_by_bank=before_tail)
+    return result
 
 
 def temporary_read_media_bounds(writes, reads):
@@ -111,7 +243,7 @@ def qualify_temporary_host_only_reads(controller, bound, *, host_slots_sufficien
 
 
 def qualify_gc_read_basis(tasks, physical, owner, kv_rows, *, context_tokens,
-                          token_boundary_completed):
+                          token_boundary_completed, minimum_decode_context_tokens=None):
     """Prove bounded unique KV reads and an actual immutable cache barrier.
 
     A barrier is one atomic physical READ task after every KV reader in the
@@ -293,5 +425,10 @@ def qualify_gc_read_basis(tasks, physical, owner, kv_rows, *, context_tokens,
             barrier_mixed_temporary_accesses_cannot_warm_current_kv_tags=True,
             token_boundary_completed=True,
             gc_copy_cache_rule="source_tags_describe_old_pages_and_target_programs_invalidate_new_mapping_tags")
+        zero_warm = _initial_warm_zero_proof(tasks, physical, owner, immutable, ancestors, expected,
+            minimum_decode_context_tokens=minimum_decode_context_tokens)
+        result["initial_warm_zero_proof"] = zero_warm
+        if zero_warm["qualified"]:
+            result["initial_warm_read_pages_per_decode_upper"] = 0
         return result
     return reject("gc_actual_immutable_bank_barrier_unavailable")
