@@ -1,0 +1,2213 @@
+{
+  "profile_source": "worker42472_prefill_native.speedscope.json",
+  "worker_pid": 42472,
+  "thread_name": "Thread 53192 \"MainThread\"",
+  "phase": "real formal scan Prefill, after block 100",
+  "configuration": {
+    "point_id": "qwen2_5-1_5b__HBF__P262144__D1024",
+    "model": "Qwen2.5-1.5B",
+    "memory": "HBF",
+    "prompt_tokens": 262144,
+    "output_tokens": 1024,
+    "simulation_mode": "fast",
+    "precision": "BF16",
+    "completed_prefill_chunks_during_capture": 126,
+    "executing_prefill_chunk_ordinal_during_capture": 127,
+    "prefill_chunks_total": 128,
+    "context_source": "root observed worker progress plus appended real worker log; chunk ordinal is completed+1, not cohort_tasks count"
+  },
+  "capture": {
+    "tool": "py-spy@0.4.2",
+    "unit": "seconds",
+    "elapsed_seconds": 44.99,
+    "sample_count": 4499,
+    "sample_period_seconds": 0.01,
+    "empty_stacks": 0,
+    "stack_depth_min": 22,
+    "stack_depth_max": 108,
+    "stacks_without_worker_python_ancestor": 0,
+    "tool_reported_samples": 4499,
+    "tool_reported_errors": 0,
+    "tool_count_source": "root actual py-spy command output: Samples 4499, Errors 0; initial native-symbol warning, then successful Sampling and normal completion",
+    "observed_wall_clock_window_local": "2026-10-18 17:12–17:13 Asia/Shanghai (approximate)",
+    "first_native_symbol_warning_utc": "2026-10-18T09:12:10.202982400Z",
+    "second_native_symbol_warning_utc": "2026-10-18T09:12:10.207290400Z",
+    "output_file_mtime_utc": "2026-10-18T09:12:54.6127154Z",
+    "timestamp_limitation": "Warning times and output mtime supplied by root actual tool output; they are not exact sampling start/end timers. Duration is 4499 × 0.01-second weights = 44.99 seconds."
+  },
+  "method": {
+    "exclusive_categories": "Each sample assigned exactly once, priority rollback > _collect > any nand_core.py ancestor > memory_transfer.py ancestor > deepest hbf_staging.py > deepest data_motion.py > other. This assigns Python call ancestry, not hardware latency. Native frames below a Python caller remain in that caller category.",
+    "inclusive_hotspots": "Each distinct file/function counted at most once per sample. Inclusive rows overlap and must not be summed; line rows also overlap.",
+    "gc_breakdown": "Only _collect samples, mutually exclusive in the listed priority: _remember journal > NAND > _transfer > _host > other. Percentages remain relative to all 4499 samples.",
+    "sample_time": "Fixed 0.01-second weights. Sampled CPU call-stack residency, not exact function elapsed timers; py-spy attachment overhead is not separated."
+  },
+  "mutually_exclusive_categories": [
+    {
+      "category": "nand_submission_excluding_gc",
+      "samples": 2133,
+      "seconds": 21.33,
+      "percent": 47.410536
+    },
+    {
+      "category": "staging_metadata_loop_excluding_above",
+      "samples": 879,
+      "seconds": 8.79,
+      "percent": 19.537675
+    },
+    {
+      "category": "data_motion_records_reduction",
+      "samples": 566,
+      "seconds": 5.66,
+      "percent": 12.580573
+    },
+    {
+      "category": "link_reservation_excluding_nand_gc",
+      "samples": 343,
+      "seconds": 3.43,
+      "percent": 7.623916
+    },
+    {
+      "category": "gc_collection",
+      "samples": 310,
+      "seconds": 3.1,
+      "percent": 6.89042
+    },
+    {
+      "category": "other",
+      "samples": 268,
+      "seconds": 2.68,
+      "percent": 5.956879
+    }
+  ],
+  "gc_collection_exclusive_subcategories": [
+    {
+      "category": "journal_deletion_order_snapshot",
+      "samples": 197,
+      "seconds": 1.97,
+      "percent": 4.378751
+    },
+    {
+      "category": "nand_submission",
+      "samples": 34,
+      "seconds": 0.34,
+      "percent": 0.755723
+    },
+    {
+      "category": "host_dram",
+      "samples": 34,
+      "seconds": 0.34,
+      "percent": 0.755723
+    },
+    {
+      "category": "other_collection",
+      "samples": 27,
+      "seconds": 0.27,
+      "percent": 0.600133
+    },
+    {
+      "category": "link_transfer",
+      "samples": 18,
+      "seconds": 0.18,
+      "percent": 0.400089
+    }
+  ],
+  "inclusive_python_function_hotspots": [
+    {
+      "file": "serving.py",
+      "function": "_run_until_decode_steps",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "b200_hbm_hbf_scan.py",
+      "function": "<module>",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_replay_authored_token_program",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "fast_simulation.py",
+      "function": "simulate_fast",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_schedule_execution_stages",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "reporting.py",
+      "function": "_run_scenario_in_context",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "b200_hbm_hbf_scan.py",
+      "function": "worker",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "b200_hbm_hbf_scan.py",
+      "function": "main",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "run_until_decode_steps",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "reporting.py",
+      "function": "run_scenario",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_execute_cohort",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_drain_prevalidated_compiled",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_execute",
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_resolve_task_execution",
+      "samples": 4448,
+      "seconds": 44.48,
+      "percent": 98.866415
+    },
+    {
+      "file": "data_motion.py",
+      "function": "_resolve_physical_task",
+      "samples": 4396,
+      "seconds": 43.96,
+      "percent": 97.710602
+    },
+    {
+      "file": "data_motion.py",
+      "function": "resolve_physical_task",
+      "samples": 4396,
+      "seconds": 43.96,
+      "percent": 97.710602
+    },
+    {
+      "file": "data_motion.py",
+      "function": "_execute_physical_task",
+      "samples": 4394,
+      "seconds": 43.94,
+      "percent": 97.666148
+    },
+    {
+      "file": "data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "samples": 4287,
+      "seconds": 42.87,
+      "percent": 95.287842
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "write",
+      "samples": 3691,
+      "seconds": 36.91,
+      "percent": 82.040453
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit",
+      "samples": 2009,
+      "seconds": 20.09,
+      "percent": 44.654368
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "samples": 1576,
+      "seconds": 15.76,
+      "percent": 35.030007
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_transfer",
+      "samples": 580,
+      "seconds": 5.8,
+      "percent": 12.891754
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_admit_host_request",
+      "samples": 410,
+      "seconds": 4.1,
+      "percent": 9.113136
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_validate_request",
+      "samples": 377,
+      "seconds": 3.77,
+      "percent": 8.37964
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_allocate",
+      "samples": 361,
+      "seconds": 3.61,
+      "percent": 8.024005
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "map_nand_address",
+      "samples": 349,
+      "seconds": 3.49,
+      "percent": 7.757279
+    },
+    {
+      "file": "memory_transfer.py",
+      "function": "reserve",
+      "samples": 341,
+      "seconds": 3.41,
+      "percent": 7.579462
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_validate_program_order",
+      "samples": 317,
+      "seconds": 3.17,
+      "percent": 7.04601
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_collect",
+      "samples": 310,
+      "seconds": 3.1,
+      "percent": 6.89042
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "split_nand_request",
+      "samples": 259,
+      "seconds": 2.59,
+      "percent": 5.756835
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_remember",
+      "samples": 206,
+      "seconds": 2.06,
+      "percent": 4.578795
+    },
+    {
+      "file": "nand_core.py",
+      "function": "<genexpr>",
+      "samples": 204,
+      "seconds": 2.04,
+      "percent": 4.534341
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "pop",
+      "samples": 197,
+      "seconds": 1.97,
+      "percent": 4.378751
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "read",
+      "samples": 134,
+      "seconds": 1.34,
+      "percent": 2.97844
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_host_id",
+      "samples": 101,
+      "seconds": 1.01,
+      "percent": 2.244943
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_read_full_pages",
+      "samples": 92,
+      "seconds": 0.92,
+      "percent": 2.044899
+    },
+    {
+      "file": "nand_core.py",
+      "function": "reserve",
+      "samples": 89,
+      "seconds": 0.89,
+      "percent": 1.978217
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit_read_pages",
+      "samples": 67,
+      "seconds": 0.67,
+      "percent": 1.48922
+    },
+    {
+      "file": "memory_transfer.py",
+      "function": "_number",
+      "samples": 60,
+      "seconds": 0.6,
+      "percent": 1.33363
+    },
+    {
+      "file": "data_motion.py",
+      "function": "_merge_latest_resource_intervals",
+      "samples": 58,
+      "seconds": 0.58,
+      "percent": 1.289175
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "validate_nand_request",
+      "samples": 53,
+      "seconds": 0.53,
+      "percent": 1.17804
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_bandwidth_ceiling_gb_s",
+      "samples": 52,
+      "seconds": 0.52,
+      "percent": 1.155812
+    },
+    {
+      "file": "hbf_staging_runtime.py",
+      "function": "release",
+      "samples": 46,
+      "seconds": 0.46,
+      "percent": 1.022449
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_reclaim_physical_allocations",
+      "samples": 46,
+      "seconds": 0.46,
+      "percent": 1.022449
+    },
+    {
+      "file": "data_motion.py",
+      "function": "release_staging_buffer",
+      "samples": 46,
+      "seconds": 0.46,
+      "percent": 1.022449
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "release",
+      "samples": 43,
+      "seconds": 0.43,
+      "percent": 0.955768
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_release_clean_pages",
+      "samples": 43,
+      "seconds": 0.43,
+      "percent": 0.955768
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_read_state",
+      "samples": 41,
+      "seconds": 0.41,
+      "percent": 0.911314
+    },
+    {
+      "file": "enum.py",
+      "function": "__call__",
+      "samples": 39,
+      "seconds": 0.39,
+      "percent": 0.866859
+    },
+    {
+      "file": "memory_types.py",
+      "function": "__post_init__",
+      "samples": 38,
+      "seconds": 0.38,
+      "percent": 0.844632
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_array_id",
+      "samples": 35,
+      "seconds": 0.35,
+      "percent": 0.777951
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_touch_page",
+      "samples": 34,
+      "seconds": 0.34,
+      "percent": 0.755723
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_host",
+      "samples": 34,
+      "seconds": 0.34,
+      "percent": 0.755723
+    },
+    {
+      "file": "memory_types.py",
+      "function": "transfer_page_bytes",
+      "samples": 33,
+      "seconds": 0.33,
+      "percent": 0.733496
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_page_for_write",
+      "samples": 33,
+      "seconds": 0.33,
+      "percent": 0.733496
+    }
+  ],
+  "deepest_python_function_hotspots": [
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "samples": 527,
+      "seconds": 5.27,
+      "percent": 11.713714
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_admit_host_request",
+      "samples": 406,
+      "seconds": 4.06,
+      "percent": 9.024228
+    },
+    {
+      "file": "data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "samples": 384,
+      "seconds": 3.84,
+      "percent": 8.53523
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "write",
+      "samples": 350,
+      "seconds": 3.5,
+      "percent": 7.779507
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "map_nand_address",
+      "samples": 338,
+      "seconds": 3.38,
+      "percent": 7.512781
+    },
+    {
+      "file": "memory_transfer.py",
+      "function": "reserve",
+      "samples": 280,
+      "seconds": 2.8,
+      "percent": 6.223605
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_transfer",
+      "samples": 212,
+      "seconds": 2.12,
+      "percent": 4.712158
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_remember",
+      "samples": 206,
+      "seconds": 2.06,
+      "percent": 4.578795
+    },
+    {
+      "file": "nand_core.py",
+      "function": "<genexpr>",
+      "samples": 204,
+      "seconds": 2.04,
+      "percent": 4.534341
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "split_nand_request",
+      "samples": 112,
+      "seconds": 1.12,
+      "percent": 2.489442
+    },
+    {
+      "file": "data_motion.py",
+      "function": "_execute_physical_task",
+      "samples": 107,
+      "seconds": 1.07,
+      "percent": 2.378306
+    },
+    {
+      "file": "nand_core.py",
+      "function": "reserve",
+      "samples": 89,
+      "seconds": 0.89,
+      "percent": 1.978217
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_host_id",
+      "samples": 66,
+      "seconds": 0.66,
+      "percent": 1.466993
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit_read_pages",
+      "samples": 65,
+      "seconds": 0.65,
+      "percent": 1.444766
+    },
+    {
+      "file": "memory_transfer.py",
+      "function": "_number",
+      "samples": 60,
+      "seconds": 0.6,
+      "percent": 1.33363
+    },
+    {
+      "file": "data_motion.py",
+      "function": "_merge_latest_resource_intervals",
+      "samples": 58,
+      "seconds": 0.58,
+      "percent": 1.289175
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit",
+      "samples": 50,
+      "seconds": 0.5,
+      "percent": 1.111358
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "validate_nand_request",
+      "samples": 45,
+      "seconds": 0.45,
+      "percent": 1.000222
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_drain_prevalidated_compiled",
+      "samples": 44,
+      "seconds": 0.44,
+      "percent": 0.977995
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_validate_program_order",
+      "samples": 42,
+      "seconds": 0.42,
+      "percent": 0.933541
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_release_clean_pages",
+      "samples": 42,
+      "seconds": 0.42,
+      "percent": 0.933541
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_read_state",
+      "samples": 38,
+      "seconds": 0.38,
+      "percent": 0.844632
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_array_id",
+      "samples": 35,
+      "seconds": 0.35,
+      "percent": 0.777951
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_allocate",
+      "samples": 35,
+      "seconds": 0.35,
+      "percent": 0.777951
+    },
+    {
+      "file": "memory_types.py",
+      "function": "transfer_page_bytes",
+      "samples": 33,
+      "seconds": 0.33,
+      "percent": 0.733496
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_page_for_write",
+      "samples": 33,
+      "seconds": 0.33,
+      "percent": 0.733496
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_bandwidth_ceiling_gb_s",
+      "samples": 31,
+      "seconds": 0.31,
+      "percent": 0.689042
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_record_host_admission",
+      "samples": 31,
+      "seconds": 0.31,
+      "percent": 0.689042
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_touch_page",
+      "samples": 29,
+      "seconds": 0.29,
+      "percent": 0.644588
+    },
+    {
+      "file": "enum.py",
+      "function": "__call__",
+      "samples": 28,
+      "seconds": 0.28,
+      "percent": 0.622361
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_count",
+      "samples": 28,
+      "seconds": 0.28,
+      "percent": 0.622361
+    },
+    {
+      "file": "memory_types.py",
+      "function": "__post_init__",
+      "samples": 25,
+      "seconds": 0.25,
+      "percent": 0.555679
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_block_key",
+      "samples": 23,
+      "seconds": 0.23,
+      "percent": 0.511225
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_set_program_frontier",
+      "samples": 23,
+      "seconds": 0.23,
+      "percent": 0.511225
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_invalidate_cache",
+      "samples": 23,
+      "seconds": 0.23,
+      "percent": 0.511225
+    }
+  ],
+  "inclusive_python_line_hotspots": [
+    {
+      "file": "reporting.py",
+      "function": "_run_scenario_in_context",
+      "line": 273,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "reporting.py",
+      "function": "run_scenario",
+      "line": 231,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "b200_hbm_hbf_scan.py",
+      "function": "main",
+      "line": 615,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "fast_simulation.py",
+      "function": "simulate_fast",
+      "line": 537,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_replay_authored_token_program",
+      "line": 13386,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "run_until_decode_steps",
+      "line": 10038,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_run_until_decode_steps",
+      "line": 10076,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "b200_hbm_hbf_scan.py",
+      "function": "<module>",
+      "line": 625,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_execute_cohort",
+      "line": 15321,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_schedule_execution_stages",
+      "line": 14659,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_drain_prevalidated_compiled",
+      "line": 1990,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "serving.py",
+      "function": "_execute",
+      "line": 15144,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "b200_hbm_hbf_scan.py",
+      "function": "worker",
+      "line": 337,
+      "samples": 4499,
+      "seconds": 44.99,
+      "percent": 100.0
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_resolve_task_execution",
+      "line": 2461,
+      "samples": 4447,
+      "seconds": 44.47,
+      "percent": 98.844188
+    },
+    {
+      "file": "data_motion.py",
+      "function": "resolve_physical_task",
+      "line": 899,
+      "samples": 4396,
+      "seconds": 43.96,
+      "percent": 97.710602
+    },
+    {
+      "file": "data_motion.py",
+      "function": "_resolve_physical_task",
+      "line": 931,
+      "samples": 4394,
+      "seconds": 43.94,
+      "percent": 97.666148
+    },
+    {
+      "file": "data_motion.py",
+      "function": "_execute_physical_task",
+      "line": 1033,
+      "samples": 4394,
+      "seconds": 43.94,
+      "percent": 97.666148
+    },
+    {
+      "file": "data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "line": 1102,
+      "samples": 3825,
+      "seconds": 38.25,
+      "percent": 85.018893
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "write",
+      "line": 889,
+      "samples": 2499,
+      "seconds": 24.99,
+      "percent": 55.545677
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit",
+      "line": 869,
+      "samples": 1593,
+      "seconds": 15.93,
+      "percent": 35.407868
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "write",
+      "line": 888,
+      "samples": 568,
+      "seconds": 5.68,
+      "percent": 12.625028
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_transfer",
+      "line": 668,
+      "samples": 560,
+      "seconds": 5.6,
+      "percent": 12.44721
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1056,
+      "samples": 418,
+      "seconds": 4.18,
+      "percent": 9.290954
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit",
+      "line": 860,
+      "samples": 379,
+      "seconds": 3.79,
+      "percent": 8.424094
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "write",
+      "line": 887,
+      "samples": 364,
+      "seconds": 3.64,
+      "percent": 8.090687
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_validate_request",
+      "line": 585,
+      "samples": 325,
+      "seconds": 3.25,
+      "percent": 7.223828
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_allocate",
+      "line": 710,
+      "samples": 310,
+      "seconds": 3.1,
+      "percent": 6.89042
+    },
+    {
+      "file": "data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "line": 1202,
+      "samples": 278,
+      "seconds": 2.78,
+      "percent": 6.179151
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_validate_program_order",
+      "line": 473,
+      "samples": 268,
+      "seconds": 2.68,
+      "percent": 5.956879
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "map_nand_address",
+      "line": 125,
+      "samples": 209,
+      "seconds": 2.09,
+      "percent": 4.645477
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_collect",
+      "line": 797,
+      "samples": 197,
+      "seconds": 1.97,
+      "percent": 4.378751
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_remember",
+      "line": 328,
+      "samples": 196,
+      "seconds": 1.96,
+      "percent": 4.356524
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "pop",
+      "line": 352,
+      "samples": 196,
+      "seconds": 1.96,
+      "percent": 4.356524
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1169,
+      "samples": 130,
+      "seconds": 1.3,
+      "percent": 2.889531
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_admit_host_request",
+      "line": 418,
+      "samples": 117,
+      "seconds": 1.17,
+      "percent": 2.600578
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_admit_host_request",
+      "line": 405,
+      "samples": 110,
+      "seconds": 1.1,
+      "percent": 2.444988
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "split_nand_request",
+      "line": 225,
+      "samples": 107,
+      "seconds": 1.07,
+      "percent": 2.378306
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_admit_host_request",
+      "line": 412,
+      "samples": 105,
+      "seconds": 1.05,
+      "percent": 2.333852
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1045,
+      "samples": 101,
+      "seconds": 1.01,
+      "percent": 2.244943
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "read",
+      "line": 1095,
+      "samples": 92,
+      "seconds": 0.92,
+      "percent": 2.044899
+    },
+    {
+      "file": "nand_core.py",
+      "function": "<genexpr>",
+      "line": 1169,
+      "samples": 90,
+      "seconds": 0.9,
+      "percent": 2.000445
+    },
+    {
+      "file": "memory_transfer.py",
+      "function": "reserve",
+      "line": 160,
+      "samples": 79,
+      "seconds": 0.79,
+      "percent": 1.755946
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1142,
+      "samples": 76,
+      "seconds": 0.76,
+      "percent": 1.689264
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1171,
+      "samples": 69,
+      "seconds": 0.69,
+      "percent": 1.533674
+    },
+    {
+      "file": "memory_transfer.py",
+      "function": "reserve",
+      "line": 104,
+      "samples": 69,
+      "seconds": 0.69,
+      "percent": 1.533674
+    },
+    {
+      "file": "data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "line": 1198,
+      "samples": 68,
+      "seconds": 0.68,
+      "percent": 1.511447
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "_read_full_pages",
+      "line": 1147,
+      "samples": 67,
+      "seconds": 0.67,
+      "percent": 1.48922
+    },
+    {
+      "file": "nand_core.py",
+      "function": "submit_read_pages",
+      "line": 1023,
+      "samples": 66,
+      "seconds": 0.66,
+      "percent": 1.466993
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1145,
+      "samples": 62,
+      "seconds": 0.62,
+      "percent": 1.378084
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_host_id",
+      "line": 378,
+      "samples": 59,
+      "seconds": 0.59,
+      "percent": 1.311403
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1049,
+      "samples": 57,
+      "seconds": 0.57,
+      "percent": 1.266948
+    },
+    {
+      "file": "nand_core.py",
+      "function": "<genexpr>",
+      "line": 1171,
+      "samples": 54,
+      "seconds": 0.54,
+      "percent": 1.200267
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1155,
+      "samples": 53,
+      "seconds": 0.53,
+      "percent": 1.17804
+    },
+    {
+      "file": "nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "line": 1125,
+      "samples": 52,
+      "seconds": 0.52,
+      "percent": 1.155812
+    },
+    {
+      "file": "memory_mapping.py",
+      "function": "split_nand_request",
+      "line": 221,
+      "samples": 49,
+      "seconds": 0.49,
+      "percent": 1.089131
+    },
+    {
+      "file": "data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "line": 1194,
+      "samples": 46,
+      "seconds": 0.46,
+      "percent": 1.022449
+    },
+    {
+      "file": "event_kernel.py",
+      "function": "_reclaim_physical_allocations",
+      "line": 1235,
+      "samples": 46,
+      "seconds": 0.46,
+      "percent": 1.022449
+    },
+    {
+      "file": "hbf_staging_runtime.py",
+      "function": "release",
+      "line": 66,
+      "samples": 46,
+      "seconds": 0.46,
+      "percent": 1.022449
+    },
+    {
+      "file": "data_motion.py",
+      "function": "release_staging_buffer",
+      "line": 265,
+      "samples": 46,
+      "seconds": 0.46,
+      "percent": 1.022449
+    },
+    {
+      "file": "hbf_staging.py",
+      "function": "release",
+      "line": 1251,
+      "samples": 43,
+      "seconds": 0.43,
+      "percent": 0.955768
+    }
+  ],
+  "native_leaf_file_categories": [
+    {
+      "category": "cpython_dll",
+      "samples": 4162,
+      "seconds": 41.62,
+      "percent": 92.509447
+    },
+    {
+      "category": "cython_extension_pyd",
+      "samples": 199,
+      "seconds": 1.99,
+      "percent": 4.423205
+    },
+    {
+      "category": "other_native",
+      "samples": 138,
+      "seconds": 1.38,
+      "percent": 3.067348
+    }
+  ],
+  "ten_second_bins": [
+    {
+      "start_elapsed_seconds": 0,
+      "end_elapsed_seconds": 10,
+      "sample_count": 1000,
+      "categories": [
+        {
+          "category": "nand_submission_excluding_gc",
+          "samples": 455,
+          "percent_of_bin": 45.5
+        },
+        {
+          "category": "staging_metadata_loop_excluding_above",
+          "samples": 200,
+          "percent_of_bin": 20.0
+        },
+        {
+          "category": "data_motion_records_reduction",
+          "samples": 140,
+          "percent_of_bin": 14.0
+        },
+        {
+          "category": "link_reservation_excluding_nand_gc",
+          "samples": 76,
+          "percent_of_bin": 7.6
+        },
+        {
+          "category": "gc_collection",
+          "samples": 65,
+          "percent_of_bin": 6.5
+        },
+        {
+          "category": "other",
+          "samples": 64,
+          "percent_of_bin": 6.4
+        }
+      ]
+    },
+    {
+      "start_elapsed_seconds": 10,
+      "end_elapsed_seconds": 20,
+      "sample_count": 1000,
+      "categories": [
+        {
+          "category": "nand_submission_excluding_gc",
+          "samples": 503,
+          "percent_of_bin": 50.3
+        },
+        {
+          "category": "staging_metadata_loop_excluding_above",
+          "samples": 206,
+          "percent_of_bin": 20.6
+        },
+        {
+          "category": "data_motion_records_reduction",
+          "samples": 82,
+          "percent_of_bin": 8.2
+        },
+        {
+          "category": "gc_collection",
+          "samples": 81,
+          "percent_of_bin": 8.1
+        },
+        {
+          "category": "link_reservation_excluding_nand_gc",
+          "samples": 66,
+          "percent_of_bin": 6.6
+        },
+        {
+          "category": "other",
+          "samples": 62,
+          "percent_of_bin": 6.2
+        }
+      ]
+    },
+    {
+      "start_elapsed_seconds": 20,
+      "end_elapsed_seconds": 30,
+      "sample_count": 1000,
+      "categories": [
+        {
+          "category": "nand_submission_excluding_gc",
+          "samples": 482,
+          "percent_of_bin": 48.2
+        },
+        {
+          "category": "staging_metadata_loop_excluding_above",
+          "samples": 174,
+          "percent_of_bin": 17.4
+        },
+        {
+          "category": "data_motion_records_reduction",
+          "samples": 162,
+          "percent_of_bin": 16.2
+        },
+        {
+          "category": "link_reservation_excluding_nand_gc",
+          "samples": 74,
+          "percent_of_bin": 7.4
+        },
+        {
+          "category": "gc_collection",
+          "samples": 57,
+          "percent_of_bin": 5.7
+        },
+        {
+          "category": "other",
+          "samples": 51,
+          "percent_of_bin": 5.1
+        }
+      ]
+    },
+    {
+      "start_elapsed_seconds": 30,
+      "end_elapsed_seconds": 40,
+      "sample_count": 1000,
+      "categories": [
+        {
+          "category": "nand_submission_excluding_gc",
+          "samples": 478,
+          "percent_of_bin": 47.8
+        },
+        {
+          "category": "staging_metadata_loop_excluding_above",
+          "samples": 186,
+          "percent_of_bin": 18.6
+        },
+        {
+          "category": "data_motion_records_reduction",
+          "samples": 134,
+          "percent_of_bin": 13.4
+        },
+        {
+          "category": "link_reservation_excluding_nand_gc",
+          "samples": 80,
+          "percent_of_bin": 8.0
+        },
+        {
+          "category": "other",
+          "samples": 63,
+          "percent_of_bin": 6.3
+        },
+        {
+          "category": "gc_collection",
+          "samples": 59,
+          "percent_of_bin": 5.9
+        }
+      ]
+    },
+    {
+      "start_elapsed_seconds": 40,
+      "end_elapsed_seconds": 44.99,
+      "sample_count": 499,
+      "categories": [
+        {
+          "category": "nand_submission_excluding_gc",
+          "samples": 215,
+          "percent_of_bin": 43.086172
+        },
+        {
+          "category": "staging_metadata_loop_excluding_above",
+          "samples": 113,
+          "percent_of_bin": 22.645291
+        },
+        {
+          "category": "gc_collection",
+          "samples": 48,
+          "percent_of_bin": 9.619238
+        },
+        {
+          "category": "data_motion_records_reduction",
+          "samples": 48,
+          "percent_of_bin": 9.619238
+        },
+        {
+          "category": "link_reservation_excluding_nand_gc",
+          "samples": 47,
+          "percent_of_bin": 9.418838
+        },
+        {
+          "category": "other",
+          "samples": 28,
+          "percent_of_bin": 5.611222
+        }
+      ]
+    }
+  ],
+  "real_hot_stack_paths": [
+    {
+      "samples": 271,
+      "percent": 6.023561,
+      "python_tail": [
+        {
+          "file": "event_kernel.py",
+          "function": "_drain_prevalidated_compiled",
+          "line": 1990
+        },
+        {
+          "file": "event_kernel.py",
+          "function": "_resolve_task_execution",
+          "line": 2461
+        },
+        {
+          "file": "data_motion.py",
+          "function": "resolve_physical_task",
+          "line": 899
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1202
+        }
+      ]
+    },
+    {
+      "samples": 214,
+      "percent": 4.756613,
+      "python_tail": [
+        {
+          "file": "event_kernel.py",
+          "function": "_resolve_task_execution",
+          "line": 2461
+        },
+        {
+          "file": "data_motion.py",
+          "function": "resolve_physical_task",
+          "line": 899
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        }
+      ]
+    },
+    {
+      "samples": 200,
+      "percent": 4.445432,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "resolve_physical_task",
+          "line": 899
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 888
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "_transfer",
+          "line": 668
+        }
+      ]
+    },
+    {
+      "samples": 196,
+      "percent": 4.356524,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 887
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "_allocate",
+          "line": 710
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "_collect",
+          "line": 797
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "pop",
+          "line": 352
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "_remember",
+          "line": 328
+        }
+      ]
+    },
+    {
+      "samples": 117,
+      "percent": 2.600578,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 869
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_submit_ocp_single_page_summary",
+          "line": 1056
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_admit_host_request",
+          "line": 418
+        }
+      ]
+    },
+    {
+      "samples": 107,
+      "percent": 2.378306,
+      "python_tail": [
+        {
+          "file": "serving.py",
+          "function": "_replay_authored_token_program",
+          "line": 13386
+        },
+        {
+          "file": "event_kernel.py",
+          "function": "_drain_prevalidated_compiled",
+          "line": 1990
+        },
+        {
+          "file": "event_kernel.py",
+          "function": "_resolve_task_execution",
+          "line": 2461
+        },
+        {
+          "file": "data_motion.py",
+          "function": "resolve_physical_task",
+          "line": 899
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        }
+      ]
+    },
+    {
+      "samples": 105,
+      "percent": 2.333852,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 869
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_submit_ocp_single_page_summary",
+          "line": 1056
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_admit_host_request",
+          "line": 412
+        }
+      ]
+    },
+    {
+      "samples": 105,
+      "percent": 2.333852,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 869
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_submit_ocp_single_page_summary",
+          "line": 1056
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_admit_host_request",
+          "line": 405
+        }
+      ]
+    },
+    {
+      "samples": 90,
+      "percent": 2.000445,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 869
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_submit_ocp_single_page_summary",
+          "line": 1169
+        },
+        {
+          "file": "nand_core.py",
+          "function": "<genexpr>",
+          "line": 1169
+        }
+      ]
+    },
+    {
+      "samples": 81,
+      "percent": 1.8004,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "resolve_physical_task",
+          "line": 899
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "memory_mapping.py",
+          "function": "map_nand_address",
+          "line": 125
+        }
+      ]
+    },
+    {
+      "samples": 75,
+      "percent": 1.667037,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 869
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_submit_ocp_single_page_summary",
+          "line": 1142
+        }
+      ]
+    },
+    {
+      "samples": 73,
+      "percent": 1.622583,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 888
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "_transfer",
+          "line": 668
+        },
+        {
+          "file": "memory_transfer.py",
+          "function": "reserve",
+          "line": 160
+        }
+      ]
+    },
+    {
+      "samples": 68,
+      "percent": 1.511447,
+      "python_tail": [
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 860
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_validate_request",
+          "line": 585
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_validate_program_order",
+          "line": 473
+        },
+        {
+          "file": "memory_mapping.py",
+          "function": "split_nand_request",
+          "line": 225
+        },
+        {
+          "file": "memory_mapping.py",
+          "function": "map_nand_address",
+          "line": 125
+        }
+      ]
+    },
+    {
+      "samples": 67,
+      "percent": 1.48922,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 888
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "_transfer",
+          "line": 668
+        },
+        {
+          "file": "memory_transfer.py",
+          "function": "reserve",
+          "line": 104
+        }
+      ]
+    },
+    {
+      "samples": 64,
+      "percent": 1.422538,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "read",
+          "line": 1095
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "_read_full_pages",
+          "line": 1147
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit_read_pages",
+          "line": 1023
+        }
+      ]
+    },
+    {
+      "samples": 61,
+      "percent": 1.355857,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 869
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_submit_ocp_single_page_summary",
+          "line": 1145
+        }
+      ]
+    },
+    {
+      "samples": 57,
+      "percent": 1.266948,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 869
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_submit_ocp_single_page_summary",
+          "line": 1045
+        },
+        {
+          "file": "memory_mapping.py",
+          "function": "map_nand_address",
+          "line": 125
+        }
+      ]
+    },
+    {
+      "samples": 54,
+      "percent": 1.200267,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 869
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_submit_ocp_single_page_summary",
+          "line": 1171
+        },
+        {
+          "file": "nand_core.py",
+          "function": "<genexpr>",
+          "line": 1171
+        }
+      ]
+    },
+    {
+      "samples": 49,
+      "percent": 1.089131,
+      "python_tail": [
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1102
+        },
+        {
+          "file": "hbf_staging.py",
+          "function": "write",
+          "line": 889
+        },
+        {
+          "file": "nand_core.py",
+          "function": "submit",
+          "line": 860
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_validate_request",
+          "line": 585
+        },
+        {
+          "file": "nand_core.py",
+          "function": "_validate_program_order",
+          "line": 473
+        },
+        {
+          "file": "memory_mapping.py",
+          "function": "split_nand_request",
+          "line": 221
+        }
+      ]
+    },
+    {
+      "samples": 46,
+      "percent": 1.022449,
+      "python_tail": [
+        {
+          "file": "event_kernel.py",
+          "function": "_drain_prevalidated_compiled",
+          "line": 1990
+        },
+        {
+          "file": "event_kernel.py",
+          "function": "_resolve_task_execution",
+          "line": 2461
+        },
+        {
+          "file": "data_motion.py",
+          "function": "resolve_physical_task",
+          "line": 899
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_resolve_physical_task",
+          "line": 931
+        },
+        {
+          "file": "data_motion.py",
+          "function": "_execute_physical_task",
+          "line": 1033
+        },
+        {
+          "file": "data_motion.py",
+          "function": "execute_prepared_physical_task",
+          "line": 1194
+        }
+      ]
+    }
+  ],
+  "conclusions": [
+    "NAND submission outside GC dominates 47.411% and remains about 43-50% in every time bin.",
+    "HbfStagingController.write inclusive 82.04%; observed write line 889 scalar io.write_flash branch inclusive 55.546%, transfer line 888 inclusive 12.625%. These overlap with descendant hotspot rows.",
+    "GC _collect inclusive 6.890%; deletion-order tuple(self) journal snapshot 4.379% of all samples. GC copy itself is not the main current cost.",
+    "The source fallback returns an entire aligned long write to scalar after encountering a live-copy GC victim. Safe non-GC portions after that boundary still repeatedly incur page mapping, host admission, NAND summary object construction and LINK/record reduction.",
+    "No rollback_transaction or full controller snapshot hotspot appeared in this window. This is a real 45-second late-Prefill window, not the whole-request CPU decomposition."
+  ],
+  "native_symbol_limitations": [
+    "Native stacks contain unresolved addresses and coarse PyInit labels for .pyd frames; CPython export names can be broad nearest symbols. Do not infer precise internal Cython function percentages from them.",
+    "92.509% of native leaf samples are in CPython DLL; this supports interpreter/object operation overhead but is not a separate additive stage. PyObject_GC_* names refer to Python object garbage collection, not simulated NAND GC.",
+    "Python source frames and line numbers are available for the real hot path; inclusive ancestors are shared and cannot be added to each other."
+  ],
+  "validation_design_targets": [
+    {
+      "path": "src/heterollm_sim/hbf_staging.py",
+      "function": "write",
+      "lines": [
+        870,
+        887,
+        888,
+        889
+      ],
+      "requirement": "Reproduce full aligned bulk-eligible write with free/active safe pages, a live-copy GC boundary, then another no-GC safe span. Compare exact scalar-vs-segmented IO call sequence, arrivals/completions, all counters, ownership/read-cache state and timeline."
+    },
+    {
+      "path": "src/heterollm_sim/hbf_staging.py",
+      "function": "_collect",
+      "lines": [
+        766,
+        797
+      ],
+      "requirement": "Keep original live-copy boundary scalar and preserve page-zero erase dependency and insertion-order victim ties; do not claim journal-only fix solves dominant NAND path."
+    },
+    {
+      "path": "src/heterollm_sim/nand_core.py",
+      "function": "_submit_ocp_single_page_summary",
+      "lines": [
+        1032,
+        1056,
+        1169,
+        1171
+      ],
+      "requirement": "Existing physical summary/admission semantics must remain exact while avoiding redundant per-page dispatcher work; no bank-parallel latency shortcut."
+    },
+    {
+      "path": "src/heterollm_sim/data_motion.py",
+      "function": "execute_prepared_physical_task",
+      "lines": [
+        1194,
+        1202
+      ],
+      "requirement": "Check record aggregation and resource intervals remain bit-for-bit equal when IO submission is segmented."
+    }
+  ]
+}

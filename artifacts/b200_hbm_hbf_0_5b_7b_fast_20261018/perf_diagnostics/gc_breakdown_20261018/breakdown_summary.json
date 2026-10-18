@@ -322,5 +322,43 @@
     "Current remaining bounded-workload cost is the one-time dense cache and 524288-block initial index plus scalar page IO. No full end-to-end Prefill speedup is claimed.",
     "This path can explain a post-exhaustion complexity cliff; old live scan logs did not expose GC counters, so its exact share of the interrupted formal 107-block execution is not directly measured."
   ],
-  "exact_state_validation": "Optimization agent reports 97 focused tests including old/new real-NAND controller/core/calendar/allocator/cost equality for live-copy GC, native on/off and detailed capture on/off."
+  "exact_state_validation": "Optimization agent reports 97 focused tests including old/new real-NAND controller/core/calendar/allocator/cost equality for live-copy GC, native on/off and detailed capture on/off.",
+  "formal_prefill_observation": {
+    "observed_at_beijing": "2026-10-18T17:05:02.884702+08:00",
+    "point_id": "qwen2_5-1_5b__HBF__P262144__D1024",
+    "log_attempt_index": 3,
+    "worker_pid": 42472,
+    "completed_prefill_blocks": 122,
+    "total_prefill_blocks": 128,
+    "latest_checkpoint_wall_seconds": {
+      "90": 778.09,
+      "100": 880.89,
+      "101": 1002.78,
+      "102": 1121.27,
+      "107": 1725.28,
+      "110": 2090.2,
+      "120": 3301.77,
+      "122": 3547.98
+    },
+    "windows_seconds": {
+      "90_to_100": 102.8,
+      "100_to_101": 121.89,
+      "101_to_102": 118.49,
+      "100_to_107": 844.39,
+      "100_to_110": 1209.31,
+      "110_to_120": 1211.57
+    },
+    "previous_attempt_windows_seconds": {
+      "90_to_100": 115.21,
+      "100_to_101": 362.03,
+      "101_to_102": 368.65,
+      "100_to_107": 2641.73
+    },
+    "historical_segment_speedups": {
+      "100_to_101": 2.9701370087784067,
+      "100_to_107": 3.1285661838723815
+    },
+    "semantics": "Historical non-ABBA partial-request wall-time comparison. Serving-cohort boundaries only; task-local completion is not a complete Prefill block. No full-request speedup or remaining GC cost breakdown measured.",
+    "conclusion": "Latest post-100 blocks remain near 121 seconds each versus about 10 seconds before 100; improvement observed, slowdown remains. Controller ABBA 10.94x is not the formal request speedup."
+  }
 }

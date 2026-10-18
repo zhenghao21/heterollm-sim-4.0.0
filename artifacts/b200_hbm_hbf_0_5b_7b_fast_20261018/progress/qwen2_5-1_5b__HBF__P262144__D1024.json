@@ -4,21 +4,13 @@
   "architecture": "HBF",
   "prompt_tokens": 262144,
   "output_tokens": 1024,
-  "status": "running",
   "pid": 42472,
   "simulation_mode": "fast",
-  "approximation": {},
-  "real_prefill_steps": 9,
+  "real_prefill_steps": 127,
   "real_decode_steps": 0,
-  "updated_at": "2026-10-18T08:04:50.853890+00:00",
-  "wall_seconds": 73.32799999997951,
-  "progress": {
-    "stage": "cohort_tasks",
-    "completed": 1024,
-    "total": 1279,
-    "message": "正在连续物理状态上执行当前批次",
-    "simulated_time_ns": 5699956931.460337,
-    "metadata": {},
-    "unit": "schedule_tasks"
-  }
+  "approximation": {},
+  "status": "capacity_rejected",
+  "updated_at": "2026-10-18T09:15:30.751312+00:00",
+  "wall_seconds": 4313.234999999986,
+  "reason": "MemoryError: insufficient HBF space for immutable preload and GC reserve"
 }

@@ -1,0 +1,16 @@
+{
+  "pid": 51352,
+  "point_id": "qwen2_5-1_5b__HBF__P262144__D1024",
+  "simulation_mode": "fast",
+  "candidate_only": true,
+  "formal_queue_remains_paused": true,
+  "baseline": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\b200_hbm_hbf_0_5b_7b_fast_20261018\\points\\qwen2_5-1_5b__HBF__P262144__D1024.json",
+  "scope": "same full-budget request, new fast implementation only; no old or detailed reference rerun",
+  "baseline_status": "capacity_rejected",
+  "baseline_reason": "MemoryError: insufficient HBF space for immutable preload and GC reserve",
+  "baseline_window_seconds": {
+    "100_to_107": 844.39,
+    "110_to_120": 1211.57
+  },
+  "timing_semantics": "historical non-ABBA comparison; candidate observer adds bounded JSON progress writes"
+}

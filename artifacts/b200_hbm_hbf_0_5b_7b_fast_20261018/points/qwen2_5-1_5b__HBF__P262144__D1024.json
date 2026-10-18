@@ -4,7 +4,7 @@
   "architecture": "HBF",
   "prompt_tokens": 262144,
   "output_tokens": 1024,
-  "started_at": "2026-10-18T06:52:40.445727+00:00",
+  "started_at": "2026-10-18T08:03:37.516100+00:00",
   "ttft_ns": null,
   "tpot_ns": null,
   "python_executable": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\.venv\\Scripts\\python.exe",
@@ -22,7 +22,7 @@
       "sampling_strategy": "adaptive"
     }
   },
-  "pid": 30532,
+  "pid": 42472,
   "paired_reference": {
     "model_name": "Qwen2.5-1.5B",
     "prompt_tokens": 262144,
@@ -84,10 +84,10 @@
     100,
     100
   ],
-  "status": "interrupted",
-  "reason": "ExecutionCancelledError: 仿真任务已取消",
-  "finished_at": "2026-10-18T07:52:56.812338+00:00",
-  "wall_seconds": 3616.375,
-  "real_prefill_steps": 107,
+  "status": "capacity_rejected",
+  "reason": "MemoryError: insufficient HBF space for immutable preload and GC reserve",
+  "finished_at": "2026-10-18T09:15:30.751312+00:00",
+  "wall_seconds": 4313.234999999986,
+  "real_prefill_steps": 127,
   "real_decode_steps": 0
 }

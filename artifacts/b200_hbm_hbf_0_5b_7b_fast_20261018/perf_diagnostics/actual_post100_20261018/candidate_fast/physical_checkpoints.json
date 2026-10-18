@@ -1,0 +1,42 @@
+[
+  {
+    "prefill_completed": 125,
+    "task_completed": 1024,
+    "task_total": 1279,
+    "reference_simulated_time_ns": 685413957561.7616,
+    "candidate_simulated_time_ns": 685413957561.7616,
+    "exact_equal": true
+  },
+  {
+    "prefill_completed": 126,
+    "task_completed": 1024,
+    "task_total": 1279,
+    "reference_simulated_time_ns": 709078321796.4534,
+    "candidate_simulated_time_ns": 709078321796.4534,
+    "exact_equal": true
+  },
+  {
+    "prefill_completed": 127,
+    "task_completed": 256,
+    "task_total": 1292,
+    "reference_simulated_time_ns": 718722758315.3732,
+    "candidate_simulated_time_ns": 718722758315.3732,
+    "exact_equal": true
+  },
+  {
+    "prefill_completed": 127,
+    "task_completed": 512,
+    "task_total": 1292,
+    "reference_simulated_time_ns": 723541788481.0206,
+    "candidate_simulated_time_ns": 723541788481.0206,
+    "exact_equal": true
+  },
+  {
+    "prefill_completed": 127,
+    "task_completed": 768,
+    "task_total": 1292,
+    "reference_simulated_time_ns": 728018193677.9133,
+    "candidate_simulated_time_ns": 728018193677.9133,
+    "exact_equal": true
+  }
+]

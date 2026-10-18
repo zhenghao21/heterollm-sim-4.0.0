@@ -676,21 +676,21 @@
     "total": 72,
     "failed": 0,
     "completed": 27,
-    "capacity_rejected": 0,
+    "capacity_rejected": 1,
     "forecast_rejected": 0,
     "forecast_completed": 27,
     "detailed_completed": 0,
-    "pending": 45
+    "pending": 44
   },
   "queue_status": {
-    "status": "running",
+    "status": "paused",
     "manager_pid": 33500,
-    "updated_at": "2026-10-18T08:03:36.966103+00:00",
+    "updated_at": "2026-10-18T09:16:41.192989+00:00",
     "total": 72,
     "simulation_mode": "fast",
     "completed": 27,
     "forecast_completed": 27,
-    "capacity_rejected": 0,
+    "capacity_rejected": 1,
     "forecast_rejected": 0,
     "failed": 0,
     "retry_priority_points": [
@@ -703,19 +703,8 @@
     "retry_group_completed": 4,
     "retry_group_accepted": true,
     "pending": 44,
-    "running": [
-      {
-        "point_id": "qwen2_5-1_5b__HBF__P262144__D1024",
-        "model_id": "qwen2_5-1_5b",
-        "architecture": "HBF",
-        "prompt_tokens": 262144,
-        "output_tokens": 1024,
-        "pid": 27640,
-        "started_at": "2026-10-18T08:03:36.962754+00:00",
-        "simulation_mode": "fast"
-      }
-    ],
-    "reason": null
+    "running": [],
+    "reason": "stop_requested"
   },
   "historical_attempts": {
     "directory": "points_history",
@@ -49528,7 +49517,7 @@
       "architecture": "HBF",
       "prompt_tokens": 262144,
       "output_tokens": 1024,
-      "started_at": "2026-10-18T06:52:40.445727+00:00",
+      "started_at": "2026-10-18T08:03:37.516100+00:00",
       "ttft_ns": null,
       "tpot_ns": null,
       "python_executable": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\.venv\\Scripts\\python.exe",
@@ -49546,7 +49535,7 @@
           "sampling_strategy": "adaptive"
         }
       },
-      "pid": 30532,
+      "pid": 42472,
       "paired_reference": {
         "model_name": "Qwen2.5-1.5B",
         "prompt_tokens": 262144,
@@ -49608,11 +49597,11 @@
         100,
         100
       ],
-      "status": "interrupted",
-      "reason": "ExecutionCancelledError: 仿真任务已取消",
-      "finished_at": "2026-10-18T07:52:56.812338+00:00",
-      "wall_seconds": 3616.375,
-      "real_prefill_steps": 107,
+      "status": "capacity_rejected",
+      "reason": "MemoryError: insufficient HBF space for immutable preload and GC reserve",
+      "finished_at": "2026-10-18T09:15:30.751312+00:00",
+      "wall_seconds": 4313.234999999986,
+      "real_prefill_steps": 127,
       "real_decode_steps": 0,
       "ttft_fidelity": null,
       "tpot_fidelity": null,

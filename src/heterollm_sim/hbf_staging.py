@@ -866,6 +866,7 @@ class HbfStagingController:
         completion = float(time_ns)
         self._count("logical_write_bytes", byte_count)
         bulk_write = getattr(io, "write_flash_pages", None)
+        chunked_write = False
         if (offset % PAGE == 0 and byte_count % PAGE == 0 and stop - first >= 16
                 and bulk_write is not None):
             completion = self._write_full_pages(buffer_id, generation, first, stop,
@@ -873,7 +874,30 @@ class HbfStagingController:
             if completion is not None:
                 return completion
             completion = float(time_ns)
-        for index in range(first, stop):
+            chunked_write = type(self) is HbfStagingController and all(
+                name not in self.__dict__ and getattr(HbfStagingController, name) is method
+                for name, method in _EMPTY_GC_METHODS.items())
+        index = first
+        while index < stop:
+            if chunked_write:
+                # One live-copy collection must not force the rest of a long
+                # ordinary write through the scalar NAND/link adapters. Only
+                # batch the currently available allocation prefix: no victim
+                # selection or collection can occur inside this run. The
+                # boundary page below keeps the complete scalar GC sequence.
+                available = len(self._free_blocks) * self.config.pages_per_block + sum(
+                    self.config.pages_per_block - self._used[block] for block in self._active)
+                end = min(stop, index + available)
+                if end - index >= 16:
+                    bulk_end = self._write_full_pages(buffer_id, generation, index, end,
+                                                      float(time_ns), io, bulk_write)
+                    if bulk_end is not None:
+                        completion = max(completion, bulk_end)
+                        index = end
+                        continue
+                    # An authored media adapter may decline bulk execution.
+                    # Its untouched request keeps the ordinary scalar path.
+                    chunked_write = False
             lo, hi = max(0, offset - index * PAGE), min(PAGE, offset + byte_count - index * PAGE)
             key = (buffer_id, generation, index)
             self._touch_page(key)
@@ -907,6 +931,7 @@ class HbfStagingController:
                 page.ready_ns = time
                 self._refresh_read_state(key, page)
                 completion = max(completion, time)
+                index += 1
                 continue
             if page.slot is None:
                 page.slot, time = self._new_slot(time, io)
@@ -922,6 +947,7 @@ class HbfStagingController:
                 time = self._flush_page(key, page, time, io)
             self._refresh_read_state(key, page)
             completion = max(completion, time)
+            index += 1
         return completion
 
     def _write_full_pages(self, buffer_id, generation, first, stop, time_ns, io, bulk_write):
