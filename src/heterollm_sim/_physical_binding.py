@@ -8,7 +8,8 @@ normally; no value is inferred from samples of successive Tokens.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Optional, Tuple
+from collections.abc import Mapping
+from typing import Optional, Tuple
 
 
 _PHYSICAL_FIELDS = frozenset({
@@ -44,7 +45,14 @@ def _copy_physical_field(key, value):
     return value
 
 
+_GENERATION_SCALAR_TYPES = frozenset((str, int, float, bool, bytes, type(None)))
+
+
 def _has_explicit_generation(value) -> bool:
+    # Scalar leaves cannot contain a declaration. Most planner metadata is
+    # scalar; avoid two abstract-container checks for every such leaf.
+    if type(value) in _GENERATION_SCALAR_TYPES:
+        return False
     if isinstance(value, Mapping):
         for key, item in value.items():
             if (isinstance(key, str) and key.endswith("generation")

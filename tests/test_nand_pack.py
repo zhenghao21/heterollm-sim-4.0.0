@@ -152,3 +152,40 @@ def test_multi_lane_pack_matches_original_protocol_order_and_array_bits(case):
                 result = (result[:4], tuple((value.dtype.str, value.shape, value.tobytes()) for value in result[4:]))
         outcomes.append((result, directions, lookup, events))
     assert outcomes[0] == outcomes[1] == outcomes[2]
+
+
+@pytest.mark.parametrize("module", [python_source(), _nand_pack])
+def test_program_frontiers_keep_interleaved_order_and_page_zero_reset(module):
+    addresses = np.array([0, 1, 2, 3, 0, 2], dtype=np.int64) * 4096
+    current = {("a", 0): 4, ("b", 0): 3}
+    expected = {("a", 0): 2, ("b", 0): 2}
+    actual = module.validate_program_frontiers(addresses, 2, 4, (("a",), ("b",)), current)
+    assert list(actual.items()) == list(expected.items())
+    assert current == {("a", 0): 4, ("b", 0): 3}
+
+
+@pytest.mark.parametrize("module", [python_source(), _nand_pack])
+@pytest.mark.parametrize("span", [17, 2**63 - 1, 2**65])
+def test_program_frontiers_validate_int64_limit_without_rounding(module, span):
+    addresses = np.array([2**63 - 8192, 2**63 - 4096], dtype=np.int64)
+    physical_page = (2**63 - 8192) // 4096 // 2
+    block, page = divmod(physical_page, span)
+    current = {("a", block): page, ("b", block): page}
+    actual = module.validate_program_frontiers(addresses, 2, span, (("a",), ("b",)), current)
+    assert list(actual.items()) == [(("a", block), page + 1), (("b", block), page + 1)]
+
+
+@pytest.mark.parametrize("module", [python_source(), _nand_pack])
+def test_program_frontier_error_preserves_lookup_order_and_does_not_mutate(module):
+    class Observed(dict):
+        def get(self, key, default=None):
+            visited.append(key)
+            return super().get(key, default)
+
+    visited = []
+    current = Observed({("a", 0): 0})
+    with pytest.raises(ValueError, match=r"requires page 2, received 3"):
+        module.validate_program_frontiers(np.array([0, 4096, 12288], dtype=np.int64),
+                                         1, 4, (("a",),), current)
+    assert visited == [("a", 0)] * 3
+    assert current == {("a", 0): 0}

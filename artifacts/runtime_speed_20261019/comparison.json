@@ -1,0 +1,189 @@
+{
+  "scope": "Qwen2.5-0.5B, physical B200 scan geometry; 2048 input/5 output small execution diagnostic, not a formal scan/reference",
+  "baseline_revision": "98b7eff",
+  "protocol": "ABBA, serial owned diagnostic processes, eight highest eligible logical CPUs, same 32 input/2 output warmup before each measured request; formal scanner processes exited; no profiling or transaction capture in timed requests",
+  "phases": {
+    "HBM": {
+      "runs": [
+        {
+          "label": "A1",
+          "prefill_seconds": 4.484749600000214,
+          "decode_seconds": 5.359725400048774,
+          "total_seconds": 10.495131900010165
+        },
+        {
+          "label": "B1",
+          "prefill_seconds": 4.534518900036346,
+          "decode_seconds": 5.340077799977735,
+          "total_seconds": 10.526563699997496
+        },
+        {
+          "label": "B2",
+          "prefill_seconds": 4.5747297999914736,
+          "decode_seconds": 5.191893799987156,
+          "total_seconds": 10.454931599961128
+        },
+        {
+          "label": "A2",
+          "prefill_seconds": 4.536215700034518,
+          "decode_seconds": 5.333450099977199,
+          "total_seconds": 10.527218700037338
+        }
+      ],
+      "measurements": {
+        "prefill": {
+          "baseline_mean_seconds": 4.510482650017366,
+          "candidate_mean_seconds": 4.55462435001391,
+          "speedup": 0.9903083774633556,
+          "pair_speedups": [
+            0.9890243483083214,
+            0.991581120275775
+          ],
+          "baseline_drift_fraction": 0.01141033100617421
+        },
+        "decode": {
+          "baseline_mean_seconds": 5.346587750012986,
+          "candidate_mean_seconds": 5.265985799982445,
+          "speedup": 1.0153061464827364,
+          "pair_speedups": [
+            1.0036792722516366,
+            1.0272648681662928
+          ],
+          "baseline_drift_fraction": 0.004914405467582745
+        },
+        "total": {
+          "baseline_mean_seconds": 10.511175300023751,
+          "candidate_mean_seconds": 10.490747649979312,
+          "speedup": 1.001947206312267,
+          "pair_speedups": [
+            0.9970140493248202,
+            1.0069141628890694
+          ],
+          "baseline_drift_fraction": 0.003052636751962505
+        }
+      },
+      "all_simulation_fields_exact": true
+    },
+    "HBF": {
+      "runs": [
+        {
+          "label": "A1",
+          "prefill_seconds": 3.5690979000064544,
+          "decode_seconds": 2.971739600005094,
+          "total_seconds": 7.363882299978286
+        },
+        {
+          "label": "B1",
+          "prefill_seconds": 3.4332790999906138,
+          "decode_seconds": 2.851471700007096,
+          "total_seconds": 7.090201299986802
+        },
+        {
+          "label": "B2",
+          "prefill_seconds": 3.369613900023978,
+          "decode_seconds": 2.8543412999715656,
+          "total_seconds": 6.99661129998276
+        },
+        {
+          "label": "A2",
+          "prefill_seconds": 3.434329399955459,
+          "decode_seconds": 2.9595336000202224,
+          "total_seconds": 7.177898399997503
+        }
+      ],
+      "measurements": {
+        "prefill": {
+          "baseline_mean_seconds": 3.5017136499809567,
+          "candidate_mean_seconds": 3.401446500007296,
+          "speedup": 1.029477797158781,
+          "pair_speedups": [
+            1.0395594986775798,
+            1.0192056128243714
+          ],
+          "baseline_drift_fraction": 0.038486442217149426
+        },
+        "decode": {
+          "baseline_mean_seconds": 2.965636600012658,
+          "candidate_mean_seconds": 2.8529064999893308,
+          "speedup": 1.039514123587208,
+          "pair_speedups": [
+            1.0421774832966775,
+            1.036853441475168
+          ],
+          "baseline_drift_fraction": 0.004115811082456798
+        },
+        "total": {
+          "baseline_mean_seconds": 7.270890349987894,
+          "candidate_mean_seconds": 7.043406299984781,
+          "speedup": 1.0322974481826506,
+          "pair_speedups": [
+            1.0385998913728998,
+            1.0259107005151464
+          ],
+          "baseline_drift_fraction": 0.025579246973665766
+        }
+      },
+      "all_simulation_fields_exact": true
+    }
+  },
+  "transaction_comparisons": {
+    "HBM": {
+      "scope": "Separate untimed 32 input/3 output request, complete ordered physical_task/DRAM/NAND page-batch observations",
+      "exactly_equal": true,
+      "record_count": 4251
+    },
+    "HBF": {
+      "scope": "Separate untimed 32 input/3 output request, complete ordered physical_task/DRAM/NAND page-batch observations",
+      "exactly_equal": true,
+      "record_count": 10857
+    }
+  },
+  "simulation_results_exact": true,
+  "program_validation_only": {
+    "pages_per_run": 65536,
+    "repetitions": 10,
+    "banks": 256,
+    "pages_per_block": 256,
+    "runs": [
+      {
+        "label": "A1",
+        "seconds": 0.12075459997868165
+      },
+      {
+        "label": "B1",
+        "seconds": 0.07399200001964346
+      },
+      {
+        "label": "B2",
+        "seconds": 0.0739235999644734
+      },
+      {
+        "label": "A2",
+        "seconds": 0.12914139998611063
+      }
+    ],
+    "speedup": 1.6894499294978087,
+    "ordered_frontiers_exact": true,
+    "scope": "PROGRAM order precheck only; not a NAND/Prefill/request speedup"
+  },
+  "tests": {
+    "targeted_main": 453,
+    "independent_review": 136,
+    "counts_not_added_due_to_overlap": true
+  },
+  "live_sample": {
+    "worker_pid": 37460,
+    "phase": "3B HBF 256K/1K, Prefill block125+",
+    "duration_seconds": 20,
+    "rate_hz": 100,
+    "samples": 1998,
+    "sampling_errors": 1,
+    "inclusive_call_samples": {
+      "submit_write_pages": 553,
+      "submit_read_pages": 141,
+      "_allocate": 437,
+      "_collect": 188
+    },
+    "note": "Inclusive overlapping call paths, cannot sum; compiled bodies charged to the last Python frame; cannot identify pure numeric time from this leaf alone."
+  }
+}

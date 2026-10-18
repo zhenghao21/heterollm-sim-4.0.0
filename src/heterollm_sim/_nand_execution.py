@@ -16,6 +16,7 @@ from .memory_types import Operation, TransactionResult
 from ._nand_pack import (
     pack_single_lane as _single_lane_timeline_state, pack_multi_lane,
     publish_timeline, pack_host_admission, publish_host_admission, host_admission_mask,
+    validate_program_frontiers,
 )
 
 
@@ -172,16 +173,8 @@ def execute_pages(core, addresses, arrival_ns, link_program, *, operation=Operat
      nand_resources, array_ids, channel_ids, host_ids) = _geometry_plan(core, operation, banks, units, per_channel)
     program_frontiers = {}
     if not read:
-        for address in addresses.tolist():
-            page_index = address // 4096
-            bank, physical_page = page_index % banks, page_index // banks
-            block, page = divmod(physical_page, config.pages_per_block)
-            key = (*bank_keys[bank], block)
-            expected = program_frontiers.get(key, core._next_program_page.get(key, 0))
-            if page != 0 and page != expected:
-                raise ValueError("ocp_hbf_0_7 write order violation: block {} requires page {}, received {}"
-                                 .format(key, expected, page))
-            program_frontiers[key] = page + 1
+        program_frontiers = validate_program_frontiers(
+            addresses, banks, config.pages_per_block, bank_keys, core._next_program_page)
     # Shared array slots are supported; independently named buses must remain
     # distinct to preserve per-owner billing without ambiguous double counting.
     if (set(array_resources + array_names) & set(channel_names + host_names)

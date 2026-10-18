@@ -24,6 +24,38 @@ except ImportError:
     cython = _PythonMode()
 
 
+def validate_program_frontiers(addresses, banks, pages_per_block, bank_keys, current):
+    """Validate every PROGRAM in order without NumPy scalar/Python division.
+
+    execute_pages has already checked a nonnegative int64 page-address array.
+    The clipped divisor is exact even for a larger authored block: all page
+    indices are at most (2**63-1)//4096, hence remain in its first block.
+    No live frontier is mutated until the numeric command batch succeeds.
+    """
+    frontiers: dict = {}
+    bank_count: cython.longlong = banks
+    block_span: cython.longlong = min(pages_per_block, 2**63 - 1)
+    address: cython.longlong
+    page_index: cython.longlong
+    bank: cython.longlong
+    physical_page: cython.longlong
+    block: cython.longlong
+    page: cython.longlong
+    for address in addresses.tolist():
+        page_index = address // 4096
+        bank, physical_page = page_index % bank_count, page_index // bank_count
+        block, page = physical_page // block_span, physical_page % block_span
+        key = (*bank_keys[bank], block)
+        # Evaluate the authored current lookup even on an intra-batch hit,
+        # matching the existing mapping protocol and exception ordering.
+        expected = frontiers.get(key, current.get(key, 0))
+        if page != 0 and page != expected:
+            raise ValueError("ocp_hbf_0_7 write order violation: block {} requires page {}, received {}"
+                             .format(key, expected, page))
+        frontiers[key] = page + 1
+    return frontiers
+
+
 def ordered_indexed_maximum(target, indexes, values):
     """Apply the ordinary maximum.at operation to finite contiguous pages.
 
