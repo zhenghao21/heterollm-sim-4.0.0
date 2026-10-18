@@ -103,25 +103,27 @@ def test_live_metadata_keeps_every_field_order_type_and_original_summary_records
                   for row in summary.execution_records)
     expected = {"resource_busy_by_direction_ns": ledger._resource_busy_by_direction(tasks),
                 "dram_traffic": planner._summarize_dram_task_traffic(tasks, resource_owners=live.resource_owners),
-                "storage_traffic": planner._summarize_nand_task_traffic(tasks, resource_owners=live.resource_owners)}
-    # Observe that all three reducers receive the exact record tuple, not a
+                "storage_traffic": planner._summarize_nand_task_traffic(tasks, resource_owners=live.resource_owners),
+                "storage_gc_observations": planner._summarize_hbf_gc_observations(tasks)}
+    # Observe that all reducers receive the exact record tuple, not a
     # new wrapper collection, without changing their reduction code.
     observed = []
-    for name in ("_resource_busy_by_direction", "_summarize_dram_task_traffic", "_summarize_nand_task_traffic"):
+    for name in ("_resource_busy_by_direction", "_summarize_dram_task_traffic", "_summarize_nand_task_traffic",
+                 "_summarize_hbf_gc_observations"):
         original = getattr(planner, name)
         def wrapper(rows, _original=original, **kwargs):
             observed.append(rows)
             return _original(rows, **kwargs)
         monkeypatch.setattr(planner, name, wrapper)
     report = live.metadata()
-    assert observed == [summary.execution_records] * 3
+    assert observed == [summary.execution_records] * 4
     assert all(rows is summary.execution_records for rows in observed)
     assert exact({key: report[key] for key in expected}) == exact(expected)
     assert report["host_orchestration_task_count"] == 1
     assert report["host_submission_count"] == 2
     assert list(report) == ["task_count", "resource_accounted_bytes", "resource_busy_ns",
         "resource_busy_by_direction_ns", "category_time_ns", "critical_path_category_ns", "coverage",
-        "linear_state_bytes", "dram_traffic", "storage_traffic", "execution_stage_makespan_ns",
+        "linear_state_bytes", "dram_traffic", "storage_traffic", "storage_gc_observations", "execution_stage_makespan_ns",
         "host_orchestration_ns", "device_execution_ns", "host_task_time_ns", "host_device_overlap_ns",
         "execution_idle_ns", "execution_time_semantics", "host_orchestration_task_count",
         "host_submission_count", "physical_execution_scope", "cost_duration_semantics"]

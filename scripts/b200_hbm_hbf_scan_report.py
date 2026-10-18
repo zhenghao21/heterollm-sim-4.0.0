@@ -610,7 +610,7 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                 decision.get("reference_source_id") or "无匹配参考",
             )
             lines.append("| " + " | ".join(_markdown(value) for value in values) + " |")
-        lines.extend(["", "各轮校准判定、方向上下界及未来擦除分项均保留在 CSV/JSON 的原始预算记录中。", ""])
+        lines.extend(["", "各轮校准判定、方向上下界，以及擦除、GC、读写放置、缓存扰动和已有等待的分项均保留在 CSV/JSON 的原始预算记录中。", ""])
     unsuccessful = [row for row in rows if row.get("status") in {"failed", "capacity_rejected", "forecast_rejected"}]
     if unsuccessful:
         lines.extend(["## 未成功的配置", "", "| 模型 | 存储 | 输入/输出 | 状态 | 原因 |", "| --- | --- | --- | --- | --- |"])

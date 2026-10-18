@@ -172,7 +172,8 @@ class LiveCohortMetrics:
         # Planner imports the cohort execution primitives, so use a lazy
         # import for its existing physical traffic and direction reducers.
         from .planner import (_GPU_CONSUMER_FRONTEND_STAGE, _resource_busy_by_direction,
-                              _summarize_dram_task_traffic, _summarize_nand_task_traffic)
+                              _summarize_dram_task_traffic, _summarize_hbf_gc_observations,
+                              _summarize_nand_task_traffic)
         summary = self.summary()
         records = summary.execution_records
         host = tuple(row for row in summary.execution_records
@@ -194,6 +195,7 @@ class LiveCohortMetrics:
             "linear_state_bytes": summary.linear_state_bytes,
             "dram_traffic": _summarize_dram_task_traffic(records, resource_owners=self.resource_owners),
             "storage_traffic": _summarize_nand_task_traffic(records, resource_owners=self.resource_owners),
+            "storage_gc_observations": _summarize_hbf_gc_observations(records),
             "execution_stage_makespan_ns": summary.makespan_ns,
             **time_breakdown,
             "host_orchestration_task_count": len(host),

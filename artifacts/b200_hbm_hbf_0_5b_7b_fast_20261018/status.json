@@ -1,14 +1,14 @@
 {
-  "status": "running",
+  "status": "paused",
   "physical_weight_semantics": "canonical_shared_resident_weights_v1",
   "manager_pid": 37304,
-  "updated_at": "2026-10-18T10:01:52.770738+00:00",
+  "updated_at": "2026-10-18T12:00:18.498200+00:00",
   "total": 72,
   "simulation_mode": "fast",
-  "completed": 3,
-  "forecast_completed": 3,
+  "completed": 24,
+  "forecast_completed": 24,
   "capacity_rejected": 0,
-  "forecast_rejected": 0,
+  "forecast_rejected": 1,
   "failed": 0,
   "retry_priority_points": [
     "qwen2_5-1_5b__HBM__P262144__D1024",
@@ -38,20 +38,9 @@
     "qwen2_5-0_5b__HBF__P262144__D1024"
   ],
   "retry_group_total": 25,
-  "retry_group_completed": 0,
+  "retry_group_completed": 22,
   "retry_group_accepted": null,
-  "pending": 68,
-  "running": [
-    {
-      "point_id": "qwen2_5-1_5b__HBM__P262144__D1024",
-      "model_id": "qwen2_5-1_5b",
-      "architecture": "HBM",
-      "prompt_tokens": 262144,
-      "output_tokens": 1024,
-      "pid": 53108,
-      "started_at": "2026-10-18T10:00:37.487683+00:00",
-      "simulation_mode": "fast"
-    }
-  ],
-  "reason": "priority_revalidation"
+  "pending": 47,
+  "running": [],
+  "reason": "stop_requested"
 }

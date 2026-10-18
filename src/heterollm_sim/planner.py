@@ -29882,6 +29882,7 @@ def _estimate_serving_cohort_cost(
                 summary.execution_records,
                 resource_owners=lowering.schedule.resource_owners,
             ),
+            "storage_gc_observations": _summarize_hbf_gc_observations(summary.execution_records),
             "dram_traffic": _summarize_dram_task_traffic(
                 summary.execution_records,
                 resource_owners=lowering.schedule.resource_owners,
@@ -29999,6 +30000,50 @@ def _nand_queue_scope_description(scopes_by_owner):
     prefix = ("mixed admission scopes; peak is max of source samples, not a simultaneous device total: "
               if len(scopes) > 1 else "max across physical owners: ")
     return prefix + "; ".join(scopes)
+
+
+def _summarize_hbf_gc_observations(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
+    """Sum task-local staging deltas once per owner, never controller totals.
+
+    The ordinary staging ledger emits sparse counter differences. An absent
+    GC key in a recorded ledger row therefore means zero; an absent ledger
+    row on an executed HBF task is unavailable, not evidence of zero GC.
+    HOST/link records share that task's ledger and must not count it again.
+    """
+    fields = ("gc_cycles", "gc_copied_pages", "pressure_flushes", "rmw_pages")
+    totals, seen = {}, set()
+    for task in tasks:
+        metadata = task.metadata
+        staging = metadata.get("hbf_host_staging")
+        staging = staging if isinstance(staging, Mapping) else {}
+        owners = {str(owner) for owner in staging}
+        by_owner = metadata.get("physical_execution_by_owner")
+        if isinstance(by_owner, Mapping):
+            owners.update(str(owner) for owner, raw in by_owner.items()
+                          if isinstance(raw, Mapping)
+                          and str(raw.get("kind", "")).upper() in {"HBF", "MEMORYKIND.HBF"})
+        for owner in owners:
+            identity = task.task_id, owner
+            if identity in seen:
+                continue
+            seen.add(identity)
+            total = totals.setdefault(owner, {**dict.fromkeys(fields, 0),
+                "available": True, "recorded_task_count": 0, "expected_task_count": 0,
+                "semantics": "cohort_local_staging_counter_deltas"})
+            total["expected_task_count"] += 1
+            raw = staging.get(owner)
+            if (not isinstance(raw, Mapping) or any(type(raw.get(name, 0)) is not int
+                    or raw.get(name, 0) < 0 for name in fields)):
+                total["available"] = False
+                continue
+            total["recorded_task_count"] += 1
+            for name in fields:
+                total[name] += raw.get(name, 0)
+    for total in totals.values():
+        if not total["available"]:
+            for name in fields:
+                total[name] = None
+    return dict(sorted(totals.items()))
 
 
 def _summarize_nand_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=None) -> Mapping[str, object]:

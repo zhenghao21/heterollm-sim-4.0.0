@@ -198,11 +198,21 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
         # This entry point creates IR only. It neither previews a cost
         # schedule nor binds/executes any access against the live kernel.
         lowering = _lower_serving_cohort(scenario, cohort)
-        writes, declarations, fused = [], [], set()
+        writes, reads, declarations, fused = [], [], [], set()
+        staging_bindings = {}
+        temporary_read_pages = Counter()
+        immutable_reads = {}
+        read_unavailable = None
         partials = Counter()
         rounded_pages = Counter()
         for task in lowering.schedule.tasks:
             metadata = task.metadata
+            for owner, binding in metadata.get("hbf_host_staging_by_owner", {}).items():
+                if owner not in owners:
+                    continue
+                variants = staging_bindings.setdefault(owner, [])
+                if binding not in variants:
+                    variants.append(binding)
             if metadata.get("fusion_group") == "flash_attention" and metadata.get("fusion_enabled") is True:
                 fused.add(str(metadata.get("layer_id")))
             accesses = metadata.get("memory_accesses", ())
@@ -212,10 +222,47 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
             for access in accesses:
                 owner = str(access.get("physical_owner", ""))
                 operation = getattr(access.get("operation"), "value", access.get("operation"))
-                if owner not in owners or operation != "write":
+                if owner not in owners or operation not in {"read", "write"}:
                     continue
                 buffer_id = str(access.get("buffer_id", ""))
                 if buffer_id in kv_ids:
+                    continue
+                if operation == "read":
+                    # Resident generation-0 reads are immutable weights.
+                    # Fresh cohort temporaries can change physical banks
+                    # after collection, so their complete READ/cache effects
+                    # must accompany the ordinary WRITE placement budget.
+                    if (access.get("allocation_generation") == 0
+                            and access.get("allocation_arena") == "resident"):
+                        offset, size = access.get("offset_bytes"), access.get("byte_count")
+                        if (not buffer_id or type(offset) is not int or type(size) is not int
+                                or offset < 0 or size <= 0):
+                            read_unavailable = read_unavailable or "resident_read_span_unavailable"
+                        else:
+                            immutable_reads.setdefault(owner, set()).add((buffer_id, 0, offset, size))
+                        continue
+                    if (not buffer_id or not access.get("allocation_generation")
+                            or access.get("allocation_arena") == "resident"
+                            or access.get("alias_of") in kv_ids
+                            or access.get("alias_generation") == 0):
+                        read_unavailable = read_unavailable or "non_kv_reads_require_fresh_cohort_generation"
+                        continue
+                    offset, size = access.get("offset_bytes"), access.get("byte_count")
+                    if type(offset) is not int or type(size) is not int or offset < 0 or size <= 0:
+                        read_unavailable = read_unavailable or "non_kv_read_span_unavailable"
+                        continue
+                    alias_offset = access.get("alias_offset_bytes", 0)
+                    if type(alias_offset) is not int or alias_offset < 0:
+                        read_unavailable = read_unavailable or "non_kv_read_alias_offset_unavailable"
+                        continue
+                    reads.append((owner, buffer_id, offset, size,
+                        access.get("allocation_generation"), access.get("alias_of"),
+                        access.get("alias_generation"), alias_offset))
+                    # A nested alias can add a parent offset that is not in
+                    # this access row. Charge arbitrary page alignment for
+                    # aliases; fresh base NAND buffers are page aligned.
+                    alignment = PAGE_BYTES - 1 if access.get("alias_of") is not None else offset % PAGE_BYTES
+                    temporary_read_pages[owner] += _ceil_pages(alignment + size)
                     continue
                 if (not buffer_id or buffer_id.startswith("kv:")
                         or not access.get("allocation_generation")
@@ -243,9 +290,13 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
                     "alias_generation", "alias_offset_bytes", "allocation_arena")))
         if fused != {str(layer.layer_id) for layer in layers}:
             return None, "terminal_flash_attention_not_admitted_for_every_layer"
-        return {"signature": (tuple(writes), tuple(declarations)),
+        return {"signature": (tuple(writes), tuple(declarations)), "reads": tuple(reads),
                 "task_count": len(lowering.schedule.tasks), "writes": writes,
-                "partial_slots": partials, "rounded_write_pages": rounded_pages}, None
+                "partial_slots": partials, "rounded_write_pages": rounded_pages,
+                "staging_bindings": staging_bindings,
+                "temporary_read_pages": temporary_read_pages,
+                "immutable_reads": immutable_reads,
+                "read_unavailable": read_unavailable}, None
 
     try:
         with _compilation_scope(scenario):
@@ -259,6 +310,11 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
         return unavailable("write_geometry_lowering_failed:" + type(error).__name__ + ":" + str(error))
     if start["signature"] != terminal["signature"]:
         return unavailable("non_kv_write_or_alias_geometry_changes_with_context")
+    read_unavailable = start["read_unavailable"] or terminal["read_unavailable"]
+    if start["reads"] != terminal["reads"]:
+        read_unavailable = read_unavailable or "non_kv_read_or_alias_geometry_changes_with_context"
+    if start.get("staging_bindings") != terminal.get("staging_bindings"):
+        return unavailable("hbf_staging_route_contract_changes_with_context")
     return {"qualified": True, "reason": None,
         "method": "analytic_admitted_flash_attention_fixed_non_kv_write_sequence",
         "first_context_tokens": first, "last_context_tokens": max(first, last),
@@ -272,6 +328,14 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
         "interior_context_argument": "terminal_flash_sram_admission_is_monotone_and_all_other_writes_depend_only_on_single_token_and_fixed_layer_shapes",
         "partial_host_slots_by_owner": dict(terminal["partial_slots"]),
         "rounded_write_span_pages_by_owner": dict(terminal["rounded_write_pages"]),
+        "gc_staging_bindings_by_owner": terminal.get("staging_bindings", {}),
+        "temporary_read_span_count": len(terminal["reads"]),
+        "temporary_read_page_upper_by_owner": dict(terminal["temporary_read_pages"]),
+        "temporary_read_geometry_qualified": read_unavailable is None,
+        "temporary_read_geometry_unavailable_reason": read_unavailable,
+        "immutable_resident_read_rows_by_owner": {owner: tuple(sorted(
+            start["immutable_reads"].get(owner, set()) | terminal["immutable_reads"].get(owner, set())))
+            for owner in set(start["immutable_reads"]) | set(terminal["immutable_reads"])},
         "physical_state_advanced": False, "physical_io_executed": False}
 
 
@@ -486,7 +550,7 @@ def project_fast_tail(
         controller = staging["controller"]
         config = controller.config
         stats = controller.stats
-        for stat in ("gc_cycles", "pressure_flushes", "rmw_pages"):
+        for stat in ("pressure_flushes", "rmw_pages"):
             if stats.get(stat, 0):
                 reasons.append("hbf_observed_" + stat + ":" + owner)
         new_pages = sum(int(row["new_logical_pages"]) for row in rows)
@@ -505,8 +569,6 @@ def project_fast_tail(
             reasons.append("hbf_decode_media_budget_uncalibrated:" + owner)
         if remaining and not budget["observed_program_counters_available"]:
             reasons.append("hbf_decode_program_observations_unavailable:" + owner)
-        if program_budget > available_pages:
-            reasons.append("hbf_program_headroom_may_require_gc:" + owner)
         device = physical.runtimes.get(owner)
         core = None if device is None else device.core
         allocation_projection = _project_program_allocations(controller, program_budget, core)
@@ -516,6 +578,46 @@ def project_fast_tail(
             reasons.append("hbf_nand_program_frontier_unavailable:" + owner)
         if allocation_projection["reused_blocks_requiring_erase"]:
             reasons.append("hbf_free_block_reuse_may_require_erase:" + owner)
+        gc_projection = None
+        gc_required = bool(stats.get("gc_cycles", 0) or program_budget > available_pages)
+        if gc_required:
+            from .fast_gc import gc_service_bounds, project_zero_copy_gc, qualify_immutable_reads
+            immutable_proof = qualify_immutable_reads(physical, controller, owner,
+                (write_geometry or {}).get("immutable_resident_read_rows_by_owner", {}).get(owner, ()))
+            qualified_geometry = bool(budget["kv_program_deduction_available"]
+                and budget["observed_program_counters_available"]
+                and (write_geometry or {}).get("temporary_read_geometry_qualified")
+                and immutable_proof["qualified"])
+            read_pages = ((write_geometry or {}).get(
+                "temporary_read_page_upper_by_owner", {}).get(owner, 0))
+            gc_projection = project_zero_copy_gc(controller,
+                program_pages=program_budget, free_program_pages=available_pages,
+                geometry_qualified=qualified_geometry,
+                temporary_read_pages_per_decode=read_pages, remaining_decode_steps=remaining)
+            gc_projection["immutable_resident_read_preload_proof"] = immutable_proof
+            if gc_projection["zero_copy_proven"]:
+                binding = (write_geometry or {}).get(
+                    "gc_staging_bindings_by_owner", {}).get(owner)
+                commits = [event.timestamp_ns for event in runtime.events
+                    if event.event_type == "tokens_committed"
+                    and event.request_id == state.spec.request_id]
+                try:
+                    if not commits:
+                        raise ValueError("gc_live_commit_cutoff_unavailable")
+                    services = gc_service_bounds(physical, controller, binding, commits[-1])
+                    gc_projection = project_zero_copy_gc(controller,
+                        program_pages=program_budget, free_program_pages=available_pages,
+                        geometry_qualified=qualified_geometry, service_bounds=services,
+                        temporary_read_pages_per_decode=read_pages, remaining_decode_steps=remaining)
+                    gc_projection["immutable_resident_read_preload_proof"] = immutable_proof
+                except (AttributeError, KeyError, TypeError, ValueError) as error:
+                    gc_projection["reason"] = "gc_service_projection_unavailable:" + str(error)
+            if not gc_projection["qualified"]:
+                if stats.get("gc_cycles", 0):
+                    reasons.append("hbf_observed_gc_cycles:" + owner)
+                if program_budget > available_pages:
+                    reasons.append("hbf_program_headroom_may_require_gc:" + owner)
+                reasons.append("hbf_" + str(gc_projection["reason"]) + ":" + owner)
         tail_slots = sum(int(row["tail_page_slots_upper_bound"]) for row in rows)
         workspace_slots = (int(write_geometry.get("partial_host_slots_by_owner", {}).get(owner, 0))
                            if write_geometry and write_geometry.get("qualified") else 0)
@@ -551,9 +653,12 @@ def project_fast_tail(
             "observed_gc_cycles": int(stats.get("gc_cycles", 0)),
             "observed_pressure_flushes": int(stats.get("pressure_flushes", 0)),
             "observed_rmw_pages": int(stats.get("rmw_pages", 0)),
+            **({"gc_projection": gc_projection} if gc_projection is not None else {}),
             "budget_assumption": ("ir_qualified_fixed_non_kv_write_sequence_plus_phase_exact_future_kv_page_completions"
                 if budget["kv_program_deduction_available"] else "context_scaled_observed_writes_plus_per_step_kv_boundary_bound"),
-            "future_erase_or_gc_events": "ordinary_page_zero_erase_bounded_gc_excluded",
+            "future_erase_or_gc_events": ("ordinary_and_zero_copy_gc_page_zero_erase_bounded"
+                if gc_projection is not None and gc_projection["qualified"]
+                else "ordinary_page_zero_erase_bounded_gc_excluded"),
             "future_physical_state": "not_advanced",
         })
     return FastTailProjection(remaining, current, final,

@@ -68,7 +68,7 @@ def expanded_sampling_window(window: SamplingWindow, cap: int) -> SamplingWindow
     return candidate if candidate.total <= cap else None
 
 
-def maintenance_recalibration(runtime, sampling: SamplingWindow, options):
+def maintenance_recalibration(runtime, sampling: SamplingWindow, options, *, gc_copy_only=False):
     """Select a clean calibration window from observed media events only.
 
     A Decode cohort can release buffers after its visible commit. Its erase
@@ -77,8 +77,21 @@ def maintenance_recalibration(runtime, sampling: SamplingWindow, options):
     not remove their latency or the projected future erase service budget.
     """
     decode = [batch for batch in runtime.batches if batch.kind == "decode"]
-    erases = [(step, int(batch.cost.metadata.get("storage_traffic", {}).get(
-        "erase_operations", 0) or 0)) for step, batch in enumerate(decode, 1)]
+    if gc_copy_only:
+        def copied_pages(batch):
+            observations = batch.cost.metadata.get("storage_gc_observations")
+            if not isinstance(observations, Mapping):
+                return 0
+            # Eligibility of every current fit/cleanup observation was
+            # checked by the budget builder. Unavailable older cohorts
+            # are not used to invent a copy event for reset selection.
+            return sum(row["gc_copied_pages"] for row in observations.values()
+                if isinstance(row, Mapping) and row.get("available") is True
+                and type(row.get("gc_copied_pages")) is int and row["gc_copied_pages"] >= 0)
+        erases = [(step, copied_pages(batch)) for step, batch in enumerate(decode, 1)]
+    else:
+        erases = [(step, int(batch.cost.metadata.get("storage_traffic", {}).get(
+            "erase_operations", 0) or 0)) for step, batch in enumerate(decode, 1)]
     erases = [(step, count) for step, count in erases if count and step >= sampling.warmup]
     if not erases:
         return None
@@ -96,8 +109,10 @@ def maintenance_recalibration(runtime, sampling: SamplingWindow, options):
         candidate = SamplingWindow(candidate.warmup,
             candidate.training + 2 * candidate.period, candidate.holdout, candidate.period)
     record = {
-        "cause": "observed_ordinary_page_zero_erase_and_following_cohort_cleanup",
-        "selection_inputs": ["observed_decode_cohort_erase_operations", "hbf_kv_page_period_tokens"],
+        "cause": ("observed_live_gc_copy_and_following_cohort_cleanup" if gc_copy_only
+                  else "observed_ordinary_page_zero_erase_and_following_cohort_cleanup"),
+        "selection_inputs": ["observed_decode_cohort_gc_copied_pages" if gc_copy_only
+                             else "observed_decode_cohort_erase_operations", "hbf_kv_page_period_tokens"],
         "sampled_steps_at_reset": len(decode),
         "old_warmup": sampling.warmup, "new_warmup": candidate.warmup,
         "old_sampling_window": asdict(sampling), "new_sampling_window": asdict(candidate),
@@ -109,8 +124,17 @@ def maintenance_recalibration(runtime, sampling: SamplingWindow, options):
         "within_sample_budget": candidate.total <= options.max_sample_tokens,
         "exact_prefix_samples_and_latency_preserved": True,
         "future_erase_service_budget_preserved": True,
+        "gc_copy_only": gc_copy_only,
         "semantics": "exclude_observed_maintenance_from_baseline_fit_only_not_from_execution_cost",
     }
+    if gc_copy_only:
+        record["gc_copy_cohorts"] = [{"decode_step": step, "gc_copied_pages": count}
+                                     for step, count in erases]
+        record["last_gc_copy_decode_step"] = last_step
+        record["last_gc_copied_pages"] = last_count
+        # Counts retain their actual units; GC copies are not erase events.
+        for key in ("erase_cohorts", "last_erase_decode_step", "last_erase_operations"):
+            record.pop(key)
     return candidate, record
 
 
@@ -317,9 +341,30 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
     """Record each conditional interval; the terms are not additive errors."""
     prefix = maintenance["prefix_erase_bias_guard_ns"]
     future = maintenance["future_erase_serial_guard_ns"]
+    gc_required = maintenance.get("gc_budget_required", False)
+    prefix_fields = ("prefix_gc_bias_guard_ns", "prefix_write_placement_bias_guard_ns",
+                     "prefix_read_placement_bias_guard_ns")
+    future_fields = ("future_gc_erase_serial_guard_ns", "future_gc_non_erase_serial_guard_ns",
+                     "future_write_placement_serial_guard_ns", "future_read_placement_serial_guard_ns",
+                     "future_gc_carry_in_serial_guard_ns")
+    gc_fields = prefix_fields + future_fields
+    gc_available = (not gc_required or (maintenance.get("gc_observations_available") is True
+        and all(isinstance(maintenance.get(name), (int, float))
+                and not isinstance(maintenance[name], bool)
+                and math.isfinite(maintenance[name]) and maintenance[name] >= 0
+                for name in gc_fields)))
+    # Missing observations are never measured zero in the newly admitted GC
+    # domain. The original no-GC arithmetic is retained without a new term.
+    gc = {name: maintenance[name] if gc_required and gc_available else
+          (None if gc_required else 0.) for name in gc_fields}
+    all_prefix = (math.fsum((prefix, *(gc[name] for name in prefix_fields)))
+                  if gc_required and gc_available else prefix if not gc_required else None)
+    all_future = (math.fsum((future, *(gc[name] for name in future_fields)))
+                  if gc_required and gc_available else future if not gc_required else None)
 
     def interval(lo, hi):
-        if lo <= 0 or hi <= 0 or not all(math.isfinite(x) for x in (lo, hi, estimate)):
+        if (lo is None or hi is None or lo <= 0 or hi <= 0
+                or not all(math.isfinite(x) for x in (lo, hi, estimate))):
             return {"lower_ns": None, "upper_ns": None,
                     "overestimate_relative_error": None, "underestimate_relative_error": None,
                     "relative_error_budget": None}
@@ -329,13 +374,17 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
                 "relative_error_budget": max(over, under)}
 
     model = interval(lower, upper)
-    media = interval(lower - prefix, upper + future)
+    media = interval(lower - all_prefix, upper + all_future) if gc_available else interval(None, None)
     valid_local = math.isfinite(local_error) and 0 <= local_error < 1
     local = interval(lower / (1 + local_error), upper / (1 - local_error)) if valid_local else interval(0., 0.)
-    combined = (interval((lower - prefix) / (1 + local_error),
-                         (upper + future) / (1 - local_error))
-                if valid_local else interval(0., 0.))
-    reason = ("prefix_erase_budget_exhausts_lower_timing_bound" if lower - prefix <= 0 else
+    mapping_stable = not gc_required or maintenance.get("gc_prefix_mapping_stable") is True
+    combined = (interval((lower - all_prefix) / (1 + local_error),
+                         (upper + all_future) / (1 - local_error))
+                if valid_local and gc_available and mapping_stable else interval(None, None))
+    reason = ("hbf_gc_maintenance_observations_unavailable" if not gc_available else
+              "hbf_gc_prefix_mapping_requires_clean_window" if not mapping_stable else
+              "prefix_maintenance_budget_exhausts_lower_timing_bound" if gc_required and lower - all_prefix <= 0 else
+              "prefix_erase_budget_exhausts_lower_timing_bound" if lower - prefix <= 0 else
               "local_calibration_error_not_bounded_below_one" if not valid_local else None)
     return {"conditional_relative_error_budget": combined["relative_error_budget"],
         "budget_unavailable_reason": reason,
@@ -344,12 +393,156 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
         "error_budget_breakdown": {"semantics": "conditional_interval_bounds_not_additive_percentages",
             "forecast_tail_ns": estimate, "local_relative_error": local_error if valid_local else None,
             "prefix_erase_bias_guard_ns": prefix, "future_erase_serial_guard_ns": future,
+            "gc_budget_required": gc_required,
+            "gc_observations_available": gc_available,
+            "gc_prefix_mapping_stable": mapping_stable,
+            **gc,
+            "prefix_maintenance_total_guard_ns": all_prefix,
+            "future_maintenance_total_guard_ns": all_future,
             "legacy_future_erase_serial_guard_ns": maintenance.get("legacy_future_erase_serial_guard_ns", future),
             "future_erase_upper_bound_methods": maintenance.get("future_erase_upper_bound_methods", []),
             "model_only": model, "model_with_local_error": local,
             "model_with_prefix_erase_bias": interval(lower - prefix, upper),
             "model_with_future_erase": interval(lower, upper + future),
+            "model_with_prefix_gc_bias": interval(lower - gc["prefix_gc_bias_guard_ns"], upper)
+                if gc_available else interval(None, None),
+            "model_with_prefix_write_placement_bias": interval(lower - gc["prefix_write_placement_bias_guard_ns"], upper)
+                if gc_available else interval(None, None),
+            "model_with_prefix_read_placement_bias": interval(lower - gc["prefix_read_placement_bias_guard_ns"], upper)
+                if gc_available else interval(None, None),
+            "model_with_future_gc": interval(lower, upper + gc["future_gc_erase_serial_guard_ns"] + gc["future_gc_non_erase_serial_guard_ns"])
+                if gc_available else interval(None, None),
+            "model_with_future_write_placement": interval(lower, upper + gc["future_write_placement_serial_guard_ns"])
+                if gc_available else interval(None, None),
+            "model_with_future_read_placement": interval(lower, upper + gc["future_read_placement_serial_guard_ns"])
+                if gc_available else interval(None, None),
+            "model_with_gc_carry_in": interval(lower, upper + gc["future_gc_carry_in_serial_guard_ns"])
+                if gc_available else interval(None, None),
             "model_with_maintenance": media, "combined": combined}}
+
+
+def _gc_maintenance_error_envelope(projection, batches, count, remaining, context_scale):
+    """Compose static tail service bounds with measured cohort-local deltas.
+
+    GC changes placement of ordinary writes as well as copying live pages.
+    The fit already includes both costs: remove their complete serial bounds
+    from its lower endpoint, and charge the separately proved future bounds
+    to its upper endpoint. No physical device or controller is advanced.
+    """
+    prefix_names = ("prefix_gc_bias_guard_ns", "prefix_write_placement_bias_guard_ns",
+                    "prefix_read_placement_bias_guard_ns")
+    future_names = ("future_gc_erase_serial_guard_ns", "future_gc_non_erase_serial_guard_ns",
+                    "future_write_placement_serial_guard_ns", "future_read_placement_serial_guard_ns",
+                    "future_gc_carry_in_serial_guard_ns")
+    names = prefix_names + future_names
+    devices = [row for row in projection.hbf_devices if (
+        row.get("gc_projection", {}).get("required") is True
+        or row.get("observed_gc_cycles", 0) > 0
+        or row.get("program_page_guard_budget", 0) > row.get("free_program_pages", math.inf))]
+    record = {"gc_budget_required": bool(devices), "gc_observations_available": True,
+        "gc_budget_unavailable_reason": None,
+        "gc_prefix_mapping_stable": True, "gc_prefix_recalibration_required": False,
+        **dict.fromkeys(names, 0.), "gc_guard_by_owner": [],
+        "gc_guard_source": "closed_empty_victim_reservoir_and_actual_cohort_staging_deltas",
+        "gc_guard_semantics": "conditional_serial_service_bounds_not_measured_suffix_error",
+        "gc_guard_physical_state_advanced": False}
+    if not devices:
+        return record
+
+    def unavailable(reason):
+        record.update(gc_observations_available=False, gc_budget_unavailable_reason=reason)
+        record.update(dict.fromkeys(names))
+        return record
+
+    def counter(value):
+        return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+    def service(value):
+        return (isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and value >= 0)
+
+    if count <= 0 or len(batches) != count + 1:
+        return unavailable("hbf_gc_prefix_and_previous_cohort_observations_unavailable")
+    if batches[0].kind != "decode":
+        # The fixed Decode IR cannot bound a preceding Prefill's temporary
+        # READ pollution. A warmup or direct Prefill read proof is required.
+        return unavailable("hbf_gc_previous_decode_read_geometry_unavailable")
+    terms = {name: [] for name in names}
+    for device in devices:
+        owner = device.get("physical_owner")
+        guard = device.get("gc_projection", {})
+        if guard.get("qualified") is not True or guard.get("zero_copy_proven") is not True:
+            return unavailable("hbf_gc_closed_empty_victim_projection_unavailable:" + str(owner))
+        units = guard.get("per_unit_costs", {})
+        copy_ns, program_ns = (units.get("gc_copy_page_serial_upper_ns"),
+                              units.get("ordinary_program_page_serial_upper_ns"))
+        read_ns = units.get("ordinary_read_page_serial_upper_ns")
+        initial_cache_ns = units.get("read_cache_initial_state_serial_upper_ns")
+        temporary_reads = guard.get("temporary_read_pages_per_decode_upper")
+        future_keys = ("future_gc_erase_serial_ns", "future_gc_non_erase_serial_ns",
+                       "future_write_placement_serial_guard_ns", "future_read_placement_serial_guard_ns",
+                       "carry_in_serial_guard_ns")
+        if (not counter(temporary_reads) or not all(service(value) for value in
+                (copy_ns, program_ns, read_ns, initial_cache_ns,
+                 *(guard.get(key) for key in future_keys)))):
+            return unavailable("hbf_gc_serial_service_bounds_unavailable:" + str(owner))
+        observed = []
+        for batch in batches:
+            metadata = batch.cost.metadata
+            observations = metadata.get("storage_gc_observations")
+            row = observations.get(owner) if isinstance(observations, Mapping) else None
+            programs = metadata.get("storage_traffic", {}).get("pages_programmed")
+            if (not isinstance(row, Mapping) or row.get("available") is not True
+                    or row.get("semantics") != "cohort_local_staging_counter_deltas"
+                    or not all(counter(row.get(name)) for name in
+                        ("gc_cycles", "gc_copied_pages", "pressure_flushes", "rmw_pages"))
+                    or not counter(row.get("recorded_task_count"))
+                    or not counter(row.get("expected_task_count"))
+                    or row["recorded_task_count"] == 0
+                    or row["recorded_task_count"] != row.get("expected_task_count")
+                    or (row["gc_copied_pages"] and not row["gc_cycles"])
+                    or not counter(programs) or programs < row["gc_copied_pages"]):
+                return unavailable("hbf_gc_cohort_observations_unavailable:" + str(owner))
+            if row["pressure_flushes"] or row["rmw_pages"]:
+                return unavailable("hbf_gc_prefix_has_pressure_or_rmw:" + str(owner))
+            # The aggregate NAND count may include other owners. Subtract
+            # only this owner's proven GC copies; all other programs remain
+            # charged, conservatively, at this owner's full page cost.
+            observed.append({"gc_cycles": row["gc_cycles"],
+                "gc_copied_pages": row["gc_copied_pages"],
+                "ordinary_program_pages": programs - row["gc_copied_pages"]})
+        copies = sum(row["gc_copied_pages"] for row in observed)
+        programs = sum(row["ordinary_program_pages"] for row in observed)
+        scale = remaining / count * context_scale
+        terms[names[0]].append(copies * copy_ns * scale)
+        terms[names[1]].append(programs * program_ns * scale)
+        # Strip the entire temporary READ/cache perturbation relative to a
+        # persistent-only LRU trace. The preceding cohort's cleanup is part
+        # of the first visible duration and therefore receives another R.
+        prefix_read_pages = len(batches) * temporary_reads
+        terms[names[2]].append((prefix_read_pages * read_ns + initial_cache_ns) * scale)
+        for name, key in zip(future_names, future_keys, strict=True):
+            terms[name].append(guard[key])
+        if copies:
+            record.update(gc_prefix_mapping_stable=False, gc_prefix_recalibration_required=True)
+        record["gc_guard_by_owner"].append({"physical_owner": owner,
+            "sampled_gc_cycles": sum(row["gc_cycles"] for row in observed),
+            "sampled_gc_copied_pages": copies,
+            "sampled_ordinary_program_pages": programs,
+            "previous_cohort": observed[0],
+            "selected_cohort_gc_cycles": sum(row["gc_cycles"] for row in observed[1:]),
+            "selected_cohort_gc_copied_pages": sum(row["gc_copied_pages"] for row in observed[1:]),
+            "guard_sample_steps": count, "guard_batches": len(batches),
+            "guard_remaining_steps": remaining, "guard_context_scale": context_scale,
+            "gc_copy_page_serial_upper_ns": copy_ns,
+            "ordinary_program_page_serial_upper_ns": program_ns,
+            "temporary_read_pages_per_decode_upper": temporary_reads,
+            "prefix_temporary_read_page_upper": prefix_read_pages,
+            "ordinary_read_page_serial_upper_ns": read_ns,
+            "read_cache_initial_state_serial_upper_ns": initial_cache_ns,
+            "future_projection": guard})
+    record.update({name: math.fsum(values) for name, values in terms.items()})
+    return record
 
 
 def maintenance_error_envelope(runtime, projection, sampling: SamplingWindow,
@@ -388,6 +581,7 @@ def maintenance_error_envelope(runtime, projection, sampling: SamplingWindow,
                        for row in projection.hbf_devices)
     legacy_future = math.fsum(float(row.get("legacy_ordinary_erase_serial_time_guard_ns",
         row["ordinary_erase_serial_time_guard_ns"])) for row in projection.hbf_devices)
+    gc = _gc_maintenance_error_envelope(projection, batches, count, remaining, context_scale)
     return {"prefix_erase_bias_guard_ns": prefix_bias,
             "future_erase_serial_guard_ns": future,
             "legacy_future_erase_serial_guard_ns": legacy_future,
@@ -401,6 +595,7 @@ def maintenance_error_envelope(runtime, projection, sampling: SamplingWindow,
             "erase_guard_remaining_steps": remaining,
             "erase_guard_context_scale": context_scale,
             "erase_observations_available": available,
+            **gc,
             "erase_guard_semantics": "serial_service_upper_bounds_not_predicted_stall_time"}
 
 
@@ -443,7 +638,7 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
         "model_assumptions": [
             "ordinary single-request Decode with fixed resident weights and dense attention",
             "steady mean Token cost lies in a nonnegative affine context-growth envelope",
-            "ordinary OCP page-zero erases are bounded by serial service budgets; GC and block reuse remain excluded",
+            "ordinary OCP page-zero erases are bounded by serial service budgets; GC requires a closed empty-victim proof and complete placement/maintenance bounds, while block reuse remains excluded",
             "after observed ordinary erases, a new steady-cost fit may exclude those already timed prefix cohorts and their cleanup; future erase guards remain unchanged",
             "no unseen cache, scheduling, pressure-flush or allocation regime change",
             "whole-Decode bounds include the exact timed prefix; a matched BF16 request uses directional HBF/HBM interval arithmetic with both single-point and ratio errors bounded by target",
@@ -577,6 +772,10 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                 diagnostics.update(maintenance)
                 if not maintenance["erase_observations_available"]:
                     return detailed("hbf_erase_observations_unavailable")
+                if maintenance.get("gc_budget_required"):
+                    diagnostics["method"] = "closed_empty_gc_maintenance_directional_paired_envelope/v5"
+                    if not maintenance.get("gc_observations_available"):
+                        return detailed(maintenance["gc_budget_unavailable_reason"])
                 budget = conditional_error_budget(lower, upper, estimate, local_error, maintenance)
                 error_budget = budget["conditional_relative_error_budget"]
                 exact_prefix = math.fsum(sample.duration_ns for sample in samples)
@@ -605,13 +804,21 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                     metadata={"approximation": recorded_diagnostics(), "calibration_attempt": attempt})
                 if decision["accepted"]:
                     break
-                if options.sampling_strategy == "adaptive" and projection.hbf_devices:
-                    reset = maintenance_recalibration(runtime, sampling, options)
+                gc_domain = maintenance.get("gc_budget_required", False)
+                needs_gc_reset = maintenance.get("gc_prefix_recalibration_required", False)
+                if (options.sampling_strategy == "adaptive" and projection.hbf_devices
+                        and (not gc_domain or needs_gc_reset)):
+                    # Empty collections are already completely budgeted.
+                    # Repeated page-zero erases must not move a clean GC
+                    # window forever. Only a real copy changes its mapping.
+                    reset = maintenance_recalibration(runtime, sampling, options,
+                                                      gc_copy_only=gc_domain)
                     if reset is not None:
                         candidate, reset_record = reset
                         diagnostics["sampling_resets"].append(reset_record)
                         control.report("fast_recalibration", len(samples), total_steps,
-                            message="按已执行擦除和清理边界重新采集独立校准窗口",
+                            message=("按真实 GC 复制及清理边界重采样" if gc_domain else
+                                     "按已执行擦除和清理边界重新采集独立校准窗口"),
                             simulated_time_ns=runtime.now,
                             metadata={"approximation": recorded_diagnostics(),
                                       "sampling_reset": reset_record})
