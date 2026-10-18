@@ -1,18 +1,26 @@
 # B200 HBM/HBF 单请求扫描
 
-报告刷新时间：**2026-10-18 14:25:31（北京时间 UTC+08:00）**。
+报告刷新时间：**2026-10-18 14:52:40（北京时间 UTC+08:00）**。
 
-已成功 **23/72** 个配置点（详细完成 0，预测完成 23）；预测安全检查拒绝 0 个；失败 0 个；容量不满足 0 个；尚未完成 49 个。
+已成功 **27/72** 个配置点（详细完成 0，预测完成 27）；预测安全检查拒绝 0 个；失败 0 个；容量不满足 0 个；尚未完成 45 个。
 
-队列状态：**待启动**；队列记录已完成 23/72；等待运行 49 个。队列更新时间：2026-10-18 14:25:31（北京时间）。
-
-队列说明：修正配对预算及未来擦除上界后，优先重跑原拒绝点。
+队列状态：**运行中**；队列记录已完成 27/72；等待运行 44 个。队列更新时间：2026-10-18 14:52:39（北京时间）。
 
 配对预算修复后优先重跑：**4 个点**。旧拒绝尝试保留在历史目录，只有 active points 的最新结果计入本报告；重跑不执行完整详细模式。
 
 优先点位：qwen2_5-0_5b__HBF__P65536__D10240、qwen2_5-1_5b__HBF__P65536__D10240、qwen2_5-3b__HBF__P65536__D10240、qwen2_5-7b__HBF__P65536__D10240。
 
-本轮修复重跑已处理 **0/4** 个；验收状态：**尚未全部处理**。该组全部接受后继续原队列；仍有拒绝则暂停处理。
+本轮修复重跑已处理 **4/4** 个；验收状态：**全部通过**。该组全部接受后继续原队列；仍有拒绝则暂停处理。
+
+| 正在运行的模型 | 存储 | 输入/输出 | 开始时间 |
+| --- | --- | --- | --- |
+| qwen2_5-1_5b | HBF | 256K/1K | 2026-10-18 14:52:39 |
+
+| 存储 / 模型 | 当前阶段 | 已完成 Prefill | Decode | 当前批次细节 | 进度记录时间（北京时间） |
+| --- | --- | --- | --- | --- | --- |
+| HBF / qwen2_5-1_5b | 准备启动 | 尚未记录已完成块 | 尚未记录 | 等待进度记录 | 未记录 |
+
+Prefill 只在整个批次完成后增加已完成块数。当前批次任务数是局部工作进度，不代表整点完成百分比；Decode 后续步骤数也不直接等同于已输出 token 数。细粒度记录若没有实际执行标记，则显示为准备/估算。
 
 | 参数 | 设置 |
 | --- | --- |
@@ -91,6 +99,7 @@ HBM3E 使用标准参考模型；当前 24Gb × 8H 组织未套用只支持 32Gb
 | qwen2_5-0_5b | HBM | 256K/1K | fast（TPOT 估算） | 5.37557 | 2.15715 | 16/1007 | 0.098% | not_validated_against_full_detailed |
 | qwen2_5-0_5b | HBF | 64K/1K | fast（TPOT 估算） | 10.5285 | 122.96 | 80/943 | 1.687% | not_validated_against_full_detailed |
 | qwen2_5-0_5b | HBF | 64K/5K | fast（TPOT 估算） | 10.5285 | 124.722 | 80/5039 | 3.392% | not_validated_against_full_detailed |
+| qwen2_5-0_5b | HBF | 64K/10K | fast（TPOT 估算） | 10.5285 | 126.927 | 80/10159 | 4.636% | not_validated_against_full_detailed |
 | qwen2_5-0_5b | HBF | 256K/1K | fast（TPOT 估算） | 45.8033 | 183.141 | 52/971 | 1.236% | not_validated_against_full_detailed |
 | qwen2_5-1_5b | HBM | 64K/1K | fast（TPOT 估算） | 0.54326 | 2.55436 | 16/1007 | 0.392% | not_validated_against_full_detailed |
 | qwen2_5-1_5b | HBM | 64K/5K | fast（TPOT 估算） | 0.540074 | 2.60265 | 16/5103 | 1.929% | not_validated_against_full_detailed |
@@ -98,15 +107,31 @@ HBM3E 使用标准参考模型；当前 24Gb × 8H 组织未套用只支持 32Gb
 | qwen2_5-1_5b | HBM | 256K/1K | fast（TPOT 估算） | 5.91751 | 4.70356 | 16/1007 | 0.098% | not_validated_against_full_detailed |
 | qwen2_5-1_5b | HBF | 64K/1K | fast（TPOT 估算） | 19.0112 | 188.075 | 28/995 | 1.993% | not_validated_against_full_detailed |
 | qwen2_5-1_5b | HBF | 64K/5K | fast（TPOT 估算） | 19.0112 | 190.914 | 28/5091 | 3.522% | not_validated_against_full_detailed |
+| qwen2_5-1_5b | HBF | 64K/10K | fast（TPOT 估算） | 19.0112 | 194.307 | 28/10211 | 4.841% | not_validated_against_full_detailed |
 | qwen2_5-3b | HBM | 64K/1K | fast（TPOT 估算） | 0.963634 | 4.12324 | 16/1007 | 0.391% | not_validated_against_full_detailed |
 | qwen2_5-3b | HBM | 64K/5K | fast（TPOT 估算） | 0.960526 | 4.20423 | 16/5103 | 1.929% | not_validated_against_full_detailed |
 | qwen2_5-3b | HBM | 64K/10K | fast（TPOT 估算） | 0.95017 | 4.26106 | 16/10223 | 3.803% | not_validated_against_full_detailed |
 | qwen2_5-3b | HBF | 64K/1K | fast（TPOT 估算） | 29.8801 | 295.043 | 28/995 | 2.592% | not_validated_against_full_detailed |
 | qwen2_5-3b | HBF | 64K/5K | fast（TPOT 估算） | 29.8801 | 299.498 | 28/5091 | 4.109% | not_validated_against_full_detailed |
+| qwen2_5-3b | HBF | 64K/10K | fast（TPOT 估算） | 29.8801 | 304.819 | 28/10211 | 5.420% | not_validated_against_full_detailed |
 | qwen2_5-7b | HBM | 64K/1K | fast（TPOT 估算） | 1.6025 | 7.55381 | 16/1007 | 0.390% | not_validated_against_full_detailed |
 | qwen2_5-7b | HBM | 64K/5K | fast（TPOT 估算） | 1.6025 | 7.68395 | 16/5103 | 1.927% | not_validated_against_full_detailed |
 | qwen2_5-7b | HBM | 64K/10K | fast（TPOT 估算） | 1.6025 | 7.82967 | 16/10223 | 3.802% | not_validated_against_full_detailed |
 | qwen2_5-7b | HBF | 64K/1K | fast（TPOT 估算） | 40.7268 | 485.124 | 16/1007 | 1.926% | not_validated_against_full_detailed |
 | qwen2_5-7b | HBF | 64K/5K | fast（TPOT 估算） | 40.7268 | 492.446 | 16/5103 | 3.413% | not_validated_against_full_detailed |
+| qwen2_5-7b | HBF | 64K/10K | fast（TPOT 估算） | 40.7268 | 501.195 | 16/10223 | 4.971% | not_validated_against_full_detailed |
+
+## 快速预测的条件预算判定
+
+下表是采样模型的条件界，**不是与完整详细模式对照得到的实测误差**。有匹配参考时，候选点、参考点各自的条件预算及 HBF/HBM 比值条件预算都必须 ≤10%；没有匹配参考时，仍使用独立对称预算 ≤4.7619% 的充分条件。配对判定使用方向区间，不把 4.7619% 的独立门槛简单放宽到 10%。
+
+| 模型 / 存储 | 输入/输出 | 接受策略 | 单点条件预算 | 参考点条件预算 | 比值条件预算 | 判定 | HBM 参考点 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| qwen2_5-0_5b / HBF | 64K/10K | 匹配方向区间配对 | 4.602% | 3.798% | 8.015% | 接受 | qwen2_5-0_5b__HBM__P65536__D10240 |
+| qwen2_5-1_5b / HBF | 64K/10K | 匹配方向区间配对 | 4.828% | 3.798% | 8.233% | 接受 | qwen2_5-1_5b__HBM__P65536__D10240 |
+| qwen2_5-3b / HBF | 64K/10K | 匹配方向区间配对 | 5.406% | 3.797% | 8.790% | 接受 | qwen2_5-3b__HBM__P65536__D10240 |
+| qwen2_5-7b / HBF | 64K/10K | 匹配方向区间配对 | 4.963% | 3.796% | 8.363% | 接受 | qwen2_5-7b__HBM__P65536__D10240 |
+
+各轮校准判定、方向上下界及未来擦除分项均保留在 CSV/JSON 的原始预算记录中。
 
 文件：[summary.csv](summary.csv) 保留全部终态的主指标、精度口径、采样记录、单点/配对预算、参考点及拒绝原因（无指标时留空）；[results.json](results.json) 保留全部结果、详细数据和参数。

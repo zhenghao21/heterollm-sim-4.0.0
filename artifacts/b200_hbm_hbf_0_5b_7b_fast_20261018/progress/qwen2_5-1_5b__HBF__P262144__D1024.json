@@ -4,13 +4,21 @@
   "architecture": "HBF",
   "prompt_tokens": 262144,
   "output_tokens": 1024,
-  "pid": 54028,
+  "status": "running",
+  "pid": 30532,
   "simulation_mode": "fast",
-  "real_prefill_steps": 100,
-  "real_decode_steps": 0,
   "approximation": {},
-  "status": "interrupted",
-  "updated_at": "2026-10-18T06:00:50.837553+00:00",
-  "wall_seconds": 3003.3910000000033,
-  "reason": "ExecutionCancelledError: 仿真任务已取消"
+  "real_prefill_steps": 5,
+  "real_decode_steps": 0,
+  "updated_at": "2026-10-18T06:53:18.231974+00:00",
+  "wall_seconds": 37.78099999995902,
+  "progress": {
+    "stage": "cohort_tasks",
+    "completed": 1281,
+    "total": 1281,
+    "message": "",
+    "simulated_time_ns": 37896561.01584508,
+    "metadata": {},
+    "unit": "schedule_tasks"
+  }
 }
