@@ -1,0 +1,25 @@
+{
+  "point_id": "qwen2_5-7b__HBF__P262144__D1024",
+  "model_id": "qwen2_5-7b",
+  "architecture": "HBF",
+  "prompt_tokens": 262144,
+  "output_tokens": 1024,
+  "status": "running",
+  "pid": 39332,
+  "physical_weight_semantics": "canonical_shared_resident_weights_v1",
+  "simulation_mode": "fast",
+  "approximation": {},
+  "real_prefill_steps": 16,
+  "real_decode_steps": 0,
+  "updated_at": "2026-10-18T17:32:37.864699+00:00",
+  "wall_seconds": 216.28100000001723,
+  "progress": {
+    "stage": "cohort_tasks",
+    "completed": 1393,
+    "total": 1393,
+    "message": "",
+    "simulated_time_ns": 78089401.75444844,
+    "metadata": {},
+    "unit": "schedule_tasks"
+  }
+}
