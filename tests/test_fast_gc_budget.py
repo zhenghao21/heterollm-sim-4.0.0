@@ -509,7 +509,7 @@ def test_gc_forecast_uses_same_exact_prefix_and_never_runs_a_detailed_suffix(mon
     assert result.forecast.samples == tuple(fast.DecodeSample(step, 1000 + step, 100.)
                                              for step in range(1, 17))
     diagnostics = result.diagnostics
-    assert diagnostics["method"] == "closed_empty_gc_maintenance_directional_paired_envelope/v5"
+    assert diagnostics["method"] == "fixed_interval_minimax_empty_gc_directional_paired_envelope/v7"
     assert diagnostics["gc_budget_required"] is True
     assert diagnostics["paired_budget_decision"]["accepted"] is True
     assert diagnostics["paired_budget_decision"]["target_relative_error"] == .1
@@ -650,7 +650,7 @@ def test_proved_live_domain_keeps_periodic_copy_prefix_without_endless_clean_res
     assert [sample.step for sample in result.forecast.samples] == list(range(1, 17))
     assert result.diagnostics["exact_sampled_decode_ns"] == 1600.
     assert result.diagnostics["sampling_resets"] == []
-    assert result.diagnostics["method"] == "closed_victim_live_gc_symmetric_directional_paired_envelope/v6"
+    assert result.diagnostics["method"] == "fixed_interval_minimax_live_gc_directional_paired_envelope/v7"
     assert result.diagnostics["gc_prefix_mapping_stable"] is False
     assert result.diagnostics["gc_prefix_mapping_bounded"] is True
     assert result.diagnostics["paired_budget_decision"]["accepted"] is True

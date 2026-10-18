@@ -6,6 +6,7 @@ them does not establish error against an unexecuted detailed suffix.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from fractions import Fraction
 import math
 
 from .precision import canonical_dtype
@@ -34,10 +35,55 @@ def timing_interval(estimate: float, lower: float, upper: float) -> dict:
 
 
 def _within(interval: dict, target: float) -> bool:
-    # Comparing the original values avoids turning an exact 10% boundary
-    # into a rejection through subtraction roundoff, without an error margin.
-    return (interval["estimate_ns"] <= (1. + target) * interval["lower_ns"]
-            and interval["estimate_ns"] >= (1. - target) * interval["upper_ns"])
+    # Exact products of the authored floating values distinguish the target
+    # from its next representable overrun. Rounded (1+target)*lower can
+    # otherwise swallow an above-target ULP. This adds no error margin.
+    estimate, lower, upper = (Fraction(interval[name])
+        for name in ("estimate_ns", "lower_ns", "upper_ns"))
+    threshold = Fraction(target)
+    return estimate <= (1 + threshold) * lower and estimate >= (1 - threshold) * upper
+
+
+def minimax_decode_estimate(lower: float, upper: float, *,
+                            candidate_memory_kind: str | None,
+                            reference: PairedTimingReference | None = None) -> float:
+    """Choose a point inside fixed bounds; never narrow or regenerate them.
+
+    Relative errors use possible true timings as denominators. With no
+    reference their minimax point is the harmonic midpoint. For an HBF
+    numerator the paired errors have the same form at enlarged effective
+    endpoints. For an HBM denominator, both increasing/decreasing envelopes
+    contain a reciprocal term. Their minimum is at one of four analytic
+    intersections (or a constrained endpoint), not a relaxed error target.
+    """
+    timing_interval(lower, lower, upper)
+    def harmonic(lo, hi):
+        # Algebraically 2*lo*hi/(lo+hi), without either large product or
+        # sum. Adding the correction also preserves exact simple boundaries.
+        return lo + ((hi - lo) / hi) * (lo / (1. + lo / hi))
+    if reference is None:
+        return harmonic(lower, upper)
+    if (not isinstance(reference, PairedTimingReference)
+            or candidate_memory_kind not in {"hbm", "hbf"}
+            or candidate_memory_kind == reference.memory_kind):
+        raise ValueError("minimax reference must describe the other HBM/HBF store")
+    effective_lower = lower * (reference.decode_estimate_ns / reference.decode_upper_ns)
+    effective_upper = upper * (reference.decode_estimate_ns / reference.decode_lower_ns)
+    if not all(math.isfinite(value) and value > 0
+               for value in (effective_lower, effective_upper)):
+        raise ValueError("minimax effective endpoints must be positive and finite")
+    if candidate_memory_kind == "hbf":
+        return min(upper, max(lower, harmonic(effective_lower, effective_upper)))
+    # max(single over, paired under) increases with E, while
+    # max(single under, paired over) decreases. Enumerate their crossings.
+    candidates = (lower, upper, harmonic(lower, upper),
+        math.sqrt(lower) * math.sqrt(effective_upper),
+        math.sqrt(effective_lower) * math.sqrt(upper),
+        effective_lower + (effective_upper - effective_lower) / 2.)
+    def score(estimate):
+        return max(estimate / lower - 1., 1. - estimate / upper,
+                   effective_upper / estimate - 1., 1. - effective_lower / estimate)
+    return min((min(upper, max(lower, value)) for value in candidates), key=score)
 
 
 @dataclass(frozen=True)
@@ -159,9 +205,20 @@ def paired_timing_decision(*, decode_estimate_ns: float,
     ratio = timing_interval(numerator["estimate_ns"] / denominator["estimate_ns"],
         numerator["lower_ns"] / denominator["upper_ns"],
         numerator["upper_ns"] / denominator["lower_ns"])
+    # The original timing products avoid both ratio-division roundoff and
+    # swallowed nextafter overruns. Fractions are used only at this tiny
+    # acceptance gate, never on the physical simulation path.
+    ne, nl, nu = (Fraction(numerator[name])
+        for name in ("estimate_ns", "lower_ns", "upper_ns"))
+    de, dl, du = (Fraction(denominator[name])
+        for name in ("estimate_ns", "lower_ns", "upper_ns"))
+    threshold = Fraction(target_relative_error)
+    pair_within = (
+        ne * du <= (1 + threshold) * nl * de
+        and ne * dl >= (1 - threshold) * nu * de)
     result.update(pair_ratio_interval={key.removesuffix("_ns"): value for key, value in ratio.items()},
                   pair_relative_error_budget=ratio["relative_error_budget"],
-                  pair_within_target=_within(ratio, target_relative_error))
+                  pair_within_target=pair_within)
     if not result["pair_within_target"]:
         result["reasons"].append("directional_pair_conditional_error_exceeds_target")
     result["accepted"] = bool(result["candidate_within_target"]
@@ -169,4 +226,5 @@ def paired_timing_decision(*, decode_estimate_ns: float,
     return result
 
 
-__all__ = ["PairedTimingReference", "paired_timing_decision", "timing_interval", "validate_paired_reference"]
+__all__ = ["PairedTimingReference", "minimax_decode_estimate", "paired_timing_decision",
+           "timing_interval", "validate_paired_reference"]

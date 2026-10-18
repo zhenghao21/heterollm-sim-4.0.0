@@ -7,13 +7,14 @@ state as if that state had advanced to the forecast endpoint.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import math
 from statistics import fmean
 from typing import Any, Mapping
 
 from .execution_control import ExecutionControl
-from .fast_budget import PairedTimingReference, paired_timing_decision, validate_paired_reference
+from .fast_budget import (PairedTimingReference, minimax_decode_estimate,
+    paired_timing_decision, timing_interval, validate_paired_reference)
 from .fast_state import hbf_kv_page_period, project_fast_tail
 from .planner import _compilation_scope, _execution_layers, _parallel_plan
 from .precision import canonical_dtype
@@ -442,6 +443,57 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
             "model_with_maintenance": media, "combined": combined}}
 
 
+def _center_maintenance_forecast(segments, exact_prefix, budget, *, memory_kind, reference):
+    """Recenter only the forecast, around the already constructed fixed bounds.
+
+    The affine-only bounds on each segment remain baseline diagnostics.
+    There is no per-segment error claim after maintenance centering; its
+    conditional guarantee is the unmodified whole-Decode interval. Exact
+    physical samples, execution state and all future service bounds stay put.
+    """
+    baseline_tail = math.fsum(segment.duration_ns for segment in segments)
+    lower, upper = budget["conditional_tail_lower_ns"], budget["conditional_tail_upper_ns"]
+    record = {"method": "fixed_whole_decode_single_and_directional_pair_minimax/v1",
+        "applied": False, "reason": "conditional_interval_unavailable",
+        "baseline_model_tail_estimate_ns": baseline_tail,
+        "baseline_model_decode_estimate_ns": exact_prefix + baseline_tail,
+        "exact_sampled_decode_ns": exact_prefix,
+        "baseline_model_segments": [asdict(segment) for segment in segments],
+        "segment_model_bound_semantics": "uncentered_affine_model_only_not_final_segment_error_bounds",
+        "conditional_bounds_recomputed_after_centering": False,
+        "physical_prefix_rescaled": False,
+        "objective": "maximum_single_and_fixed_hbf_over_hbm_relative_error" if reference else
+                     "single_relative_error_with_unchanged_independent_ratio_sufficient_guard"}
+    if lower is None or upper is None:
+        return segments, budget, record
+    whole_lower, whole_upper = exact_prefix + lower, exact_prefix + upper
+    center = minimax_decode_estimate(whole_lower, whole_upper,
+        candidate_memory_kind=memory_kind, reference=reference)
+    selected_tail = center - exact_prefix
+    scale = selected_tail / baseline_tail
+    centered = [replace(segment, duration_ns=segment.duration_ns * scale) for segment in segments]
+    # Preserve the selected whole-request center despite independent segment
+    # multiplication roundoff. Only the final predicted segment is adjusted.
+    centered[-1] = replace(centered[-1],
+        duration_ns=selected_tail - math.fsum(segment.duration_ns for segment in centered[:-1]))
+    selected_tail = math.fsum(segment.duration_ns for segment in centered)
+    selected_interval = timing_interval(selected_tail, lower, upper)
+    breakdown = {**budget["error_budget_breakdown"],
+        "baseline_model_forecast_tail_ns": baseline_tail,
+        "baseline_model_combined": budget["error_budget_breakdown"]["combined"],
+        "component_interval_point_estimate_semantics": "baseline_affine_model_estimate_before_maintenance_centering",
+        "forecast_tail_ns": selected_tail, "combined": selected_interval}
+    updated = {**budget, "baseline_model_conditional_relative_error_budget":
+        budget["conditional_relative_error_budget"],
+        "conditional_relative_error_budget": selected_interval["relative_error_budget"],
+        "error_budget_breakdown": breakdown}
+    record.update(applied=True, reason="minimax_center_of_fixed_maintenance_interval",
+        conditional_decode_lower_ns=whole_lower, conditional_decode_upper_ns=whole_upper,
+        selected_decode_estimate_ns=exact_prefix + selected_tail,
+        selected_tail_estimate_ns=selected_tail, predicted_tail_scale=scale)
+    return tuple(centered), updated, record
+
+
 def _gc_maintenance_error_envelope(projection, batches, count, remaining, context_scale):
     """Compose static tail service bounds with measured cohort-local deltas.
 
@@ -787,6 +839,7 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
             "after observed ordinary erases, a new steady-cost fit may exclude those already timed prefix cohorts and their cleanup; future erase guards remain unchanged",
             "no unseen cache, scheduling, pressure-flush or allocation regime change",
             "whole-Decode bounds include the exact timed prefix; a matched BF16 request uses directional HBF/HBM interval arithmetic with both single-point and ratio errors bounded by target",
+            "GC maintenance forecasts choose a minimax point inside the fixed whole-Decode bounds; only predicted segment durations are rescaled, while affine segment bounds remain baseline diagnostics",
             "without a matched reference, per-storage conditional bounds retain target/(2+target) as a sufficient ratio condition",
             "prefix holdout error does not establish full-suffix accuracy",
         ],
@@ -919,14 +972,20 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                     return detailed("hbf_erase_observations_unavailable")
                 if maintenance.get("gc_budget_required"):
                     diagnostics["method"] = (
-                        "closed_victim_live_gc_symmetric_directional_paired_envelope/v6"
+                        "fixed_interval_minimax_live_gc_directional_paired_envelope/v7"
                         if maintenance.get("gc_live_copy_budget_required") else
-                        "closed_empty_gc_maintenance_directional_paired_envelope/v5")
+                        "fixed_interval_minimax_empty_gc_directional_paired_envelope/v7")
                     if not maintenance.get("gc_observations_available"):
                         return detailed(maintenance["gc_budget_unavailable_reason"])
                 budget = conditional_error_budget(lower, upper, estimate, local_error, maintenance)
-                error_budget = budget["conditional_relative_error_budget"]
                 exact_prefix = math.fsum(sample.duration_ns for sample in samples)
+                centering = {}
+                if maintenance.get("gc_budget_required"):
+                    segments, budget, center_record = _center_maintenance_forecast(
+                        segments, exact_prefix, budget, memory_kind=memory_kind,
+                        reference=paired_reference)
+                    centering = {"forecast_estimate_centering": center_record}
+                    estimate = math.fsum(segment.duration_ns for segment in segments)
                 tail_lower, tail_upper = budget["conditional_tail_lower_ns"], budget["conditional_tail_upper_ns"]
                 whole_lower = exact_prefix + tail_lower if tail_lower is not None else None
                 whole_upper = exact_prefix + tail_upper if tail_upper is not None else None
@@ -934,7 +993,7 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                     decode_lower_ns=whole_lower, decode_upper_ns=whole_upper,
                     target_relative_error=options.target_relative_error,
                     candidate_memory_kind=memory_kind, reference=paired_reference)
-                diagnostics.update(model_relative_half_width=half_width, **budget,
+                diagnostics.update(model_relative_half_width=half_width, **budget, **centering,
                     exact_sampled_decode_ns=exact_prefix,
                     decode_forecast_estimate_ns=exact_prefix + estimate,
                     decode_conditional_lower_ns=whole_lower, decode_conditional_upper_ns=whole_upper,
@@ -942,7 +1001,7 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                     paired_budget_decision=decision)
                 attempt = {
                     "sampled_steps": len(samples), **asdict(sampling),
-                    **calibration, **maintenance, **budget,
+                    **calibration, **maintenance, **budget, **centering,
                     "acceptance_target_relative_error": diagnostics["per_storage_conditional_error_target"],
                     "paired_budget_decision": decision,
                     "forecast_accepted": decision["accepted"]}

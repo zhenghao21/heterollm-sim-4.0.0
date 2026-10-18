@@ -6,7 +6,8 @@ from itertools import product
 import pytest
 
 from heterollm_sim.fast_gc import (
-    _calendar_carry_in, _host_page_cost, gc_service_bounds, project_gc_maintenance,
+    _calendar_carry_in, _host_page_cost, _temporary_read_cache_accounting,
+    _ordered_read_cache_contract, gc_service_bounds, project_gc_maintenance,
     qualify_gc_host_state, qualify_immutable_reads,
 )
 from heterollm_sim.hbf_staging import HbfStagingController, HbfStagingIO, PAGE
@@ -92,6 +93,107 @@ def cold_read_proof():
         "kv_reads_per_page_per_decode_upper": 1,
         "immutable_repeat_read_pages_per_decode_upper": 3,
         "initial_warm_read_pages_per_decode_upper": 4}
+
+
+def full_read_inventory():
+    return {**cold_read_proof(),
+        "method": "single_kv_prefix_read_and_actual_preload_bank_barrier/v1",
+        "physical_io_executed": False,
+        "kv_buffer_count": 2, "kv_reader_task_count": 1,
+        "immutable_read_access_count": 3,
+        "immutable_read_pages_with_multiplicity": 11,
+        "immutable_distinct_canonical_read_pages": 8,
+        "barrier_distinct_tags_per_bank": (2, 2),
+        "barrier_all_kv_readers_are_dag_ancestors": True,
+        "barrier_preloads_are_canonical": True,
+        "barrier_mixed_temporary_accesses_cannot_warm_current_kv_tags": True,
+        "token_boundary_completed": True}
+
+
+def inventory_services():
+    result = live_services()
+    result["per_unit_costs"].update(ordinary_read_page_serial_upper_ns=9.,
+                                   link_read_hbf_page_serial_upper_ns=3.)
+    result["ordered_read_cache_contract"] = {"qualified": True,
+        "physical_state_advanced": False,
+        "same_bank_read_host_fifo": True, "read_host_resources_single_lane": True,
+        "method": "standard_ordered_nand_lru_and_staging_read_dispatch/v1"}
+    return result
+
+
+def test_live_read_inventory_deduplicates_only_temporary_cache_surcharge():
+    controller, _ = low_live_controller()
+    bounds = inventory_services()
+    before = deepcopy(bounds)
+    tight = live_project(controller, gc_read_qualification=full_read_inventory(), service_bounds=bounds)
+    legacy = live_project(controller, service_bounds=bounds)
+    assert tight["qualified"] and tight["temporary_read_cache_accounting"]["applied"]
+    assert not legacy["temporary_read_cache_accounting"]["applied"]
+    assert tight["per_unit_costs"]["ordinary_read_page_serial_upper_ns"] == 5.
+    assert legacy["per_unit_costs"]["ordinary_read_page_serial_upper_ns"] == 9.
+    assert legacy["future_read_placement_serial_guard_ns"] - tight[
+        "future_read_placement_serial_guard_ns"] == 5 * 3 * 4.
+    for name in ("future_gc_read_remap_symmetric_guard_ns",
+                 "future_gc_persistent_cache_symmetric_guard_ns",
+                 "future_gc_host_state_symmetric_guard_ns", "future_gc_non_erase_serial_ns",
+                 "future_gc_erase_serial_ns", "future_write_placement_serial_guard_ns"):
+        assert tight[name] == legacy[name]
+    assert bounds == before
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda proof: proof.pop("method"),
+    lambda proof: proof.update(physical_io_executed=True),
+    lambda proof: proof.update(kv_reads_per_page_per_decode_upper=2),
+    lambda proof: proof.update(immutable_repeat_read_pages_per_decode_upper=2),
+    lambda proof: proof.update(immutable_distinct_canonical_read_pages=12),
+    lambda proof: proof.update(barrier_all_kv_readers_are_dag_ancestors=False),
+    lambda proof: proof.update(barrier_distinct_tags_per_bank=(2, 1)),
+    lambda proof: proof.update(initial_warm_read_pages_per_decode_upper=1),
+    lambda proof: proof.update(initial_warm_read_pages_per_decode_upper=0),
+    lambda proof: proof.update(token_boundary_completed=False),
+])
+def test_incomplete_inventory_keeps_general_k_plus_one_bound(mutate):
+    controller, _ = low_live_controller()
+    proof, bounds = full_read_inventory(), inventory_services()
+    mutate(proof)
+    result = _temporary_read_cache_accounting(controller, proof,
+        bounds["per_unit_costs"], bounds["ordered_read_cache_contract"])
+    assert not result["applied"]
+    assert result["legacy_ordinary_read_page_serial_upper_ns"] == 9.
+
+
+@pytest.mark.parametrize("missing", [None, {}, {"qualified": False},
+    {"qualified": True, "physical_state_advanced": True},
+    {"qualified": True, "physical_state_advanced": False, "method": "custom"}])
+def test_inventory_without_ordered_dispatch_keeps_general_bound(missing):
+    controller, _ = low_live_controller()
+    bounds = inventory_services()
+    result = _temporary_read_cache_accounting(controller, full_read_inventory(),
+        bounds["per_unit_costs"], missing)
+    assert not result["applied"]
+    assert result["reason"] == "standard_ordered_cache_dispatch_unqualified"
+
+
+def test_inventory_bound_pays_lru_pollution_once_and_retains_repeated_hits():
+    from itertools import permutations
+    from test_fast_gc_budget import lru_misses
+    # KV tags are unique and cold. Immutable repeated aliases are deliberately
+    # retained in the hit inventory; no per-temporary k surcharge is needed
+    # after paying every temporary miss and all possible persistent hits.
+    persistent = ("kv0", "kv1", "weight0", "weight1", "weight0")
+    repeated = 1
+    for slots in (1, 2):
+        for initial in permutations(("weight0", "weight1", "old_temporary"), slots):
+            base = lru_misses(slots, initial, persistent)
+            for first in range(len(persistent) + 1):
+                for second in range(first, len(persistent) + 1):
+                    actual = (persistent[:first] + ("temporary0",) + persistent[first:second]
+                              + ("temporary1",) + persistent[second:])
+                    assert lru_misses(slots, initial, actual) - base <= 2 + repeated + slots
+    # With no repeat/initial-hit inventory, coefficient one alone is unsafe.
+    assert lru_misses(2, ("weight0", "weight1"),
+        ("temporary0", "weight0", "weight1")) == 3
 
 
 def warm_zero_fixture(*, preload_pages=8):
@@ -427,6 +529,82 @@ def real_physical(*, capture=False, host_updates=None):
     return physical, state["controller"], binding
 
 
+@pytest.mark.parametrize("change", ["submit", "submit_read_pages", "_execute_accepted",
+                                   "_execute_detailed_accepted", "_host_id",
+                                   "instance_execute", "ordered_native_run"])
+def test_temporary_dedup_requires_actual_standard_ordered_dispatch(monkeypatch, change):
+    from heterollm_sim.nand_core import NandCore
+    from heterollm_sim import _compiled_nand
+    from heterollm_sim.memory_allocator import PhysicalAddressAllocator
+    # Import/capture the canonical functions before introducing a hook.
+    from heterollm_sim import fast_gc_read_basis
+    physical, controller, _ = real_physical()
+    physical.allocators.setdefault("flash", PhysicalAddressAllocator(controller.config.capacity_bytes))
+    before = _ordered_read_cache_contract(physical, controller, "flash")
+    assert before["qualified"], before
+    replacement = lambda *args, **kwargs: pytest.fail("read-only proof executed a read")
+    if change == "instance_execute":
+        physical.runtimes["flash"].core._execute_accepted = replacement
+    elif change == "ordered_native_run":
+        monkeypatch.setattr(_compiled_nand, "_run", replacement)
+    else:
+        monkeypatch.setattr(NandCore, change, replacement)
+    rejected = _ordered_read_cache_contract(physical, controller, "flash")
+    assert not rejected["qualified"]
+    bounds = inventory_services()
+    result = _temporary_read_cache_accounting(controller, full_read_inventory(),
+        bounds["per_unit_costs"], rejected)
+    assert not result["applied"]
+
+
+@pytest.mark.parametrize("change", ["two_lanes", "outgoing_alias", "incoming_alias", "shared_slots"])
+def test_temporary_dedup_refuses_non_fifo_or_hidden_read_host_lanes(change):
+    from heterollm_sim.memory_allocator import PhysicalAddressAllocator
+    physical, controller, _ = real_physical()
+    physical.allocators.setdefault("flash", PhysicalAddressAllocator(controller.config.capacity_bytes))
+    accepted = _ordered_read_cache_contract(physical, controller, "flash")
+    assert accepted["qualified"], accepted
+    name = accepted["read_host_resource_ids"][0]
+    if change == "two_lanes":
+        physical.timeline.lane_available[name] = [0., 0.]
+    elif change == "outgoing_alias":
+        physical.timeline.resource_aliases[name] = "another-client"
+    elif change == "incoming_alias":
+        physical.timeline.resource_aliases["another-client"] = name
+    else:
+        physical.timeline.lane_available[name] = physical.timeline.lane_available["another-client"] = [0.]
+    refused = _ordered_read_cache_contract(physical, controller, "flash")
+    assert not refused["qualified"]
+    assert refused["reason"] == "nand_read_host_fifo_resources_or_lanes_unqualified"
+
+
+@pytest.mark.parametrize("capture", [False, True])
+def test_actual_nand_read_fifo_with_backlog_fits_temporary_and_hit_inventory(capture):
+    from heterollm_sim.nand_core import NandCore
+    configured = config()  # Two banks share one HOST channel, two LRU slots each.
+    persistent = (0, 1, 2, 3, 0)
+    def execute(trace):
+        core = NandCore(configured, capture_details=capture)
+        # Nonzero reader frontiers already occupy both cache slots per bank.
+        for index in (24, 25, 26, 27):
+            core.submit(AccessRequest("initial", Operation.READ, index * PAGE, PAGE, 100000.))
+        end = 0.
+        for index in trace:
+            end = max(end, core.submit(AccessRequest("trace", Operation.READ,
+                index * PAGE, PAGE, 0.)).completion_ns)
+        return end
+    baseline = execute(persistent)
+    read_service = (configured.front_ns + configured.page_read_ns
+        + configured.transfer_page_bytes / configured.internal_bandwidth_gb_s
+        + PAGE * configured.host_channels / configured.host_bandwidth_for(Operation.READ))
+    for first in range(len(persistent) + 1):
+        for second in range(first, len(persistent) + 1):
+            trace = persistent[:first] + (8,) + persistent[first:second] + (9,) + persistent[second:]
+            # Two temporary accesses pay full service. The repeated persistent
+            # page remains in the separate hit inventory, not discarded.
+            assert execute(trace) - baseline <= 3 * read_service
+
+
 @pytest.mark.parametrize("capture", [False, True])
 def test_real_host_state_proof_records_actual_domain_and_preserves_every_live_object(capture):
     import pickle
@@ -483,6 +661,11 @@ def test_formal_1_5b_host_state_service_is_qualified_after_bootstrap_without_req
     units = bounds["per_unit_costs"]
     assert units["gc_host_state_page_serial_upper_ns"] == (
         units["host_read_page_serial_upper_ns"] + units["host_write_page_serial_upper_ns"])
+    deduplicated = _temporary_read_cache_accounting(state["controller"], warm, units,
+        bounds["ordered_read_cache_contract"])
+    assert deduplicated["applied"], deduplicated
+    assert deduplicated["ordinary_read_page_serial_upper_ns"] == (
+        units["nand_read_page_serial_upper_ns"] + units["link_read_hbf_page_serial_upper_ns"])
     assert not state["controller"]._pages
 
 

@@ -19,6 +19,8 @@ from .nand_core import NandCore
 
 _NAND_CACHE_METHODS = {name: getattr(NandCore, name) for name in (
     "_invalidate_cache", "_cache_slot", "_submit_ocp_single_page_summary", "_submit_ocp_page_commands")}
+_ORDERED_READ_FALLBACK_METHODS = {name: getattr(NandCore, name) for name in (
+    "_execute_accepted", "_execute_detailed_accepted", "_bank_key", "_staged_key", "_host_id")}
 _HOST_STATE_METHODS = {name: getattr(DramCore, name) for name in (
     "submit", "submit_many", "_execute_accepted", "_execute_accelerated_accepted",
     "_can_accelerate", "_bank_id", "_data_id", "_command_id")}
@@ -283,6 +285,60 @@ def _calendar_carry_in(physical, controller, cutoff_ns):
     return _finite(max(maxima) - cutoff)
 
 
+def _ordered_read_cache_contract(physical, controller, owner):
+    """Require the standard submission order, independently of warm-zero."""
+    from .fast_gc_read_basis import (_COLD_CACHE_METHODS, _COLD_ORDERED_FUNCTIONS,
+        _COLD_STAGING_METHODS, _STAGING_SUBMIT)
+    from ._io_execution import PreparedStagingIO
+    from .memory_allocator import PhysicalAddressAllocator
+    from .memory_transfer import ResourceTimeline
+    result = {"qualified": False, "physical_state_advanced": False,
+        "method": "standard_ordered_nand_lru_and_staging_read_dispatch/v1",
+        "reason": "custom_or_unavailable_ordered_read_dispatch"}
+    device = physical.runtimes.get(owner)
+    core = None if device is None else device.core
+    if (type(core) is not NandCore or type(controller) is not HbfStagingController
+            or type(getattr(physical, "allocators", {}).get(owner)) is not PhysicalAddressAllocator
+            or any(name in core.__dict__ or getattr(NandCore, name) is not method
+                   for name, method in _COLD_CACHE_METHODS.items())
+            or any(name in core.__dict__ or getattr(NandCore, name) is not method
+                   for name, method in _ORDERED_READ_FALLBACK_METHODS.items())
+            or any(name in controller.__dict__ or getattr(HbfStagingController, name) is not method
+                   for name, method in _COLD_STAGING_METHODS.items())
+            or any(getattr(module, name) is not function
+                   for module, name, function in _COLD_ORDERED_FUNCTIONS)
+            or PreparedStagingIO.submit is not _STAGING_SUBMIT):
+        return result
+    timeline = core.timeline
+    prefix = str(core.config.metadata.get("host_resource_id", "nand:host"))
+    names = tuple(prefix + (":" + str(channel) if core.config.host_channels > 1 else "")
+        + (":read" if core.config.host_full_duplex else "")
+        for channel in range(core.config.host_channels))
+    try:
+        if (type(timeline) is not ResourceTimeline or timeline is not physical.timeline
+                or any(timeline.canonical_resource_id(name) != name for name in names)
+                or any(name != target and timeline.canonical_resource_id(name) in names
+                       for name, target in timeline.resource_aliases.items())):
+            raise ValueError("nand_read_host_fifo_resource_unqualified")
+        present = [timeline.lane_available[name] for name in names if name in timeline.lane_available]
+        slots = {id(lanes) for lanes in present}
+        if (any(len(lanes) != 1 for lanes in present) or len(slots) != len(present)
+                or any(name not in names and id(lanes) in slots
+                       for name, lanes in timeline.lane_available.items())):
+            raise ValueError("nand_read_host_fifo_lanes_unqualified")
+    except (TypeError, ValueError):
+        result["reason"] = "nand_read_host_fifo_resources_or_lanes_unqualified"
+        return result
+    # Same-bank READs use one FIFO HOST lane. Their completion and LRU use
+    # order therefore agree: the oldest slot cannot retain a later reader
+    # than a newer slot. Cold misses form a fixed-k-buffer max-plus pipeline;
+    # an extra temporary READ adds its own complete service, while changed
+    # persistent hit/miss service is charged by the separate hit inventory.
+    result.update(qualified=True, reason=None, same_bank_read_host_fifo=True,
+        read_host_resources_single_lane=True, read_host_resource_ids=names)
+    return result
+
+
 def gc_service_bounds(physical, controller, binding, cutoff_ns):
     """Static complete-page costs and already outstanding cleanup service."""
     config = controller.config
@@ -375,6 +431,7 @@ def gc_service_bounds(physical, controller, binding, cutoff_ns):
         "carry_in_cutoff_ns": cutoff_ns,
         "carry_in_clock_semantics": "absolute_live_token_commit_timestamp",
         "gc_host_state_qualification": host_state,
+        "ordered_read_cache_contract": _ordered_read_cache_contract(physical, controller, owners[0]),
         "qualified_initiator_route_variants": len(variants),
         "read_cache_mapping_proof": "scalar_and_numeric_OCP_writes_invalidate_only_matching_page_or_target_block_tags_no_whole_bank_invalidation",
         "persistent_write_invalidation_extra_miss_upper": 0,
@@ -459,6 +516,79 @@ def _validate_initial_warm_zero_proof(controller, proof, immutable_blocks):
         if len(unique) != slots:
             return "actual_tail_tags_not_distinct"
     return None
+
+
+def _temporary_read_cache_accounting(controller, qualification, units, ordered_contract):
+    """Avoid charging the same persistent misses per temporary insertion.
+
+    In this narrow read domain every KV reference is cold and unique. All
+    possible immutable hits are already bounded by repeat + initial-warm
+    counts in the separate symmetric persistent-cache guard. Temporary
+    references themselves are charged as misses, including repeats, so
+    their mutual pollution is covered too. Unknown read traces retain the
+    general k+1 insertion bound instead of claiming a measured zero.
+    """
+    result = {"applied": False, "reason": "cold_persistent_read_inventory_unqualified",
+        "method": "full_temporary_service_and_separate_persistent_hit_inventory/v1",
+        "physical_state_advanced": False,
+        "legacy_ordinary_read_page_serial_upper_ns": units.get("ordinary_read_page_serial_upper_ns")}
+    if not isinstance(qualification, Mapping):
+        return result
+    if (not isinstance(ordered_contract, Mapping)
+            or ordered_contract.get("qualified") is not True
+            or ordered_contract.get("physical_state_advanced") is not False
+            or ordered_contract.get("same_bank_read_host_fifo") is not True
+            or ordered_contract.get("read_host_resources_single_lane") is not True
+            or ordered_contract.get("method") != "standard_ordered_nand_lru_and_staging_read_dispatch/v1"):
+        result["reason"] = "standard_ordered_cache_dispatch_unqualified"
+        return result
+    proof = qualification
+    counts = ("kv_buffer_count", "kv_reader_task_count", "immutable_read_access_count",
+              "immutable_read_pages_with_multiplicity", "immutable_distinct_canonical_read_pages",
+              "immutable_repeat_read_pages_per_decode_upper", "initial_warm_read_pages_per_decode_upper")
+    flags = ("barrier_all_kv_readers_are_dag_ancestors", "barrier_preloads_are_canonical",
+             "barrier_mixed_temporary_accesses_cannot_warm_current_kv_tags", "token_boundary_completed")
+    banks, slots = controller.config.array_units, controller.config.read_cache_pages_per_bank
+    tags = proof.get("barrier_distinct_tags_per_bank")
+    if (proof.get("qualified") is not True or proof.get("physical_state_advanced") is not False
+            or proof.get("physical_io_executed") is not False
+            or proof.get("method") != "single_kv_prefix_read_and_actual_preload_bank_barrier/v1"
+            or type(proof.get("kv_reads_per_page_per_decode_upper")) is not int
+            or proof["kv_reads_per_page_per_decode_upper"] != 1
+            or any(type(proof.get(name)) is not int or proof[name] < 0 for name in counts)
+            or any(proof[name] == 0 for name in counts[:5])
+            or proof["kv_reader_task_count"] > proof["kv_buffer_count"]
+            or any(proof.get(name) is not True for name in flags)
+            or proof["immutable_read_pages_with_multiplicity"]
+                - proof["immutable_distinct_canonical_read_pages"]
+                != proof["immutable_repeat_read_pages_per_decode_upper"]
+            or not isinstance(tags, (tuple, list)) or len(tags) != banks
+            or any(type(count) is not int or count < slots for count in tags)
+            or proof["initial_warm_read_pages_per_decode_upper"] not in {0, banks * slots}):
+        return result
+    if proof["initial_warm_read_pages_per_decode_upper"] == 0:
+        immutable = {block for preload in controller._preloads.values() for block in preload.blocks()}
+        if _validate_initial_warm_zero_proof(controller, proof.get("initial_warm_zero_proof"), immutable):
+            result["reason"] = "initial_warm_zero_certificate_unqualified"
+            return result
+    try:
+        read = _finite(units.get("nand_read_page_serial_upper_ns"))
+        route = _finite(units.get("link_read_hbf_page_serial_upper_ns"))
+        legacy = _finite(units.get("ordinary_read_page_serial_upper_ns"))
+        if (units.get("read_cache_lru_slots_per_bank") != slots
+                or units.get("persistent_cache_miss_page_serial_upper_ns") != read
+                or legacy != (slots + 1) * read + route):
+            result["reason"] = "full_read_and_persistent_miss_service_unqualified"
+            return result
+    except (TypeError, ValueError):
+        result["reason"] = "full_read_and_persistent_miss_service_unavailable"
+        return result
+    result.update(applied=True, reason=None,
+        ordinary_read_page_serial_upper_ns=read + route,
+        duplicate_persistent_pollution_removed_per_temporary_read_ns=slots * read,
+        persistent_hit_budget_retained="immutable_repeats_plus_qualified_initial_warm_symmetric_guard",
+        kv_mapping_budget_retained=True, host_state_budget_retained=True)
+    return result
 
 
 def project_gc_maintenance(controller, *, program_pages, free_program_pages,
@@ -611,7 +741,8 @@ def project_gc_maintenance(controller, *, program_pages, free_program_pages,
         result["reason"] = "gc_complete_service_bounds_unavailable"
         return result
     result.update(service_bounds)
-    units = service_bounds["per_unit_costs"]
+    units = dict(service_bounds["per_unit_costs"])
+    result["per_unit_costs"] = units
     required_units = ("ordinary_program_page_serial_upper_ns",
         "ordinary_read_page_serial_upper_ns", "read_cache_initial_state_serial_upper_ns")
     try:
@@ -662,9 +793,14 @@ def project_gc_maintenance(controller, *, program_pages, free_program_pages,
             * units["persistent_cache_miss_page_serial_upper_ns"])
         result["future_gc_host_state_symmetric_guard_ns"] = _finite(copies
             * units["gc_host_state_page_serial_upper_ns"])
+        cache_accounting = _temporary_read_cache_accounting(controller, gc_read_qualification, units,
+            service_bounds.get("ordered_read_cache_contract"))
+        result["temporary_read_cache_accounting"] = cache_accounting
+        if cache_accounting["applied"]:
+            units["ordinary_read_page_serial_upper_ns"] = cache_accounting["ordinary_read_page_serial_upper_ns"]
     per_page = service_bounds["per_unit_costs"]["ordinary_program_page_serial_upper_ns"]
     result["future_write_placement_serial_guard_ns"] = _finite(program_pages * per_page)
-    read_unit = service_bounds["per_unit_costs"]["ordinary_read_page_serial_upper_ns"]
+    read_unit = units["ordinary_read_page_serial_upper_ns"]
     result["temporary_read_pages_per_decode_upper"] = temporary_read_pages_per_decode
     result["future_temporary_read_pages_upper"] = temporary_read_pages_per_decode * remaining_decode_steps
     result["future_read_placement_serial_guard_ns"] = _finite(

@@ -383,11 +383,22 @@ def _decode_program_budget(batches, rows, *, request_id, prompt_tokens,
     de-duplicated result is diagnostic only unless planner IR proves fixed
     non-K/V writes. In that narrower domain their observed maximum is a
     constant; no aggregate context scaling or page rounding is needed.
+    GC copies are physical programs too, but their future allocation and
+    service are bounded separately by the GC projection. Remove them from
+    this ordinary-write residual only when the complete cohort ledger has
+    one matching physical owner. Missing or ambiguous evidence leaves those
+    programs charged in the residual; it never establishes zero copies.
     Existing pressure/RMW/GC/reuse guards stay intact.
     """
     observed = []
     counters_available = True
     deductions = []
+    owner_names = [row.get("physical_owner") for row in rows]
+    owner = (owner_names[0] if owner_names and all(
+        isinstance(name, str) and name and name == owner_names[0]
+        for name in owner_names) else None)
+    gc_copies = []
+    gc_unavailable = None
     unavailable = None
     expected_context = prompt_tokens
     for batch in batches:
@@ -398,6 +409,29 @@ def _decode_program_budget(batches, rows, *, request_id, prompt_tokens,
         if not valid_counter:
             counters_available = False
             unavailable = unavailable or "cohort_program_counter_unavailable"
+        observations = metadata.get("storage_gc_observations")
+        gc = observations.get(owner) if owner and isinstance(observations, Mapping) else None
+        if owner is None:
+            gc_reason = "program_gc_physical_owner_unverified"
+        elif not isinstance(observations, Mapping) or set(observations) != {owner}:
+            gc_reason = "program_gc_single_owner_observations_unavailable"
+        elif (not isinstance(gc, Mapping) or gc.get("available") is not True
+                or gc.get("semantics") != "cohort_local_staging_counter_deltas"
+                or any(type(gc.get(name)) is not int or gc[name] < 0 for name in
+                    ("gc_cycles", "gc_copied_pages", "pressure_flushes", "rmw_pages",
+                     "recorded_task_count", "expected_task_count"))
+                or gc["recorded_task_count"] == 0
+                or gc["recorded_task_count"] != gc["expected_task_count"]
+                or (gc["gc_copied_pages"] and not gc["gc_cycles"])):
+            gc_reason = "program_gc_complete_cohort_ledger_unavailable"
+        elif not valid_counter or gc["gc_copied_pages"] > raw:
+            gc_reason = "program_gc_copies_exceed_cohort_programs"
+        elif gc["pressure_flushes"] or gc["rmw_pages"]:
+            gc_reason = "program_gc_cohort_has_pressure_or_rmw"
+        else:
+            gc_reason = None
+        gc_unavailable = gc_unavailable or gc_reason
+        gc_copies.append(gc["gc_copied_pages"] if gc_reason is None else None)
         items = getattr(batch, "items", ())
         if (metadata.get("physical_execution_scope") != "persistent_live_kernel"
                 or metadata.get("cost_duration_semantics") != "live_cohort_span"):
@@ -421,18 +455,24 @@ def _decode_program_budget(batches, rows, *, request_id, prompt_tokens,
                          for row in rows)
         if not valid_counter or compulsory > raw:
             unavailable = unavailable or "cohort_program_count_below_kv_lower_bound"
+        if (gc_reason is None and compulsory + gc["gc_copied_pages"] > raw):
+            gc_unavailable = gc_unavailable or "program_gc_and_kv_exceed_cohort_programs"
         deductions.append(compulsory)
     if expected_context != current_tokens or len(batches) != current_tokens - prompt_tokens:
         unavailable = unavailable or "decode_kv_phase_not_contiguous"
     if not batches:
         counters_available = False
         unavailable = unavailable or "decode_program_observations_empty"
+        gc_unavailable = gc_unavailable or "decode_program_observations_empty"
     # Aggregate traffic can contain other physical owners. Subtracting only
     # this owner's compulsory K/V pages leaves all other owners charged too,
     # so the residual remains conservative for multi-owner layouts.
     if unavailable:
         deductions = [0] * len(observed)
-    residual = [total - kv for total, kv in zip(observed, deductions, strict=True)]
+    gc_verified = unavailable is None and gc_unavailable is None
+    gc_deductions = gc_copies if gc_verified else [0] * len(observed)
+    ordinary = [total - copied for total, copied in zip(observed, gc_deductions, strict=True)]
+    residual = [total - kv for total, kv in zip(ordinary, deductions, strict=True)]
     observed_max = max(observed, default=0)
     residual_max = max(residual, default=0)
     scale = max(1.0, final_tokens / max(1, current_tokens))
@@ -448,9 +488,9 @@ def _decode_program_budget(batches, rows, *, request_id, prompt_tokens,
     qualified = deduction_unavailable is None
     # Fixed ordinary logical write/alias sequences execute the same staging
     # programs for each fresh cohort generation. Reads do not flush, release
-    # discards partial HOST tails, and the separate guards exclude pressure,
-    # GC, RMW and reuse. Thus every observed residual is an upper bound for
-    # that sequence; using its maximum also retains extra prefix cleanup IO.
+    # discards partial HOST tails, and separate guards bound GC while
+    # excluding pressure, RMW and reuse. Every observed residual is then an
+    # upper bound for that sequence; its maximum retains prefix cleanup IO.
     program_budget = remaining * residual_max + future_kv if qualified else remaining * legacy_per_step
     return {"program_page_guard_budget": program_budget,
             "program_pages_per_decode_guard_budget": residual_max if qualified else legacy_per_step,
@@ -458,7 +498,15 @@ def _decode_program_budget(batches, rows, *, request_id, prompt_tokens,
             "observed_max_non_kv_program_pages_per_decode": residual_max,
             "observed_kv_completed_page_programs_deducted": sum(deductions) if qualified else 0,
             "observed_kv_completed_page_programs_verified": sum(deductions),
+            "observed_gc_copied_pages_by_decode": tuple(gc_copies),
+            "observed_gc_copied_pages_verified": sum(gc_copies) if gc_verified else None,
+            "observed_gc_copied_pages_deducted": sum(gc_deductions) if qualified else 0,
+            "gc_copy_program_deduction_available": qualified and gc_verified,
+            "gc_copy_program_deduction_unavailable_reason": (
+                unavailable or gc_unavailable or deduction_unavailable),
             "observed_program_pages_by_decode": tuple(observed),
+            "observed_ordinary_program_pages_upper_by_decode": tuple(ordinary),
+            "observed_residual_non_kv_program_pages_upper_by_decode": tuple(residual),
             "observed_kv_program_lower_bound_by_decode": tuple(deductions),
             "kv_program_lower_bound_verified": lower_bound_verified,
             "kv_program_deduction_available": qualified,
@@ -471,6 +519,22 @@ def _decode_program_budget(batches, rows, *, request_id, prompt_tokens,
             "non_kv_write_geometry_qualified": geometry_qualified,
             "non_kv_write_geometry": write_geometry,
             "fixed_non_kv_program_pages_per_decode": residual_max if qualified else None,
+            "program_page_budget_breakdown": {
+                "semantics": "cohort_raw_programs_minus_verified_gc_copies_minus_compulsory_kv_pages",
+                "physical_owner": owner,
+                "observed_raw_program_pages": sum(observed) if counters_available else None,
+                "verified_gc_copy_program_pages": sum(gc_copies) if gc_verified else None,
+                "gc_copy_program_pages_deducted": sum(gc_deductions) if qualified else 0,
+                "compulsory_kv_program_pages_verified": sum(deductions),
+                "compulsory_kv_program_pages_deducted": sum(deductions) if qualified else 0,
+                "residual_non_kv_program_pages_upper": sum(residual) if counters_available else None,
+                "residual_scope": ("ordinary_non_kv_programs" if gc_verified
+                    else "ordinary_non_kv_plus_undeducted_unknown_gc_programs"),
+                "future_fixed_non_kv_program_pages_upper": remaining * residual_max if qualified else None,
+                "future_compulsory_kv_program_pages": future_kv,
+                "future_program_pages_guard": program_budget,
+                "future_gc_copy_allocation_and_service": "charged_separately_by_gc_projection",
+                "physical_state_advanced": False},
             "legacy_program_page_guard_budget": remaining * legacy_per_step,
             "legacy_program_pages_per_decode_guard_budget": legacy_per_step}
 
