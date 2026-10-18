@@ -509,6 +509,14 @@ class HbfStagingController:
 
     def rollback_transaction(self, token):
         self._finish_transaction(token)
+        # The heap is derived from ownership and used-block membership. Undo
+        # changes only these blocks; retaining all other entries avoids a
+        # device-wide rebuild after an ordinary declined bulk-write probe.
+        gc_blocks = set(token["owners"])
+        gc_blocks.update(token["maps"]["_used"]["values"])
+        gc_blocks.update((self._spare, token["state"]["_spare"]))
+        pages_changed = any(token[name] for name in (
+            "pages", "page_ready", "read_ready", "released_order"))
         for name, journal in token["maps"].items():
             self.__dict__[name].rollback(journal)
         for state, ready in token["read_ready"].values():
@@ -537,16 +545,19 @@ class HbfStagingController:
             else:
                 self._owners[block] = owners
         self.__dict__.update(token["state"])
-        # Rollback is exceptional. Materialize once so restored page objects
-        # cannot retain a plan that described an overwritten/collected page.
-        # Active outer transactions retain their original scalar values.
-        for key, page in self._pages.items():
-            if page._read_state is not None:
-                self._touch_page_ready(key, page)
-                page._ready_ns = page.ready_ns
-                page._read_state = None
-        self._read_states.clear()
-        self._reset_gc_index()
+        if pages_changed:
+            # Restored page objects cannot retain a read plan that described
+            # overwritten/collected pages. Active outer journals retain their
+            # original scalar values. An empty-GC allocation probe changes no
+            # page or read plan, so it must not scan every retained KV page.
+            for key, page in self._pages.items():
+                if page._read_state is not None:
+                    self._touch_page_ready(key, page)
+                    page._ready_ns = page.ready_ns
+                    page._read_state = None
+            self._read_states.clear()
+        if self._gc_dirty is not None:
+            self._gc_dirty.update(gc_blocks)
 
     @staticmethod
     def _ready_before(token, page):

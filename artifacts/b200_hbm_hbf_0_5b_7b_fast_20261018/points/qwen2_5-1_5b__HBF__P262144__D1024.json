@@ -4,7 +4,7 @@
   "architecture": "HBF",
   "prompt_tokens": 262144,
   "output_tokens": 1024,
-  "started_at": "2026-10-18T05:10:47.452704+00:00",
+  "started_at": "2026-10-18T06:52:40.445727+00:00",
   "ttft_ns": null,
   "tpot_ns": null,
   "python_executable": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\.venv\\Scripts\\python.exe",
@@ -22,7 +22,20 @@
       "sampling_strategy": "adaptive"
     }
   },
-  "pid": 54028,
+  "pid": 30532,
+  "paired_reference": {
+    "model_name": "Qwen2.5-1.5B",
+    "prompt_tokens": 262144,
+    "output_tokens": 1024,
+    "memory_kind": "hbm",
+    "target_relative_error": 0.1,
+    "decode_estimate_ns": 4811740201.102106,
+    "decode_lower_ns": 4807099687.757416,
+    "decode_upper_ns": 4816392455.925186,
+    "source_id": "qwen2_5-1_5b__HBM__P262144__D1024",
+    "weight_dtype": "bf16",
+    "kv_dtype": "bf16"
+  },
   "model": {
     "name": "Qwen2.5-1.5B",
     "layers": 28,
@@ -73,8 +86,8 @@
   ],
   "status": "interrupted",
   "reason": "ExecutionCancelledError: 仿真任务已取消",
-  "finished_at": "2026-10-18T06:00:50.836526+00:00",
-  "wall_seconds": 3003.3910000000033,
-  "real_prefill_steps": 100,
+  "finished_at": "2026-10-18T07:52:56.812338+00:00",
+  "wall_seconds": 3616.375,
+  "real_prefill_steps": 107,
   "real_decode_steps": 0
 }

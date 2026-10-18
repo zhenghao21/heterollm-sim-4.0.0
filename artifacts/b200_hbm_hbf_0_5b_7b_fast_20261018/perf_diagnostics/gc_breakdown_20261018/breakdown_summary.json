@@ -1,0 +1,326 @@
+{
+  "scope": "Bounded seeded physical-controller workload; formal 256-bank NAND and real NAND/HOST/fabric callbacks. No long LLM prefill replay or detailed reference run.",
+  "script": "scripts/profile_hbf_gc.py",
+  "timing_scope": "Warm import, bulk NAND and HOST numeric before seeding. Every timed trial includes its first GC index and first dense cache construction. Seed setup excluded from both versions. ABBA runs have no profiler.",
+  "physical_geometry": {
+    "banks": 256,
+    "blocks_per_bank": 2048,
+    "pages_per_block": 256,
+    "page_bytes": 4096,
+    "physical_blocks": 524288
+  },
+  "dense_profile": {
+    "baseline_wall_seconds": 21.23345659999177,
+    "candidate_wall_seconds": 1.412174800003413,
+    "baseline_nonoverlapping_boundaries": [
+      {
+        "category": "victim_lookup_and_index",
+        "function": "_gc_victim",
+        "calls": 17,
+        "seconds": 3.2241108,
+        "percent": 15.184107141562858,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "rollback_restore_and_read_cache_detach",
+        "function": "rollback_transaction",
+        "calls": 8,
+        "seconds": 12.527515200000002,
+        "percent": 58.99894414743975,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "dense_read_cache_construction",
+        "function": "_read_state",
+        "calls": 8,
+        "seconds": 5.0002864,
+        "percent": 23.549092802920928,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "nand_page_io",
+        "function": "submit",
+        "calls": 2084,
+        "seconds": 0.17874620000000002,
+        "percent": 0.8418139512907631,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "host_dram_io",
+        "function": "_host",
+        "calls": 36,
+        "seconds": 0.005031300000000001,
+        "percent": 0.02369515286551108,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "fabric_transfer",
+        "function": "_transfer",
+        "calls": 2084,
+        "seconds": 0.0717777,
+        "percent": 0.33804058073157917,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "owner_journal_update",
+        "function": "_touch_owners",
+        "calls": 7302,
+        "seconds": 0.0021492,
+        "percent": 0.010121762275864369,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "allocation_python_self_excluding_gc",
+        "function": "_allocate",
+        "calls": 3770,
+        "seconds": 0.0047524,
+        "percent": 0.022381659705852333,
+        "time_kind": "self_seconds"
+      },
+      {
+        "category": "provisional_page_owner_loop_self",
+        "function": "_prepare_empty_gc_write",
+        "calls": 8,
+        "seconds": 0.0035596000000000004,
+        "percent": 0.016764109900040396,
+        "time_kind": "self_seconds"
+      },
+      {
+        "category": "frontier_dependency_journal",
+        "function": "_remember",
+        "calls": 5872,
+        "seconds": 0.013102200000000001,
+        "percent": 0.06170545025629544,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "transaction_begin",
+        "function": "begin_transaction",
+        "calls": 16,
+        "seconds": 0.0003238,
+        "percent": 0.0015249519006722886,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "transaction_commit",
+        "function": "commit_transaction",
+        "calls": 8,
+        "seconds": 4.02e-05,
+        "percent": 0.0001893238616646881,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "remaining_validation_dispatch_builtin_and_timer",
+        "seconds": 0.2020615999917652,
+        "percent": 0.9516189652882213
+      }
+    ],
+    "candidate_nonoverlapping_boundaries": [
+      {
+        "category": "victim_lookup_and_index",
+        "function": "_gc_victim",
+        "calls": 17,
+        "seconds": 0.3789521,
+        "percent": 26.834645399357367,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "rollback_restore_and_read_cache_detach",
+        "function": "rollback_transaction",
+        "calls": 8,
+        "seconds": 0.0001653,
+        "percent": 0.011705349790946593,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "dense_read_cache_construction",
+        "function": "_read_state",
+        "calls": 8,
+        "seconds": 0.6602655000000001,
+        "percent": 46.755224636383836,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "nand_page_io",
+        "function": "submit",
+        "calls": 2084,
+        "seconds": 0.182432,
+        "percent": 12.91851405361143,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "host_dram_io",
+        "function": "_host",
+        "calls": 36,
+        "seconds": 0.0047343,
+        "percent": 0.33524886579115826,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "fabric_transfer",
+        "function": "_transfer",
+        "calls": 2084,
+        "seconds": 0.0740827,
+        "percent": 5.246000707548453,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "owner_journal_update",
+        "function": "_touch_owners",
+        "calls": 7302,
+        "seconds": 0.0029787000000000004,
+        "percent": 0.21092997835627722,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "allocation_python_self_excluding_gc",
+        "function": "_allocate",
+        "calls": 3770,
+        "seconds": 0.0046251,
+        "percent": 0.3275161120272661,
+        "time_kind": "self_seconds"
+      },
+      {
+        "category": "provisional_page_owner_loop_self",
+        "function": "_prepare_empty_gc_write",
+        "calls": 8,
+        "seconds": 0.0035913000000000004,
+        "percent": 0.2543098772185512,
+        "time_kind": "self_seconds"
+      },
+      {
+        "category": "frontier_dependency_journal",
+        "function": "_remember",
+        "calls": 5872,
+        "seconds": 0.0132721,
+        "percent": 0.9398340771955371,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "transaction_begin",
+        "function": "begin_transaction",
+        "calls": 16,
+        "seconds": 0.000272,
+        "percent": 0.019261071646324703,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "transaction_commit",
+        "function": "commit_transaction",
+        "calls": 8,
+        "seconds": 4.04e-05,
+        "percent": 0.0028608356415864636,
+        "time_kind": "inclusive_seconds"
+      },
+      {
+        "category": "remaining_validation_dispatch_builtin_and_timer",
+        "seconds": 0.08676330000341292,
+        "percent": 6.143949035431252
+      }
+    ],
+    "note": "Inclusive times of _touch_page_ready/_ready_before are nested inside rollback; do not add them to rollback. GC _collect is not summed together with nested NAND/HOST/fabric functions. Profile adds overhead and is not used for speedup acceptance."
+  },
+  "ABBA": [
+    {
+      "workload": "live_copy_with_dense_cache",
+      "order": [
+        "old",
+        "new",
+        "new",
+        "old"
+      ],
+      "profiled": false,
+      "source_baseline": "c27a305 staging module, read only git show in diagnostic process",
+      "records": [
+        {
+          "tag": "abba_old_1",
+          "wall_seconds": 9.057807600009255,
+          "seed_setup_seconds_excluded": 5.776246200024616
+        },
+        {
+          "tag": "abba_new_1",
+          "wall_seconds": 0.7695249000098556,
+          "seed_setup_seconds_excluded": 5.59160659997724
+        },
+        {
+          "tag": "abba_new_2",
+          "wall_seconds": 0.8514415000099689,
+          "seed_setup_seconds_excluded": 5.726118499995209
+        },
+        {
+          "tag": "abba_old_2",
+          "wall_seconds": 8.679934400017373,
+          "seed_setup_seconds_excluded": 5.7536952999653295
+        }
+      ],
+      "old_mean_seconds": 8.868871000013314,
+      "new_mean_seconds": 0.8104832000099123,
+      "speedup": 10.942695665875428,
+      "equal_outputs": {
+        "geometry": true,
+        "writes": true,
+        "pages_per_write": true,
+        "retained_pages": true,
+        "live_pages_per_block": true,
+        "bind_read_state_per_write": true,
+        "simulated_completion_ns": true,
+        "stats_delta": true,
+        "physical_costs_sum": true
+      }
+    },
+    {
+      "workload": "zero_live_copy_control",
+      "order": [
+        "old",
+        "new",
+        "new",
+        "old"
+      ],
+      "profiled": false,
+      "source_baseline": "c27a305 staging module, read only git show in diagnostic process",
+      "records": [
+        {
+          "tag": "empty_abba_old_1",
+          "wall_seconds": 0.41911429999163374,
+          "seed_setup_seconds_excluded": 1.3385017999680713
+        },
+        {
+          "tag": "empty_abba_new_1",
+          "wall_seconds": 0.4019034000230022,
+          "seed_setup_seconds_excluded": 1.3963518000091426
+        },
+        {
+          "tag": "empty_abba_new_2",
+          "wall_seconds": 0.40069430001312867,
+          "seed_setup_seconds_excluded": 1.4147423999966122
+        },
+        {
+          "tag": "empty_abba_old_2",
+          "wall_seconds": 0.4383537999819964,
+          "seed_setup_seconds_excluded": 1.4430427000042982
+        }
+      ],
+      "old_mean_seconds": 0.4287340499868151,
+      "new_mean_seconds": 0.4012988500180654,
+      "speedup": 1.068366006948474,
+      "equal_outputs": {
+        "geometry": true,
+        "writes": true,
+        "pages_per_write": true,
+        "retained_pages": true,
+        "live_pages_per_block": true,
+        "bind_read_state_per_write": true,
+        "simulated_completion_ns": true,
+        "stats_delta": true,
+        "physical_costs_sum": true
+      }
+    }
+  ],
+  "conclusion": [
+    "On failed empty-GC preflight, old rollback detached all retained read states, journalled all page readiness into outer transactions, and reset the derived victim index.",
+    "Candidate retains unaffected read states and marks only changed physical blocks dirty after rollback; victim geometry/tie ordering, NAND/host/link work and timing are unchanged.",
+    "Current remaining bounded-workload cost is the one-time dense cache and 524288-block initial index plus scalar page IO. No full end-to-end Prefill speedup is claimed.",
+    "This path can explain a post-exhaustion complexity cliff; old live scan logs did not expose GC counters, so its exact share of the interrupted formal 107-block execution is not directly measured."
+  ],
+  "exact_state_validation": "Optimization agent reports 97 focused tests including old/new real-NAND controller/core/calendar/allocator/cost equality for live-copy GC, native on/off and detailed capture on/off."
+}

@@ -1,0 +1,1559 @@
+{
+  "case": "live_copy_gc",
+  "tag": "candidate_warm",
+  "profiled": true,
+  "scope": "controller-level seeded programmed medium; no LLM or detailed reference run",
+  "geometry": {
+    "banks": 256,
+    "blocks_per_bank": 2048,
+    "pages_per_block": 256,
+    "page_bytes": 4096,
+    "physical_blocks": 524288
+  },
+  "seed_setup_seconds_excluded": 3.7984487999929115,
+  "writes": 8,
+  "pages_per_write": 256,
+  "retained_pages": 524543,
+  "live_pages_per_block": 1,
+  "bind_read_state_per_write": false,
+  "wall_seconds": 0.7111289000022225,
+  "per_write_wall_seconds": [
+    0.4101564000011422,
+    0.04168030002620071,
+    0.03999239997938275,
+    0.04088640003465116,
+    0.04453690000809729,
+    0.043983499985188246,
+    0.044316900020930916,
+    0.045001499995123595
+  ],
+  "simulated_completion_ns": 155142921.0000008,
+  "stats_delta": {
+    "logical_write_bytes": 8388608,
+    "write_hbf_bytes": 8388608,
+    "flash_write_bytes": 8425472,
+    "direct_write_pages": 2048,
+    "to_host_bytes": 0,
+    "host_write_bytes": 36864,
+    "host_read_bytes": 36864,
+    "to_hbf_bytes": 36864,
+    "flushed_pages": 0,
+    "released_buffers": 0,
+    "flash_read_bytes": 36864,
+    "from_hbf_bytes": 36864,
+    "gc_copied_pages": 9,
+    "gc_cycles": 9
+  },
+  "physical_costs_sum": {
+    "flash": {
+      "operation_count": 2066.0,
+      "logical_bytes": 8462336.0,
+      "logical_read_bytes": 36864.0,
+      "logical_write_bytes": 8425472.0,
+      "physical_bytes": 8462336.0,
+      "physical_read_bytes": 36864.0,
+      "physical_write_bytes": 8425472.0,
+      "arrival_ns": 560694761.666673,
+      "completion_ns": 715837682.6666738,
+      "host_transfer_bytes": 8462336.0,
+      "internal_transfer_bytes": 8462336.0,
+      "pages_read": 9.0,
+      "pages_programmed": 2057.0,
+      "merge_bytes": 0.0,
+      "merged_pages": 0.0,
+      "staging_write_pages": 0.0,
+      "staging_read_hits": 0.0,
+      "staging_read_merges": 0.0,
+      "read_cache_hits": 0.0,
+      "read_cache_misses": 9.0,
+      "erase_operations": 9.0,
+      "pages_touched": 2066.0,
+      "read_operations": 9.0,
+      "program_operations": 2057.0,
+      "rmw_read_operations": 0.0,
+      "page_access_payload_bytes": 8462336.0,
+      "page_access_capacity_bytes": 8462336.0,
+      "host_admission_samples": 2066.0,
+      "host_outstanding_at_admission_peak": 512.0,
+      "host_read_outstanding_at_admission_peak": 8.0,
+      "host_write_outstanding_at_admission_peak": 512.0,
+      "queue_wait_ns": 10580602208.000065,
+      "write_buffer_wait_ns": 0.0,
+      "write_buffer_bytes": 0.0,
+      "write_buffer_peak_bytes": 0.0,
+      "service_ns": 155142921.0000008
+    },
+    "from_hbf": {
+      "operation_count": 9.0,
+      "logical_bytes": 36864.0,
+      "logical_read_bytes": 36864.0,
+      "logical_write_bytes": 0.0,
+      "physical_bytes": 36864.0,
+      "physical_read_bytes": 0.0,
+      "physical_write_bytes": 0.0,
+      "arrival_ns": 560694761.666673,
+      "completion_ns": 564884178.666673,
+      "internal_transfer_bytes": 0.0,
+      "service_ns": 4189417.0000000023
+    },
+    "host": {
+      "operation_count": 18.0,
+      "logical_bytes": 73728.0,
+      "logical_read_bytes": 36864.0,
+      "logical_write_bytes": 36864.0,
+      "physical_bytes": 73728.0,
+      "physical_read_bytes": 36864.0,
+      "physical_write_bytes": 36864.0,
+      "arrival_ns": 560694761.666673,
+      "completion_ns": 564887066.666673,
+      "row_hits": 1152.0,
+      "row_misses": 0.0,
+      "row_conflicts": 0.0,
+      "burst_count": 1152.0,
+      "queue_wait_ns": 0.0,
+      "host_transfer_bytes": 0.0,
+      "internal_transfer_bytes": 0.0,
+      "pages_read": 0.0,
+      "pages_programmed": 0.0,
+      "erase_operations": 0.0,
+      "scheduler_reordered_requests": 0.0,
+      "scheduler_batches": 0.0,
+      "controller_direction_switches": 18.0,
+      "service_ns": 4192305.0000000023
+    },
+    "to_hbf": {
+      "operation_count": 9.0,
+      "logical_bytes": 36864.0,
+      "logical_read_bytes": 36864.0,
+      "logical_write_bytes": 0.0,
+      "physical_bytes": 36864.0,
+      "physical_read_bytes": 0.0,
+      "physical_write_bytes": 0.0,
+      "arrival_ns": 560694761.666673,
+      "completion_ns": 564888730.666673,
+      "internal_transfer_bytes": 0.0,
+      "service_ns": 4193969.0000000023
+    },
+    "write_hbf": {
+      "operation_count": 2048.0,
+      "logical_bytes": 8388608.0,
+      "logical_read_bytes": 8388608.0,
+      "logical_write_bytes": 0.0,
+      "physical_bytes": 8388608.0,
+      "physical_read_bytes": 0.0,
+      "physical_write_bytes": 0.0,
+      "arrival_ns": 560694761.666673,
+      "completion_ns": 581493978.666673,
+      "internal_transfer_bytes": 0.0,
+      "service_ns": 20799217.0
+    }
+  },
+  "final_metadata_counts": {
+    "used": 524287,
+    "owners": 524287,
+    "gc_heap": 524299,
+    "gc_entries": 524286
+  },
+  "profile": {
+    "total_profile_self_seconds": 0.6871784000000001,
+    "top_functions": [
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py",
+        "line": 885,
+        "function": "resolve_physical_task",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 2.79e-05,
+        "inclusive_seconds": 0.7052868
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py",
+        "line": 919,
+        "function": "_resolve_physical_task",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 8.460000000000001e-05,
+        "inclusive_seconds": 0.7039834
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py",
+        "line": 1027,
+        "function": "_execute_physical_task",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 0.0013486000000000001,
+        "inclusive_seconds": 0.7033283
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py",
+        "line": 1037,
+        "function": "execute_prepared_physical_task",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 0.014313500000000002,
+        "inclusive_seconds": 0.7009688000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 851,
+        "function": "write",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 0.0158043,
+        "inclusive_seconds": 0.6777157
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 927,
+        "function": "_write_full_pages",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 6.69e-05,
+        "inclusive_seconds": 0.3672438
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 1010,
+        "function": "_prepare_empty_gc_write",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 0.0034676000000000004,
+        "inclusive_seconds": 0.3668208
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 722,
+        "function": "_gc_victim",
+        "calls": 17,
+        "primitive_calls": 17,
+        "self_seconds": 0.24027,
+        "inclusive_seconds": 0.35715630000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 858,
+        "function": "submit",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0035059,
+        "inclusive_seconds": 0.1823684
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1033,
+        "function": "_submit_ocp_single_page_summary",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.029076800000000003,
+        "inclusive_seconds": 0.147688
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 666,
+        "function": "_transfer",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0072506,
+        "inclusive_seconds": 0.06384970000000001
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<method 'get' of 'dict' objects>",
+        "calls": 697946,
+        "primitive_calls": 697946,
+        "self_seconds": 0.0637307,
+        "inclusive_seconds": 0.0637307
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_transfer.py",
+        "line": 104,
+        "function": "reserve",
+        "calls": 4132,
+        "primitive_calls": 4132,
+        "self_seconds": 0.023482600000000003,
+        "inclusive_seconds": 0.049734600000000004
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method _heapq.heappush>",
+        "calls": 524302,
+        "primitive_calls": 524302,
+        "self_seconds": 0.045991500000000005,
+        "inclusive_seconds": 0.045991500000000005
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 582,
+        "function": "_validate_request",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0017818,
+        "inclusive_seconds": 0.030324100000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.len>",
+        "calls": 570763,
+        "primitive_calls": 570763,
+        "self_seconds": 0.0281547,
+        "inclusive_seconds": 0.028155500000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 702,
+        "function": "_allocate",
+        "calls": 3805,
+        "primitive_calls": 3805,
+        "self_seconds": 0.0044759000000000005,
+        "inclusive_seconds": 0.027272800000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.sum>",
+        "calls": 4140,
+        "primitive_calls": 4140,
+        "self_seconds": 0.0132504,
+        "inclusive_seconds": 0.0262543
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 469,
+        "function": "_validate_program_order",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0029729,
+        "inclusive_seconds": 0.025064600000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.any>",
+        "calls": 4206,
+        "primitive_calls": 4206,
+        "self_seconds": 0.0023596000000000003,
+        "inclusive_seconds": 0.0206244
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_mapping.py",
+        "line": 183,
+        "function": "split_nand_request",
+        "calls": 4114,
+        "primitive_calls": 4114,
+        "self_seconds": 0.0054521000000000005,
+        "inclusive_seconds": 0.0204539
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 766,
+        "function": "_collect",
+        "calls": 9,
+        "primitive_calls": 9,
+        "self_seconds": 0.0002475,
+        "inclusive_seconds": 0.0192585
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 390,
+        "function": "_admit_host_request",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.016120000000000002,
+        "inclusive_seconds": 0.018935200000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_mapping.py",
+        "line": 95,
+        "function": "map_nand_address",
+        "calls": 4424,
+        "primitive_calls": 4424,
+        "self_seconds": 0.008614,
+        "inclusive_seconds": 0.0186489
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1066,
+        "function": "reserve",
+        "calls": 6207,
+        "primitive_calls": 6207,
+        "self_seconds": 0.0095019,
+        "inclusive_seconds": 0.014179800000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 322,
+        "function": "_remember",
+        "calls": 5898,
+        "primitive_calls": 5898,
+        "self_seconds": 0.0135551,
+        "inclusive_seconds": 0.0135641
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 350,
+        "function": "pop",
+        "calls": 9,
+        "primitive_calls": 9,
+        "self_seconds": 3.68e-05,
+        "inclusive_seconds": 0.012620900000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_transfer.py",
+        "line": 17,
+        "function": "_number",
+        "calls": 18594,
+        "primitive_calls": 18594,
+        "self_seconds": 0.0076408000000000005,
+        "inclusive_seconds": 0.011685300000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1053,
+        "function": "<genexpr>",
+        "calls": 8264,
+        "primitive_calls": 8264,
+        "self_seconds": 0.0081869,
+        "inclusive_seconds": 0.0098083
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1051,
+        "function": "<genexpr>",
+        "calls": 8264,
+        "primitive_calls": 8264,
+        "self_seconds": 0.007148000000000001,
+        "inclusive_seconds": 0.008347
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1169,
+        "function": "<genexpr>",
+        "calls": 112779,
+        "primitive_calls": 112779,
+        "self_seconds": 0.0067093000000000005,
+        "inclusive_seconds": 0.0067093000000000005
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.isinstance>",
+        "calls": 83680,
+        "primitive_calls": 83680,
+        "self_seconds": 0.006220000000000001,
+        "inclusive_seconds": 0.0062903
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1171,
+        "function": "<genexpr>",
+        "calls": 112779,
+        "primitive_calls": 112779,
+        "self_seconds": 0.0062883,
+        "inclusive_seconds": 0.0062883
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 369,
+        "function": "_host_id",
+        "calls": 2367,
+        "primitive_calls": 2367,
+        "self_seconds": 0.0034690000000000003,
+        "inclusive_seconds": 0.0060264
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.min>",
+        "calls": 15943,
+        "primitive_calls": 15943,
+        "self_seconds": 0.0037904,
+        "inclusive_seconds": 0.0056097000000000004
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method builtins.max>",
+        "calls": 39846,
+        "primitive_calls": 39846,
+        "self_seconds": 0.0055772,
+        "inclusive_seconds": 0.0055772
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_types.py",
+        "line": 154,
+        "function": "__post_init__",
+        "calls": 2084,
+        "primitive_calls": 2084,
+        "self_seconds": 0.0026202,
+        "inclusive_seconds": 0.0055431000000000005
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_mapping.py",
+        "line": 162,
+        "function": "validate_nand_request",
+        "calls": 4123,
+        "primitive_calls": 4123,
+        "self_seconds": 0.0037973000000000004,
+        "inclusive_seconds": 0.0053575
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 570,
+        "function": "_touch_page",
+        "calls": 2057,
+        "primitive_calls": 2057,
+        "self_seconds": 0.0030508,
+        "inclusive_seconds": 0.005145
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_transfer.py",
+        "line": 130,
+        "function": "eligible",
+        "calls": 4132,
+        "primitive_calls": 4132,
+        "self_seconds": 0.0016577,
+        "inclusive_seconds": 0.0046370000000000005
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 482,
+        "function": "_bandwidth_ceiling_gb_s",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.00206,
+        "inclusive_seconds": 0.004125
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_transfer.py",
+        "line": 97,
+        "function": "available_ns",
+        "calls": 4134,
+        "primitive_calls": 4134,
+        "self_seconds": 0.0023153,
+        "inclusive_seconds": 0.0038390000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 662,
+        "function": "_host",
+        "calls": 18,
+        "primitive_calls": 18,
+        "self_seconds": 0.00035810000000000003,
+        "inclusive_seconds": 0.0037446000000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py",
+        "line": 910,
+        "function": "_merge_latest_resource_intervals",
+        "calls": 4142,
+        "primitive_calls": 4142,
+        "self_seconds": 0.0026198000000000003,
+        "inclusive_seconds": 0.0036439000000000003
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<built-in method math.isfinite>",
+        "calls": 47780,
+        "primitive_calls": 47780,
+        "self_seconds": 0.0034538000000000004,
+        "inclusive_seconds": 0.0034538000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 330,
+        "function": "__setitem__",
+        "calls": 5889,
+        "primitive_calls": 5889,
+        "self_seconds": 0.0022153000000000003,
+        "inclusive_seconds": 0.0032012000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\_compiled_dram.py",
+        "line": 113,
+        "function": "execute_compiled",
+        "calls": 18,
+        "primitive_calls": 18,
+        "self_seconds": 0.0016393,
+        "inclusive_seconds": 0.0031763000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 637,
+        "function": "_touch_owners",
+        "calls": 7372,
+        "primitive_calls": 7372,
+        "self_seconds": 0.0023712,
+        "inclusive_seconds": 0.0030867000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 353,
+        "function": "_array_id",
+        "calls": 4734,
+        "primitive_calls": 4734,
+        "self_seconds": 0.0022666,
+        "inclusive_seconds": 0.0028428000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 449,
+        "function": "_count",
+        "calls": 6224,
+        "primitive_calls": 6224,
+        "self_seconds": 0.0018720000000000002,
+        "inclusive_seconds": 0.0026281
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 357,
+        "function": "_array_resource_id",
+        "calls": 2367,
+        "primitive_calls": 2367,
+        "self_seconds": 0.0010938,
+        "inclusive_seconds": 0.002581
+      },
+      {
+        "file": "C:\\Users\\A\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\Lib\\enum.py",
+        "line": 720,
+        "function": "__call__",
+        "calls": 4441,
+        "primitive_calls": 4441,
+        "self_seconds": 0.0014395,
+        "inclusive_seconds": 0.0021445
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<method 'add' of 'set' objects>",
+        "calls": 17951,
+        "primitive_calls": 17951,
+        "self_seconds": 0.0020386000000000002,
+        "inclusive_seconds": 0.0020386000000000002
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 434,
+        "function": "_block_key",
+        "calls": 4114,
+        "primitive_calls": 4114,
+        "self_seconds": 0.0013755,
+        "inclusive_seconds": 0.0019439000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 457,
+        "function": "_invalidate_cache",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0012679,
+        "inclusive_seconds": 0.0018748
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 365,
+        "function": "_channel_id",
+        "calls": 2367,
+        "primitive_calls": 2367,
+        "self_seconds": 0.0013009,
+        "inclusive_seconds": 0.0018269
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_transfer.py",
+        "line": 136,
+        "function": "<lambda>",
+        "calls": 4132,
+        "primitive_calls": 4132,
+        "self_seconds": 0.0018156000000000001,
+        "inclusive_seconds": 0.0018156000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 652,
+        "function": "_address",
+        "calls": 3823,
+        "primitive_calls": 3823,
+        "self_seconds": 0.0014216,
+        "inclusive_seconds": 0.0017639
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_types.py",
+        "line": 763,
+        "function": "host_bandwidth_for",
+        "calls": 4132,
+        "primitive_calls": 4132,
+        "self_seconds": 0.0014271000000000002,
+        "inclusive_seconds": 0.0017567000000000001
+      },
+      {
+        "file": "C:\\Users\\A\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\Lib\\enum.py",
+        "line": 202,
+        "function": "__get__",
+        "calls": 6637,
+        "primitive_calls": 6637,
+        "self_seconds": 0.0012397,
+        "inclusive_seconds": 0.0017479000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 311,
+        "function": "_set_program_frontier",
+        "calls": 2057,
+        "primitive_calls": 2057,
+        "self_seconds": 0.0011565,
+        "inclusive_seconds": 0.0017432
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 381,
+        "function": "_host_bandwidth",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0007052,
+        "inclusive_seconds": 0.0016549000000000002
+      },
+      {
+        "file": "~",
+        "line": 0,
+        "function": "<method 'pop' of 'dict' objects>",
+        "calls": 13688,
+        "primitive_calls": 13688,
+        "self_seconds": 0.001654,
+        "inclusive_seconds": 0.001654
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_transfer.py",
+        "line": 80,
+        "function": "canonical_resource_id",
+        "calls": 15576,
+        "primitive_calls": 15576,
+        "self_seconds": 0.0016484000000000002,
+        "inclusive_seconds": 0.0016484000000000002
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_types.py",
+        "line": 757,
+        "function": "transfer_page_bytes",
+        "calls": 6180,
+        "primitive_calls": 6180,
+        "self_seconds": 0.0015573000000000002,
+        "inclusive_seconds": 0.0015573000000000002
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_types.py",
+        "line": 35,
+        "function": "_nonnegative",
+        "calls": 2092,
+        "primitive_calls": 2092,
+        "self_seconds": 0.0009787,
+        "inclusive_seconds": 0.0014125000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 420,
+        "function": "_record_host_admission",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0013533,
+        "inclusive_seconds": 0.0013533
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\memory_types.py",
+        "line": 749,
+        "function": "effective_capacity_bytes",
+        "calls": 12670,
+        "primitive_calls": 12670,
+        "self_seconds": 0.0012632000000000001,
+        "inclusive_seconds": 0.0012632000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py",
+        "line": 512,
+        "function": "begin_transaction",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 1.3000000000000001e-05,
+        "inclusive_seconds": 0.0011369000000000002
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\data_motion.py",
+        "line": 376,
+        "function": "snapshot",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 0.0003578,
+        "inclusive_seconds": 0.0011239000000000002
+      }
+    ],
+    "controller_io_functions": [
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 851,
+        "function": "write",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 0.0158043,
+        "inclusive_seconds": 0.6777157
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 927,
+        "function": "_write_full_pages",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 6.69e-05,
+        "inclusive_seconds": 0.3672438
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 1010,
+        "function": "_prepare_empty_gc_write",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 0.0034676000000000004,
+        "inclusive_seconds": 0.3668208
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 722,
+        "function": "_gc_victim",
+        "calls": 17,
+        "primitive_calls": 17,
+        "self_seconds": 0.24027,
+        "inclusive_seconds": 0.35715630000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 858,
+        "function": "submit",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0035059,
+        "inclusive_seconds": 0.1823684
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1033,
+        "function": "_submit_ocp_single_page_summary",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.029076800000000003,
+        "inclusive_seconds": 0.147688
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 666,
+        "function": "_transfer",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0072506,
+        "inclusive_seconds": 0.06384970000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 582,
+        "function": "_validate_request",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0017818,
+        "inclusive_seconds": 0.030324100000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 702,
+        "function": "_allocate",
+        "calls": 3805,
+        "primitive_calls": 3805,
+        "self_seconds": 0.0044759000000000005,
+        "inclusive_seconds": 0.027272800000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 469,
+        "function": "_validate_program_order",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0029729,
+        "inclusive_seconds": 0.025064600000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 766,
+        "function": "_collect",
+        "calls": 9,
+        "primitive_calls": 9,
+        "self_seconds": 0.0002475,
+        "inclusive_seconds": 0.0192585
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 390,
+        "function": "_admit_host_request",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.016120000000000002,
+        "inclusive_seconds": 0.018935200000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1066,
+        "function": "reserve",
+        "calls": 6207,
+        "primitive_calls": 6207,
+        "self_seconds": 0.0095019,
+        "inclusive_seconds": 0.014179800000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 322,
+        "function": "_remember",
+        "calls": 5898,
+        "primitive_calls": 5898,
+        "self_seconds": 0.0135551,
+        "inclusive_seconds": 0.0135641
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 350,
+        "function": "pop",
+        "calls": 9,
+        "primitive_calls": 9,
+        "self_seconds": 3.68e-05,
+        "inclusive_seconds": 0.012620900000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1053,
+        "function": "<genexpr>",
+        "calls": 8264,
+        "primitive_calls": 8264,
+        "self_seconds": 0.0081869,
+        "inclusive_seconds": 0.0098083
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1051,
+        "function": "<genexpr>",
+        "calls": 8264,
+        "primitive_calls": 8264,
+        "self_seconds": 0.007148000000000001,
+        "inclusive_seconds": 0.008347
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1169,
+        "function": "<genexpr>",
+        "calls": 112779,
+        "primitive_calls": 112779,
+        "self_seconds": 0.0067093000000000005,
+        "inclusive_seconds": 0.0067093000000000005
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 1171,
+        "function": "<genexpr>",
+        "calls": 112779,
+        "primitive_calls": 112779,
+        "self_seconds": 0.0062883,
+        "inclusive_seconds": 0.0062883
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 369,
+        "function": "_host_id",
+        "calls": 2367,
+        "primitive_calls": 2367,
+        "self_seconds": 0.0034690000000000003,
+        "inclusive_seconds": 0.0060264
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 570,
+        "function": "_touch_page",
+        "calls": 2057,
+        "primitive_calls": 2057,
+        "self_seconds": 0.0030508,
+        "inclusive_seconds": 0.005145
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 482,
+        "function": "_bandwidth_ceiling_gb_s",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.00206,
+        "inclusive_seconds": 0.004125
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 662,
+        "function": "_host",
+        "calls": 18,
+        "primitive_calls": 18,
+        "self_seconds": 0.00035810000000000003,
+        "inclusive_seconds": 0.0037446000000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 330,
+        "function": "__setitem__",
+        "calls": 5889,
+        "primitive_calls": 5889,
+        "self_seconds": 0.0022153000000000003,
+        "inclusive_seconds": 0.0032012000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 637,
+        "function": "_touch_owners",
+        "calls": 7372,
+        "primitive_calls": 7372,
+        "self_seconds": 0.0023712,
+        "inclusive_seconds": 0.0030867000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 353,
+        "function": "_array_id",
+        "calls": 4734,
+        "primitive_calls": 4734,
+        "self_seconds": 0.0022666,
+        "inclusive_seconds": 0.0028428000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 449,
+        "function": "_count",
+        "calls": 6224,
+        "primitive_calls": 6224,
+        "self_seconds": 0.0018720000000000002,
+        "inclusive_seconds": 0.0026281
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 357,
+        "function": "_array_resource_id",
+        "calls": 2367,
+        "primitive_calls": 2367,
+        "self_seconds": 0.0010938,
+        "inclusive_seconds": 0.002581
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 434,
+        "function": "_block_key",
+        "calls": 4114,
+        "primitive_calls": 4114,
+        "self_seconds": 0.0013755,
+        "inclusive_seconds": 0.0019439000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 457,
+        "function": "_invalidate_cache",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0012679,
+        "inclusive_seconds": 0.0018748
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 365,
+        "function": "_channel_id",
+        "calls": 2367,
+        "primitive_calls": 2367,
+        "self_seconds": 0.0013009,
+        "inclusive_seconds": 0.0018269
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 652,
+        "function": "_address",
+        "calls": 3823,
+        "primitive_calls": 3823,
+        "self_seconds": 0.0014216,
+        "inclusive_seconds": 0.0017639
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 311,
+        "function": "_set_program_frontier",
+        "calls": 2057,
+        "primitive_calls": 2057,
+        "self_seconds": 0.0011565,
+        "inclusive_seconds": 0.0017432
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 381,
+        "function": "_host_bandwidth",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0007052,
+        "inclusive_seconds": 0.0016549000000000002
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 420,
+        "function": "_record_host_admission",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0013533,
+        "inclusive_seconds": 0.0013533
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 645,
+        "function": "_page_for_write",
+        "calls": 2048,
+        "primitive_calls": 2048,
+        "self_seconds": 0.0006337000000000001,
+        "inclusive_seconds": 0.0009988
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 619,
+        "function": "_refresh_read_state",
+        "calls": 2057,
+        "primitive_calls": 2057,
+        "self_seconds": 0.0007048,
+        "inclusive_seconds": 0.0009752000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 430,
+        "function": "_bank_key",
+        "calls": 6189,
+        "primitive_calls": 6189,
+        "self_seconds": 0.0008701000000000001,
+        "inclusive_seconds": 0.0008701000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 259,
+        "function": "_nand_publish_numeric",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.0005986,
+        "inclusive_seconds": 0.0008504000000000001
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 670,
+        "function": "_read_flash",
+        "calls": 9,
+        "primitive_calls": 9,
+        "self_seconds": 5.41e-05,
+        "inclusive_seconds": 0.0007757
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 562,
+        "function": "_ready_before",
+        "calls": 1801,
+        "primitive_calls": 1801,
+        "self_seconds": 0.00046780000000000004,
+        "inclusive_seconds": 0.0006407
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 82,
+        "function": "ready_ns",
+        "calls": 5622,
+        "primitive_calls": 5622,
+        "self_seconds": 0.0004922,
+        "inclusive_seconds": 0.0004922
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 574,
+        "function": "_write_buffer_payload_bytes",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.00047900000000000004,
+        "inclusive_seconds": 0.00047900000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 234,
+        "function": "begin_transaction",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 2.11e-05,
+        "inclusive_seconds": 0.0004358
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 128,
+        "function": "materialize_cache",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 2.2000000000000003e-05,
+        "inclusive_seconds": 0.00039850000000000004
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 44,
+        "function": "_copy_nand_read_cache",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 0.00015480000000000002,
+        "inclusive_seconds": 0.00037380000000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 385,
+        "function": "_admission_depth_scope",
+        "calls": 2066,
+        "primitive_calls": 2066,
+        "self_seconds": 0.00036780000000000005,
+        "inclusive_seconds": 0.00036780000000000005
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 249,
+        "function": "__len__",
+        "calls": 3821,
+        "primitive_calls": 3821,
+        "self_seconds": 0.0003087,
+        "inclusive_seconds": 0.0003087
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 491,
+        "function": "begin_transaction",
+        "calls": 16,
+        "primitive_calls": 16,
+        "self_seconds": 3.8400000000000005e-05,
+        "inclusive_seconds": 0.00024200000000000003
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 87,
+        "function": "ready_ns",
+        "calls": 2057,
+        "primitive_calls": 2057,
+        "self_seconds": 0.0002165,
+        "inclusive_seconds": 0.0002165
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 1296,
+        "function": "_use_page_helpers",
+        "calls": 16,
+        "primitive_calls": 16,
+        "self_seconds": 7.91e-05,
+        "inclusive_seconds": 0.0001956
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 359,
+        "function": "_copy_controller_state",
+        "calls": 16,
+        "primitive_calls": 16,
+        "self_seconds": 0.0001348,
+        "inclusive_seconds": 0.00018240000000000002
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging_runtime.py",
+        "line": 70,
+        "function": "snapshot",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 1.8200000000000002e-05,
+        "inclusive_seconds": 0.00017020000000000002
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 510,
+        "function": "rollback_transaction",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 7.350000000000001e-05,
+        "inclusive_seconds": 0.0001563
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging_runtime.py",
+        "line": 12,
+        "function": "configure",
+        "calls": 16,
+        "primitive_calls": 16,
+        "self_seconds": 3.9500000000000005e-05,
+        "inclusive_seconds": 0.0001341
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 437,
+        "function": "_cache_slot",
+        "calls": 9,
+        "primitive_calls": 9,
+        "self_seconds": 4.0900000000000005e-05,
+        "inclusive_seconds": 9.190000000000001e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 67,
+        "function": "clone",
+        "calls": 80,
+        "primitive_calls": 80,
+        "self_seconds": 4.5900000000000004e-05,
+        "inclusive_seconds": 8.05e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 93,
+        "function": "<genexpr>",
+        "calls": 28,
+        "primitive_calls": 28,
+        "self_seconds": 9.9e-06,
+        "inclusive_seconds": 6.31e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging_runtime.py",
+        "line": 76,
+        "function": "commit",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 1.1700000000000001e-05,
+        "inclusive_seconds": 5.3200000000000006e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 1329,
+        "function": "<genexpr>",
+        "calls": 128,
+        "primitive_calls": 128,
+        "self_seconds": 2.8000000000000003e-05,
+        "inclusive_seconds": 4.18e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 505,
+        "function": "commit_transaction",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 2.16e-05,
+        "inclusive_seconds": 4.05e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 92,
+        "function": "<genexpr>",
+        "calls": 60,
+        "primitive_calls": 60,
+        "self_seconds": 1.27e-05,
+        "inclusive_seconds": 4e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 593,
+        "function": "_staged_key",
+        "calls": 26,
+        "primitive_calls": 26,
+        "self_seconds": 3.61e-05,
+        "inclusive_seconds": 3.61e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 308,
+        "function": "rollback",
+        "calls": 24,
+        "primitive_calls": 24,
+        "self_seconds": 1.69e-05,
+        "inclusive_seconds": 2.8100000000000002e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 278,
+        "function": "copy",
+        "calls": 16,
+        "primitive_calls": 16,
+        "self_seconds": 1.39e-05,
+        "inclusive_seconds": 2.3100000000000002e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 304,
+        "function": "commit",
+        "calls": 48,
+        "primitive_calls": 48,
+        "self_seconds": 1.4200000000000001e-05,
+        "inclusive_seconds": 1.97e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 299,
+        "function": "begin",
+        "calls": 48,
+        "primitive_calls": 48,
+        "self_seconds": 1.4900000000000001e-05,
+        "inclusive_seconds": 1.97e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 1323,
+        "function": "<genexpr>",
+        "calls": 64,
+        "primitive_calls": 64,
+        "self_seconds": 1.22e-05,
+        "inclusive_seconds": 1.8200000000000002e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 247,
+        "function": "commit_transaction",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 7.3e-06,
+        "inclusive_seconds": 1.63e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 500,
+        "function": "_finish_transaction",
+        "calls": 16,
+        "primitive_calls": 16,
+        "self_seconds": 1.3300000000000001e-05,
+        "inclusive_seconds": 1.63e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 934,
+        "function": "<genexpr>",
+        "calls": 48,
+        "primitive_calls": 48,
+        "self_seconds": 1.13e-05,
+        "inclusive_seconds": 1.6000000000000003e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 307,
+        "function": "_touch_cache_bank",
+        "calls": 17,
+        "primitive_calls": 17,
+        "self_seconds": 1.15e-05,
+        "inclusive_seconds": 1.48e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 100,
+        "function": "__init__",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 1.45e-05,
+        "inclusive_seconds": 1.45e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 81,
+        "function": "<genexpr>",
+        "calls": 105,
+        "primitive_calls": 105,
+        "self_seconds": 1.39e-05,
+        "inclusive_seconds": 1.39e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 72,
+        "function": "<genexpr>",
+        "calls": 120,
+        "primitive_calls": 120,
+        "self_seconds": 1.2400000000000002e-05,
+        "inclusive_seconds": 1.2400000000000002e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 452,
+        "function": "occupied_bytes",
+        "calls": 16,
+        "primitive_calls": 16,
+        "self_seconds": 1.01e-05,
+        "inclusive_seconds": 1.2100000000000001e-05
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 1326,
+        "function": "<genexpr>",
+        "calls": 64,
+        "primitive_calls": 64,
+        "self_seconds": 9.600000000000001e-06,
+        "inclusive_seconds": 9.600000000000001e-06
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 242,
+        "function": "_finish_transaction",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 6.6e-06,
+        "inclusive_seconds": 9e-06
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 656,
+        "function": "_check_range",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 5e-06,
+        "inclusive_seconds": 7.5e-06
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 932,
+        "function": "<genexpr>",
+        "calls": 15,
+        "primitive_calls": 15,
+        "self_seconds": 6.300000000000001e-06,
+        "inclusive_seconds": 6.300000000000001e-06
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 457,
+        "function": "host_occupied_bytes",
+        "calls": 8,
+        "primitive_calls": 8,
+        "self_seconds": 3.3e-06,
+        "inclusive_seconds": 5.500000000000001e-06
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 449,
+        "function": "<genexpr>",
+        "calls": 9,
+        "primitive_calls": 9,
+        "self_seconds": 4.7e-06,
+        "inclusive_seconds": 4.7e-06
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\hbf_staging.py",
+        "line": 518,
+        "function": "<genexpr>",
+        "calls": 40,
+        "primitive_calls": 40,
+        "self_seconds": 3.9e-06,
+        "inclusive_seconds": 3.9e-06
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 452,
+        "function": "<lambda>",
+        "calls": 18,
+        "primitive_calls": 18,
+        "self_seconds": 3.7e-06,
+        "inclusive_seconds": 3.7e-06
+      },
+      {
+        "file": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\nand_core.py",
+        "line": 115,
+        "function": "remember_cache",
+        "calls": 17,
+        "primitive_calls": 17,
+        "self_seconds": 3.3e-06,
+        "inclusive_seconds": 3.3e-06
+      }
+    ]
+  }
+}
