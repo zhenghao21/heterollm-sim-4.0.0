@@ -350,7 +350,9 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
     symmetric_fields = ("prefix_gc_read_remap_symmetric_bias_guard_ns",
         "prefix_gc_persistent_cache_symmetric_bias_guard_ns",
         "future_gc_read_remap_symmetric_guard_ns",
-        "future_gc_persistent_cache_symmetric_guard_ns")
+        "future_gc_persistent_cache_symmetric_guard_ns",
+        "prefix_gc_host_state_symmetric_bias_guard_ns",
+        "future_gc_host_state_symmetric_guard_ns")
     live_required = maintenance.get("gc_live_copy_budget_required", False)
     gc_fields = prefix_fields + future_fields + (symmetric_fields if live_required else ())
     gc_available = (not gc_required or (maintenance.get("gc_observations_available") is True
@@ -446,7 +448,9 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
     GC changes placement of ordinary writes as well as copying live pages.
     The fit already includes both costs: remove their complete serial bounds
     from its lower endpoint, and charge the separately proved future bounds
-    to its upper endpoint. No physical device or controller is advanced.
+    to its upper endpoint. Persistent read/cache mapping and scratch-induced
+    HOST row-state changes can instead help or hurt; their separately proved
+    bounds widen both endpoints. No physical device/controller is advanced.
     """
     prefix_names = ("prefix_gc_bias_guard_ns", "prefix_write_placement_bias_guard_ns",
                     "prefix_read_placement_bias_guard_ns")
@@ -456,7 +460,9 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
     symmetric_names = ("prefix_gc_read_remap_symmetric_bias_guard_ns",
         "prefix_gc_persistent_cache_symmetric_bias_guard_ns",
         "future_gc_read_remap_symmetric_guard_ns",
-        "future_gc_persistent_cache_symmetric_guard_ns")
+        "future_gc_persistent_cache_symmetric_guard_ns",
+        "prefix_gc_host_state_symmetric_bias_guard_ns",
+        "future_gc_host_state_symmetric_guard_ns")
     names = prefix_names + future_names + symmetric_names
     devices = [row for row in projection.hbf_devices if (
         row.get("gc_projection", {}).get("required") is True
@@ -535,6 +541,15 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
                     or not all(service(value) for value in (remap_ns, cache_miss_ns,
                         guard.get(symmetric_names[2]), guard.get(symmetric_names[3])))):
                 return unavailable("hbf_gc_persistent_read_remap_bounds_unavailable:" + str(owner))
+            host_qualification = guard.get("gc_host_state_qualification")
+            if (not isinstance(host_qualification, Mapping)
+                    or host_qualification.get("qualified") is not True
+                    or host_qualification.get("physical_state_advanced") is not False):
+                return unavailable("hbf_gc_host_state_qualification_unavailable:" + str(owner))
+            host_state_ns = units.get("gc_host_state_page_serial_upper_ns")
+            if not all(service(value) for value in
+                    (host_state_ns, guard.get("future_gc_host_state_symmetric_guard_ns"))):
+                return unavailable("hbf_gc_host_state_bounds_unavailable:" + str(owner))
         observed = []
         for batch in batches:
             metadata = batch.cost.metadata
@@ -590,6 +605,12 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
             terms[symmetric_names[1]].append(cache_misses * cache_miss_ns * scale)
             terms[symmetric_names[2]].append(guard[symmetric_names[2]])
             terms[symmetric_names[3]].append(guard[symmetric_names[3]])
+            # Scratch READ/WRITE can make the next ordinary HOST row access
+            # either faster or slower. In the qualified controller domain,
+            # the full scratch-page pair bounds its state repair separately
+            # from the GC pair's already charged physical execution cost.
+            terms[symmetric_names[4]].append(copies * host_state_ns * scale)
+            terms[symmetric_names[5]].append(guard[symmetric_names[5]])
             remap_record = {"prefix_mapping_reference": "inspected_cutoff_mapping",
                 "prefix_reverse_cumulative_copied_pages": tuple(reverse_copies),
                 "prefix_remapped_kv_page_reads_upper": remapped_reads,
@@ -599,6 +620,8 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
                 "initial_warm_read_pages_per_decode_upper": initial_warm_reads,
                 "kv_read_remap_page_serial_upper_ns": remap_ns,
                 "persistent_cache_miss_page_serial_upper_ns": cache_miss_ns,
+                "gc_host_state_page_serial_upper_ns": host_state_ns,
+                "gc_host_state_bound_direction": "symmetric_lower_and_upper",
                 "read_remap_bound_direction": "symmetric_lower_and_upper"}
         if copies:
             record["gc_prefix_mapping_stable"] = False
@@ -720,6 +743,7 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
             "steady mean Token cost lies in a nonnegative affine context-growth envelope",
             "ordinary OCP page-zero erases are bounded by serial service budgets; GC requires a closed victim proof and complete placement/maintenance bounds, while block reuse remains excluded",
             "live-copy GC additionally requires a proven cold-read contract; prefix and future persistent read remapping/cache uncertainty widen both timing endpoints about the inspected cutoff mapping",
+            "live-copy GC scratch HOST row-state uncertainty is symmetric and requires the qualified FCFS analytical controller without group, refresh or bus-turnaround gates",
             "after observed ordinary erases, a new steady-cost fit may exclude those already timed prefix cohorts and their cleanup; future erase guards remain unchanged",
             "no unseen cache, scheduling, pressure-flush or allocation regime change",
             "whole-Decode bounds include the exact timed prefix; a matched BF16 request uses directional HBF/HBM interval arithmetic with both single-point and ratio errors bounded by target",

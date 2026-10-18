@@ -14,10 +14,19 @@ import math
 
 from .hbf_staging import HbfStagingController, PAGE, _EMPTY_GC_METHODS
 from .memory_types import DramConfig, NandConfig, Operation
+from .dram_core import DramCore
 from .nand_core import NandCore
 
 _NAND_CACHE_METHODS = {name: getattr(NandCore, name) for name in (
     "_invalidate_cache", "_cache_slot", "_submit_ocp_single_page_summary", "_submit_ocp_page_commands")}
+_HOST_STATE_METHODS = {name: getattr(DramCore, name) for name in (
+    "submit", "submit_many", "_execute_accepted", "_execute_accelerated_accepted",
+    "_can_accelerate", "_bank_id", "_data_id", "_command_id")}
+_HOST_STATE_DISABLED_TIMINGS = (
+    "column_same_group_ns", "column_different_group_ns",
+    "activate_same_group_ns", "activate_different_group_ns", "four_activate_window_ns",
+    "write_to_read_same_group_ns", "write_to_read_different_group_ns",
+    "read_to_write_ns", "write_to_read_ns")
 
 
 def _same_physical_config(bound, authored):
@@ -108,6 +117,108 @@ def _host_page_cost(config, operation):
     # burst to cover unusual legal HOST base alignment too.
     bursts = (PAGE + 2 * (config.burst_bytes - 1)) // config.burst_bytes
     return _finite(bursts * per_burst)
+
+
+def qualify_gc_host_state(physical, owner, bindings):
+    """Prove a scratch access has only a one-access row-state after-effect.
+
+    In this narrow FCFS domain, an inserted burst may change the touched
+    bank's open row. Once that bank next serves an ordinary burst, its row
+    state agrees again. Full READ+WRITE page service bounds the repairs for
+    the scratch page's two accesses. Disabled group/turnaround gates and a
+    single, unaliased data lane prevent uncharged persistent shared state.
+    """
+    from ._compiled_dram import _resource_ids
+    from .memory_transfer import ResourceTimeline
+    result = {"qualified": False, "reason": None, "physical_state_advanced": False,
+        "method": "fcfs_row_state_single_next_access_repair_without_shared_history/v1"}
+    active = physical.runtimes.get(owner)
+    core = None if active is None else active.core
+    if (type(core) is not DramCore or any(name in core.__dict__
+            or getattr(DramCore, name) is not method for name, method in _HOST_STATE_METHODS.items())):
+        result["reason"] = "gc_host_state_custom_controller_unqualified"
+        return result
+    config = core.config
+    result["actual_config"] = {name: getattr(config, name) for name in
+        ("kind", "control_mode", "scheduler", "refresh_policy", "lane_count",
+         "channels", "data_lanes", "burst_bytes", "row_bytes", "address_mapping",
+         "open_ns", "close_ns", "read_recovery_ns", "write_recovery_ns",
+         *_HOST_STATE_DISABLED_TIMINGS)}
+    # Serialize enums in the report, without changing the physical contract.
+    result["actual_config"]["kind"] = config.kind.value
+    if (config.control_mode != "analytical" or config.scheduler != "fcfs"
+            or config.refresh_policy != "disabled"):
+        result["reason"] = "gc_host_state_controller_mode_unqualified"
+        return result
+    if any(getattr(config, name) != 0 for name in _HOST_STATE_DISABLED_TIMINGS):
+        result["reason"] = "gc_host_state_shared_timing_history_unqualified"
+        return result
+    if config.lane_count != 1:
+        result["reason"] = "gc_host_state_multiple_data_lanes_unqualified"
+        return result
+    timeline = core.timeline
+    if type(timeline) is not ResourceTimeline or timeline is not physical.timeline:
+        result["reason"] = "gc_host_state_calendar_unqualified"
+        return result
+    metadata = config.metadata
+    bank = str(metadata.get("bank_resource_prefix", "dram:bank"))
+    command = str(metadata.get("command_resource_prefix", "dram:command"))
+    data = str(metadata.get("data_resource_prefix", "dram:data"))
+    shared = metadata.get("shared_command_resource")
+    if (shared or (bank, command, data) != (
+            f"{owner}:dram:bank", f"{owner}:dram:command", f"{owner}:dram:data")):
+        result["reason"] = "gc_host_state_custom_resource_namespace_unqualified"
+        result["resource_prefixes"] = {"bank": bank, "command": command, "data": data,
+                                       "shared_command_resource": shared}
+        return result
+    resources = _resource_ids(config.addressable_stack_count, config.addressable_die_count,
+        config.lane_count, config.bank_count, config.bank_groups_per_rank,
+        config.banks_per_group, bank, command, data, str(shared) if shared else None,
+        config.lanes_per_stack if config.stack_interface_mode == "independent" else 0)
+    result["resource_ids"] = resources
+    if len(set(resources)) != len(resources):
+        result["reason"] = "gc_host_state_overlapping_resource_names_unqualified"
+        return result
+    resource_set = set(resources)
+    try:
+        if (any(timeline.canonical_resource_id(name) != name for name in resources)
+                or any(name != target and timeline.canonical_resource_id(name) in resource_set
+                       for name, target in timeline.resource_aliases.items())):
+            raise ValueError("gc_host_state_resource_alias_unqualified")
+        # No LINK or another physical core may be a hidden client of these
+        # independent HOST bank/command/data resources.
+        for binding in bindings:
+            for hops in binding["routes"].values():
+                for hop in hops:
+                    if any(timeline.canonical_resource_id(name) in resource_set
+                           for name in (hop["resource_id"], hop["resource_id"] + ".inflight")):
+                        raise ValueError("gc_host_state_link_resource_overlap_unqualified")
+        other_resource_fields = ("bank_resource_prefix", "command_resource_prefix", "data_resource_prefix",
+            "shared_command_resource", "array_resource_prefix", "parallel_resource_prefix",
+            "channel_resource_prefix", "host_resource_id")
+        for other in physical.runtimes.values():
+            if other is active:
+                continue
+            for name in other_resource_fields:
+                value = other.core.config.metadata.get(name)
+                if isinstance(value, str) and any(resource == value or resource.startswith(value + ":")
+                                                  for resource in resources):
+                    raise ValueError("gc_host_state_other_core_resource_overlap_unqualified")
+        slots = {id(timeline.lane_available[name]) for name in resources if name in timeline.lane_available}
+        present = [timeline.lane_available[name] for name in resources if name in timeline.lane_available]
+        if (any(len(lanes) != 1 for lanes in present) or len(slots) != len(present)
+                or any(name not in resource_set and id(lanes) in slots
+                       for name, lanes in timeline.lane_available.items())):
+            raise ValueError("gc_host_state_resource_slots_unqualified")
+        banks = core.__dict__.get("_banks", {})
+        if len({id(state) for state in banks.values()}) != len(banks):
+            raise ValueError("gc_host_state_bank_alias_unqualified")
+    except (KeyError, TypeError, ValueError) as error:
+        result["reason"] = str(error)
+        return result
+    result.update(qualified=True,
+        repair_basis="each_inserted_scratch_burst_changes_only_its_bank_until_the_next_ordinary_burst_full_read_plus_write_page_service_bounds_both_repairs")
+    return result
 
 
 def _calendar_carry_in(physical, controller, cutoff_ns):
@@ -225,6 +336,7 @@ def gc_service_bounds(physical, controller, binding, cutoff_ns):
         + PAGE * config.host_channels / config.host_bandwidth_for(Operation.WRITE))
     host_read = _host_page_cost(host, Operation.READ)
     host_write = _host_page_cost(host, Operation.WRITE)
+    host_state = qualify_gc_host_state(physical, host_owner, variants)
     cache_capacity = config.read_cache_pages_per_bank
     # Delete temporary reads from the reference cache trace. Inserting one
     # access into a k-slot LRU changes at most the next k distinct-reference
@@ -250,6 +362,7 @@ def gc_service_bounds(physical, controller, binding, cutoff_ns):
         "nand_program_page_serial_upper_ns": _finite(write),
         "host_read_page_serial_upper_ns": host_read,
         "host_write_page_serial_upper_ns": host_write,
+        "gc_host_state_page_serial_upper_ns": _finite(host_read + host_write) if host_state["qualified"] else None,
         "link_from_hbf_page_serial_upper_ns": route["from_hbf"],
         "link_to_hbf_page_serial_upper_ns": route["to_hbf"],
         "link_write_hbf_page_serial_upper_ns": route["write_hbf"],
@@ -261,6 +374,7 @@ def gc_service_bounds(physical, controller, binding, cutoff_ns):
         "carry_in_serial_guard_ns": _calendar_carry_in(physical, controller, cutoff_ns),
         "carry_in_cutoff_ns": cutoff_ns,
         "carry_in_clock_semantics": "absolute_live_token_commit_timestamp",
+        "gc_host_state_qualification": host_state,
         "qualified_initiator_route_variants": len(variants),
         "read_cache_mapping_proof": "scalar_and_numeric_OCP_writes_invalidate_only_matching_page_or_target_block_tags_no_whole_bank_invalidation",
         "persistent_write_invalidation_extra_miss_upper": 0,
@@ -286,7 +400,8 @@ def project_gc_maintenance(controller, *, program_pages, free_program_pages,
         "copied_pages_upper": None, "zero_copy_proven": False,
         "live_copy_proven": False, "live_projection_qualified": False,
         "future_gc_read_remap_symmetric_guard_ns": None,
-        "future_gc_persistent_cache_symmetric_guard_ns": None}
+        "future_gc_persistent_cache_symmetric_guard_ns": None,
+        "future_gc_host_state_symmetric_guard_ns": None}
     if (type(program_pages) is not int or program_pages < 0
             or type(free_program_pages) is not int or free_program_pages < 0):
         result["reason"] = "gc_program_budget_unqualified"
@@ -402,6 +517,7 @@ def project_gc_maintenance(controller, *, program_pages, free_program_pages,
         result.update(copy_zero_basis="sufficient_closed_empty_victim_reservoir_not_an_unobserved_zero",
             future_gc_read_remap_symmetric_guard_ns=0.,
             future_gc_persistent_cache_symmetric_guard_ns=0.,
+            future_gc_host_state_symmetric_guard_ns=0.,
             gc_copy_nand_read_serial_upper_ns=0., gc_copy_nand_write_serial_upper_ns=0.,
             gc_copy_host_read_serial_upper_ns=0., gc_copy_host_write_serial_upper_ns=0.,
             gc_copy_link_from_hbf_serial_upper_ns=0., gc_copy_link_to_hbf_serial_upper_ns=0.)
@@ -421,11 +537,17 @@ def project_gc_maintenance(controller, *, program_pages, free_program_pages,
         result["reason"] = "gc_complete_service_bounds_unavailable:" + str(error)
         return result
     if q:
+        host_state = service_bounds.get("gc_host_state_qualification")
+        if (not isinstance(host_state, Mapping) or host_state.get("qualified") is not True
+                or host_state.get("physical_state_advanced") is not False):
+            result["reason"] = "live_gc_host_state_qualification_unavailable"
+            return result
         required_units = ("gc_copy_page_serial_upper_ns", "nand_read_page_serial_upper_ns",
             "nand_program_page_serial_upper_ns", "host_read_page_serial_upper_ns",
             "host_write_page_serial_upper_ns", "link_from_hbf_page_serial_upper_ns",
             "link_to_hbf_page_serial_upper_ns", "read_cache_lru_slots_per_bank",
-            "kv_read_remap_page_serial_upper_ns", "persistent_cache_miss_page_serial_upper_ns")
+            "kv_read_remap_page_serial_upper_ns", "persistent_cache_miss_page_serial_upper_ns",
+            "gc_host_state_page_serial_upper_ns")
         try:
             for name in required_units:
                 _finite(units.get(name))
@@ -453,6 +575,8 @@ def project_gc_maintenance(controller, *, program_pages, free_program_pages,
             * (result["immutable_repeat_read_pages_per_decode_upper"]
                + result["initial_warm_read_pages_per_decode_upper"])
             * units["persistent_cache_miss_page_serial_upper_ns"])
+        result["future_gc_host_state_symmetric_guard_ns"] = _finite(copies
+            * units["gc_host_state_page_serial_upper_ns"])
     per_page = service_bounds["per_unit_costs"]["ordinary_program_page_serial_upper_ns"]
     result["future_write_placement_serial_guard_ns"] = _finite(program_pages * per_page)
     read_unit = service_bounds["per_unit_costs"]["ordinary_read_page_serial_upper_ns"]

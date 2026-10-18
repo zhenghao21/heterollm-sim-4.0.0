@@ -221,6 +221,12 @@ def test_real_bf16_prefix_connects_empty_gc_projection_observations_and_budget(m
         assert guard["zero_copy_proven"]
         assert guard["empty_victim_reservoir"] >= guard["cycles_upper"] > 0
         assert guard["copied_pages_upper"] == 0
+        media = guard["temporary_read_media_proof"]
+        assert media["applied"], media
+        assert media["physical_state_advanced"] is False
+        assert media["potential_nand_read_pages_per_decode"] + media[
+            "proven_host_only_read_pages_per_decode"] == media["rounded_read_pages_per_decode"]
+        assert media["charged_nand_read_pages_per_decode"] == media["potential_nand_read_pages_per_decode"]
         remaining = projected.remaining_decode_steps
         envelope = maintenance_error_envelope(runner, projected, window, remaining,
             projected.final_cached_tokens / projected.current_cached_tokens)

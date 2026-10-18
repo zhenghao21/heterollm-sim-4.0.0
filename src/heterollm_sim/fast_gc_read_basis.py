@@ -4,7 +4,110 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Mapping
 
+from .hbf_staging import HbfStagingController
+from ._io_execution import PreparedStagingIO
+
 PAGE = 4096
+
+# The proof below depends on the production read/write dispatcher never
+# explicitly flushing a partially initialized page. Keep authored hooks out
+# of this narrower certificate without changing their physical execution.
+_HOST_ONLY_METHODS = {name: getattr(HbfStagingController, name) for name in (
+    "write", "read", "release", "flush", "_new_slot", "_flush_page", "_page_for_write")}
+_STAGING_SUBMIT = PreparedStagingIO.submit
+
+
+def temporary_read_media_bounds(writes, reads):
+    """Bound temporary NAND reads from complete-page WRITE unions, IR only.
+
+    For a fresh unaliased generation, a page whose complete byte range is
+    never initialized cannot be programmed by ordinary writes. Its reads
+    stay in HOST unless pressure or an explicit flush intervenes. This
+    union deliberately ignores order: a later completion of a page keeps
+    *all* earlier reads charged as possible NAND reads too. Unknown sources
+    and aliases retain the original arbitrary-alignment upper bound.
+    """
+    unions, unsafe_owners = defaultdict(list), set()
+    for owner, identity, offset, size, generation, alias, _, _ in writes:
+        if (not identity or type(generation) is not int or generation <= 0
+                or alias is not None or type(offset) is not int or offset < 0
+                or type(size) is not int or size <= 0):
+            unsafe_owners.add(owner)
+        else:
+            unions[(owner, identity, generation)].append((offset, offset + size))
+    for key, ranges in unions.items():
+        merged = []
+        for lo, hi in sorted(ranges):
+            if merged and lo <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(hi, merged[-1][1]))
+            else:
+                merged.append((lo, hi))
+        unions[key] = merged
+    result = {}
+    for owner, identity, offset, size, generation, alias, _, _ in reads:
+        row = result.setdefault(owner, {
+            "qualified": True,
+            "method": "fresh_temporary_full_page_write_union/v1",
+            "rounded_read_pages_per_decode": 0,
+            "potential_nand_read_pages_per_decode": 0,
+            "proven_host_only_read_pages_per_decode": 0,
+            "read_access_count": 0, "conservative_read_access_count": 0,
+            "conservative_reasons": set(),
+            "basis": "only_fully_initialized_pages_can_program_without_pressure_or_explicit_flush",
+            "physical_state_advanced": False, "physical_io_executed": False})
+        alignment = PAGE - 1 if alias is not None else offset % PAGE
+        rounded = (alignment + size + PAGE - 1) // PAGE
+        row["rounded_read_pages_per_decode"] += rounded
+        row["read_access_count"] += 1
+        ranges = unions.get((owner, identity, generation), ())
+        reason = None
+        if owner in unsafe_owners:
+            reason = "owner_has_aliased_or_unknown_write_source"
+        elif alias is not None:
+            reason = "read_has_unknown_alias_alignment"
+        elif type(generation) is not int or generation <= 0:
+            reason = "read_generation_is_not_fresh"
+        elif not any(lo <= offset and offset + size <= hi for lo, hi in ranges):
+            reason = "read_bytes_not_covered_by_known_write_union"
+        if reason:
+            possible = rounded
+            row["conservative_read_access_count"] += 1
+            row["conservative_reasons"].add(reason)
+        else:
+            first, stop = offset // PAGE, (offset + size + PAGE - 1) // PAGE
+            possible = sum(max(0, min(stop, hi // PAGE) - max(first, (lo + PAGE - 1) // PAGE))
+                           for lo, hi in ranges)
+        row["potential_nand_read_pages_per_decode"] += possible
+        row["proven_host_only_read_pages_per_decode"] += rounded - possible
+    for row in result.values():
+        row["conservative_reasons"] = tuple(sorted(row["conservative_reasons"]))
+    return result
+
+
+def qualify_temporary_host_only_reads(controller, bound, *, host_slots_sufficient,
+                                       read_write_dispatch_qualified):
+    """Apply a WRITE-union reduction only in the no-partial-flush domain."""
+    result = {**bound, "applied": False, "reason": None,
+        "requirements": "fresh_fixed_ir_no_pressure_no_rmw_sufficient_host_slots_no_explicit_flush",
+        "physical_state_advanced": False, "physical_io_executed": False}
+    if not bound.get("qualified"):
+        result["reason"] = "temporary_write_union_unavailable"
+    elif (type(controller) is not HbfStagingController
+            or any(name in controller.__dict__ or getattr(HbfStagingController, name) is not method
+                   for name, method in _HOST_ONLY_METHODS.items())
+            or PreparedStagingIO.submit is not _STAGING_SUBMIT
+            or not read_write_dispatch_qualified):
+        result["reason"] = "standard_nonflushing_read_write_dispatch_required"
+    elif controller.stats.get("pressure_flushes", 0) or controller.stats.get("rmw_pages", 0):
+        result["reason"] = "observed_pressure_or_rmw_can_program_partial_pages"
+    elif not host_slots_sufficient:
+        result["reason"] = "future_host_slots_can_require_partial_pressure_flush"
+    else:
+        result.update(applied=True, standard_dispatch_has_no_explicit_flush=True,
+            future_host_slots_sufficient=True, observed_pressure_flushes=0, observed_rmw_pages=0)
+    result["charged_nand_read_pages_per_decode"] = result.get(
+        "potential_nand_read_pages_per_decode" if result["applied"] else "rounded_read_pages_per_decode")
+    return result
 
 
 def qualify_gc_read_basis(tasks, physical, owner, kv_rows, *, context_tokens,

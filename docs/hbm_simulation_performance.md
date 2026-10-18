@@ -26,6 +26,14 @@
 
 活页版统一 **815 项通过，59.80 秒**，独立只读审查通过。真实小型 FTL 的 q=1/q=2、Python/native 配置检查了复制次数、逐段服务上界与只读状态不变；真实 tiny 模型的前缀到预算链仍为 q=0，不能冒称它覆盖完整模型活页链。正式 1.5B 的 bootstrap+IR 已实证上述冷读资格（重复 immutable 页 1、初态暖页 512），没有执行正式详细参考或新请求。全请求 fast 复测仍待执行。
 
+活页版 `8fb7534` 已推送，21:00:14 启动 fast 重测；21:03:24 在 27 Prefill / 0 Decode 后主动安全取消，190.094 秒，**未取得该版全请求接受或拒绝结论**。原因是只读 IR 复核已证明原 676 页临时 READ 中 368 页仅在 HOST，不会 PROGRAM；继续把它们计入 NAND 会过算。合并每个 fresh、无 alias buffer 的全部 WRITE 字节区间，仅区间完全覆盖整页才可能首次 PROGRAM，当前及最终 context 都得到 308 页可能 NAND READ。READ 不触发 flush，释放丢弃 partial tail，GC 只能搬已有 flash owner；必须保留足够 HOST 槽、无 pressure/RMW、无显式 flush 的资格，未知则保留原上界。真实 pressure/显式 flush 反例与 tiny 物理状态检查均已覆盖。取消期间后续配置未启动，当前仍 24 成功、48 待运行；已完成的两份拒绝原样留在历史。
+
+另补 HOST 行状态双向预算：GC scratch WRITE/READ 不仅自身有耗时，还能改变后续普通 HOST 的 row hit。只在当前 analytical/fcfs、refresh disabled、组门控/tFAW与总线换向均关闭、单数据 lane且资源无别名的域证明，每次复制的完整 HOST 页读写上界覆盖后继行状态修复；前缀按真实复制页外推、未来按已证明复制页上界，均同时扩大上下界。其他 HOST 时序域保留拒绝，不能套用任意倍数。物理 HOST 配置不变。
+
+复用旧拒绝与 `0e5699c` 重测已有的 28 步记录，`base_ns`、anchor、训练均值、holdout 实际/估计、holdout 误差及半窗漂移共 7 项逐值相同；未为此重跑参考。这是已执行前缀的摘要一致性检查，不能替代整请求全部物理状态对照。物理状态保证另由真实 FTL/native/DRAM/allocator/calendar 和事件测试支持。
+
+HOST-only 与 HOST 行状态补齐后，统一 **864 项通过，61.98 秒**，二次独立审查通过。专项还含真实 scratch 行污染非零影响的 Python/native 对照、9 个不支持历史门控逐一拒绝、资源别名/共享状态拒绝，以及压力/显式 flush 把 partial HOST 页写入 NAND 的真实反例。未运行新的正式详细参考；下一步仅用 fast 完整重测该点，接受前后续队列继续暂停。
+
 ## 2026-10-18：真实扫描采样与活页 GC 后普通写入分段
 
 按用户要求，让正在执行的 1.5B HBF / 256K / 1K 结束后暂停后续队列。17:15:30 的终态为 `capacity_rejected`，127 个 Prefill 块、0 个 Decode，实际运行 4313.235 秒，原因 `insufficient HBF space for immutable preload and GC reserve`；这不是成功完成完整请求。收尾后主队列为暂停、27 个成功点、1 个初始化/容量拒绝、44 个待运行，所有正式 worker 已退出。

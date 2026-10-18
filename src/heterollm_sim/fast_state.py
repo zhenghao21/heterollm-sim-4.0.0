@@ -203,6 +203,7 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
         temporary_read_pages = Counter()
         immutable_reads = {}
         read_unavailable = None
+        read_write_dispatch_qualified = True
         partials = Counter()
         rounded_pages = Counter()
         for task in lowering.schedule.tasks:
@@ -222,6 +223,8 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
             for access in accesses:
                 owner = str(access.get("physical_owner", ""))
                 operation = getattr(access.get("operation"), "value", access.get("operation"))
+                if owner in owners and operation not in {"read", "write"}:
+                    read_write_dispatch_qualified = False
                 if owner not in owners or operation not in {"read", "write"}:
                     continue
                 buffer_id = str(access.get("buffer_id", ""))
@@ -290,7 +293,7 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
                     "alias_generation", "alias_offset_bytes", "allocation_arena")))
         if fused != {str(layer.layer_id) for layer in layers}:
             return None, "terminal_flash_attention_not_admitted_for_every_layer"
-        from .fast_gc_read_basis import qualify_gc_read_basis
+        from .fast_gc_read_basis import qualify_gc_read_basis, temporary_read_media_bounds
         kernel = getattr(runtime, "_execution_resource_kernel", None)
         physical = getattr(kernel, "physical_runtime", None)
         read_basis = {owner: qualify_gc_read_basis(lowering.schedule.tasks, physical, owner,
@@ -303,6 +306,8 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
                 "partial_slots": partials, "rounded_write_pages": rounded_pages,
                 "staging_bindings": staging_bindings,
                 "temporary_read_pages": temporary_read_pages,
+                "temporary_read_media_bounds": temporary_read_media_bounds(writes, reads),
+                "read_write_dispatch_qualified": read_write_dispatch_qualified,
                 "immutable_reads": immutable_reads,
                 "gc_read_basis": read_basis,
                 "read_unavailable": read_unavailable}, None
@@ -349,6 +354,9 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
         "gc_staging_bindings_by_owner": terminal.get("staging_bindings", {}),
         "temporary_read_span_count": len(terminal["reads"]),
         "temporary_read_page_upper_by_owner": dict(terminal["temporary_read_pages"]),
+        "temporary_read_media_bounds_by_owner": terminal["temporary_read_media_bounds"],
+        "temporary_host_only_dispatch_qualified": bool(
+            start["read_write_dispatch_qualified"] and terminal["read_write_dispatch_qualified"]),
         "temporary_read_geometry_qualified": read_unavailable is None,
         "temporary_read_geometry_unavailable_reason": read_unavailable,
         "immutable_resident_read_rows_by_owner": {owner: tuple(rows)
@@ -606,6 +614,12 @@ def project_fast_tail(
             reasons.append("hbf_nand_program_frontier_unavailable:" + owner)
         if allocation_projection["reused_blocks_requiring_erase"]:
             reasons.append("hbf_free_block_reuse_may_require_erase:" + owner)
+        tail_slots = sum(int(row["tail_page_slots_upper_bound"]) for row in rows)
+        workspace_slots = (int(write_geometry.get("partial_host_slots_by_owner", {}).get(owner, 0))
+                           if write_geometry and write_geometry.get("qualified") else 0)
+        host_slots = controller.host_capacity_bytes // PAGE_BYTES - 1
+        resident_slots = len(controller._resident)
+        host_slots_sufficient = resident_slots + tail_slots + workspace_slots <= host_slots
         gc_projection = None
         gc_required = bool(stats.get("gc_cycles", 0) or program_budget > available_pages)
         if gc_required:
@@ -618,6 +632,14 @@ def project_fast_tail(
                 and immutable_proof["qualified"])
             read_pages = ((write_geometry or {}).get(
                 "temporary_read_page_upper_by_owner", {}).get(owner, 0))
+            from .fast_gc_read_basis import qualify_temporary_host_only_reads
+            temporary_media_proof = qualify_temporary_host_only_reads(controller,
+                (write_geometry or {}).get("temporary_read_media_bounds_by_owner", {}).get(owner, {}),
+                host_slots_sufficient=host_slots_sufficient,
+                read_write_dispatch_qualified=bool(qualified_geometry and (write_geometry or {}).get(
+                    "temporary_host_only_dispatch_qualified")))
+            if temporary_media_proof["applied"]:
+                read_pages = temporary_media_proof["charged_nand_read_pages_per_decode"]
             read_basis = ((write_geometry or {}).get("gc_read_qualification_by_owner", {}).get(owner)
                 or {"qualified": False, "reason": "gc_read_basis_unavailable",
                     "physical_state_advanced": False})
@@ -645,18 +667,14 @@ def project_fast_tail(
                     gc_projection["immutable_resident_read_preload_proof"] = immutable_proof
                 except (AttributeError, KeyError, TypeError, ValueError) as error:
                     gc_projection["reason"] = "gc_service_projection_unavailable:" + str(error)
+            gc_projection["temporary_read_media_proof"] = temporary_media_proof
             if not gc_projection["qualified"]:
                 if stats.get("gc_cycles", 0):
                     reasons.append("hbf_observed_gc_cycles:" + owner)
                 if program_budget > available_pages:
                     reasons.append("hbf_program_headroom_may_require_gc:" + owner)
                 reasons.append("hbf_" + str(gc_projection["reason"]) + ":" + owner)
-        tail_slots = sum(int(row["tail_page_slots_upper_bound"]) for row in rows)
-        workspace_slots = (int(write_geometry.get("partial_host_slots_by_owner", {}).get(owner, 0))
-                           if write_geometry and write_geometry.get("qualified") else 0)
-        host_slots = controller.host_capacity_bytes // PAGE_BYTES - 1
-        resident_slots = len(controller._resident)
-        if resident_slots + tail_slots + workspace_slots > host_slots:
+        if not host_slots_sufficient:
             reasons.append("hbf_host_tail_slots_may_require_pressure_flush:" + owner)
         devices.append({
             "physical_owner": owner, "bank_count": config.array_units,

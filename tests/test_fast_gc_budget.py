@@ -51,11 +51,13 @@ def live_projection(**changes):
         future_gc_non_erase_serial_ns=9.,
         future_gc_read_remap_symmetric_guard_ns=11.,
         future_gc_persistent_cache_symmetric_guard_ns=13.,
+        future_gc_host_state_symmetric_guard_ns=17.,
+        gc_host_state_qualification={"qualified": True, "physical_state_advanced": False},
         kv_reads_per_page_per_decode_upper=2,
         immutable_repeat_read_pages_per_decode_upper=3,
         initial_warm_read_pages_per_decode_upper=4)
     guard["per_unit_costs"].update(kv_read_remap_page_serial_upper_ns=5.,
-                                  persistent_cache_miss_page_serial_upper_ns=7.)
+        persistent_cache_miss_page_serial_upper_ns=7., gc_host_state_page_serial_upper_ns=11.)
     guard.update(changes)
     guard["gc_read_qualification"] = {"qualified": True, "physical_state_advanced": False,
         **{name: guard[name] for name in ("kv_reads_per_page_per_decode_upper",
@@ -162,6 +164,8 @@ def test_live_domain_budgets_reverse_copies_against_the_cutoff_mapping():
     assert result["prefix_gc_persistent_cache_symmetric_bias_guard_ns"] == pytest.approx(35 * 7. * 100 / 4 * 1.1)
     assert result["future_gc_read_remap_symmetric_guard_ns"] == 11.
     assert result["future_gc_persistent_cache_symmetric_guard_ns"] == 13.
+    assert result["prefix_gc_host_state_symmetric_bias_guard_ns"] == pytest.approx(3 * 11. * 100 / 4 * 1.1)
+    assert result["future_gc_host_state_symmetric_guard_ns"] == 17.
     assert [batch.cost.metadata for batch in runner.batches] == before
     assert envelope(runner, projected) == result
     json.dumps(result, allow_nan=False)
@@ -186,7 +190,9 @@ def test_all_live_remapping_and_persistent_cache_terms_widen_both_endpoints():
     symmetric_names = ("prefix_gc_read_remap_symmetric_bias_guard_ns",
         "prefix_gc_persistent_cache_symmetric_bias_guard_ns",
         "future_gc_read_remap_symmetric_guard_ns",
-        "future_gc_persistent_cache_symmetric_guard_ns")
+        "future_gc_persistent_cache_symmetric_guard_ns",
+        "prefix_gc_host_state_symmetric_bias_guard_ns",
+        "future_gc_host_state_symmetric_guard_ns")
     symmetric = math.fsum(maintenance[name] for name in symmetric_names)
     prefix = math.fsum(maintenance[name] for name in ("prefix_erase_bias_guard_ns",
         "prefix_gc_bias_guard_ns", "prefix_write_placement_bias_guard_ns", "prefix_read_placement_bias_guard_ns"))
@@ -221,6 +227,13 @@ def test_all_live_remapping_and_persistent_cache_terms_widen_both_endpoints():
     lambda guard: guard["gc_read_qualification"].update(qualified=False),
     lambda guard: guard["gc_read_qualification"].update(physical_state_advanced=True),
     lambda guard: guard["gc_read_qualification"].update(kv_reads_per_page_per_decode_upper=1),
+    lambda guard: guard.pop("gc_host_state_qualification"),
+    lambda guard: guard["gc_host_state_qualification"].update(qualified=False),
+    lambda guard: guard["gc_host_state_qualification"].update(physical_state_advanced=True),
+    lambda guard: guard["per_unit_costs"].pop("gc_host_state_page_serial_upper_ns"),
+    lambda guard: guard["per_unit_costs"].update(gc_host_state_page_serial_upper_ns=math.inf),
+    lambda guard: guard.pop("future_gc_host_state_symmetric_guard_ns"),
+    lambda guard: guard.update(future_gc_host_state_symmetric_guard_ns=None),
 ])
 def test_live_domain_cannot_default_unknown_read_bounds_or_qualification_to_zero(mutation):
     projected = live_projection()

@@ -9,7 +9,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from heterollm_sim.contracts import TaskCategory, TaskSpec
-from heterollm_sim.fast_gc_read_basis import qualify_gc_read_basis
+from heterollm_sim.fast_gc_read_basis import (qualify_gc_read_basis,
+    qualify_temporary_host_only_reads, temporary_read_media_bounds)
 from heterollm_sim.hbf_staging import HbfStagingController
 from heterollm_sim.memory_allocator import PhysicalAddressAllocator
 from heterollm_sim.physical_presets import resolve_physical_config
@@ -165,4 +166,115 @@ def test_formal_1_5b_bank_barrier_is_certified_from_preloads_without_request_exe
     assert result["barrier_distinct_tags_per_bank"] == (2,) * 256
     assert result["initial_warm_read_pages_per_decode_upper"] == 512
     assert result["immutable_read_access_count"] > 56
+    media = proof["temporary_read_media_bounds_by_owner"]["hbf0.memory"]
+    assert proof["temporary_read_page_upper_by_owner"]["hbf0.memory"] == 676
+    assert media["rounded_read_pages_per_decode"] == 676
+    assert media["potential_nand_read_pages_per_decode"] == 308
+    assert media["proven_host_only_read_pages_per_decode"] == 368
+    assert media["conservative_read_access_count"] == 0
+    assert proof["temporary_host_only_dispatch_qualified"]
     assert not bootstrap.kernel.physical_runtime.hbf_staging["hbf0.memory"]["controller"]._pages
+
+
+def temporary_span(offset=0, size=512, *, identity="temporary", generation=1, alias=None):
+    return ("flash", identity, offset, size, generation, alias, None, 0)
+
+
+def media(writes, reads):
+    return temporary_read_media_bounds(writes, reads)["flash"]
+
+
+def test_write_union_gap_outside_read_cannot_initialize_the_whole_page():
+    result = media((temporary_span(), temporary_span(1024)), (temporary_span(),))
+    assert result["rounded_read_pages_per_decode"] == 1
+    assert result["potential_nand_read_pages_per_decode"] == 0
+    assert result["proven_host_only_read_pages_per_decode"] == 1
+
+
+def test_read_of_unknown_bytes_keeps_original_budget_even_on_incomplete_page():
+    result = media((temporary_span(), temporary_span(1024)), (temporary_span(0, 1536),))
+    assert result["potential_nand_read_pages_per_decode"] == 1
+    assert result["proven_host_only_read_pages_per_decode"] == 0
+    assert result["conservative_reasons"] == ("read_bytes_not_covered_by_known_write_union",)
+
+
+def test_later_partial_write_completion_keeps_earlier_read_charged_order_independently():
+    result = media((temporary_span(2048, 2048), temporary_span(0, 2048)),
+                   (temporary_span(0, 512), temporary_span(4096, 64, identity="unknown")))
+    assert result["rounded_read_pages_per_decode"] == 2
+    assert result["potential_nand_read_pages_per_decode"] == 2
+    assert result["proven_host_only_read_pages_per_decode"] == 0
+
+
+def test_unaligned_span_can_leave_both_read_pages_host_only_and_retains_multiplicity():
+    result = media((temporary_span(1, 4096),), (temporary_span(1, 4096),) * 3)
+    assert result["rounded_read_pages_per_decode"] == 6
+    assert result["potential_nand_read_pages_per_decode"] == 0
+    assert result["proven_host_only_read_pages_per_decode"] == 6
+
+
+@pytest.mark.parametrize("change", ["read_alias", "write_alias", "unknown_generation", "missing_write"])
+def test_alias_or_unknown_fresh_source_retains_original_worst_alignment_budget(change):
+    write = temporary_span(0, 4096)
+    read = temporary_span(0, 4096)
+    if change == "read_alias":
+        read = temporary_span(0, 4096, alias="parent")
+    elif change == "write_alias":
+        write = temporary_span(0, 4096, alias="parent")
+    elif change == "unknown_generation":
+        read = temporary_span(0, 4096, generation=0)
+    else:
+        write = temporary_span(0, 4096, identity="other")
+    result = media((write,), (read,))
+    assert result["potential_nand_read_pages_per_decode"] == (2 if change == "read_alias" else 1)
+    assert result["proven_host_only_read_pages_per_decode"] == 0
+    assert result["conservative_read_access_count"] == 1
+
+
+def test_any_aliased_write_prevents_claiming_another_base_buffer_is_host_only():
+    result = media((temporary_span(), temporary_span(alias="temporary", identity="view")),
+                   (temporary_span(),))
+    assert result["potential_nand_read_pages_per_decode"] == 1
+
+
+@pytest.mark.parametrize("condition", ["host_slots", "dispatch", "pressure", "rmw", "flush_hook"])
+def test_host_only_reduction_never_crosses_partial_flush_guard(condition, monkeypatch):
+    data = fixture()
+    controller = data[1]
+    bound = media((temporary_span(),), (temporary_span(),))
+    assert qualify_temporary_host_only_reads(controller, bound,
+        host_slots_sufficient=True, read_write_dispatch_qualified=True)["applied"]
+    if condition in {"pressure", "rmw"}:
+        controller.stats["pressure_flushes" if condition == "pressure" else "rmw_pages"] = 1
+    elif condition == "flush_hook":
+        monkeypatch.setattr(controller, "flush", lambda *args: 0.)
+    proof = qualify_temporary_host_only_reads(controller, bound,
+        host_slots_sufficient=condition != "host_slots",
+        read_write_dispatch_qualified=condition != "dispatch")
+    assert not proof["applied"]
+    assert proof["charged_nand_read_pages_per_decode"] == 1
+
+
+def test_real_partial_page_only_programs_under_pressure_or_explicit_flush():
+    from test_hbf_staging import Hardware, config
+    configured = config()
+    bound = media((temporary_span(),), (temporary_span(),))
+    # One data slot plus the permanently reserved GC slot.
+    controller, hardware = HbfStagingController(configured, 2 * 4096), Hardware(configured, 2 * 4096)
+    now = controller.write("temporary", 1, 0, 512, 0., hardware.io)
+    now = controller.read("temporary", 1, 0, 512, now, hardware.io)
+    assert not hardware.bytes("flash_write") and not hardware.bytes("flash_read")
+    controller.write("another", 1, 0, 512, now, hardware.io)
+    assert controller.stats["pressure_flushes"] == 1
+    assert hardware.bytes("flash_write") == 4096
+    proof = qualify_temporary_host_only_reads(controller, bound,
+        host_slots_sufficient=True, read_write_dispatch_qualified=True)
+    assert not proof["applied"]
+    # Explicit flush has the same physical exception even with free slots;
+    # such a dispatch cannot use the narrower static READ bound.
+    controller, hardware = HbfStagingController(configured, 3 * 4096), Hardware(configured)
+    now = controller.write("temporary", 1, 0, 512, 0., hardware.io)
+    controller.flush("temporary", 1, now, hardware.io)
+    assert hardware.bytes("flash_write") == 4096
+    assert not qualify_temporary_host_only_reads(controller, bound,
+        host_slots_sufficient=True, read_write_dispatch_qualified=False)["applied"]

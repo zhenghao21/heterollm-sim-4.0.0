@@ -1,14 +1,14 @@
 {
   "status": "paused",
   "physical_weight_semantics": "canonical_shared_resident_weights_v1",
-  "manager_pid": 41040,
-  "updated_at": "2026-10-18T12:51:08.338822+00:00",
+  "manager_pid": 38132,
+  "updated_at": "2026-10-18T13:03:26.532014+00:00",
   "total": 72,
   "simulation_mode": "fast",
   "completed": 24,
   "forecast_completed": 24,
   "capacity_rejected": 0,
-  "forecast_rejected": 1,
+  "forecast_rejected": 0,
   "failed": 0,
   "retry_priority_points": [
     "qwen2_5-1_5b__HBM__P262144__D1024",
@@ -38,9 +38,9 @@
     "qwen2_5-0_5b__HBF__P262144__D1024"
   ],
   "retry_group_total": 25,
-  "retry_group_completed": 22,
+  "retry_group_completed": 21,
   "retry_group_accepted": null,
-  "pending": 47,
+  "pending": 48,
   "running": [],
   "reason": "stop_requested"
 }

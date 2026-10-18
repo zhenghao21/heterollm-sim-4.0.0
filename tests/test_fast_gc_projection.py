@@ -7,7 +7,7 @@ import pytest
 
 from heterollm_sim.fast_gc import (
     _calendar_carry_in, _host_page_cost, gc_service_bounds, project_gc_maintenance,
-    qualify_immutable_reads,
+    qualify_gc_host_state, qualify_immutable_reads,
 )
 from heterollm_sim.hbf_staging import HbfStagingController, HbfStagingIO, PAGE
 from heterollm_sim.memory_types import AccessRequest, Operation
@@ -74,13 +74,15 @@ def low_live_controller(live_per_block=1, *, controller=None, io=None):
 
 def live_services():
     result = services()
+    result["gc_host_state_qualification"] = {"qualified": True, "physical_state_advanced": False}
     result["per_unit_costs"].update({
         "nand_read_page_serial_upper_ns": 2., "nand_program_page_serial_upper_ns": 3.,
         "host_read_page_serial_upper_ns": 5., "host_write_page_serial_upper_ns": 7.,
         "link_from_hbf_page_serial_upper_ns": 11., "link_to_hbf_page_serial_upper_ns": 13.,
         "read_cache_lru_slots_per_bank": 2,
         "kv_read_remap_page_serial_upper_ns": 17.,
-        "persistent_cache_miss_page_serial_upper_ns": 2.})
+        "persistent_cache_miss_page_serial_upper_ns": 2.,
+        "gc_host_state_page_serial_upper_ns": 12.})
     return result
 
 
@@ -129,6 +131,7 @@ def test_live_complete_copy_chain_and_two_sided_read_costs_are_not_divided_by_ba
     assert result["future_gc_migrated_kv_page_token_upper"] == 10
     assert result["future_gc_read_remap_symmetric_guard_ns"] == 10 * 17.
     assert result["future_gc_persistent_cache_symmetric_guard_ns"] == 5 * (3 + 4) * 2.
+    assert result["future_gc_host_state_symmetric_guard_ns"] == 4 * (5. + 7.)
     assert result["future_gc_non_erase_serial_ns"] == 4 * 100.
     assert result["future_gc_erase_serial_ns"] == 4 * config().block_erase_ns
     assert result["gc_copy_nand_read_serial_upper_ns"] == 4 * 2.
@@ -190,6 +193,18 @@ def test_live_missing_service_component_is_unknown_not_a_zero_cost(name):
     assert result["future_gc_read_remap_symmetric_guard_ns"] is None
 
 
+@pytest.mark.parametrize("proof", [None, {}, {"qualified": False},
+    {"qualified": True, "physical_state_advanced": True}])
+def test_live_without_host_state_proof_rejects_and_does_not_treat_it_as_zero(proof):
+    controller, _ = low_live_controller()
+    bounds = live_services()
+    bounds["gc_host_state_qualification"] = proof
+    result = live_project(controller, service_bounds=bounds)
+    assert not result["qualified"] and not result["live_projection_qualified"]
+    assert result["reason"] == "live_gc_host_state_qualification_unavailable"
+    assert result["future_gc_host_state_symmetric_guard_ns"] is None
+
+
 def test_live_without_sufficient_low_live_pool_cannot_use_a_global_diagnostic_q():
     controller, _ = low_live_controller(2)
     result = live_project(controller, (0, 8, 16, 24, 32))
@@ -207,6 +222,7 @@ def test_empty_domain_keeps_original_costs_without_new_live_proof_or_prefix():
     assert not result["live_copy_proven"] and not result["live_projection_qualified"]
     assert result["future_gc_read_remap_symmetric_guard_ns"] == 0.
     assert result["future_gc_persistent_cache_symmetric_guard_ns"] == 0.
+    assert result["future_gc_host_state_symmetric_guard_ns"] == 0.
     assert result["future_gc_non_erase_serial_ns"] == 0.
 
 
@@ -288,14 +304,145 @@ def test_custom_allocator_hook_is_not_certified():
     assert result["reason"] == "gc_custom_allocator_or_controller_unqualified"
 
 
-def real_physical(*, capture=False):
+def real_physical(*, capture=False, host_updates=None):
     from heterollm_sim.data_motion import PhysicalRuntimeContext
     from heterollm_sim.hbf_staging_runtime import configure
     from test_hbf_staging_runtime import setup
     configured, binding = setup(capacity=16 * PAGE)
+    if host_updates:
+        binding = {**binding, "host_config": replace(binding["host_config"], **host_updates)}
     physical = PhysicalRuntimeContext(capture_details=capture)
     state = configure(physical, "flash", configured, binding)
     return physical, state["controller"], binding
+
+
+@pytest.mark.parametrize("capture", [False, True])
+def test_real_host_state_proof_records_actual_domain_and_preserves_every_live_object(capture):
+    import pickle
+    physical, controller, binding = real_physical(capture=capture)
+    before = pickle.dumps(physical)
+    proof = qualify_gc_host_state(physical, "host", (binding,))
+    assert pickle.dumps(physical) == before
+    assert proof["qualified"] and proof["physical_state_advanced"] is False
+    assert proof["actual_config"]["control_mode"] == "analytical"
+    assert proof["actual_config"]["scheduler"] == "fcfs"
+    assert proof["actual_config"]["refresh_policy"] == "disabled"
+    assert proof["actual_config"]["lane_count"] == 1
+    bounds = gc_service_bounds(physical, controller, binding, 0.)
+    units = bounds["per_unit_costs"]
+    assert bounds["gc_host_state_qualification"] == proof
+    assert units["gc_host_state_page_serial_upper_ns"] == (
+        units["host_read_page_serial_upper_ns"] + units["host_write_page_serial_upper_ns"])
+
+
+def test_formal_1_5b_host_state_service_is_qualified_after_bootstrap_without_request_execution():
+    from pathlib import Path
+    import sys
+    from types import SimpleNamespace as NS
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from b200_hbm_hbf_scan_config import build_scan_scenario
+    from heterollm_sim.control_plane import bootstrap_control_plane
+    from heterollm_sim.fast_state import _fixed_decode_write_geometry
+    from heterollm_sim.planner import TopologyAwareBatchCostProvider, _execution_layers
+    bootstrap = bootstrap_control_plane(build_scan_scenario("qwen2_5-1_5b", "HBF", 262144, 1024),
+                                        capture_physical_details=False)
+    scenario, physical = bootstrap.scenario, bootstrap.kernel.physical_runtime
+    runner = NS(lowerer=TopologyAwareBatchCostProvider(scenario, defer_physical_execution=True),
+        plan=NS(scenario=scenario), _execution_resource_kernel=bootstrap.kernel,
+        _state_values=(NS(cached_tokens=262172, spec=scenario.workload.requests[0]),))
+    rows = [{"buffer_id": f"kv:scan-request:{layer.layer_id}:rank0:tp0:pp0:{part}",
+             "physical_owner": "hbf0.memory", "component_id": "hbf0", "bytes_per_token": 512}
+            for layer in _execution_layers(scenario) for part in ("k", "v")]
+    geometry = _fixed_decode_write_geometry(runner, rows, 263167)
+    state = physical.hbf_staging["hbf0.memory"]
+    assert not state["controller"]._pages
+    bounds = gc_service_bounds(physical, state["controller"],
+        geometry["gc_staging_bindings_by_owner"]["hbf0.memory"], bootstrap.makespan_ns)
+    proof = bounds["gc_host_state_qualification"]
+    assert proof["qualified"], proof
+    assert proof["actual_config"]["lane_count"] == 1
+    units = bounds["per_unit_costs"]
+    assert units["gc_host_state_page_serial_upper_ns"] == (
+        units["host_read_page_serial_upper_ns"] + units["host_write_page_serial_upper_ns"])
+    assert not state["controller"]._pages
+
+
+@pytest.mark.parametrize("name", ["column_same_group_ns", "column_different_group_ns",
+    "activate_same_group_ns", "activate_different_group_ns", "four_activate_window_ns",
+    "write_to_read_same_group_ns", "write_to_read_different_group_ns",
+    "read_to_write_ns", "write_to_read_ns"])
+def test_live_host_nonzero_shared_history_rejects_but_zero_copy_budget_stays_usable(name):
+    physical, controller, binding = real_physical(host_updates={name: 1.})
+    bounds = gc_service_bounds(physical, controller, binding, 0.)
+    proof = bounds["gc_host_state_qualification"]
+    assert not proof["qualified"]
+    assert proof["actual_config"][name] == 1.
+    assert proof["reason"] == "gc_host_state_shared_timing_history_unqualified"
+    assert bounds["per_unit_costs"]["gc_host_state_page_serial_upper_ns"] is None
+    live, _ = low_live_controller()
+    rejected = live_project(live, service_bounds=bounds)
+    assert not rejected["qualified"]
+    assert rejected["future_gc_host_state_symmetric_guard_ns"] is None
+    empty = project(exhausted(), 4, service_bounds=bounds)
+    assert empty["qualified"] and empty["future_gc_host_state_symmetric_guard_ns"] == 0.
+
+
+@pytest.mark.parametrize("change,reason", [
+    ("multiple_data_lanes", "gc_host_state_multiple_data_lanes_unqualified"),
+    ("custom_namespace", "gc_host_state_custom_resource_namespace_unqualified"),
+    ("outgoing_alias", "gc_host_state_resource_alias_unqualified"),
+    ("incoming_alias", "gc_host_state_resource_alias_unqualified"),
+    ("link_overlap", "gc_host_state_link_resource_overlap_unqualified"),
+    ("multiple_resource_slots", "gc_host_state_resource_slots_unqualified"),
+    ("shared_slot_list", "gc_host_state_resource_slots_unqualified"),
+    ("bank_alias", "gc_host_state_bank_alias_unqualified"),
+    ("custom_controller", "gc_host_state_custom_controller_unqualified")])
+def test_host_shared_or_unknown_resources_cannot_receive_the_row_repair_bound(change, reason):
+    updates = ({"data_lanes": 2} if change == "multiple_data_lanes" else
+               {"metadata": {"data_resource_prefix": "shared-custom"}} if change == "custom_namespace" else None)
+    physical, _, binding = real_physical(host_updates=updates)
+    core, timeline = physical.runtimes["host"].core, physical.timeline
+    data, command = "host:dram:data:0", "host:dram:command:0"
+    if change == "outgoing_alias":
+        timeline.resource_aliases = {data: "external"}
+    elif change == "incoming_alias":
+        timeline.resource_aliases = {"external": data}
+    elif change == "link_overlap":
+        binding = {**binding, "routes": {**binding["routes"], "to_hbf": ({
+            **binding["routes"]["to_hbf"][0], "resource_id": data},)}}
+    elif change == "multiple_resource_slots":
+        timeline.lane_available[data] = [0., 0.]
+    elif change == "shared_slot_list":
+        timeline.lane_available[data] = timeline.lane_available[command] = [0.]
+    elif change == "bank_alias":
+        state = object()
+        core.__dict__["_banks"] = {"a": state, "b": state}
+    elif change == "custom_controller":
+        core._data_id = lambda mapping: data
+    proof = qualify_gc_host_state(physical, "host", (binding,))
+    assert not proof["qualified"] and proof["reason"] == reason
+
+
+@pytest.mark.parametrize("capture", [False, True])
+def test_real_host_scratch_row_pollution_repair_fits_one_read_plus_write_page(capture):
+    from heterollm_sim.dram_core import DramCore
+    from heterollm_sim.memory_transfer import ResourceTimeline
+    from heterollm_sim.memory_types import make_ddr_config
+    configured = make_ddr_config(capacity_bytes=1024 * 1024)
+    baseline = DramCore(configured, ResourceTimeline(), capture_details=capture)
+    polluted = DramCore(configured, ResourceTimeline(), capture_details=capture)
+    address = configured.bank_count * configured.row_bytes
+    def access(core, operation, location, arrival):
+        return core.submit(AccessRequest("host-state", operation, location, PAGE, arrival)).completion_ns
+    baseline_start = access(baseline, Operation.READ, address, 0.)
+    polluted_start = access(polluted, Operation.READ, address, 0.)
+    scratch_end = access(polluted, Operation.WRITE, 0, polluted_start)
+    scratch_end = access(polluted, Operation.READ, 0, scratch_end)
+    baseline_end = access(baseline, Operation.READ, address, baseline_start)
+    polluted_end = access(polluted, Operation.READ, address, scratch_end)
+    repair = abs((polluted_end - scratch_end) - (baseline_end - baseline_start))
+    assert repair > 0
+    assert repair <= _host_page_cost(configured, Operation.READ) + _host_page_cost(configured, Operation.WRITE)
 
 
 @pytest.mark.parametrize("capture", [False, True])
