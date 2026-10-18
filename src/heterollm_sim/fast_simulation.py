@@ -347,7 +347,12 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
     future_fields = ("future_gc_erase_serial_guard_ns", "future_gc_non_erase_serial_guard_ns",
                      "future_write_placement_serial_guard_ns", "future_read_placement_serial_guard_ns",
                      "future_gc_carry_in_serial_guard_ns")
-    gc_fields = prefix_fields + future_fields
+    symmetric_fields = ("prefix_gc_read_remap_symmetric_bias_guard_ns",
+        "prefix_gc_persistent_cache_symmetric_bias_guard_ns",
+        "future_gc_read_remap_symmetric_guard_ns",
+        "future_gc_persistent_cache_symmetric_guard_ns")
+    live_required = maintenance.get("gc_live_copy_budget_required", False)
+    gc_fields = prefix_fields + future_fields + (symmetric_fields if live_required else ())
     gc_available = (not gc_required or (maintenance.get("gc_observations_available") is True
         and all(isinstance(maintenance.get(name), (int, float))
                 and not isinstance(maintenance[name], bool)
@@ -357,10 +362,15 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
     # domain. The original no-GC arithmetic is retained without a new term.
     gc = {name: maintenance[name] if gc_required and gc_available else
           (None if gc_required else 0.) for name in gc_fields}
+    if not live_required:
+        gc.update(dict.fromkeys(symmetric_fields, 0.))
     all_prefix = (math.fsum((prefix, *(gc[name] for name in prefix_fields)))
                   if gc_required and gc_available else prefix if not gc_required else None)
     all_future = (math.fsum((future, *(gc[name] for name in future_fields)))
                   if gc_required and gc_available else future if not gc_required else None)
+    symmetric = (math.fsum(gc[name] for name in symmetric_fields) if gc_available else None)
+    lower_guard = all_prefix + symmetric if gc_available else None
+    upper_guard = all_future + symmetric if gc_available else None
 
     def interval(lo, hi):
         if (lo is None or hi is None or lo <= 0 or hi <= 0
@@ -374,16 +384,18 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
                 "relative_error_budget": max(over, under)}
 
     model = interval(lower, upper)
-    media = interval(lower - all_prefix, upper + all_future) if gc_available else interval(None, None)
+    media = interval(lower - lower_guard, upper + upper_guard) if gc_available else interval(None, None)
     valid_local = math.isfinite(local_error) and 0 <= local_error < 1
     local = interval(lower / (1 + local_error), upper / (1 - local_error)) if valid_local else interval(0., 0.)
     mapping_stable = not gc_required or maintenance.get("gc_prefix_mapping_stable") is True
-    combined = (interval((lower - all_prefix) / (1 + local_error),
-                         (upper + all_future) / (1 - local_error))
-                if valid_local and gc_available and mapping_stable else interval(None, None))
+    mapping_bounded = mapping_stable or (live_required and maintenance.get("gc_prefix_mapping_bounded") is True)
+    combined = (interval((lower - lower_guard) / (1 + local_error),
+                         (upper + upper_guard) / (1 - local_error))
+                if valid_local and gc_available and mapping_bounded else interval(None, None))
     reason = ("hbf_gc_maintenance_observations_unavailable" if not gc_available else
-              "hbf_gc_prefix_mapping_requires_clean_window" if not mapping_stable else
-              "prefix_maintenance_budget_exhausts_lower_timing_bound" if gc_required and lower - all_prefix <= 0 else
+              "hbf_gc_prefix_mapping_requires_clean_window" if not mapping_bounded else
+              "live_gc_maintenance_budget_exhausts_lower_timing_bound" if live_required and lower - lower_guard <= 0 else
+              "prefix_maintenance_budget_exhausts_lower_timing_bound" if gc_required and lower - lower_guard <= 0 else
               "prefix_erase_budget_exhausts_lower_timing_bound" if lower - prefix <= 0 else
               "local_calibration_error_not_bounded_below_one" if not valid_local else None)
     return {"conditional_relative_error_budget": combined["relative_error_budget"],
@@ -396,9 +408,14 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
             "gc_budget_required": gc_required,
             "gc_observations_available": gc_available,
             "gc_prefix_mapping_stable": mapping_stable,
+            "gc_prefix_mapping_bounded": mapping_bounded,
+            "gc_live_copy_budget_required": live_required,
             **gc,
             "prefix_maintenance_total_guard_ns": all_prefix,
             "future_maintenance_total_guard_ns": all_future,
+            "symmetric_maintenance_guard_ns": symmetric,
+            "conditional_lower_maintenance_guard_ns": lower_guard,
+            "conditional_upper_maintenance_guard_ns": upper_guard,
             "legacy_future_erase_serial_guard_ns": maintenance.get("legacy_future_erase_serial_guard_ns", future),
             "future_erase_upper_bound_methods": maintenance.get("future_erase_upper_bound_methods", []),
             "model_only": model, "model_with_local_error": local,
@@ -418,6 +435,8 @@ def conditional_error_budget(lower, upper, estimate, local_error, maintenance):
                 if gc_available else interval(None, None),
             "model_with_gc_carry_in": interval(lower, upper + gc["future_gc_carry_in_serial_guard_ns"])
                 if gc_available else interval(None, None),
+            **{"model_with_" + name.removesuffix("_guard_ns"): interval(lower - gc[name], upper + gc[name])
+                if gc_available else interval(None, None) for name in symmetric_fields},
             "model_with_maintenance": media, "combined": combined}}
 
 
@@ -434,7 +453,11 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
     future_names = ("future_gc_erase_serial_guard_ns", "future_gc_non_erase_serial_guard_ns",
                     "future_write_placement_serial_guard_ns", "future_read_placement_serial_guard_ns",
                     "future_gc_carry_in_serial_guard_ns")
-    names = prefix_names + future_names
+    symmetric_names = ("prefix_gc_read_remap_symmetric_bias_guard_ns",
+        "prefix_gc_persistent_cache_symmetric_bias_guard_ns",
+        "future_gc_read_remap_symmetric_guard_ns",
+        "future_gc_persistent_cache_symmetric_guard_ns")
+    names = prefix_names + future_names + symmetric_names
     devices = [row for row in projection.hbf_devices if (
         row.get("gc_projection", {}).get("required") is True
         or row.get("observed_gc_cycles", 0) > 0
@@ -442,6 +465,7 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
     record = {"gc_budget_required": bool(devices), "gc_observations_available": True,
         "gc_budget_unavailable_reason": None,
         "gc_prefix_mapping_stable": True, "gc_prefix_recalibration_required": False,
+        "gc_prefix_mapping_bounded": True, "gc_live_copy_budget_required": False,
         **dict.fromkeys(names, 0.), "gc_guard_by_owner": [],
         "gc_guard_source": "closed_empty_victim_reservoir_and_actual_cohort_staging_deltas",
         "gc_guard_semantics": "conditional_serial_service_bounds_not_measured_suffix_error",
@@ -471,8 +495,14 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
     for device in devices:
         owner = device.get("physical_owner")
         guard = device.get("gc_projection", {})
-        if guard.get("qualified") is not True or guard.get("zero_copy_proven") is not True:
+        zero_copy = guard.get("zero_copy_proven") is True
+        live_copy = (not zero_copy and guard.get("live_copy_proven") is True
+                     and guard.get("live_projection_qualified") is True)
+        if guard.get("qualified") is not True or not (zero_copy or live_copy):
             return unavailable("hbf_gc_closed_empty_victim_projection_unavailable:" + str(owner))
+        if live_copy:
+            record.update(gc_live_copy_budget_required=True,
+                gc_guard_source="closed_victim_live_page_reservoir_cold_read_proof_and_actual_cohort_staging_deltas")
         units = guard.get("per_unit_costs", {})
         copy_ns, program_ns = (units.get("gc_copy_page_serial_upper_ns"),
                               units.get("ordinary_program_page_serial_upper_ns"))
@@ -486,6 +516,25 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
                 (copy_ns, program_ns, read_ns, initial_cache_ns,
                  *(guard.get(key) for key in future_keys)))):
             return unavailable("hbf_gc_serial_service_bounds_unavailable:" + str(owner))
+        if live_copy:
+            remap_ns = units.get("kv_read_remap_page_serial_upper_ns")
+            cache_miss_ns = units.get("persistent_cache_miss_page_serial_upper_ns")
+            kv_multiplicity = guard.get("kv_reads_per_page_per_decode_upper")
+            repeat_reads = guard.get("immutable_repeat_read_pages_per_decode_upper")
+            initial_warm_reads = guard.get("initial_warm_read_pages_per_decode_upper")
+            qualification = guard.get("gc_read_qualification")
+            qualification_fields = ("kv_reads_per_page_per_decode_upper",
+                "immutable_repeat_read_pages_per_decode_upper", "initial_warm_read_pages_per_decode_upper")
+            if (not isinstance(qualification, Mapping) or qualification.get("qualified") is not True
+                    or qualification.get("physical_state_advanced") is not False
+                    or any(not counter(qualification.get(name))
+                           or qualification[name] != guard.get(name) for name in qualification_fields)):
+                return unavailable("hbf_gc_cold_persistent_read_qualification_unavailable:" + str(owner))
+            if (not counter(kv_multiplicity) or kv_multiplicity == 0
+                    or not counter(repeat_reads) or not counter(initial_warm_reads)
+                    or not all(service(value) for value in (remap_ns, cache_miss_ns,
+                        guard.get(symmetric_names[2]), guard.get(symmetric_names[3])))):
+                return unavailable("hbf_gc_persistent_read_remap_bounds_unavailable:" + str(owner))
         observed = []
         for batch in batches:
             metadata = batch.cost.metadata
@@ -523,8 +572,38 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
         terms[names[2]].append((prefix_read_pages * read_ns + initial_cache_ns) * scale)
         for name, key in zip(future_names, future_keys, strict=True):
             terms[name].append(guard[key])
+        remap_record = {}
+        if live_copy:
+            # The common reference is the mapping inspected at the cutoff.
+            # A prior cohort can differ only for a page copied from that
+            # cohort through the cutoff. Reverse cumulative counts also
+            # cover copies after the visible commit and previous cleanup.
+            reverse_copies = []
+            copied_after = 0
+            for row in reversed(observed):
+                copied_after += row["gc_copied_pages"]
+                reverse_copies.append(copied_after)
+            reverse_copies.reverse()
+            remapped_reads = sum(reverse_copies) * kv_multiplicity
+            cache_misses = len(batches) * (repeat_reads + initial_warm_reads)
+            terms[symmetric_names[0]].append(remapped_reads * remap_ns * scale)
+            terms[symmetric_names[1]].append(cache_misses * cache_miss_ns * scale)
+            terms[symmetric_names[2]].append(guard[symmetric_names[2]])
+            terms[symmetric_names[3]].append(guard[symmetric_names[3]])
+            remap_record = {"prefix_mapping_reference": "inspected_cutoff_mapping",
+                "prefix_reverse_cumulative_copied_pages": tuple(reverse_copies),
+                "prefix_remapped_kv_page_reads_upper": remapped_reads,
+                "prefix_persistent_cache_misses_upper": cache_misses,
+                "kv_reads_per_page_per_decode_upper": kv_multiplicity,
+                "immutable_repeat_read_pages_per_decode_upper": repeat_reads,
+                "initial_warm_read_pages_per_decode_upper": initial_warm_reads,
+                "kv_read_remap_page_serial_upper_ns": remap_ns,
+                "persistent_cache_miss_page_serial_upper_ns": cache_miss_ns,
+                "read_remap_bound_direction": "symmetric_lower_and_upper"}
         if copies:
-            record.update(gc_prefix_mapping_stable=False, gc_prefix_recalibration_required=True)
+            record["gc_prefix_mapping_stable"] = False
+            if not live_copy:
+                record.update(gc_prefix_mapping_bounded=False, gc_prefix_recalibration_required=True)
         record["gc_guard_by_owner"].append({"physical_owner": owner,
             "sampled_gc_cycles": sum(row["gc_cycles"] for row in observed),
             "sampled_gc_copied_pages": copies,
@@ -540,6 +619,7 @@ def _gc_maintenance_error_envelope(projection, batches, count, remaining, contex
             "prefix_temporary_read_page_upper": prefix_read_pages,
             "ordinary_read_page_serial_upper_ns": read_ns,
             "read_cache_initial_state_serial_upper_ns": initial_cache_ns,
+            **remap_record,
             "future_projection": guard})
     record.update({name: math.fsum(values) for name, values in terms.items()})
     return record
@@ -638,7 +718,8 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
         "model_assumptions": [
             "ordinary single-request Decode with fixed resident weights and dense attention",
             "steady mean Token cost lies in a nonnegative affine context-growth envelope",
-            "ordinary OCP page-zero erases are bounded by serial service budgets; GC requires a closed empty-victim proof and complete placement/maintenance bounds, while block reuse remains excluded",
+            "ordinary OCP page-zero erases are bounded by serial service budgets; GC requires a closed victim proof and complete placement/maintenance bounds, while block reuse remains excluded",
+            "live-copy GC additionally requires a proven cold-read contract; prefix and future persistent read remapping/cache uncertainty widen both timing endpoints about the inspected cutoff mapping",
             "after observed ordinary erases, a new steady-cost fit may exclude those already timed prefix cohorts and their cleanup; future erase guards remain unchanged",
             "no unseen cache, scheduling, pressure-flush or allocation regime change",
             "whole-Decode bounds include the exact timed prefix; a matched BF16 request uses directional HBF/HBM interval arithmetic with both single-point and ratio errors bounded by target",
@@ -773,7 +854,10 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                 if not maintenance["erase_observations_available"]:
                     return detailed("hbf_erase_observations_unavailable")
                 if maintenance.get("gc_budget_required"):
-                    diagnostics["method"] = "closed_empty_gc_maintenance_directional_paired_envelope/v5"
+                    diagnostics["method"] = (
+                        "closed_victim_live_gc_symmetric_directional_paired_envelope/v6"
+                        if maintenance.get("gc_live_copy_budget_required") else
+                        "closed_empty_gc_maintenance_directional_paired_envelope/v5")
                     if not maintenance.get("gc_observations_available"):
                         return detailed(maintenance["gc_budget_unavailable_reason"])
                 budget = conditional_error_budget(lower, upper, estimate, local_error, maintenance)

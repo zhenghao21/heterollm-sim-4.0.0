@@ -1,4 +1,4 @@
-"""A GC forecast may use only a proved empty-victim reservoir and real IO costs."""
+"""A GC forecast needs proved victim, read placement and complete IO bounds."""
 from copy import deepcopy
 from dataclasses import replace
 from itertools import product
@@ -6,7 +6,7 @@ from itertools import product
 import pytest
 
 from heterollm_sim.fast_gc import (
-    _calendar_carry_in, _host_page_cost, gc_service_bounds, project_zero_copy_gc,
+    _calendar_carry_in, _host_page_cost, gc_service_bounds, project_gc_maintenance,
     qualify_immutable_reads,
 )
 from heterollm_sim.hbf_staging import HbfStagingController, HbfStagingIO, PAGE
@@ -53,7 +53,161 @@ def project(controller, pages, *, headroom=0, **updates):
         geometry_qualified=True, temporary_read_pages_per_decode=3,
         remaining_decode_steps=5, service_bounds=services())
     arguments.update(updates)
-    return project_zero_copy_gc(controller, **arguments)
+    return project_gc_maintenance(controller, **arguments)
+
+
+def low_live_controller(live_per_block=1, *, controller=None, io=None):
+    """Build the candidate pool through actual writes and lifetime releases."""
+    controller = controller or HbfStagingController(config(), 64 * PAGE)
+    io = io or callbacks()
+    now = 0.
+    pages = (controller._block_count - 1) * controller.config.pages_per_block
+    for page in range(pages):
+        now = controller.write(("initial", page), 1, 0, PAGE, now, io)
+    discarded = [key for owners in controller._owners.values()
+                 for _, key in sorted(owners.items())[live_per_block:]]
+    for buffer_id, generation, _ in discarded:
+        controller.release(buffer_id, generation)
+    assert not controller._active and not controller._free_blocks
+    return controller, now
+
+
+def live_services():
+    result = services()
+    result["per_unit_costs"].update({
+        "nand_read_page_serial_upper_ns": 2., "nand_program_page_serial_upper_ns": 3.,
+        "host_read_page_serial_upper_ns": 5., "host_write_page_serial_upper_ns": 7.,
+        "link_from_hbf_page_serial_upper_ns": 11., "link_to_hbf_page_serial_upper_ns": 13.,
+        "read_cache_lru_slots_per_bank": 2,
+        "kv_read_remap_page_serial_upper_ns": 17.,
+        "persistent_cache_miss_page_serial_upper_ns": 2.})
+    return result
+
+
+def cold_read_proof():
+    return {"qualified": True, "reason": None, "physical_state_advanced": False,
+        "kv_reads_per_page_per_decode_upper": 1,
+        "immutable_repeat_read_pages_per_decode_upper": 3,
+        "initial_warm_read_pages_per_decode_upper": 4}
+
+
+def live_project(controller, prefix=(0, 3, 6, 9, 12), **updates):
+    parameters = dict(remaining_decode_steps=len(prefix), service_bounds=live_services(),
+        ordinary_program_prefix_upper_by_decode=prefix, gc_read_qualification=cold_read_proof())
+    parameters.update(updates)
+    return project(controller, prefix[-1] if prefix else 0, **parameters)
+
+
+def test_live_reservoir_selects_smallest_proved_q_and_records_every_candidate():
+    controller, _ = low_live_controller()
+    before = controller.snapshot()
+    result = live_project(controller)
+    assert result["qualified"] and result["live_projection_qualified"]
+    assert result["live_copy_proven"] and not result["zero_copy_proven"]
+    assert result["closed_victim_live_page_upper"] == 1
+    assert result["closed_victim_live_histogram"] == (0, 7, 0, 0)
+    assert result["closed_victim_reservoir_by_live_page_upper"] == (0, 7, 7, 7)
+    assert result["gc_cycles_required_by_live_page_upper"] == (3, 4, 6, 12)
+    assert result["cycles_upper"] == 4 and result["copied_pages_upper"] == 4
+    assert result["future_gc_target_page_zero_erases_upper"] == 4
+    assert controller.snapshot() == before
+
+
+def test_q_two_and_headroom_adjust_each_cumulative_prefix_without_early_charging():
+    controller, _ = low_live_controller(2)
+    result = live_project(controller, (0, 2, 4, 6, 8))
+    assert result["qualified"] and result["closed_victim_live_page_upper"] == 2
+    assert result["gc_cycles_prefix_upper_by_decode"] == (0, 1, 2, 3, 4)
+    assert result["future_gc_migrated_kv_page_token_upper"] == 20
+    assert result["copied_pages_upper"] == 8
+
+
+def test_live_complete_copy_chain_and_two_sided_read_costs_are_not_divided_by_banks():
+    controller, _ = low_live_controller()
+    result = live_project(controller)
+    assert result["gc_cycles_prefix_upper_by_decode"] == (0, 1, 2, 3, 4)
+    assert result["future_gc_migrated_kv_page_token_upper"] == 10
+    assert result["future_gc_read_remap_symmetric_guard_ns"] == 10 * 17.
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] == 5 * (3 + 4) * 2.
+    assert result["future_gc_non_erase_serial_ns"] == 4 * 100.
+    assert result["future_gc_erase_serial_ns"] == 4 * config().block_erase_ns
+    assert result["gc_copy_nand_read_serial_upper_ns"] == 4 * 2.
+    assert result["gc_copy_nand_write_serial_upper_ns"] == 4 * 3.
+    assert result["gc_copy_host_read_serial_upper_ns"] == 4 * 5.
+    assert result["gc_copy_host_write_serial_upper_ns"] == 4 * 7.
+    assert result["gc_copy_link_from_hbf_serial_upper_ns"] == 4 * 11.
+    assert result["gc_copy_link_to_hbf_serial_upper_ns"] == 4 * 13.
+    assert result["gc_copy_cache_pollution_serial_upper_ns"] == 4 * 2 * 2.
+    assert result["carry_in_serial_guard_ns"] == 7.
+    assert result["gc_read_qualification"] == cold_read_proof()
+
+
+@pytest.mark.parametrize("proof", [None, {}, {"qualified": False},
+    {**cold_read_proof(), "physical_state_advanced": True}])
+def test_live_without_independent_cold_read_proof_rejects_with_unknown_not_zero(proof):
+    controller, _ = low_live_controller()
+    result = live_project(controller, gc_read_qualification=proof)
+    assert not result["qualified"] and not result["live_projection_qualified"]
+    assert result["reason"] == "live_gc_cold_read_qualification_unavailable"
+    assert result["future_gc_non_erase_serial_ns"] is None
+    assert result["future_gc_read_remap_symmetric_guard_ns"] is None
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] is None
+
+
+@pytest.mark.parametrize("name,value", [
+    ("kv_reads_per_page_per_decode_upper", 0),
+    ("kv_reads_per_page_per_decode_upper", True),
+    ("immutable_repeat_read_pages_per_decode_upper", -1),
+    ("initial_warm_read_pages_per_decode_upper", None)])
+def test_live_unknown_read_counts_cannot_receive_a_zero_remap_bound(name, value):
+    controller, _ = low_live_controller()
+    result = live_project(controller, gc_read_qualification={**cold_read_proof(), name: value})
+    assert not result["qualified"] and result["reason"] == "live_gc_cold_read_counts_unqualified"
+    assert result["future_gc_read_remap_symmetric_guard_ns"] is None
+
+
+@pytest.mark.parametrize("prefix", [None, (0, 3, 6, 12), (0, 3, 6, 9, 13),
+    (0, 6, 3, 9, 12), (0, 3, 6, -1, 12), (0, 3, 6, 9., 12)])
+def test_live_cumulative_program_bound_must_cover_the_same_whole_tail(prefix):
+    controller, _ = low_live_controller()
+    result = live_project(controller, ordinary_program_prefix_upper_by_decode=prefix)
+    assert not result["qualified"]
+    assert result["reason"] == "live_gc_cumulative_program_bound_unqualified"
+    assert result["future_gc_read_remap_symmetric_guard_ns"] is None
+
+
+@pytest.mark.parametrize("name", ["gc_copy_page_serial_upper_ns",
+    "nand_read_page_serial_upper_ns", "host_write_page_serial_upper_ns",
+    "link_from_hbf_page_serial_upper_ns", "kv_read_remap_page_serial_upper_ns",
+    "persistent_cache_miss_page_serial_upper_ns"])
+def test_live_missing_service_component_is_unknown_not_a_zero_cost(name):
+    controller, _ = low_live_controller()
+    bounds = live_services()
+    del bounds["per_unit_costs"][name]
+    result = live_project(controller, service_bounds=bounds)
+    assert not result["qualified"] and not result["live_projection_qualified"]
+    assert result["reason"].startswith("live_gc_complete_service_bounds_unavailable:")
+    assert result["future_gc_read_remap_symmetric_guard_ns"] is None
+
+
+def test_live_without_sufficient_low_live_pool_cannot_use_a_global_diagnostic_q():
+    controller, _ = low_live_controller(2)
+    result = live_project(controller, (0, 8, 16, 24, 32))
+    assert not result["qualified"] and result["copied_pages_upper"] is None
+    assert result["cycles_upper"] is None
+    assert result["closed_victim_live_histogram"] == (0, 0, 7, 0)
+    assert result["reason"] == "live_gc_copy_remap_bound_unavailable"
+    assert not result["diagnostic_live_copy_bound_used_for_acceptance"]
+
+
+def test_empty_domain_keeps_original_costs_without_new_live_proof_or_prefix():
+    result = live_project(exhausted(), gc_read_qualification=None,
+                          ordinary_program_prefix_upper_by_decode=None)
+    assert result["qualified"] and result["zero_copy_proven"]
+    assert not result["live_copy_proven"] and not result["live_projection_qualified"]
+    assert result["future_gc_read_remap_symmetric_guard_ns"] == 0.
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] == 0.
+    assert result["future_gc_non_erase_serial_ns"] == 0.
 
 
 @pytest.mark.parametrize("pages,cycles", [(0, 0), (1, 1), (4, 1), (5, 2), (28, 7)])
@@ -80,7 +234,7 @@ def test_exact_empty_reservoir_has_serial_erase_and_explicit_proven_zero_terms(p
 def test_one_fewer_empty_victim_never_uses_unproved_live_copy_estimate():
     result = project(exhausted(), 29)
     assert not result["qualified"] and not result["zero_copy_proven"]
-    assert result["cycles_upper"] == 8 and result["empty_victim_reservoir"] == 7
+    assert result["zero_copy_cycles_required"] == 8 and result["empty_victim_reservoir"] == 7
     assert result["reason"] == "live_gc_copy_remap_bound_unavailable"
     assert result["copied_pages_upper"] is None
     assert not result["diagnostic_live_copy_bound_used_for_acceptance"]
@@ -92,7 +246,7 @@ def test_empty_active_block_is_not_a_future_empty_victim_reservoir():
     assert project(controller, 27, headroom=3)["qualified"]
     rejected = project(controller, 28, headroom=3)
     assert rejected["empty_victim_reservoir"] == 6
-    assert rejected["cycles_upper"] == 7 and not rejected["qualified"]
+    assert rejected["zero_copy_cycles_required"] == 7 and not rejected["qualified"]
 
 
 def test_preloaded_weights_and_spare_are_not_counted_as_empty_victims():
@@ -213,7 +367,7 @@ def test_real_empty_gc_projection_covers_later_physical_target_erases(capture):
     native = core.__dict__.get("_nand_numeric_state")
     arrays = None if native is None else tuple(array.copy() for array in native.arrays)
     services = gc_service_bounds(physical, controller, binding, 0.)
-    projected = project_zero_copy_gc(controller, program_pages=pages, free_program_pages=0,
+    projected = project_gc_maintenance(controller, program_pages=pages, free_program_pages=0,
         geometry_qualified=True, temporary_read_pages_per_decode=0,
         remaining_decode_steps=1, service_bounds=services)
     assert projected["qualified"] and controller.snapshot() == before_state
@@ -227,6 +381,51 @@ def test_real_empty_gc_projection_covers_later_physical_target_erases(capture):
     assert controller.stats["gc_cycles"] <= projected["cycles_upper"]
     assert end - start <= (projected["future_write_placement_serial_guard_ns"]
         + projected["future_gc_erase_serial_ns"])
+
+
+@pytest.mark.parametrize("capture", [False, True])
+@pytest.mark.parametrize("retained_pages", [1, 2])
+def test_live_reservoir_and_complete_service_bound_cover_real_gc(capture, retained_pages):
+    from heterollm_sim._io_execution import _PhysicalIO
+    physical, controller, binding = real_physical(capture=capture)
+    io = _PhysicalIO(physical, "flash", physical.hbf_staging["flash"], binding, [])
+    controller, cutoff = low_live_controller(retained_pages, controller=controller, io=io)
+    core = physical.runtimes["flash"].core
+    native = core.__dict__.get("_nand_numeric_state")
+    arrays = None if native is None else tuple(array.copy() for array in native.arrays)
+    flags = (core.__dict__["_nand_numeric_enabled"], core.__dict__["_nand_state_exposed"])
+    controller_before = controller.snapshot()
+    timeline_before = deepcopy(physical.timeline.__dict__)
+    bound = gc_service_bounds(physical, controller, binding, cutoff)
+    projected = live_project(controller, (3, 6, 9, 12), service_bounds=bound)
+    assert projected["qualified"] and projected["live_projection_qualified"]
+    assert projected["closed_victim_live_page_upper"] == retained_pages
+    assert controller.snapshot() == controller_before
+    assert physical.timeline.__dict__ == timeline_before
+    assert (core.__dict__["_nand_numeric_enabled"], core.__dict__["_nand_state_exposed"]) == flags
+    assert core.__dict__.get("_nand_numeric_state") is native
+    if native is not None:
+        import numpy as np
+        for actual, expected in zip(native.arrays, arrays, strict=True):
+            assert np.array_equal(actual, expected)
+    gc_before = controller.stats.get("gc_cycles", 0)
+    copies_before = controller.stats.get("gc_copied_pages", 0)
+    start = now = cutoff + projected["carry_in_serial_guard_ns"]
+    for step in range(4):
+        now = controller.write(("future", step), 2, 0, 3 * PAGE, now, io)
+        controller.release(("future", step), 2)
+    actual_gc = controller.stats["gc_cycles"] - gc_before
+    actual_copies = controller.stats["gc_copied_pages"] - copies_before
+    assert 0 < actual_gc <= projected["cycles_upper"]
+    assert 0 < actual_copies <= projected["copied_pages_upper"]
+    assert now - start <= (projected["future_write_placement_serial_guard_ns"]
+        + projected["future_gc_erase_serial_ns"] + projected["future_gc_non_erase_serial_ns"])
+    # Full-copy unit includes all source NAND, scratch HOST and both LINK
+    # directions; the persistent-cache miss component does not double LINK.
+    costs = projected["per_unit_costs"]
+    assert costs["persistent_cache_miss_page_serial_upper_ns"] == costs["nand_read_page_serial_upper_ns"]
+    assert costs["kv_read_remap_page_serial_upper_ns"] == (
+        costs["nand_read_page_serial_upper_ns"] + costs["link_read_hbf_page_serial_upper_ns"])
 
 
 def test_absolute_cutoff_and_prior_slot_lifetimes_are_not_mixed_with_runtime_origin():

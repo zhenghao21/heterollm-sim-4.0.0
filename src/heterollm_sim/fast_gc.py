@@ -1,9 +1,10 @@
 """Read-only, conditional maintenance bounds for an exhausted HBF free pool.
 
-Only the closed-empty-victim reservoir domain is accepted.  In this domain
-the scalar FTL can collect every future block without moving a live page.
-The budgets below are serial service bounds, not predictions that these
-services are all on the Token critical path.  They never divide by banks.
+Closed-victim reservoirs bound the scalar FTL's live copies. Moving a live
+page also needs an independently proved cold-read domain; its placement
+uncertainty is two-sided, unlike the added maintenance IO. These are serial
+service bounds, not predictions of critical-path service, and never divide
+by banks.
 """
 from __future__ import annotations
 
@@ -244,6 +245,8 @@ def gc_service_bounds(physical, controller, binding, cutoff_ns):
         "ordinary_read_page_serial_upper_ns": _finite(read_placement),
         "read_cache_initial_state_serial_upper_ns": _finite(cache_initial),
         "nand_read_page_serial_upper_ns": _finite(read),
+        "kv_read_remap_page_serial_upper_ns": _finite(read + route["read_hbf"]),
+        "persistent_cache_miss_page_serial_upper_ns": _finite(read),
         "nand_program_page_serial_upper_ns": _finite(write),
         "host_read_page_serial_upper_ns": host_read,
         "host_write_page_serial_upper_ns": host_write,
@@ -261,16 +264,18 @@ def gc_service_bounds(physical, controller, binding, cutoff_ns):
         "qualified_initiator_route_variants": len(variants),
         "read_cache_mapping_proof": "scalar_and_numeric_OCP_writes_invalidate_only_matching_page_or_target_block_tags_no_whole_bank_invalidation",
         "persistent_write_invalidation_extra_miss_upper": 0,
-        "persistent_write_invalidation_zero_basis": "zero_copy_targets_have_no_live_owner_monotonic_kv_appends_do_not_overwrite_backed_pages_and_warm_weights_are_immutable",
+        "persistent_write_invalidation_zero_basis": "gc_target_is_spare_before_first_program_later_programs_append_monotonic_kv_does_not_overwrite_backed_pages_and_warm_weights_are_immutable",
         "temporary_read_cache_bound_method": "persistent_only_reference_trace_plus_each_temporary_access_lru_insertion_k_plus_1_and_initial_k_distinct_misses_per_bank"}
 
 
-def project_zero_copy_gc(controller, *, program_pages, free_program_pages,
+def project_gc_maintenance(controller, *, program_pages, free_program_pages,
                          geometry_qualified, temporary_read_pages_per_decode=None,
-                         remaining_decode_steps=None, service_bounds=None):
-    """Prove a tail uses no live-copy collection using closed empty blocks.
+                         remaining_decode_steps=None, service_bounds=None,
+                         ordinary_program_prefix_upper_by_decode=None,
+                         gc_read_qualification=None):
+    """Bound a tail using a sufficient reservoir of closed low-live blocks.
 
-    Each collection consumes at most one initial empty victim. Closed
+    Each collection consumes at most one initial low-live victim. Closed
     blocks cannot be written without being selected as a victim; release
     can only increase this reservoir. Active blocks are excluded because
     the initial allocation prefix can still populate them.
@@ -278,7 +283,10 @@ def project_zero_copy_gc(controller, *, program_pages, free_program_pages,
     result = {"required": True, "qualified": False, "reason": None,
         "method": "closed_empty_victim_reservoir_with_serial_service_bounds/v1",
         "physical_state_advanced": False, "physical_io_executed": False,
-        "copied_pages_upper": None, "zero_copy_proven": False}
+        "copied_pages_upper": None, "zero_copy_proven": False,
+        "live_copy_proven": False, "live_projection_qualified": False,
+        "future_gc_read_remap_symmetric_guard_ns": None,
+        "future_gc_persistent_cache_symmetric_guard_ns": None}
     if (type(program_pages) is not int or program_pages < 0
             or type(free_program_pages) is not int or free_program_pages < 0):
         result["reason"] = "gc_program_budget_unqualified"
@@ -302,19 +310,38 @@ def project_zero_copy_gc(controller, *, program_pages, free_program_pages,
         result["reason"] = "gc_program_headroom_does_not_match_live_controller"
         return result
     immutable = {block for preload in controller._preloads.values() for block in preload.blocks()}
-    closed = sum(1 for block in controller._used
-        if block not in active and block != controller._spare
-        and block not in immutable and not controller._owners.get(block))
     per_block = controller.config.pages_per_block
+    histogram = [0] * per_block
+    for block in controller._used:
+        if block in active or block == controller._spare or block in immutable:
+            continue
+        live = len(controller._owners.get(block, ()))
+        if live < per_block:
+            histogram[live] += 1
+    closed = histogram[0]
     deficit = max(0, program_pages - free_program_pages)
     cycles = (deficit + per_block - 1) // per_block
-    result.update(empty_victim_reservoir=closed, cycles_upper=cycles,
+    reservoir_by_q, required_by_q, pool = [], [], 0
+    for candidate, count in enumerate(histogram):
+        pool += count
+        reservoir_by_q.append(pool)
+        required_by_q.append((deficit + per_block - candidate - 1) // (per_block - candidate))
+    result.update(empty_victim_reservoir=closed, cycles_upper=None,
+        zero_copy_cycles_required=cycles,
+        closed_victim_live_histogram=tuple(histogram),
+        closed_victim_reservoir_by_live_page_upper=tuple(reservoir_by_q),
+        gc_cycles_required_by_live_page_upper=tuple(required_by_q),
         reservoir_excludes_active=True, reservoir_excludes_spare=True,
         reservoir_excludes_immutable_preloads=True,
         ordinary_program_page_upper=program_pages,
         initial_program_headroom_pages=free_program_pages,
         pages_per_collected_block=per_block)
-    if closed < cycles:
+    q, pool = None, 0
+    for candidate, (pool, required) in enumerate(zip(reservoir_by_q, required_by_q)):
+        if pool >= required:
+            q, cycles = candidate, required
+            break
+    if q is None:
         result["reason"] = "live_gc_copy_remap_bound_unavailable"
         # A useful diagnostic only: no live-copy domain is accepted without
         # a bound on the resulting ordinary read/cache remapping effects.
@@ -322,21 +349,110 @@ def project_zero_copy_gc(controller, *, program_pages, free_program_pages,
         q = (len(controller._pages) + program_pages) // count if count else per_block
         result["diagnostic_live_copy_pages_per_cycle_upper"] = min(per_block - 1, q)
         result["diagnostic_live_copy_bound_used_for_acceptance"] = False
+        result["future_gc_read_remap_symmetric_guard_ns"] = None
+        result["future_gc_persistent_cache_symmetric_guard_ns"] = None
         return result
-    result.update(zero_copy_proven=True, copied_pages_upper=0,
-        existing_persistent_backing_mapping_unchanged=True,
+    result.update(closed_victim_live_page_upper=q,
+        closed_victim_reservoir=pool, closed_victim_live_histogram=tuple(histogram),
+        cycles_upper=cycles, zero_copy_proven=q == 0, copied_pages_upper=q * cycles,
+        existing_persistent_backing_mapping_unchanged=q == 0,
         new_kv_read_growth_semantics="existing_nonnegative_affine_context_envelope_not_exact_future_mapping",
-        gc_copy_nand_read_serial_upper_ns=0., gc_copy_nand_write_serial_upper_ns=0.,
-        gc_copy_host_read_serial_upper_ns=0., gc_copy_host_write_serial_upper_ns=0.,
-        gc_copy_link_from_hbf_serial_upper_ns=0., gc_copy_link_to_hbf_serial_upper_ns=0.,
-        copy_zero_basis="sufficient_closed_empty_victim_reservoir_not_an_unobserved_zero",
         future_gc_target_page_zero_erases_upper=cycles,
         future_gc_erase_serial_ns=cycles * controller.config.block_erase_ns,
-        future_gc_non_erase_serial_ns=0.)
-    if not service_bounds:
+        future_gc_non_erase_serial_ns=0. if q == 0 else None)
+    if q:
+        result["method"] = "closed_low_live_victim_reservoir_with_cold_kv_read_bounds/v1"
+        result["gc_read_qualification"] = (dict(gc_read_qualification)
+            if isinstance(gc_read_qualification, Mapping) else gc_read_qualification)
+        if (not isinstance(gc_read_qualification, Mapping)
+                or gc_read_qualification.get("qualified") is not True
+                or gc_read_qualification.get("physical_state_advanced") is not False):
+            result["reason"] = "live_gc_cold_read_qualification_unavailable"
+            result["future_gc_read_remap_symmetric_guard_ns"] = None
+            result["future_gc_persistent_cache_symmetric_guard_ns"] = None
+            return result
+        names = ("kv_reads_per_page_per_decode_upper", "immutable_repeat_read_pages_per_decode_upper",
+                 "initial_warm_read_pages_per_decode_upper")
+        if (any(type(gc_read_qualification.get(name)) is not int
+                or gc_read_qualification[name] < 0 for name in names)
+                or gc_read_qualification[names[0]] <= 0):
+            result["reason"] = "live_gc_cold_read_counts_unqualified"
+            result["future_gc_read_remap_symmetric_guard_ns"] = None
+            result["future_gc_persistent_cache_symmetric_guard_ns"] = None
+            return result
+        prefix = ordinary_program_prefix_upper_by_decode
+        if (not isinstance(prefix, (tuple, list)) or len(prefix) != remaining_decode_steps
+                or any(type(value) is not int or value < 0 for value in prefix)
+                or any(left > right for left, right in zip(prefix, prefix[1:]))
+                or (prefix[-1] if prefix else 0) != program_pages):
+            result["reason"] = "live_gc_cumulative_program_bound_unqualified"
+            result["future_gc_read_remap_symmetric_guard_ns"] = None
+            result["future_gc_persistent_cache_symmetric_guard_ns"] = None
+            return result
+        gc_prefix = tuple((max(0, value - free_program_pages) + per_block - q - 1)
+                          // (per_block - q) for value in prefix)
+        result.update(gc_read_qualification=dict(gc_read_qualification),
+            **{name: gc_read_qualification[name] for name in names},
+            ordinary_program_prefix_upper_by_decode=tuple(prefix),
+            gc_cycles_prefix_upper_by_decode=gc_prefix,
+            future_gc_migrated_kv_page_token_upper=q * sum(gc_prefix),
+            future_gc_read_remap_reference="cutoff_mapping_with_time_weighted_copy_count",
+            live_copy_proven=True)
+    else:
+        result.update(copy_zero_basis="sufficient_closed_empty_victim_reservoir_not_an_unobserved_zero",
+            future_gc_read_remap_symmetric_guard_ns=0.,
+            future_gc_persistent_cache_symmetric_guard_ns=0.,
+            gc_copy_nand_read_serial_upper_ns=0., gc_copy_nand_write_serial_upper_ns=0.,
+            gc_copy_host_read_serial_upper_ns=0., gc_copy_host_write_serial_upper_ns=0.,
+            gc_copy_link_from_hbf_serial_upper_ns=0., gc_copy_link_to_hbf_serial_upper_ns=0.)
+    if (not isinstance(service_bounds, Mapping)
+            or not isinstance(service_bounds.get("per_unit_costs"), Mapping)):
         result["reason"] = "gc_complete_service_bounds_unavailable"
         return result
     result.update(service_bounds)
+    units = service_bounds["per_unit_costs"]
+    required_units = ("ordinary_program_page_serial_upper_ns",
+        "ordinary_read_page_serial_upper_ns", "read_cache_initial_state_serial_upper_ns")
+    try:
+        _finite(service_bounds.get("carry_in_serial_guard_ns"))
+        for name in required_units:
+            _finite(units.get(name))
+    except (TypeError, ValueError) as error:
+        result["reason"] = "gc_complete_service_bounds_unavailable:" + str(error)
+        return result
+    if q:
+        required_units = ("gc_copy_page_serial_upper_ns", "nand_read_page_serial_upper_ns",
+            "nand_program_page_serial_upper_ns", "host_read_page_serial_upper_ns",
+            "host_write_page_serial_upper_ns", "link_from_hbf_page_serial_upper_ns",
+            "link_to_hbf_page_serial_upper_ns", "read_cache_lru_slots_per_bank",
+            "kv_read_remap_page_serial_upper_ns", "persistent_cache_miss_page_serial_upper_ns")
+        try:
+            for name in required_units:
+                _finite(units.get(name))
+        except (TypeError, ValueError) as error:
+            result.update(reason="live_gc_complete_service_bounds_unavailable:" + str(error),
+                future_gc_read_remap_symmetric_guard_ns=None,
+                future_gc_persistent_cache_symmetric_guard_ns=None)
+            return result
+        copies = result["copied_pages_upper"]
+        result["future_gc_non_erase_serial_ns"] = _finite(copies * units["gc_copy_page_serial_upper_ns"])
+        for output, unit in (("gc_copy_nand_read_serial_upper_ns", "nand_read_page_serial_upper_ns"),
+                ("gc_copy_nand_write_serial_upper_ns", "nand_program_page_serial_upper_ns"),
+                ("gc_copy_host_read_serial_upper_ns", "host_read_page_serial_upper_ns"),
+                ("gc_copy_host_write_serial_upper_ns", "host_write_page_serial_upper_ns"),
+                ("gc_copy_link_from_hbf_serial_upper_ns", "link_from_hbf_page_serial_upper_ns"),
+                ("gc_copy_link_to_hbf_serial_upper_ns", "link_to_hbf_page_serial_upper_ns")):
+            result[output] = _finite(copies * units[unit])
+        result["gc_copy_cache_pollution_serial_upper_ns"] = _finite(copies
+            * units["read_cache_lru_slots_per_bank"] * units["nand_read_page_serial_upper_ns"])
+        result["future_gc_read_remap_symmetric_guard_ns"] = _finite(
+            result["future_gc_migrated_kv_page_token_upper"]
+            * result["kv_reads_per_page_per_decode_upper"]
+            * units["kv_read_remap_page_serial_upper_ns"])
+        result["future_gc_persistent_cache_symmetric_guard_ns"] = _finite(remaining_decode_steps
+            * (result["immutable_repeat_read_pages_per_decode_upper"]
+               + result["initial_warm_read_pages_per_decode_upper"])
+            * units["persistent_cache_miss_page_serial_upper_ns"])
     per_page = service_bounds["per_unit_costs"]["ordinary_program_page_serial_upper_ns"]
     result["future_write_placement_serial_guard_ns"] = _finite(program_pages * per_page)
     read_unit = service_bounds["per_unit_costs"]["ordinary_read_page_serial_upper_ns"]
@@ -346,4 +462,5 @@ def project_zero_copy_gc(controller, *, program_pages, free_program_pages,
         result["future_temporary_read_pages_upper"] * read_unit
         + service_bounds["per_unit_costs"]["read_cache_initial_state_serial_upper_ns"])
     result["qualified"] = True
+    result["live_projection_qualified"] = q > 0
     return result

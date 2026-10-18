@@ -1,10 +1,10 @@
 # B200 HBM/HBF 单请求扫描
 
-报告刷新时间：**2026-10-18 20:20:47（北京时间 UTC+08:00）**。
+报告刷新时间：**2026-10-18 20:51:08（北京时间 UTC+08:00）**。
 
 已成功 **24/72** 个配置点（详细完成 0，预测完成 24）；预测安全检查拒绝 1 个；失败 0 个；容量不满足 0 个；尚未完成 47 个。
 
-队列状态：**已暂停**；队列记录已完成 24/72；等待运行 47 个。队列更新时间：2026-10-18 20:00:18（北京时间）。
+队列状态：**已暂停**；队列记录已完成 24/72；等待运行 47 个。队列更新时间：2026-10-18 20:51:08（北京时间）。
 
 队列说明：按要求暂停，未自动恢复扫描。
 
@@ -76,7 +76,7 @@ HBM3E 使用标准参考模型；当前 24Gb × 8H 组织未套用只支持 32Gb
 
 10% 是误差目标；条件误差预算依赖模型假设，不能替代每个配置与完整详细模式的实测对照。未做完整详细对照的点保留原始 validation_status，不标为全请求误差验证通过。预测拒绝和容量拒绝是已处理终态，保留原因并继续后续点；代码执行失败需要处理。
 
-[历史尝试记录](points_history/) 保留 **80** 份旧结果；历史拒绝不重复计入当前成功数、拒绝数或曲线。
+[历史尝试记录](points_history/) 保留 **81** 份旧结果；历史拒绝不重复计入当前成功数、拒绝数或曲线。
 
 ![TTFT 和 TPOT 扫描结果](comparison.png)
 
@@ -146,6 +146,6 @@ HBM3E 使用标准参考模型；当前 24Gb × 8H 组织未套用只支持 32Gb
 
 | 模型 | 存储 | 输入/输出 | 状态 | 原因 |
 | --- | --- | --- | --- | --- |
-| qwen2_5-1_5b | HBF | 256K/1K | forecast_rejected | hbf_observed_gc_cycles:hbf0.memory, hbf_program_headroom_may_require_gc:hbf0.memory |
+| qwen2_5-1_5b | HBF | 256K/1K | forecast_rejected | hbf_observed_gc_cycles:hbf0.memory, hbf_program_headroom_may_require_gc:hbf0.memory, hbf_live_gc_copy_remap_bound_unavailable:hbf0.memory |
 
 文件：[summary.csv](summary.csv) 保留全部终态的主指标、精度口径、采样记录、单点/配对预算、参考点及拒绝原因（无指标时留空）；[results.json](results.json) 保留全部结果、详细数据和参数。

@@ -239,7 +239,7 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
                                 or offset < 0 or size <= 0):
                             read_unavailable = read_unavailable or "resident_read_span_unavailable"
                         else:
-                            immutable_reads.setdefault(owner, set()).add((buffer_id, 0, offset, size))
+                            immutable_reads.setdefault(owner, []).append((buffer_id, 0, offset, size))
                         continue
                     if (not buffer_id or not access.get("allocation_generation")
                             or access.get("allocation_arena") == "resident"
@@ -290,12 +290,21 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
                     "alias_generation", "alias_offset_bytes", "allocation_arena")))
         if fused != {str(layer.layer_id) for layer in layers}:
             return None, "terminal_flash_attention_not_admitted_for_every_layer"
+        from .fast_gc_read_basis import qualify_gc_read_basis
+        kernel = getattr(runtime, "_execution_resource_kernel", None)
+        physical = getattr(kernel, "physical_runtime", None)
+        read_basis = {owner: qualify_gc_read_basis(lowering.schedule.tasks, physical, owner,
+            tuple(row for row in kv_buffers if str(row["physical_owner"]) == owner),
+            context_tokens=context + 1,
+            token_boundary_completed=kernel is not None and not kernel.has_active_tasks)
+            for owner in owners}
         return {"signature": (tuple(writes), tuple(declarations)), "reads": tuple(reads),
                 "task_count": len(lowering.schedule.tasks), "writes": writes,
                 "partial_slots": partials, "rounded_write_pages": rounded_pages,
                 "staging_bindings": staging_bindings,
                 "temporary_read_pages": temporary_read_pages,
                 "immutable_reads": immutable_reads,
+                "gc_read_basis": read_basis,
                 "read_unavailable": read_unavailable}, None
 
     try:
@@ -315,6 +324,15 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
         read_unavailable = read_unavailable or "non_kv_read_or_alias_geometry_changes_with_context"
     if start.get("staging_bindings") != terminal.get("staging_bindings"):
         return unavailable("hbf_staging_route_contract_changes_with_context")
+    if start["immutable_reads"] != terminal["immutable_reads"]:
+        read_unavailable = read_unavailable or "immutable_read_multiplicity_changes_with_context"
+    read_basis = {}
+    for owner in owners:
+        first_basis = start["gc_read_basis"][owner]
+        last_basis = terminal["gc_read_basis"][owner]
+        read_basis[owner] = (last_basis if first_basis == last_basis else {
+            "qualified": False, "reason": "gc_read_basis_changes_with_context",
+            "physical_state_advanced": False, "physical_io_executed": False})
     return {"qualified": True, "reason": None,
         "method": "analytic_admitted_flash_attention_fixed_non_kv_write_sequence",
         "first_context_tokens": first, "last_context_tokens": max(first, last),
@@ -333,9 +351,9 @@ def _fixed_decode_write_geometry(runtime, kv_buffers, final_tokens):
         "temporary_read_page_upper_by_owner": dict(terminal["temporary_read_pages"]),
         "temporary_read_geometry_qualified": read_unavailable is None,
         "temporary_read_geometry_unavailable_reason": read_unavailable,
-        "immutable_resident_read_rows_by_owner": {owner: tuple(sorted(
-            start["immutable_reads"].get(owner, set()) | terminal["immutable_reads"].get(owner, set())))
-            for owner in set(start["immutable_reads"]) | set(terminal["immutable_reads"])},
+        "immutable_resident_read_rows_by_owner": {owner: tuple(rows)
+            for owner, rows in terminal["immutable_reads"].items()},
+        "gc_read_qualification_by_owner": read_basis,
         "physical_state_advanced": False, "physical_io_executed": False}
 
 
@@ -446,6 +464,16 @@ def _decode_program_budget(batches, rows, *, request_id, prompt_tokens,
             "fixed_non_kv_program_pages_per_decode": residual_max if qualified else None,
             "legacy_program_page_guard_budget": remaining * legacy_per_step,
             "legacy_program_pages_per_decode_guard_budget": legacy_per_step}
+
+
+def _ordinary_program_prefix_bound(rows, current_tokens, remaining, fixed_programs):
+    """Keep every prefix's exact K/V page phase beside constant workspace IO."""
+    if fixed_programs is None:
+        return ()
+    return tuple(step * fixed_programs + sum(
+        (current_tokens + step) * int(row["bytes_per_token"]) // PAGE_BYTES
+            - current_tokens * int(row["bytes_per_token"]) // PAGE_BYTES for row in rows)
+        for step in range(1, remaining + 1))
 
 
 def project_fast_tail(
@@ -581,7 +609,7 @@ def project_fast_tail(
         gc_projection = None
         gc_required = bool(stats.get("gc_cycles", 0) or program_budget > available_pages)
         if gc_required:
-            from .fast_gc import gc_service_bounds, project_zero_copy_gc, qualify_immutable_reads
+            from .fast_gc import gc_service_bounds, project_gc_maintenance, qualify_immutable_reads
             immutable_proof = qualify_immutable_reads(physical, controller, owner,
                 (write_geometry or {}).get("immutable_resident_read_rows_by_owner", {}).get(owner, ()))
             qualified_geometry = bool(budget["kv_program_deduction_available"]
@@ -590,12 +618,19 @@ def project_fast_tail(
                 and immutable_proof["qualified"])
             read_pages = ((write_geometry or {}).get(
                 "temporary_read_page_upper_by_owner", {}).get(owner, 0))
-            gc_projection = project_zero_copy_gc(controller,
-                program_pages=program_budget, free_program_pages=available_pages,
+            read_basis = ((write_geometry or {}).get("gc_read_qualification_by_owner", {}).get(owner)
+                or {"qualified": False, "reason": "gc_read_basis_unavailable",
+                    "physical_state_advanced": False})
+            fixed_programs = budget["fixed_non_kv_program_pages_per_decode"]
+            program_prefix = _ordinary_program_prefix_bound(rows, current, remaining, fixed_programs)
+            gc_arguments = dict(program_pages=program_budget, free_program_pages=available_pages,
                 geometry_qualified=qualified_geometry,
-                temporary_read_pages_per_decode=read_pages, remaining_decode_steps=remaining)
+                temporary_read_pages_per_decode=read_pages, remaining_decode_steps=remaining,
+                ordinary_program_prefix_upper_by_decode=program_prefix,
+                gc_read_qualification=read_basis)
+            gc_projection = project_gc_maintenance(controller, **gc_arguments)
             gc_projection["immutable_resident_read_preload_proof"] = immutable_proof
-            if gc_projection["zero_copy_proven"]:
+            if qualified_geometry:
                 binding = (write_geometry or {}).get(
                     "gc_staging_bindings_by_owner", {}).get(owner)
                 commits = [event.timestamp_ns for event in runtime.events
@@ -605,10 +640,8 @@ def project_fast_tail(
                     if not commits:
                         raise ValueError("gc_live_commit_cutoff_unavailable")
                     services = gc_service_bounds(physical, controller, binding, commits[-1])
-                    gc_projection = project_zero_copy_gc(controller,
-                        program_pages=program_budget, free_program_pages=available_pages,
-                        geometry_qualified=qualified_geometry, service_bounds=services,
-                        temporary_read_pages_per_decode=read_pages, remaining_decode_steps=remaining)
+                    gc_projection = project_gc_maintenance(controller,
+                        **gc_arguments, service_bounds=services)
                     gc_projection["immutable_resident_read_preload_proof"] = immutable_proof
                 except (AttributeError, KeyError, TypeError, ValueError) as error:
                     gc_projection["reason"] = "gc_service_projection_unavailable:" + str(error)

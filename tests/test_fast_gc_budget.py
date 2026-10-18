@@ -43,6 +43,26 @@ def projection(**changes):
               to_metadata=lambda: {"safe": True, "physical_state_advanced": False})
 
 
+def live_projection(**changes):
+    result = projection()
+    guard = result.hbf_devices[0]["gc_projection"]
+    guard.update(zero_copy_proven=False, live_copy_proven=True,
+        live_projection_qualified=True, closed_victim_live_page_upper=2,
+        future_gc_non_erase_serial_ns=9.,
+        future_gc_read_remap_symmetric_guard_ns=11.,
+        future_gc_persistent_cache_symmetric_guard_ns=13.,
+        kv_reads_per_page_per_decode_upper=2,
+        immutable_repeat_read_pages_per_decode_upper=3,
+        initial_warm_read_pages_per_decode_upper=4)
+    guard["per_unit_costs"].update(kv_read_remap_page_serial_upper_ns=5.,
+                                  persistent_cache_miss_page_serial_upper_ns=7.)
+    guard.update(changes)
+    guard["gc_read_qualification"] = {"qualified": True, "physical_state_advanced": False,
+        **{name: guard[name] for name in ("kv_reads_per_page_per_decode_upper",
+            "immutable_repeat_read_pages_per_decode_upper", "initial_warm_read_pages_per_decode_upper")}}
+    return result
+
+
 def runtime():
     batches = []
     for index, (programs, cycles, copies, erases) in enumerate(
@@ -122,6 +142,120 @@ def test_observed_live_copy_requires_a_clean_mapping_window_even_with_known_serv
     assert result["budget_unavailable_reason"] == "hbf_gc_prefix_mapping_requires_clean_window"
     # Known service breakdowns remain visible; they cannot waive mapping.
     assert result["error_budget_breakdown"]["future_read_placement_serial_guard_ns"] == 13.
+
+
+def test_live_domain_budgets_reverse_copies_against_the_cutoff_mapping():
+    runner, projected = runtime(), live_projection()
+    before = deepcopy([batch.cost.metadata for batch in runner.batches])
+    result = envelope(runner, projected)
+    assert result["gc_observations_available"] is True
+    assert result["gc_live_copy_budget_required"] is True
+    assert result["gc_prefix_mapping_stable"] is False
+    assert result["gc_prefix_mapping_bounded"] is True
+    assert result["gc_prefix_recalibration_required"] is False
+    owner = result["gc_guard_by_owner"][0]
+    assert owner["prefix_mapping_reference"] == "inspected_cutoff_mapping"
+    assert owner["prefix_reverse_cumulative_copied_pages"] == (3, 1, 1, 0, 0)
+    assert owner["prefix_remapped_kv_page_reads_upper"] == 10
+    assert owner["prefix_persistent_cache_misses_upper"] == 35
+    assert result["prefix_gc_read_remap_symmetric_bias_guard_ns"] == pytest.approx(10 * 5. * 100 / 4 * 1.1)
+    assert result["prefix_gc_persistent_cache_symmetric_bias_guard_ns"] == pytest.approx(35 * 7. * 100 / 4 * 1.1)
+    assert result["future_gc_read_remap_symmetric_guard_ns"] == 11.
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] == 13.
+    assert [batch.cost.metadata for batch in runner.batches] == before
+    assert envelope(runner, projected) == result
+    json.dumps(result, allow_nan=False)
+
+
+def test_copy_near_cutoff_affects_more_prefix_reads_than_an_early_copy():
+    results = []
+    for step in (0, 4):
+        runner = runtime()
+        for index, batch in enumerate(runner.batches):
+            batch.cost.metadata["storage_gc_observations"][OWNER] = observation(
+                int(index == step), 2 if index == step else 0)
+        results.append(envelope(runner, live_projection()))
+    assert results[0]["gc_guard_by_owner"][0]["prefix_reverse_cumulative_copied_pages"] == (2, 0, 0, 0, 0)
+    assert results[1]["gc_guard_by_owner"][0]["prefix_reverse_cumulative_copied_pages"] == (2, 2, 2, 2, 2)
+    assert results[1]["prefix_gc_read_remap_symmetric_bias_guard_ns"] == 5 * results[0]["prefix_gc_read_remap_symmetric_bias_guard_ns"]
+
+
+def test_all_live_remapping_and_persistent_cache_terms_widen_both_endpoints():
+    maintenance = envelope(runtime(), live_projection())
+    result = fast.conditional_error_budget(50000., 51000., 50500., .01, maintenance)
+    symmetric_names = ("prefix_gc_read_remap_symmetric_bias_guard_ns",
+        "prefix_gc_persistent_cache_symmetric_bias_guard_ns",
+        "future_gc_read_remap_symmetric_guard_ns",
+        "future_gc_persistent_cache_symmetric_guard_ns")
+    symmetric = math.fsum(maintenance[name] for name in symmetric_names)
+    prefix = math.fsum(maintenance[name] for name in ("prefix_erase_bias_guard_ns",
+        "prefix_gc_bias_guard_ns", "prefix_write_placement_bias_guard_ns", "prefix_read_placement_bias_guard_ns"))
+    future = math.fsum(maintenance[name] for name in ("future_erase_serial_guard_ns",
+        "future_gc_erase_serial_guard_ns", "future_gc_non_erase_serial_guard_ns",
+        "future_write_placement_serial_guard_ns", "future_read_placement_serial_guard_ns",
+        "future_gc_carry_in_serial_guard_ns"))
+    assert result["conditional_tail_lower_ns"] == pytest.approx((50000. - prefix - symmetric) / 1.01)
+    assert result["conditional_tail_upper_ns"] == pytest.approx((51000. + future + symmetric) / .99)
+    assert result["budget_unavailable_reason"] is None
+    parts = result["error_budget_breakdown"]
+    assert parts["gc_prefix_mapping_stable"] is False
+    assert parts["gc_prefix_mapping_bounded"] is True
+    assert parts["symmetric_maintenance_guard_ns"] == symmetric
+    for name in symmetric_names:
+        row = parts["model_with_" + name.removesuffix("_guard_ns")]
+        assert row["lower_ns"] == 50000. - maintenance[name]
+        assert row["upper_ns"] == 51000. + maintenance[name]
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda guard: guard.pop("future_gc_read_remap_symmetric_guard_ns"),
+    lambda guard: guard.update(future_gc_persistent_cache_symmetric_guard_ns=None),
+    lambda guard: guard["per_unit_costs"].pop("kv_read_remap_page_serial_upper_ns"),
+    lambda guard: guard["per_unit_costs"].update(persistent_cache_miss_page_serial_upper_ns=math.nan),
+    lambda guard: guard.update(kv_reads_per_page_per_decode_upper=0),
+    lambda guard: guard.update(kv_reads_per_page_per_decode_upper=True),
+    lambda guard: guard.update(immutable_repeat_read_pages_per_decode_upper=-1),
+    lambda guard: guard.update(initial_warm_read_pages_per_decode_upper=None),
+    lambda guard: guard.update(live_projection_qualified=False),
+    lambda guard: guard.pop("gc_read_qualification"),
+    lambda guard: guard["gc_read_qualification"].update(qualified=False),
+    lambda guard: guard["gc_read_qualification"].update(physical_state_advanced=True),
+    lambda guard: guard["gc_read_qualification"].update(kv_reads_per_page_per_decode_upper=1),
+])
+def test_live_domain_cannot_default_unknown_read_bounds_or_qualification_to_zero(mutation):
+    projected = live_projection()
+    mutation(projected.hbf_devices[0]["gc_projection"])
+    result = envelope(runtime(), projected)
+    assert result["gc_observations_available"] is False
+    assert result["prefix_gc_read_remap_symmetric_bias_guard_ns"] is None
+    assert result["future_gc_persistent_cache_symmetric_guard_ns"] is None
+    budget = fast.conditional_error_budget(50000., 51000., 50500., .01, result)
+    assert budget["conditional_tail_lower_ns"] is None
+    assert budget["conditional_tail_upper_ns"] is None
+    json.dumps(budget, allow_nan=False)
+
+
+def test_conditional_live_composition_requires_all_four_symmetric_terms():
+    result = envelope(runtime(), live_projection())
+    result.pop("future_gc_persistent_cache_symmetric_guard_ns")
+    budget = fast.conditional_error_budget(50000., 51000., 50500., .01, result)
+    assert budget["budget_unavailable_reason"] == "hbf_gc_maintenance_observations_unavailable"
+    assert budget["conditional_relative_error_budget"] is None
+
+
+def test_zero_copy_budget_retains_exact_old_values_and_no_live_read_terms():
+    maintenance = envelope()
+    result = fast.conditional_error_budget(10000., 11000., 10500., .01, maintenance)
+    prefix = math.fsum(maintenance[name] for name in ("prefix_erase_bias_guard_ns",
+        "prefix_gc_bias_guard_ns", "prefix_write_placement_bias_guard_ns", "prefix_read_placement_bias_guard_ns"))
+    future = math.fsum(maintenance[name] for name in ("future_erase_serial_guard_ns",
+        "future_gc_erase_serial_guard_ns", "future_gc_non_erase_serial_guard_ns",
+        "future_write_placement_serial_guard_ns", "future_read_placement_serial_guard_ns",
+        "future_gc_carry_in_serial_guard_ns"))
+    assert result["conditional_tail_lower_ns"].hex() == ((10000. - prefix) / 1.01).hex()
+    assert result["conditional_tail_upper_ns"].hex() == ((11000. + future) / .99).hex()
+    assert result["error_budget_breakdown"]["symmetric_maintenance_guard_ns"] == 0.
+    assert maintenance["gc_live_copy_budget_required"] is False
 
 
 def test_decode_read_geometry_cannot_stand_in_for_previous_prefill_cleanup():
@@ -383,6 +517,71 @@ def test_live_copy_reset_over_cap_refuses_without_running_detailed_suffix(monkey
     assert reset["next_target_decode_steps"] == 28
     assert reset["within_sample_budget"] is False
     assert diagnostics["fallback_reasons"] == ["maintenance_recalibration_exceeds_sample_budget"]
+
+
+def tiny_live_projection(**changes):
+    result = live_projection()
+    guard = result.hbf_devices[0]["gc_projection"]
+    guard.update(kv_reads_per_page_per_decode_upper=1,
+        immutable_repeat_read_pages_per_decode_upper=1,
+        initial_warm_read_pages_per_decode_upper=1,
+        future_gc_non_erase_serial_ns=.01,
+        future_gc_read_remap_symmetric_guard_ns=.01,
+        future_gc_persistent_cache_symmetric_guard_ns=.01)
+    guard["per_unit_costs"] = dict.fromkeys(guard["per_unit_costs"], .01)
+    for name in ("kv_reads_per_page_per_decode_upper", "immutable_repeat_read_pages_per_decode_upper",
+                 "initial_warm_read_pages_per_decode_upper"):
+        guard["gc_read_qualification"][name] = guard[name]
+    guard.update(changes)
+    return result
+
+
+def test_proved_live_domain_keeps_periodic_copy_prefix_without_endless_clean_resets(monkeypatch):
+    scenario, _, runners = gc_harness(monkeypatch, growth=.06, copy_steps=(8, 16),
+                                      options=FastDecodeConfig(max_sample_tokens=16))
+    projected = tiny_live_projection()
+    monkeypatch.setattr(fast, "project_fast_tail", lambda *args, **kwargs: projected)
+    result = fast.simulate_fast(scenario, batch_lowerer=object())
+    assert result.forecast is not None and result.detailed is None
+    assert runners[0].decode_steps == 16 and runners[0].run_calls == 0
+    assert [sample.step for sample in result.forecast.samples] == list(range(1, 17))
+    assert result.diagnostics["exact_sampled_decode_ns"] == 1600.
+    assert result.diagnostics["sampling_resets"] == []
+    assert result.diagnostics["method"] == "closed_victim_live_gc_symmetric_directional_paired_envelope/v6"
+    assert result.diagnostics["gc_prefix_mapping_stable"] is False
+    assert result.diagnostics["gc_prefix_mapping_bounded"] is True
+    assert result.diagnostics["paired_budget_decision"]["accepted"] is True
+    assert result.diagnostics["paired_budget_decision"]["target_relative_error"] == .1
+    assert result.diagnostics["error_budget_breakdown"]["symmetric_maintenance_guard_ns"] > 0
+    assert result.diagnostics["physical_tail_transactions_recorded"] is False
+    assert result.diagnostics["future_physical_state_advanced"] is False
+
+
+def test_excess_live_read_uncertainty_still_refuses_at_cap_without_detail(monkeypatch):
+    scenario, _, runners = gc_harness(monkeypatch, growth=.06,
+        copy_steps=(8, 16, 24), options=FastDecodeConfig(max_sample_tokens=28))
+    projected = tiny_live_projection(future_gc_read_remap_symmetric_guard_ns=10000.)
+    monkeypatch.setattr(fast, "project_fast_tail", lambda *args, **kwargs: projected)
+    progress = []
+
+    class RequireForecast(RuntimeError):
+        pass
+
+    def callback(event):
+        progress.append(event)
+        if event.stage == "fast_mode_fallback":
+            raise RequireForecast()
+
+    with pytest.raises(RequireForecast):
+        fast.simulate_fast(scenario, batch_lowerer=object(),
+            execution_control=ExecutionControl(progress_callback=callback))
+    diagnostics = progress[-1].metadata["approximation"]
+    assert runners[0].decode_steps == 28 and runners[0].run_calls == 0
+    assert diagnostics["sampling_resets"] == []
+    assert diagnostics["gc_prefix_mapping_bounded"] is True
+    assert diagnostics["fallback_reasons"] == ["prefix_calibration_exceeds_error_budget"]
+    assert all(not attempt["forecast_accepted"] for attempt in diagnostics["sampling_attempts"])
+    assert diagnostics["sampling_attempts"][-1]["conditional_relative_error_budget"] is None
 
 
 def lru_misses(capacity, initial, trace):
