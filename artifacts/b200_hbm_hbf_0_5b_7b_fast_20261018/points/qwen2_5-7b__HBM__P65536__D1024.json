@@ -1990,5 +1990,11 @@
   "finished_at": "2026-10-18T03:03:50.591282+00:00",
   "wall_seconds": 295.1720000000205,
   "real_prefill_steps": 32,
-  "real_decode_steps": 16
+  "real_decode_steps": 16,
+  "physical_weight_semantics": "canonical_shared_resident_weights_v1",
+  "semantic_reuse_review": {
+    "reviewed_at": "2026-10-18T09:59:45.858910+00:00",
+    "reason": "7B has untied weights and HBM skips HBF initialization; physical path unchanged",
+    "metrics_and_budget_preserved": true
+  }
 }

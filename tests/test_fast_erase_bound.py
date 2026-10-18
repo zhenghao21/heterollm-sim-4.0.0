@@ -366,7 +366,8 @@ def test_real_small_bf16_prefix_uses_new_bound_without_advancing_any_physical_st
     from heterollm_sim.serving import _OnlineRuntime, compile_serving_plan
     from test_fast_prefix_runtime import runtime
     source = runtime(output=35).plan.scenario
-    layers = tuple(replace(layer, dtype="bf16", quantization=None)
+    # The rebuilt BF16 graph needs twice the INT8 matrix storage, too.
+    layers = tuple(replace(layer, dtype="bf16", quantization=None, weight_bytes=1179648)
                    for layer in _execution_layers(source))
     graph = build_model_graph_from_layer_specs(source.model.name, layers,
         vocabulary_size=1024, max_sequence_length=262144)

@@ -16,7 +16,7 @@ def strict_staging_scenario(*, prompt=31, output=3, capacity=8192, all_hbf=False
     base = scenario(hbf=True, count=1, prompt=prompt, output=output)
     if layers > 1:
         layer_specs = tuple(LayerSpec("dense{}".format(index), "dense", 256, 512, 4,
-            kv_heads=2, dtype="int8", quantization="w8a8", weight_bytes=655360)
+            kv_heads=2, dtype="int8", quantization="w8a8", weight_bytes=589824)
             for index in range(layers))
         model = ModelSpec(name="staged-repeat-dense", graph=build_model_graph_from_layer_specs(
             "staged-repeat-dense", layer_specs, vocabulary_size=1024,

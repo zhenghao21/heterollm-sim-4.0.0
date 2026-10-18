@@ -669,5 +669,6 @@
   "retention_policy": "aggregate",
   "ttft_definition": "request arrival to first visible output token",
   "tpot_definition": "(last visible token time - first visible token time) / (output_tokens - 1)",
-  "created_at": "2026-10-18T02:32:17.419889+00:00"
+  "created_at": "2026-10-18T02:32:17.419889+00:00",
+  "physical_weight_semantics": "canonical_shared_resident_weights_v1"
 }

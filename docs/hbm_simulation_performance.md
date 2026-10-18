@@ -1,6 +1,6 @@
 # HBM 仿真执行速度优化
 
-2026-10-18 当前安排：按用户最新指令，原 1.5B HBF / 256K / 1K 请求收尾后暂停正式队列，直接分析真实慢区并优化；当前只执行同配置的新版本 fast 候选验收，正式队列和自动跟进仍暂停。进度以[正式扫描报告](../artifacts/b200_hbm_hbf_0_5b_7b_fast_20261018/report.md)为准。HBF 采用 FlashLabAE 的 256-bank 研究参考几何及每主机通道准入队列，详见[配置说明](hbm_geometry.md#hbf-参数研究与配置修正2026-10-17)。先前清空的旧几何扫描不恢复，其结果不能用于判断当前 HBM/HBF 硬件优劣。
+2026-10-18 当前安排：按用户最新指令，原 1.5B HBF / 256K / 1K 请求收尾后暂停后续扫描，完成真实慢区分析、等价 GC 优化及另行授权的权重初始化/共享修正。统一 652 项检查通过，旧语义的 25 个受影响终态点已转历史；提交推送后先重测这 25 点，全部接受才继续其余队列。进度以[正式扫描报告](../artifacts/b200_hbm_hbf_0_5b_7b_fast_20261018/report.md)为准。HBF 采用 FlashLabAE 的 256-bank 研究参考几何及每主机通道准入队列，详见[配置说明](hbm_geometry.md#hbf-参数研究与配置修正2026-10-17)。先前清空的旧几何扫描不恢复，其结果不能用于判断当前 HBM/HBF 硬件优劣。
 
 ## 2026-10-18：真实扫描采样与活页 GC 后普通写入分段
 
@@ -38,6 +38,16 @@ GC 内部 `_used.pop` 的顺序日志占总样本 4.379%，实际 GC NAND/HOST/L
 本次拒绝还暴露独立初始化语义问题：同请求静态 IR 的末块新增 LM_HEAD 权重 466,747,392 字节，需 446 个 1 MiB 块；控制面声明它与 embedding 共享，物理 IR 却仍生成不同 resident buffer。进入 GC 后 `_free_blocks` 不会因动态数据释放或 GC 轮换补回，因此晚首次 preload 可能在逻辑容量充足时拒绝。小控制器已复现“动态数据全部释放、logical occupied=0，4 KiB preload 仍拒绝”。这不是 HBF 总共 512 GiB 装满的证据。用户已明确允许另行修正权重共享/初始化，并以 fast 重测受影响点后恢复；这项正确性修复会改变旧地址和时序，与上述 GC 等价优化分别验收。新修复在隔离目录准备，当前真实 GC 候选的源码不变。
 
 影响范围为 0.5B/1.5B/3B 的 HBM/HBF 共 54 点及 7B HBF 的 9 点。当前 27 个成功点中，24 个受影响，另加本次容量拒绝共 25 个终态点需转历史并重测 fast；3 个 7B HBM / 64K 结果物理语义不变，可显式评审后复用。新 HBF 配对引用必须来自相同语义的新 HBM；旧详细参考只保留为历史，既不重跑，也不当作新语义的实测误差证明。正式队列在实现、测试及数据迁移完成前保持暂停。
+
+### 已授权的共享与初始化修正
+
+生产路径已修正：0.5B/1.5B/3B 在单 rank、同物理源与完整 BF16 logical 视图下，将 embedding 与 LM_HEAD 绑定到同一完整 resident allocation，仍保留各自逻辑 tensor ID；7B untied 权重分离。不同 TP/PP/EP、显式 runtime copy、不同 owner、packed/GGUF 等未证明相同的存储不合并。
+
+所有 warm active HBF 权重在共享 bootstrap 进入 serving 前，由标准 lowerer 的只读 dense analytic 清单完整注册和预装；不执行该清单的 Prefill、不注册动态 KV/激活、不推进请求时钟或资源日历。`weights_resident=true` 表示数据在请求前已有，所有物理块填充及 GC reserve 仍占容量。每个物理 owner 的实际 root 字节必须与放置账本精确一致，未知晚期 resident 权重明确报初始化遗漏；snapshot/事务回滚保留初始化状态。cold HBF 和 HBM 不运行这份 HBF 清单。未证明清单完整的 MoE/MTP/llama/GGUF/custom lowerer 明确拒绝，本轮 72 点的普通 dense analytic 路径均已覆盖。
+
+合入后统一 **652 项通过，40.04 秒**，包含真实小型 31/3、两层零 HBM 运行，四正式模型的只读 IR/初始化，以及 GC、逐事务状态、失败回滚、快速采样、10% 单点/方向比值预算和队列报告。首次统一检查暴露公共 tiny GQA 模型保留 MHA 权重声明、BF16 转换保留 INT8 bytes 的问题；仅修正声明为实际矩阵字节，未放宽清单对账或预算，也未捏造额外常驻权重。
+
+正式结果已显式迁移为 `canonical_shared_resident_weights_v1`：原 25 行及其进度/配置保留到 `points_history`，活动集合只复用已评审的 3 个 7B HBM 行，指标与预算原值不改。manifest、新 worker 结果、配对参考和报告严格检查语义标签，不兼容接收旧标签。优先组先运行 1.5B HBM / 256K / 1K，再运行 HBF 同配置，然后按原 manifest 顺序重测其余 23 点；复用现有优先组验收门闩，25 点全部 `forecast_completed` 且预算接受才继续原队列。迁移记录见 [physical_weight_migration.json](../artifacts/b200_hbm_hbf_0_5b_7b_fast_20261018/physical_weight_migration.json)。没有重跑旧详细参考、完整详细后缀或修改原 72 点参数。
 
 ## 2026-10-18：第 100 块后 GC 耗时分解与回滚优化
 

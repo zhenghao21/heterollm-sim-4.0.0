@@ -90,8 +90,9 @@ def scenario(*, hbf=False, prompt=128, count=4, output=8, slots=None,
                 "hbf_write_us":program_us}, granularity={**p.granularity,"page_bytes":page_bytes})
     s = profiles._full_backend_scenario(p, use_hbf=hbf, request_count=count,
         prompt_tokens=prompt, output_tokens=output, hbm_timing_profile=hbm_timing_profile)
+    # INT8 GQA: Q/K/V/O = 196608 B; gated MLP = 393216 B.
     layers = (LayerSpec("dense0", "dense", 256, 512, 4, kv_heads=2,
-              dtype="int8", quantization="w8a8", weight_bytes=655360),)
+              dtype="int8", quantization="w8a8", weight_bytes=589824),)
     model = ModelSpec(name="synthetic-small-dense", graph=build_model_graph_from_layer_specs(
         "synthetic-small-dense", layers, vocabulary_size=1024,
         max_sequence_length=max(262144, prompt+output)))
