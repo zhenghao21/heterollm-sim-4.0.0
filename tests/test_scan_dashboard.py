@@ -194,11 +194,12 @@ def test_private_upload_header_json_ack_and_no_redirect(dashboard, monkeypatch):
         def open(self, request, timeout):
             observed.append((request, timeout))
             return Response()
-    monkeypatch.setattr(dashboard.urllib.request, "build_opener", lambda redirect: Opener())
+    monkeypatch.setattr(dashboard.urllib.request, "build_opener", lambda *handlers: Opener())
     assert dashboard.send_snapshot("https://example.com/api/scan", "testing-secret", {"schema": "test"}) == 200
     request, timeout = observed[0]
     assert request.get_method() == "PUT" and timeout == 20
     assert request.get_header("Oai-sites-authorization") == "Bearer testing-secret"
+    assert request.get_header("User-agent") == "B200-Memory-Lab/1.0"
     assert json.loads(request.data) == {"schema": "test"}
 
 
@@ -212,9 +213,36 @@ def test_html_login_is_not_reported_as_success(dashboard, monkeypatch):
         def __exit__(self, *_): pass
     class Opener:
         def open(self, *_args, **_kwargs): return Response()
-    monkeypatch.setattr(dashboard.urllib.request, "build_opener", lambda redirect: Opener())
+    monkeypatch.setattr(dashboard.urllib.request, "build_opener", lambda *handlers: Opener())
     with pytest.raises(ValueError, match="JSON"):
         dashboard.send_snapshot("https://example.com/api/scan", "testing-secret", {})
+
+
+def test_local_qa_never_uses_a_remote_proxy(dashboard, monkeypatch):
+    def unexpected():
+        raise AssertionError("local QA should not inspect a proxy")
+    monkeypatch.setattr(dashboard.urllib.request, "getproxies", unexpected)
+    assert dashboard.transport_proxies("http://127.0.0.1:5179/api/scan") == {}
+
+
+def test_explicit_environment_proxy_is_preserved(dashboard, monkeypatch):
+    monkeypatch.setattr(dashboard.urllib.request, "getproxies", lambda: {
+        "https": "http://explicit:8000", "node_use_env": "true", "no": "localhost"})
+    def unexpected():
+        raise AssertionError("explicit routing must be preserved")
+    monkeypatch.setattr(dashboard.urllib.request, "getproxies_registry", unexpected, raising=False)
+    assert dashboard.transport_proxies("https://example.com/api/scan") == {
+        "https": "http://explicit:8000", "no": "localhost"}
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows registry proxy selection")
+def test_node_env_flag_does_not_hide_existing_windows_proxy(dashboard, monkeypatch):
+    monkeypatch.setattr(dashboard.urllib.request, "getproxies", lambda: {
+        "node_use_env": "true", "no": "localhost"})
+    monkeypatch.setattr(dashboard.urllib.request, "getproxies_registry", lambda: {
+        "http": "http://system:9000", "https": "http://system:9000"})
+    assert dashboard.transport_proxies("https://example.com/api/scan") == {
+        "http": "http://system:9000", "https": "http://system:9000", "no": "localhost"}
 
 
 def test_401_status_does_not_include_token(dashboard, directory, tmp_path, monkeypatch, capsys):

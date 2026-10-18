@@ -306,16 +306,30 @@ def endpoint(url: str) -> str:
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
 
 
+def transport_proxies(url: str) -> dict[str, str]:
+    if urllib.parse.urlsplit(url).hostname in {"127.0.0.1", "localhost"}:
+        return {}
+    proxies = {key: value for key, value in urllib.request.getproxies().items()
+               if key in {"http", "https", "all", "no"} and value}
+    # NODE_USE_ENV_PROXY is interpreted as a proxy by urllib. Together with
+    # NO_PROXY it can prevent Windows' existing system proxy from being read.
+    if os.name == "nt" and not any(proxies.get(key) for key in ("http", "https", "all")):
+        registry = urllib.request.getproxies_registry()
+        proxies = {**registry, **proxies}
+    return proxies
+
+
 def send_snapshot(url: str, token: str, snapshot: dict[str, Any]) -> int:
     payload = json.dumps(snapshot, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
     request = urllib.request.Request(url, data=payload, method="PUT", headers={
         "Content-Type": "application/json", "OAI-Sites-Authorization": "Bearer " + token,
+        "User-Agent": "B200-Memory-Lab/1.0", "Accept": "application/json",
     })
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, request, fp, code, message, headers, newurl):
             raise urllib.error.HTTPError(request.full_url, code, "redirect refused", headers, fp)
 
-    with urllib.request.build_opener(NoRedirect()).open(request, timeout=20) as response:
+    with urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler(transport_proxies(url))).open(request, timeout=20) as response:
         if response.headers.get_content_type() != "application/json":
             raise ValueError("publisher expected a JSON acknowledgement")
         acknowledgement = json.loads(response.read(65536))

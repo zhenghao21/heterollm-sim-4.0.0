@@ -1,0 +1,30 @@
+# B200 实时实验台
+
+网站：<https://b200-memory-lab-20261018.zh493738267.chatgpt.site>
+
+网站使用 Sites 私有访问，通过同一个 ChatGPT 账号打开。它只读取正式扫描结果，不启动、暂停或更改仿真。
+
+## 使用
+
+- 每 15 秒同步实际扫描数据；页面关闭后后台同步仍继续。网络或进程中断时保留最后结果并提示数据陈旧。
+- 按模型、输入长度、输出长度筛选；左侧“全部配置”展示全部 72 点。
+- 切换 TTFT / TPOT、线性 / 对数坐标；拖动图下范围条缩放，点击图例显示或隐藏存储策略。
+- 点击数据点、比值条或配置方格，查看指标、执行记录、拒绝原因和 GC 预算；支持导出筛选结果 CSV。
+- 未运行、未完成、拒绝或失败的配置不画成零值。配置进度中的 Prefill 是完整块数，块内任务和 Decode 采样均不当作完整请求完成比例。
+- 10% 单点及 HBF/HBM 比值条件预算用于 Decode / TPOT；TTFT 来自物理 Prefill。条件界不是完整详细模式的实测误差保证。
+
+## 数据与维护
+
+数据来自 `artifacts/b200_hbm_hbf_0_5b_7b_fast_20261018` 的 manifest、status、active points 和实际 worker progress；历史拒绝不计入当前结果。worker PID 以 progress 为准，不把 Windows 启动器当成仿真进程。
+
+`scripts/b200_scan_dashboard.py` 按文件更新时间缓存已解析结果，仅上传约 90 KB 的汇总；不改扫描文件。发布器状态和日志分别在 `tmp/b200_scan_dashboard_publisher.json`、`tmp/b200_scan_dashboard_publisher.log`。源码与测试在主项目，网站前端和只读 API 的源码通过 Sites 源仓库保存；本地 checkout 在 `tmp/b200-scan-site`，项目身份保存在其 `.openai/hosting.json`。
+
+发布器使用 `--background --url <网站地址> --interval 15`。现有 Site 的服务凭据只通过隐藏 stdin 传入并保留在进程内，不写源码、参数、环境变量、状态或日志。恢复时获取同一 Site 的现有服务访问，不生成或轮换凭据。单实例锁避免重复发布器。
+
+完整扫描结束后先上传最终结果，再结束本地发布器；网站持久保存最终数据。扫描跟进同时检查发布器心跳，网站部署和正式仿真各自独立。
+
+## 验证
+
+发布器 24 项测试、TypeScript 和前端定向检查通过。本地真实 API 验证覆盖首次无数据、非法数据拒绝、有效上传和 72 点读取；浏览器验证覆盖筛选、TTFT/TPOT、坐标切换、图例、缩放、详情、全部 72 点，以及刷新时保留选择。
+
+发布验证：Sites 已确认部署成功；云端 GET 已读到真实 72 点和实际 worker 进度，后台发布器多次返回 HTTP 200。Windows 同步器沿用既有系统代理，并使用应用 User-Agent；没有修改系统网络设置或网站访问权限。
