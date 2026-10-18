@@ -331,4 +331,4 @@ def test_counts_do_not_count_rejections_as_completed(scan):
     counts = scan.queue_counts([{"status": status} for status in (
         "completed", "forecast_completed", "capacity_rejected", "forecast_rejected", "failed")])
     assert counts == {"completed": 2, "forecast_completed": 1, "capacity_rejected": 1,
-                      "forecast_rejected": 1, "failed": 1}
+                      "forecast_rejected": 1, "failed": 1, "cancelled": 0}

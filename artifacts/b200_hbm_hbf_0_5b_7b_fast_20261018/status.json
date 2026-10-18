@@ -1,8 +1,8 @@
 {
   "status": "running",
   "physical_weight_semantics": "canonical_shared_resident_weights_v1",
-  "manager_pid": 51020,
-  "updated_at": "2026-10-18T15:14:30.141241+00:00",
+  "manager_pid": 46684,
+  "updated_at": "2026-10-18T15:56:58.725506+00:00",
   "total": 72,
   "simulation_mode": "fast",
   "completed": 29,
@@ -10,6 +10,8 @@
   "capacity_rejected": 0,
   "forecast_rejected": 0,
   "failed": 0,
+  "cancelled": 32,
+  "planned_total": 40,
   "retry_priority_points": [
     "qwen2_5-1_5b__HBM__P262144__D1024",
     "qwen2_5-1_5b__HBF__P262144__D1024",
@@ -40,7 +42,7 @@
   "retry_group_total": 25,
   "retry_group_completed": 25,
   "retry_group_accepted": true,
-  "pending": 42,
+  "pending": 10,
   "running": [
     {
       "point_id": "qwen2_5-3b__HBF__P262144__D1024",
@@ -48,7 +50,7 @@
       "architecture": "HBF",
       "prompt_tokens": 262144,
       "output_tokens": 1024,
-      "pid": 44976,
+      "pid": 37460,
       "started_at": "2026-10-18T15:13:54.683084+00:00",
       "simulation_mode": "fast"
     }

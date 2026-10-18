@@ -55,6 +55,46 @@ def test_pending_is_null_and_complete_manifest_is_retained(dashboard, directory)
     assert all(p["sampled_decode_steps"] is None for p in snapshot["points"])
 
 
+@pytest.mark.parametrize("worker_record", [False, True])
+def test_cancelled_rows_are_terminal_empty_and_retained_results_survive(dashboard, directory, worker_record):
+    manifest = json.loads((directory / "manifest.json").read_text())
+    retained = {**manifest["points"][0], "point_id": "small__HBM__D5120", "output_tokens": 5120}
+    cancelled = {**manifest["points"][1], "point_id": "small__HBF__D10240", "output_tokens": 10240}
+    manifest["points"].extend([retained, cancelled])
+    write(directory / "manifest.json", manifest)
+    original = row(directory)
+    long_result = {**retained, "status": "forecast_completed", "ttft_ns": 2e9, "tpot_ns": 3e6,
+                   "physical_weight_semantics": manifest["physical_weight_semantics"]}
+    write(directory / "points" / f"{retained['point_id']}.json", long_result)
+    cancelled.update(status="cancelled", reason="user_cancelled_unrun_long_outputs", cancelled_at="2026-10-18T16:00:00+00:00")
+    write(directory / "queue_plan.json", {"schema": "b200-scan-plan/v1", "cancelled_points": [cancelled]})
+    if worker_record:
+        write(directory / "points" / f"{cancelled['point_id']}.json", {
+            **cancelled, "physical_weight_semantics": dashboard.SEMANTICS, "ttft_ns": None, "tpot_ns": None})
+    snapshot = dashboard.ScanReader(directory).snapshot()
+    assert len(snapshot["points"]) == 4
+    status = snapshot["status"]
+    assert (status["total"], status["planned_total"], status["completed"], status["cancelled"], status["pending"]) == (4, 3, 2, 1, 1)
+    assert status["one_k_total"] == 2 and status["one_k_completed"] == status["long_output_completed"] == 1
+    result = snapshot["points"][-1]
+    assert result["status"] == "cancelled" and result["cancelled_at"] == cancelled["cancelled_at"]
+    assert result["ttft_ms"] is None and result["tpot_ms"] is None
+    assert snapshot["points"][1]["tpot_ms"] == original["tpot_ns"] / 1e6
+    assert any("不自动恢复取消项" in setting["value"] for setting in snapshot["settings"])
+
+
+def test_cancelled_plan_cannot_hide_an_existing_success(dashboard, directory):
+    manifest = json.loads((directory / "manifest.json").read_text())
+    manifest["points"][1]["output_tokens"] = 5120
+    write(directory / "manifest.json", manifest)
+    result = row(directory)
+    cancelled = {key: result[key] for key in ("point_id", "model_id", "architecture", "prompt_tokens", "output_tokens")}
+    cancelled.update(status="cancelled", reason="cancelled", cancelled_at="2026-10-18T16:00:00+00:00")
+    write(directory / "queue_plan.json", {"schema": "b200-scan-plan/v1", "cancelled_points": [cancelled]})
+    with pytest.raises(ValueError, match="existing result|active result"):
+        dashboard.ScanReader(directory).snapshot()
+
+
 @pytest.mark.parametrize("status", ["forecast_rejected", "capacity_rejected", "failed", "interrupted"])
 def test_rejected_metrics_never_leak_even_if_saved(dashboard, directory, status):
     row(directory, status=status, reason="guard refused")

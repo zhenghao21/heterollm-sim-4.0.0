@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
 from b200_hbm_hbf_scan_report import PHYSICAL_WEIGHT_SEMANTICS, validate_physical_weight_semantics
+from b200_scan_plan import load_cancellations
 
 MODELS = (
     {"model_id": "qwen2_5-0_5b", "label": "Qwen2.5-0.5B", "parameters_b": .5},
@@ -278,6 +279,13 @@ def archive_rejected_point(output_dir, point, row):
 
 
 def worker(output_dir, point):
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    cancelled = load_cancellations(output_dir, manifest).get(point["point_id"])
+    if cancelled:
+        write_json(output_dir / "points" / (point["point_id"] + ".json"), {
+            **cancelled, "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
+            "ttft_ns": None, "tpot_ns": None})
+        return 0
     from b200_hbm_hbf_scan_config import build_scan_scenario
     from heterollm_sim.execution_control import ExecutionControl, ExecutionCancelledError
     from heterollm_sim.reporting import run_scenario
@@ -402,13 +410,13 @@ def process_alive(pid):
         return False
 
 
-def assert_no_live_workers(output_dir):
+def assert_no_live_workers(output_dir, allowed_pids=()):
     # On Windows Popen may identify a venv launcher. Progress is written by
     # the actual interpreter, which can outlive an interrupted manager.
     for path in (output_dir / "progress").glob("*.json"):
         progress = json.loads(path.read_text(encoding="utf-8"))
         pid = progress.get("pid")
-        if progress.get("status") in {"starting", "running"} and process_alive(pid):
+        if progress.get("status") in {"starting", "running"} and pid not in allowed_pids and process_alive(pid):
             raise RuntimeError(f"scan worker {pid} is still alive; refusing duplicate queue: {path.name}")
 
 
@@ -417,7 +425,39 @@ def queue_counts(finished):
         "forecast_completed": sum(row["status"] == "forecast_completed" for row in finished),
         "capacity_rejected": sum(row["status"] == "capacity_rejected" for row in finished),
         "forecast_rejected": sum(row["status"] == "forecast_rejected" for row in finished),
-        "failed": sum(row["status"] == "failed" for row in finished)}
+        "failed": sum(row["status"] == "failed" for row in finished),
+        "cancelled": sum(row["status"] == "cancelled" for row in finished)}
+
+
+class AdoptedWorker:
+    """Wait for an existing physical worker after its manager has exited."""
+    def __init__(self, pid):
+        self.pid = pid
+
+    def poll(self):
+        return None if process_alive(self.pid) else 0
+
+
+def existing_workers(output_dir, manifest):
+    status_path = output_dir / "status.json"
+    if not status_path.exists():
+        raise ValueError("adoption requires an existing queue status")
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    if process_alive(status.get("manager_pid")):
+        raise ValueError("previous manager is still alive")
+    known = {point["point_id"]: point for point in manifest["points"]}
+    adopted = {}
+    for item in status.get("running", []):
+        identifier = item["point_id"]
+        if identifier not in known or any(item.get(k) != v for k, v in known[identifier].items()):
+            raise ValueError("existing worker differs from manifest")
+        progress = json.loads((output_dir / "progress" / (identifier + ".json")).read_text(encoding="utf-8"))
+        validate_physical_weight_semantics(progress, "adopted worker")
+        if any(progress.get(k) != v for k, v in known[identifier].items()):
+            raise ValueError("worker progress differs from manifest")
+        if process_alive(progress.get("pid")):
+            adopted[identifier] = (AdoptedWorker(progress["pid"]), known[identifier], None, item["started_at"])
+    return adopted
 
 
 def retry_group_counts(finished, identifiers):
@@ -456,7 +496,7 @@ def validate_retry_selection(output_dir, manifest, identifiers, simulation_mode)
             raise ValueError("retry selection has no rejected attempt to preserve: " + identifier)
 
 
-def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast", retry_point_ids=()):
+def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast", retry_point_ids=(), adopt_running=False):
     from b200_hbm_hbf_scan_report import write_report, refresh_markdown
     if workers not in (1, 2):
         raise ValueError("workers must be 1 or 2")
@@ -482,7 +522,13 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
         else:
             import fcntl
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        assert_no_live_workers(output_dir)
+        adopted = existing_workers(output_dir, manifest) if adopt_running else {}
+        if len(adopted) > workers:
+            raise ValueError("existing workers exceed configured concurrency")
+        cancellations = load_cancellations(output_dir, manifest)
+        if set(adopted) & set(cancellations):
+            raise ValueError("cannot cancel a running physical worker")
+        assert_no_live_workers(output_dir, [item[0].pid for item in adopted.values()])
         validate_retry_selection(output_dir, manifest, retry_point_ids, simulation_mode)
         # Validate the active set before archiving any explicitly selected
         # forecast refusal. A stale result must never cause a partial migration.
@@ -495,6 +541,13 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                 saved_rows[point["point_id"]] = saved
         pending, finished = [], []
         for point in manifest["points"]:
+            if point["point_id"] in cancellations:
+                finished.append(cancellations[point["point_id"]])
+                continue
+            if point["point_id"] in adopted:
+                # A worker publishes its result before exiting. Count an
+                # adopted worker only after exit, even if that result exists.
+                continue
             saved = saved_rows.get(point["point_id"])
             if point["point_id"] in retry_point_ids and saved is not None and saved["status"] == "forecast_rejected":
                 archive_rejected_point(output_dir, point, saved)
@@ -509,7 +562,7 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
         pending.sort(key=lambda point: priority_order.get(point["point_id"], len(priority_order)))
         write_report(output_dir)
         last_report_at = time.monotonic()
-        running = {}
+        running = adopted
         stop_reason = None
         try:
             while pending or running:
@@ -541,7 +594,8 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                     code = process.poll()
                     if code is None:
                         continue
-                    log.close()
+                    if log is not None:
+                        log.close()
                     del running[identifier]
                     path = output_dir / "points" / (identifier + ".json")
                     saved = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
@@ -565,6 +619,7 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                     "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
                     "manager_pid": os.getpid(), "updated_at": utc_now(), "total": len(manifest["points"]),
                     "simulation_mode": simulation_mode, **queue_counts(finished),
+                    "planned_total": len(manifest["points"]) - len(cancellations),
                     **retry_status,
                     "pending": len(pending), "running": [{**point, "pid": process.pid, "started_at": start,
                         "simulation_mode": simulation_mode}
@@ -593,7 +648,8 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                 time.sleep(.2)
             still_running = []
             for process, point, log, start in running.values():
-                log.close()
+                if log is not None:
+                    log.close()
                 if process.poll() is None:
                     still_running.append({**point, "pid": process.pid, "started_at": start,
                                           "simulation_mode": simulation_mode})
@@ -609,12 +665,13 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
             if still_running:
                 queue_state = "needs_attention"
                 stop_reason = "workers_still_stopping"
-            elif queue_state == "completed" and any(row["status"] not in SUCCESS_STATUSES for row in finished):
+            elif queue_state == "completed" and any(row["status"] not in SUCCESS_STATUSES | {"cancelled"} for row in finished):
                 queue_state = "completed_with_rejections"
             write_json(output_dir / "status.json", {"status": queue_state,
                 "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
                 "manager_pid": os.getpid(), "updated_at": utc_now(), "total": len(manifest["points"]),
                 "simulation_mode": simulation_mode, **queue_counts(finished),
+                "planned_total": len(manifest["points"]) - len(cancellations),
                 **retry_group_counts(finished, retry_point_ids),
                 "pending": len(pending), "running": still_running, "reason": stop_reason})
             write_report(output_dir)
@@ -628,13 +685,14 @@ def main():
     parser.add_argument("--workers", type=int, choices=(1, 2), default=1)
     parser.add_argument("--simulation-mode", choices=("fast", "detailed"), default="fast")
     parser.add_argument("--retry-failed", action="store_true")
+    parser.add_argument("--adopt-running", action="store_true", help="Adopt live workers only after their old manager has exited.")
     parser.add_argument("--retry-point-id", action="append", default=[],
                         help="Revalidate selected archived points or forecast refusals first, preserving prior attempts.")
     parser.add_argument("--point-id")
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()
     if args.command == "run":
-        return run_queue(output_dir, args.workers, args.retry_failed, args.simulation_mode, args.retry_point_id)
+        return run_queue(output_dir, args.workers, args.retry_failed, args.simulation_mode, args.retry_point_id, args.adopt_running)
     if args.command == "worker":
         manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
         point = next(point for point in manifest["points"] if point["point_id"] == args.point_id)

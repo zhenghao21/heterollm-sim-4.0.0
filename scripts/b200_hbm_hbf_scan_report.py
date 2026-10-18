@@ -21,6 +21,8 @@ import tempfile
 import time
 from typing import Any, Callable
 
+from b200_scan_plan import load_cancellations
+
 
 # A new contract requires an explicit migration of active results. Archived
 # attempts remain historical and are never timing references or plotted rows.
@@ -45,7 +47,7 @@ BASE_COLUMNS = (
     "sampling_resets", "error_budget_breakdown", "approximation",
 )
 SUCCESS_STATUSES = {"completed", "forecast_completed"}
-TERMINAL_STATUSES = SUCCESS_STATUSES | {"forecast_rejected", "failed", "capacity_rejected"}
+TERMINAL_STATUSES = SUCCESS_STATUSES | {"forecast_rejected", "failed", "capacity_rejected", "cancelled"}
 COLORS = (
     "#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00",
     "#4B3E8A", "#1C7B78", "#8C564B", "#68732D",
@@ -278,6 +280,7 @@ def _read_inputs(output_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]
     order = {key: index for index, key in enumerate(expected)}
     if len(order) != len(expected):
         raise ValueError("Manifest contains duplicate model/architecture/length combinations")
+    cancellations = load_cancellations(output_dir, manifest)
     rows_by_key: dict[tuple[str, str, int, int], dict[str, Any]] = {}
     for source in sorted((output_dir / "points").glob("*.json")):
         row = json.loads(source.read_text(encoding="utf-8-sig"))
@@ -287,11 +290,24 @@ def _read_inputs(output_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]
             raise ValueError(f"Point is outside the manifest: {source.name}")
         if key in rows_by_key:
             raise ValueError(f"Duplicate point for {key}: {source.name}")
+        if row.get("status") == "cancelled" and row.get("point_id") not in cancellations:
+            raise ValueError(f"Cancelled point is absent from the queue plan: {source.name}")
         if row.get("status") in SUCCESS_STATUSES:
             for metric in ("ttft_ns", "tpot_ns"):
                 if not _positive_number(row.get(metric)):
                     raise ValueError(f"Successful point has invalid {metric}: {source.name}")
         rows_by_key[key] = row
+    for cancellation in cancellations.values():
+        key = _key(cancellation)
+        existing = rows_by_key.get(key, {})
+        if existing and (existing.get("status") != "cancelled"
+                         or existing.get("point_id") != cancellation["point_id"]
+                         or any(existing.get(metric) is not None for metric in ("ttft_ns", "tpot_ns"))):
+            raise ValueError(f"Cancelled point already has an active result: {cancellation['point_id']}")
+        rows_by_key[key] = {
+            **existing, **cancellation, "physical_weight_semantics": manifest["physical_weight_semantics"],
+            "simulation_mode": manifest.get("simulation", {}).get("mode", "fast"),
+        }
     rows = sorted(rows_by_key.values(), key=lambda row: order[_key(row)])
     return manifest, rows, len(expected)
 
@@ -364,12 +380,15 @@ def _plot(output_dir: Path, manifest: dict[str, Any], completed: list[dict[str, 
                 axis.set_ylim(observed[0] / 1.6, observed[0] * 1.6)
             axis.margins(x=0.06)
 
-        title = f"B200 single-request scan | {len(completed)}/{total} points successful"
+        title = f"B200 single-request scan | {len(completed)}/{total} planned points successful"
         figure.suptitle(title, fontsize=17, fontweight="bold", y=0.965)
         has_forecasts = any(row.get("status") == "forecast_completed" for row in completed)
         subtitle = "HBM3E vs. OCP HBF 0.7.0  |  BF16 weights and KV  |  K = 1024 tokens"
         if has_forecasts:
             subtitle += "\nFast mode: detailed TTFT; mean TPOT includes a forecast tail"
+        original_total = len(manifest["models"]) * len(manifest["architectures"]) * len(length_pairs)
+        if total != original_total:
+            subtitle += f"\nOriginal {original_total} | retained plan {total} | cancelled {original_total - total}"
         figure.text(0.5, 0.902 if has_forecasts else 0.914, subtitle,
                     ha="center", fontsize=10.5, color="#57667B")
         lengths = [Line2D([0], [0], color=COLORS[index % len(COLORS)], linewidth=2.8,
@@ -385,7 +404,7 @@ def _plot(output_dir: Path, manifest: dict[str, Any], completed: list[dict[str, 
                          for name in manifest["architectures"]]
         figure.legend(handles=architectures, loc="lower right", bbox_to_anchor=(0.96, 0.095),
                       frameon=False, title="Memory placement", handlelength=3)
-        figure.text(0.5, 0.018, "Missing, failed, forecast-rejected and capacity-rejected points are omitted; gaps are not interpolated.",
+        figure.text(0.5, 0.018, "Missing, cancelled, failed, forecast-rejected and capacity-rejected points are omitted; gaps are not interpolated.",
                     ha="center", fontsize=9, color="#637187")
         figure.subplots_adjust(left=0.075, right=0.975, bottom=0.30, top=0.84, wspace=0.25)
         try:
@@ -454,19 +473,28 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
     lines = [
         "# B200 HBM/HBF 单请求扫描", "",
         f"报告刷新时间：**{datetime.now(BEIJING).strftime('%Y-%m-%d %H:%M:%S')}（北京时间 UTC+08:00）**。", "",
-        f"已成功 **{counts['completed']}/{counts['total']}** 个配置点"
+        f"已成功 **{counts['completed']}/{counts['planned_total']}** 个保留计划配置点"
         f"（详细完成 {counts['detailed_completed']}，预测完成 {counts['forecast_completed']}）；"
         f"预测安全检查拒绝 {counts['forecast_rejected']} 个；"
         f"失败 {counts['failed']} 个；容量不满足 {counts['capacity_rejected']} 个；"
         f"尚未完成 {counts['pending']} 个。", "",
     ]
+    if counts["cancelled"]:
+        lines.extend([
+            f"实验范围：原始 **{counts['total']}** 点；保留计划 **{counts['planned_total']}** 点；"
+            f"已取消 **{counts['cancelled']}** 个尚未运行的 5K/10K 输出配置，不会自动恢复。"
+            "已完成的长输出结果保留，不重复运行。", "",
+            f"1K 输出目标：**{counts['one_k_completed']}/{counts['one_k_total']}** 点成功；"
+            f"已完成并保留的 5K/10K 输出：**{counts['long_output_completed']}** 点。"
+            "取消项是独立终态，不计作成功、拒绝或待运行。", "",
+        ])
     if queue_status is not None:
         status_label = {"ready": "待启动", "running": "运行中", "completed": "已全部成功结束",
                         "completed_with_rejections": "已结束（含拒绝点）",
                         "paused": "已暂停", "needs_attention": "需要处理"}.get(
             queue_status.get("status"), queue_status.get("status", "未知"))
         lines.extend([f"队列状态：**{_markdown(status_label)}**；"
-                      f"队列记录已完成 {queue_status.get('completed', 0)}/{queue_status.get('total', counts['total'])}；"
+                      f"队列记录已完成 {queue_status.get('completed', 0)}/{counts['planned_total']}；"
                       f"等待运行 {queue_status.get('pending', 0)} 个。"
                       f"队列更新时间：{_markdown(_local_time(queue_status.get('updated_at')))}（北京时间）。", ""])
         if queue_status.get("reason"):
@@ -562,7 +590,7 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
     if counts["completed"]:
         lines.extend(["![TTFT 和 TPOT 扫描结果](comparison.png)", "",
                       "每个面板用颜色区分 9 种输入/输出长度组合，用实线表示 HBM、虚线表示 HBF。"
-                      "横轴为模型参数量，纵轴为对数刻度；未完成、预测拒绝、容量拒绝和失败点留空。"
+                      "横轴为模型参数量，纵轴为对数刻度；未完成、已取消、预测拒绝、容量拒绝和失败点留空。"
                       "快速完成点的 TPOT 曲线为预测结果。", ""])
     else:
         lines.extend(["当前没有已完成的测量点，尚未生成曲线图。", ""])
@@ -619,17 +647,32 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                          f"{_tokens(row['prompt_tokens'])}/{_tokens(row['output_tokens'])} | "
                          f"{_markdown(row['status'])} | {_markdown(row.get('reason', ''))} |")
         lines.append("")
+    cancelled = [row for row in rows if row.get("status") == "cancelled"]
+    if cancelled:
+        lines.extend(["## 已取消的未运行配置", "",
+                      "以下配置按用户要求取消，未生成测量值；原始 manifest 保留，队列不会自动恢复它们。", "",
+                      "| 模型 | 存储 | 输入/输出 | 取消原因 |", "| --- | --- | --- | --- |"])
+        for row in cancelled:
+            lines.append(f"| {_markdown(row['model_id'])} | {_markdown(row['architecture'])} | "
+                         f"{_tokens(row['prompt_tokens'])}/{_tokens(row['output_tokens'])} | "
+                         f"{_markdown(row.get('reason', ''))} |")
+        lines.append("")
     lines.extend(["文件：[summary.csv](summary.csv) 保留全部终态的主指标、精度口径、采样记录、单点/配对预算、参考点及拒绝原因（无指标时留空）；"
                   "[results.json](results.json) 保留全部结果、详细数据和参数。", ""])
     _atomic_text(output_dir / "report.md", "\n".join(lines))
 
 
-def _counts(rows: list[dict[str, Any]], total: int) -> dict[str, int]:
+def _counts(rows: list[dict[str, Any]], total: int, manifest: dict[str, Any] | None = None) -> dict[str, int]:
     counts = {"total": total, **{status: sum(row.get("status") == status for row in rows)
                                 for status in TERMINAL_STATUSES}}
     counts["detailed_completed"] = counts["completed"]
     counts["pending"] = total - sum(counts[status] for status in TERMINAL_STATUSES)
     counts["completed"] += counts["forecast_completed"]
+    counts["planned_total"] = total - counts["cancelled"]
+    counts["one_k_completed"] = sum(row.get("status") in SUCCESS_STATUSES and row.get("output_tokens") == 1024 for row in rows)
+    counts["long_output_completed"] = sum(row.get("status") in SUCCESS_STATUSES and row.get("output_tokens") in {5120, 10240} for row in rows)
+    counts["one_k_total"] = (len(manifest["models"]) * len(manifest["architectures"]) * len(manifest["prompts"])
+                             if manifest and 1024 in manifest["outputs"] else 0)
     return counts
 
 
@@ -638,7 +681,7 @@ def refresh_markdown(output_dir: str | Path) -> dict[str, int]:
     output_dir = Path(output_dir)
     manifest, rows, total = _read_inputs(output_dir)
     queue_status = _read_optional_json(output_dir / "status.json")
-    counts = _counts(rows, total)
+    counts = _counts(rows, total, manifest)
     _write_markdown(output_dir, manifest, rows, counts, queue_status)
     return counts
 
@@ -649,7 +692,7 @@ def write_report(output_dir: str | Path) -> dict[str, int]:
     manifest, rows, total = _read_inputs(output_dir)
     queue_status = _read_optional_json(output_dir / "status.json")
     completed = [row for row in rows if row.get("status") in SUCCESS_STATUSES]
-    counts = _counts(rows, total)
+    counts = _counts(rows, total, manifest)
     _write_csv(output_dir, rows)
     _atomic_text(output_dir / "results.json", json.dumps(
         {"manifest": manifest, "counts": counts, "queue_status": queue_status,
@@ -658,7 +701,7 @@ def write_report(output_dir: str | Path) -> dict[str, int]:
         ensure_ascii=False, indent=2, allow_nan=False,
     ) + "\n")
     if completed:
-        _plot(output_dir, manifest, completed, total)
+        _plot(output_dir, manifest, completed, counts["planned_total"])
     else:
         for filename in ("comparison.png", "comparison.svg"):
             (output_dir / filename).unlink(missing_ok=True)

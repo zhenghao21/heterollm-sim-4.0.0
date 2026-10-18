@@ -7,7 +7,8 @@
 ## 使用
 
 - 每 15 秒同步实际扫描数据；页面关闭后后台同步仍继续。网络或进程中断时保留最后结果并提示数据陈旧。
-- 按模型、输入长度、输出长度筛选；左侧“全部配置”展示全部 72 点。
+- 后续只运行1K输出：保留计划40点（24个1K目标、16个已完成5K/10K结果）。原72点清单保留，32个未运行长输出标为已取消，不计入待运行、失败或成功，也不会自动恢复。
+- 按模型、输入长度、输出长度筛选；左侧“全部配置”仍展示原始72点，已有长输出结果继续可分析。
 - 切换 TTFT / TPOT、线性 / 对数坐标；拖动图下范围条缩放，点击图例显示或隐藏存储策略。
 - 点击数据点、比值条或配置方格，查看指标、执行记录、拒绝原因和 GC 预算；支持导出筛选结果 CSV。
 - 未运行、未完成、拒绝或失败的配置不画成零值。配置进度中的 Prefill 是完整块数，块内任务和 Decode 采样均不当作完整请求完成比例。
@@ -15,7 +16,7 @@
 
 ## 数据与维护
 
-数据来自 `artifacts/b200_hbm_hbf_0_5b_7b_fast_20261018` 的 manifest、status、active points 和实际 worker progress；历史拒绝不计入当前结果。worker PID 以 progress 为准，不把 Windows 启动器当成仿真进程。
+数据来自 `artifacts/b200_hbm_hbf_0_5b_7b_fast_20261018` 的 manifest、queue_plan、status、active points 和实际 worker progress；历史拒绝不计入当前结果。worker PID 以 progress 为准，不把 Windows 启动器当成仿真进程。
 
 `scripts/b200_scan_dashboard.py` 按文件更新时间缓存已解析结果，仅上传约 90 KB 的汇总；不改扫描文件。发布器状态和日志分别在 `tmp/b200_scan_dashboard_publisher.json`、`tmp/b200_scan_dashboard_publisher.log`。源码与测试在主项目，网站前端和只读 API 的源码通过 Sites 源仓库保存；本地 checkout 在 `tmp/b200-scan-site`，项目身份保存在其 `.openai/hosting.json`。
 

@@ -62,6 +62,55 @@ def test_terminal_counts_combine_success_without_double_counting(report):
     assert counts["pending"] == 67
 
 
+@pytest.mark.parametrize("worker_record", [False, True])
+def test_cancelled_plan_preserves_success_and_exports_empty_metrics(report, tmp_path, monkeypatch, worker_record):
+    retained = [point(), point(output=5120)]
+    cancelled = point("HBF", output=5120, status="cancelled", ttft_ns=None, tpot_ns=None,
+                      reason="user_cancelled_unrun_long_outputs", cancelled_at="2026-10-18T16:00:00+00:00")
+    path = scan_directory(tmp_path, [*retained, *([cancelled] if worker_record else [])])
+    manifest_path = path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["points"] = [{key: candidate[key] for key in (
+        "point_id", "model_id", "architecture", "prompt_tokens", "output_tokens")}
+        for candidate in (point(), point(output=5120), point("HBF"), cancelled)]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    cancellation = {**manifest["points"][-1], **{key: cancelled[key] for key in ("status", "reason", "cancelled_at")}}
+    (path / "queue_plan.json").write_text(json.dumps({"schema": "b200-scan-plan/v1", "cancelled_points": [cancellation]}), encoding="utf-8")
+    plotted = []
+    monkeypatch.setattr(report, "_plot", lambda root, manifest, rows, total: plotted.append((rows, total)))
+    counts = report.write_report(path)
+    assert (counts["total"], counts["planned_total"], counts["cancelled"], counts["completed"], counts["pending"]) == (4, 3, 1, 2, 1)
+    assert counts["one_k_total"] == 2 and counts["one_k_completed"] == counts["long_output_completed"] == 1
+    assert plotted[0][1] == 3 and len(plotted[0][0]) == 2
+    data = json.loads((path / "results.json").read_text(encoding="utf-8"))
+    assert len(data["rows"]) == 3
+    summary = next(row for row in data["rows"] if row["status"] == "cancelled")
+    assert all(summary[key] is None for key in ("ttft_ns", "tpot_ns", "ttft_s", "tpot_ms"))
+    with (path / "summary.csv").open(encoding="utf-8-sig", newline="") as stream:
+        csv_rows = list(csv.DictReader(stream))
+    assert len(csv_rows) == 3
+    summary = next(row for row in csv_rows if row["status"] == "cancelled")
+    assert all(summary[key] == "" for key in ("ttft_ns", "tpot_ns", "ttft_s", "tpot_ms"))
+    markdown = (path / "report.md").read_text(encoding="utf-8")
+    assert "已成功 **2/3**" in markdown and "已取消 **1**" in markdown
+    assert "1K 输出目标：**1/2**" in markdown and "已取消的未运行配置" in markdown
+    assert json.loads((path / "points/1.json").read_text())["tpot_ns"] == retained[1]["tpot_ns"]
+
+
+def test_cancellation_never_overwrites_a_successful_result(report, tmp_path):
+    completed = point("HBF", output=5120)
+    path = scan_directory(tmp_path, [completed])
+    manifest_path = path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["points"] = [{key: completed[key] for key in (
+        "point_id", "model_id", "architecture", "prompt_tokens", "output_tokens")}]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    cancelled = {**manifest["points"][0], "status": "cancelled", "reason": "cancelled", "cancelled_at": "2026-10-18T16:00:00+00:00"}
+    (path / "queue_plan.json").write_text(json.dumps({"schema": "b200-scan-plan/v1", "cancelled_points": [cancelled]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="already has an active result"):
+        report._read_inputs(path)
+
+
 def test_csv_preserves_forecast_budget_and_rejections_without_fake_latencies(report, tmp_path, monkeypatch):
     rejected = point("HBF", status="forecast_rejected", ttft_ns=None, tpot_ns=None,
                      reason="prefix_calibration_exceeds_error_budget")

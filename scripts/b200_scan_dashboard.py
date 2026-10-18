@@ -23,10 +23,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from b200_scan_plan import load_cancellations
+
 
 SEMANTICS = "canonical_shared_resident_weights_v1"
 SUCCESS = {"completed", "forecast_completed"}
-TERMINAL = SUCCESS | {"forecast_rejected", "capacity_rejected", "failed"}
+TERMINAL = SUCCESS | {"forecast_rejected", "capacity_rejected", "failed", "cancelled"}
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "artifacts/b200_hbm_hbf_0_5b_7b_fast_20261018"
 
@@ -154,6 +156,7 @@ def compact_point(spec: dict[str, Any], row: dict[str, Any] | None, model: dict[
         "pair_error_bound": numeric(decision.get("pair_relative_error_budget")),
         "paired_accepted": decision.get("accepted") if isinstance(decision.get("accepted"), bool) else None,
         "reason": reason, "started_at": row.get("started_at"), "finished_at": row.get("finished_at"),
+        "cancelled_at": row.get("cancelled_at"),
         "budget": budget_items(approx),
         "assumptions": [str(value) for value in approx.get("model_assumptions", [])],
     }
@@ -189,16 +192,25 @@ class ScanReader:
         models = {model["model_id"]: model for model in manifest["models"]}
         specs = manifest["points"]
         known = {spec["point_id"]: spec for spec in specs}
+        cancellations = load_cancellations(self.output_dir, manifest)
         rows = []
         for spec in specs:
             identifier = spec["point_id"]
             if Path(identifier).name != identifier or "/" in identifier or "\\" in identifier:
                 raise ValueError("unsafe point identifier")
             row = self.cache.read(self.output_dir / "points" / f"{identifier}.json", warnings)
+            cancellation = cancellations.get(identifier)
+            if cancellation and row and (row.get("status") != "cancelled"
+                    or any(row.get(metric) is not None for metric in ("ttft_ns", "tpot_ns"))):
+                raise ValueError(f"Cancelled point already has an active result: {identifier}")
+            if row and row.get("status") == "cancelled" and not cancellation:
+                raise ValueError(f"Cancelled point is absent from the queue plan: {identifier}")
             if row and (row.get("physical_weight_semantics") != SEMANTICS or any(row.get(k) != spec[k] for k in (
                     "point_id", "model_id", "architecture", "prompt_tokens", "output_tokens"))):
                 warnings.append(f"{identifier} 的语义或配置不匹配，未计入当前结果")
                 row = None
+            if cancellation:
+                row = {**(row or {}), **cancellation}
             rows.append(compact_point(spec, row, models.get(spec["model_id"], {})))
         by_id = {row["point_id"]: row for row in rows}
         parameters = manifest.get("parameters") or {}
@@ -238,9 +250,14 @@ class ScanReader:
             by_id[identifier].update(active)
         counts = {state: sum(row["status"] == state for row in rows) for state in TERMINAL}
         completed = sum(counts[state] for state in SUCCESS)
+        planned_total = len(specs) - counts["cancelled"]
+        one_k_total = sum(spec["output_tokens"] == 1024 for spec in specs)
+        one_k_completed = sum(row["output_tokens"] == 1024 and row["status"] in SUCCESS for row in rows)
+        long_output_completed = sum(row["output_tokens"] in {5120, 10240} and row["status"] in SUCCESS for row in rows)
         hbf = parameters.get("hbf_parameters") or {}
         geometry = hbf.get("geometry") or {}
         settings = [
+            {"label": "扫描范围", "value": f"原始 {len(specs)} 点 · 保留计划 {planned_total} 点 · 已取消 {counts['cancelled']} 点；后续仅运行 1K 输出，已完成 5K/10K 结果保留，不自动恢复取消项" if counts["cancelled"] else f"原始 {len(specs)} 点，全部保留"},
             {"label": "GPU / 请求", "value": "B200 · 单 GPU · 单请求 · BF16"},
             {"label": "仿真", "value": f"Prefill 物理执行 · adaptive Decode ≤{decode_limit} 真实步 · 条件误差目标 10%"},
             {"label": "精度说明", "value": "条件预算不等于完整详细模式实测误差保证；TPOT 包含预测尾段"},
@@ -255,6 +272,9 @@ class ScanReader:
             "schema": "b200-scan-dashboard/v1", "scan_id": self.output_dir.name,
             "observed_at": utc_now(), "status": {
                 "state": status.get("status", "unknown"), "total": len(specs), "completed": completed,
+                "planned_total": planned_total, "cancelled": counts["cancelled"],
+                "one_k_total": one_k_total, "one_k_completed": one_k_completed,
+                "long_output_completed": long_output_completed,
                 "forecast_completed": counts["forecast_completed"], "forecast_rejected": counts["forecast_rejected"],
                 "capacity_rejected": counts["capacity_rejected"], "failed": counts["failed"],
                 "pending": len(specs) - sum(counts.values()) - len(running),
