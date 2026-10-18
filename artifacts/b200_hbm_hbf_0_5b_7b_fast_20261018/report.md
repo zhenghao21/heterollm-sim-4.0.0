@@ -1,10 +1,10 @@
 # B200 HBM/HBF 单请求扫描
 
-报告刷新时间：**2026-10-18 14:20:57（北京时间 UTC+08:00）**。
+报告刷新时间：**2026-10-18 14:25:31（北京时间 UTC+08:00）**。
 
-已成功 **23/72** 个配置点（详细完成 0，预测完成 23）；预测安全检查拒绝 4 个；失败 0 个；容量不满足 0 个；尚未完成 45 个。
+已成功 **23/72** 个配置点（详细完成 0，预测完成 23）；预测安全检查拒绝 0 个；失败 0 个；容量不满足 0 个；尚未完成 49 个。
 
-队列状态：**已暂停**；队列记录已完成 23/72；等待运行 45 个。队列更新时间：2026-10-18 14:18:17（北京时间）。
+队列状态：**待启动**；队列记录已完成 23/72；等待运行 49 个。队列更新时间：2026-10-18 14:25:31（北京时间）。
 
 队列说明：修正配对预算及未来擦除上界后，优先重跑原拒绝点。
 
@@ -75,6 +75,8 @@ HBM3E 使用标准参考模型；当前 24Gb × 8H 组织未套用只支持 32Gb
 
 10% 是误差目标；条件误差预算依赖模型假设，不能替代每个配置与完整详细模式的实测对照。未做完整详细对照的点保留原始 validation_status，不标为全请求误差验证通过。预测拒绝和容量拒绝是已处理终态，保留原因并继续后续点；代码执行失败需要处理。
 
+[历史尝试记录](points_history/) 保留 **4** 份旧结果；历史拒绝不重复计入当前成功数、拒绝数或曲线。
+
 ![TTFT 和 TPOT 扫描结果](comparison.png)
 
 每个面板用颜色区分 9 种输入/输出长度组合，用实线表示 HBM、虚线表示 HBF。横轴为模型参数量，纵轴为对数刻度；未完成、预测拒绝、容量拒绝和失败点留空。快速完成点的 TPOT 曲线为预测结果。
@@ -106,14 +108,5 @@ HBM3E 使用标准参考模型；当前 24Gb × 8H 组织未套用只支持 32Gb
 | qwen2_5-7b | HBM | 64K/10K | fast（TPOT 估算） | 1.6025 | 7.82967 | 16/10223 | 3.802% | not_validated_against_full_detailed |
 | qwen2_5-7b | HBF | 64K/1K | fast（TPOT 估算） | 40.7268 | 485.124 | 16/1007 | 1.926% | not_validated_against_full_detailed |
 | qwen2_5-7b | HBF | 64K/5K | fast（TPOT 估算） | 40.7268 | 492.446 | 16/5103 | 3.413% | not_validated_against_full_detailed |
-
-## 未成功的配置
-
-| 模型 | 存储 | 输入/输出 | 状态 | 原因 |
-| --- | --- | --- | --- | --- |
-| qwen2_5-0_5b | HBF | 64K/10K | forecast_rejected | prefix_calibration_exceeds_error_budget |
-| qwen2_5-1_5b | HBF | 64K/10K | forecast_rejected | prefix_calibration_exceeds_error_budget |
-| qwen2_5-3b | HBF | 64K/10K | forecast_rejected | prefix_calibration_exceeds_error_budget |
-| qwen2_5-7b | HBF | 64K/10K | forecast_rejected | prefix_calibration_exceeds_error_budget |
 
 文件：[summary.csv](summary.csv) 保留全部终态的主指标、精度口径、采样记录、单点/配对预算、参考点及拒绝原因（无指标时留空）；[results.json](results.json) 保留全部结果、详细数据和参数。

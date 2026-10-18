@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 import tempfile
 import time
-from typing import Any
+from typing import Any, Callable
 
 
 BASE_COLUMNS = (
@@ -226,24 +226,35 @@ def _running_progress(output_dir: Path, point: dict[str, Any], chunk_tokens: int
             "updated_at": _local_time(progress.get("updated_at")), "completed_cohorts": cohorts}
 
 
-def _atomic_text(path: Path, content: str) -> None:
+def _retry_file_operation(operation: Callable[[], Any]) -> Any:
+    """Retry only Windows errors caused by temporary sharing/mapping conflicts."""
+    for attempt in range(5):
+        try:
+            return operation()
+        except OSError as error:
+            transient = os.name == "nt" and (error.errno in {13, 22}
+                or getattr(error, "winerror", None) in {32, 33, 1224})
+            if not transient or attempt == 4:
+                raise
+            time.sleep(0.1 * 2 ** attempt)
+
+
+def _atomic_file(path: Path, write: Callable[[Path], Any]) -> None:
+    """Fully close a unique sibling file before replacing the visible artifact."""
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent,
-                                         prefix=".report-", suffix=".tmp", delete=False) as stream:
+        with tempfile.NamedTemporaryFile("wb", dir=path.parent,
+                                         prefix=".report-", suffix=f".tmp{path.suffix}", delete=False) as stream:
             temporary = Path(stream.name)
-            stream.write(content)
-        for attempt in range(3):
-            try:
-                os.replace(temporary, path)
-                return
-            except PermissionError:
-                if attempt == 2:
-                    raise
-                time.sleep(0.1)
+        _retry_file_operation(lambda: write(temporary))
+        _retry_file_operation(lambda: os.replace(temporary, path))
     finally:
         if temporary is not None:
-            temporary.unlink(missing_ok=True)
+            _retry_file_operation(lambda: temporary.unlink(missing_ok=True))
+
+
+def _atomic_text(path: Path, content: str) -> None:
+    _atomic_file(path, lambda temporary: temporary.write_text(content, encoding="utf-8"))
 
 
 def _read_inputs(output_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
@@ -280,11 +291,13 @@ def _write_csv(output_dir: Path, rows: list[dict[str, Any]]) -> None:
     extra_columns = sorted({key for row in summaries for key in row}
                            - set(BASE_COLUMNS) - nested_columns)
     columns = [*BASE_COLUMNS, *extra_columns]
-    with (output_dir / "summary.csv").open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=columns)
-        writer.writeheader()
-        for row in summaries:
-            writer.writerow({key: _cell(row.get(key)) for key in columns})
+    def write(temporary: Path) -> None:
+        with temporary.open("w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=columns)
+            writer.writeheader()
+            for row in summaries:
+                writer.writerow({key: _cell(row.get(key)) for key in columns})
+    _atomic_file(output_dir / "summary.csv", write)
 
 
 def _plot(output_dir: Path, manifest: dict[str, Any], completed: list[dict[str, Any]], total: int) -> None:
@@ -363,9 +376,11 @@ def _plot(output_dir: Path, manifest: dict[str, Any], completed: list[dict[str, 
         figure.text(0.5, 0.018, "Missing, failed, forecast-rejected and capacity-rejected points are omitted; gaps are not interpolated.",
                     ha="center", fontsize=9, color="#637187")
         figure.subplots_adjust(left=0.075, right=0.975, bottom=0.30, top=0.84, wspace=0.25)
-        figure.savefig(output_dir / "comparison.png", dpi=180)
-        figure.savefig(output_dir / "comparison.svg")
-        plt.close(figure)
+        try:
+            _atomic_file(output_dir / "comparison.png", lambda temporary: figure.savefig(temporary, dpi=180))
+            _atomic_file(output_dir / "comparison.svg", lambda temporary: figure.savefig(temporary))
+        finally:
+            plt.close(figure)
 
 
 def _parameter_rows(manifest: dict[str, Any]) -> list[tuple[str, Any]]:
@@ -623,12 +638,12 @@ def write_report(output_dir: str | Path) -> dict[str, int]:
     completed = [row for row in rows if row.get("status") in SUCCESS_STATUSES]
     counts = _counts(rows, total)
     _write_csv(output_dir, rows)
-    (output_dir / "results.json").write_text(json.dumps(
+    _atomic_text(output_dir / "results.json", json.dumps(
         {"manifest": manifest, "counts": counts, "queue_status": queue_status,
          "historical_attempts": _history_summary(output_dir),
          "rows": [_summary_row(row) for row in rows]},
         ensure_ascii=False, indent=2, allow_nan=False,
-    ) + "\n", encoding="utf-8")
+    ) + "\n")
     if completed:
         _plot(output_dir, manifest, completed, total)
     else:

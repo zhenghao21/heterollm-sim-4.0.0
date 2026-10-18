@@ -649,3 +649,4 @@
 {"stage": "fast_calibration", "completed": 128, "total": 10239, "wall_seconds": 250.89}
 {"stage": "fast_mode_fallback", "completed": 128, "total": null, "wall_seconds": 250.91}
 {"point_id": "qwen2_5-0_5b__HBF__P65536__D10240", "status": "forecast_rejected", "wall_seconds": 251.15700000000652}
+{"point_id": "qwen2_5-0_5b__HBF__P65536__D10240", "status": "interrupted", "wall_seconds": 0.09299999999348074}
