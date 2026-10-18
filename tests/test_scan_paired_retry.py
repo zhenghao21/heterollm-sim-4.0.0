@@ -36,13 +36,15 @@ def reference_fixture(scan, tmp_path):
     source = {**point, "architecture": "HBM", "point_id": scan.point_id(
         point["model_id"], "HBM", point["prompt_tokens"], point["output_tokens"]),
         "status": "forecast_completed", "simulation_mode": "fast",
+        "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS,
         "model": {"name": scenario.model.name}, "metric_fidelity": {"tpot": "estimated"},
         "resolved_placement": {"active_memory": "hbm0"}, "tpot_ns": 100.,
         "approximation": {"effective_mode": "fast", "target_relative_error": .1,
             "sampled_decode_steps": 16, "predicted_decode_steps": 1007,
             "error_budget_breakdown": {"forecast_tail_ns": 90000.,
                 "combined": {"lower_ns": 89000., "upper_ns": 91000.}}}}
-    manifest = {"parameters": {"weights_dtype": "bf16", "kv_dtype": "bf16"}}
+    manifest = {"parameters": {"weights_dtype": "bf16", "kv_dtype": "bf16"},
+                "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS}
     path = tmp_path / "points" / (source["point_id"] + ".json")
     write_json(path, source)
     return point, scenario, source, manifest, path
@@ -62,7 +64,8 @@ def test_paired_reference_adds_exact_prefix_to_tail_interval(scan, tmp_path):
 @pytest.mark.parametrize("violation", (
     "id", "model_id", "model_name", "prompt", "output", "architecture", "mode",
     "effective_mode", "fidelity", "precision", "placement", "target", "nan_tpot",
-    "nan_interval", "negative_prefix", "tail_order", "count_sum", "negative_count", "bool_count"))
+    "nan_interval", "negative_prefix", "tail_order", "count_sum", "negative_count", "bool_count",
+    "source_semantics", "manifest_semantics"))
 def test_paired_reference_rejects_incompatible_saved_forecast(scan, tmp_path, violation):
     point, scenario, source, manifest, path = reference_fixture(scan, tmp_path)
     changes = {"id": (source, "point_id", "other"), "model_id": (source, "model_id", "other"),
@@ -80,11 +83,21 @@ def test_paired_reference_rejects_incompatible_saved_forecast(scan, tmp_path, vi
         "tail_order": (source["approximation"]["error_budget_breakdown"]["combined"], "lower_ns", 95000.),
         "count_sum": (source["approximation"], "predicted_decode_steps", 1),
         "negative_count": (source["approximation"], "sampled_decode_steps", -1),
-        "bool_count": (source["approximation"], "sampled_decode_steps", True)}
+        "bool_count": (source["approximation"], "sampled_decode_steps", True),
+        "source_semantics": (source, "physical_weight_semantics", "legacy_duplicated_weights"),
+        "manifest_semantics": (manifest, "physical_weight_semantics", "legacy_duplicated_weights")}
     mapping, key, value = changes[violation]
     mapping[key] = value
     write_json(path, source)
     with pytest.raises(ValueError):
+        scan.load_paired_reference(tmp_path, point, scenario, manifest)
+
+
+def test_paired_reference_never_silently_accepts_missing_weight_semantics(scan, tmp_path):
+    point, scenario, source, manifest, path = reference_fixture(scan, tmp_path)
+    del source["physical_weight_semantics"]
+    write_json(path, source)
+    with pytest.raises(ValueError, match="physical weight semantics"):
         scan.load_paired_reference(tmp_path, point, scenario, manifest)
 
 
@@ -148,15 +161,17 @@ def queue_fixture(scan, tmp_path, monkeypatch, outcomes=None):
                   and point["prompt_tokens"] == 65536 and point["output_tokens"] == 10240)
     for name in ("points", "progress", "logs", "configurations"):
         (tmp_path / name).mkdir(exist_ok=True)
-    write_json(tmp_path / "manifest.json", {"points": points, "simulation": {"mode": "fast"}})
+    write_json(tmp_path / "manifest.json", {"points": points, "simulation": {"mode": "fast"},
+        "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS})
     initial = {}
     for point in points[:27]:
         status = "forecast_rejected" if point["point_id"] in retry else "forecast_completed"
-        row = {**point, "status": status, "finished_at": "2026-10-18T01:02:03+00:00",
+        row = {**point, "status": status, "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS, "finished_at": "2026-10-18T01:02:03+00:00",
                "reason": "old budget refusal" if status == "forecast_rejected" else None}
         write_json(tmp_path / "points" / (point["point_id"] + ".json"), row)
         initial[point["point_id"]] = deepcopy(row)
-    monkeypatch.setattr(scan, "initialize", lambda *args: {"points": points})
+    monkeypatch.setattr(scan, "initialize", lambda *args: {"points": points,
+        "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS})
     monkeypatch.setattr(report, "write_report", lambda *args: None)
     monkeypatch.setattr(report, "refresh_markdown", lambda *args: None)
     monkeypatch.setattr(scan.time, "sleep", lambda seconds: None)
@@ -168,6 +183,7 @@ def queue_fixture(scan, tmp_path, monkeypatch, outcomes=None):
         point = next(item for item in points if item["point_id"] == identifier)
         status, accepted = (outcomes or {}).get(identifier, ("forecast_completed", True))
         write_json(tmp_path / "points" / (identifier + ".json"), {**point, "status": status,
+            "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS,
             "approximation": {"paired_budget_decision": {"accepted": accepted}}})
         return SimpleNamespace(pid=500000 + len(launches), poll=lambda: 1 if status == "failed" else 0)
 
@@ -208,6 +224,7 @@ def test_retry_finishes_group_then_pauses_when_any_paired_decision_is_rejected(s
         point = next(item for item in points if item["point_id"] == identifier)
         status, accepted = outcomes.get(identifier, ("forecast_completed", True))
         write_json(tmp_path / "points" / (identifier + ".json"), {**point, "status": status,
+            "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS,
             "approximation": {"paired_budget_decision": {"accepted": accepted}}})
         return SimpleNamespace(pid=500000 + len(launches), poll=lambda: 0)
     monkeypatch.setattr(scan.subprocess, "Popen", popen)
@@ -226,7 +243,8 @@ def test_real_failure_during_retry_stops_immediately(scan, tmp_path, monkeypatch
         identifier = command[command.index("--point-id") + 1]
         launches.append(identifier)
         point = next(item for item in points if item["point_id"] == identifier)
-        write_json(tmp_path / "points" / (identifier + ".json"), {**point, "status": "failed"})
+        write_json(tmp_path / "points" / (identifier + ".json"), {**point, "status": "failed",
+            "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS})
         return SimpleNamespace(pid=500001, poll=lambda: 1)
     monkeypatch.setattr(scan.subprocess, "Popen", failed)
     assert scan.run_queue(tmp_path, retry_point_ids=retry) == 1
@@ -239,7 +257,8 @@ def test_resume_does_not_repeat_an_already_accepted_retry(scan, tmp_path, monkey
     point = next(item for item in points if item["point_id"] == retry[0])
     scan.archive_rejected_point(tmp_path, point, initial[retry[0]])
     write_json(tmp_path / "points" / (retry[0] + ".json"), {**point,
-        "status": "forecast_completed", "approximation": {"paired_budget_decision": {"accepted": True}}})
+        "status": "forecast_completed", "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS,
+        "approximation": {"paired_budget_decision": {"accepted": True}}})
     assert scan.run_queue(tmp_path, retry_point_ids=retry) == 0
     assert launches[:3] == list(retry[1:])
     assert retry[0] not in launches and len(launches) == 48
@@ -290,7 +309,7 @@ def test_reporting_forwards_reference_to_fast_runner_without_detailed_simulation
     import heterollm_sim.llama_scenario as llama
     import heterollm_sim.reporting as reporting
     scenario = SimpleNamespace(simulation=SimpleNamespace(mode="fast"),
-        workload=SimpleNamespace(scheduler=SimpleNamespace(mode="continuous")))
+        workload=SimpleNamespace(scheduler=SimpleNamespace(mode="continuous")), weights_resident=False)
     reference, lowerer = object(), object()
     control_plane = SimpleNamespace(scenario=scenario, makespan_ns=0., kernel=object(),
         result=SimpleNamespace(completed_count=0), decision=SimpleNamespace(status="ready"))

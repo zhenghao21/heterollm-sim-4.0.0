@@ -21,6 +21,7 @@ def scan_directory(tmp_path, rows):
     (tmp_path / "progress").mkdir()
     (tmp_path / "logs").mkdir()
     manifest = {
+        "physical_weight_semantics": "canonical_shared_resident_weights_v1",
         "models": [{"model_id": "small", "label": "Small", "parameters_b": .5}],
         "architectures": ["HBM", "HBF"], "prompts": [65536],
         "outputs": [1024, 5120], "parameters": {"simulation_mode": "fast"},
@@ -33,6 +34,7 @@ def scan_directory(tmp_path, rows):
 
 def point(architecture="HBM", output=1024, status="forecast_completed", **updates):
     return {
+        "physical_weight_semantics": "canonical_shared_resident_weights_v1",
         "point_id": f"small-{architecture}-{output}", "model_id": "small",
         "architecture": architecture, "prompt_tokens": 65536, "output_tokens": output,
         "simulation_mode": "fast", "status": status, "ttft_ns": 2e9, "tpot_ns": 3e6,

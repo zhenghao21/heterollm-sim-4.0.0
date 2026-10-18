@@ -46,6 +46,8 @@ def preload(runtime, owner, buffer_id, generation, binding):
     key = (buffer_id, generation)
     if key in state["preloaded"]:
         return
+    if state.get("resident_initialization_complete"):
+        raise ValueError("HBF resident initialization inventory omitted weight: " + str(key))
     allocation = allocator.lookup(buffer_id, generation)
     controller = state["controller"]
     controller.preload(buffer_id, generation, allocation.size_bytes)

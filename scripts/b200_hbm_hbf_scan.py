@@ -26,6 +26,8 @@ from collections.abc import Mapping
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
+from b200_hbm_hbf_scan_report import PHYSICAL_WEIGHT_SEMANTICS, validate_physical_weight_semantics
+
 MODELS = (
     {"model_id": "qwen2_5-0_5b", "label": "Qwen2.5-0.5B", "parameters_b": .5},
     {"model_id": "qwen2_5-1_5b", "label": "Qwen2.5-1.5B", "parameters_b": 1.5},
@@ -120,6 +122,7 @@ def initialize(output_dir, simulation_mode="fast"):
         (output_dir / name).mkdir(exist_ok=True)
     path = output_dir / "manifest.json"
     manifest = {"schema": "b200-hbm-hbf-scan-v2", "models": MODELS,
+        "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
         "prompts": PROMPTS, "outputs": OUTPUTS, "architectures": ARCHITECTURES,
         "points": all_points(), "point_count": 72,
         "parameters": describe_scan_parameters(),
@@ -207,6 +210,7 @@ def collect_result(result, point):
 def load_paired_reference(output_dir, point, scenario, manifest):
     """Reuse the matching completed HBM interval; never run a reference here."""
     from heterollm_sim.fast_simulation import PairedTimingReference
+    validate_physical_weight_semantics(manifest, "paired-reference manifest")
     if point["architecture"] != "HBF" or scenario.simulation.mode != "fast":
         return None
     identifier = point_id(point["model_id"], "HBM", point["prompt_tokens"], point["output_tokens"])
@@ -214,6 +218,7 @@ def load_paired_reference(output_dir, point, scenario, manifest):
     if not path.exists():
         return None
     source = json.loads(path.read_text(encoding="utf-8"))
+    validate_physical_weight_semantics(source, "paired HBM reference")
     if source.get("status") != "forecast_completed":
         return None
     expected = {**point, "point_id": identifier, "architecture": "HBM"}
@@ -281,9 +286,11 @@ def worker(output_dir, point):
 
     started = time.monotonic()
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    validate_physical_weight_semantics(manifest, "worker manifest")
     simulation = simulation_from_dict(manifest["simulation"])
     progress_path = output_dir / "progress" / (point["point_id"] + ".json")
     row = {**point, "started_at": utc_now(), "ttft_ns": None, "tpot_ns": None,
+           "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
            "python_executable": sys.executable, "simulation_mode": simulation.mode,
            "simulation_config": simulation, "pid": os.getpid()}
     last_write = 0.0
@@ -305,6 +312,7 @@ def worker(output_dir, point):
             return
         last_write, last_stage = now, event.stage
         write_json(progress_path, {**point, "status": "running", "pid": os.getpid(),
+            "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
             "simulation_mode": simulation.mode, "approximation": approximation,
             "real_prefill_steps": real_steps["prefill"], "real_decode_steps": real_steps["decode"],
             "updated_at": utc_now(), "wall_seconds": now - started, "progress": event})
@@ -319,7 +327,8 @@ def worker(output_dir, point):
         if previous.get("status") == "failed":
             print("retrying previous failure: " + str(previous.get("reason")), flush=True)
             previous_path.unlink()
-    write_json(progress_path, {**point, "status": "starting", "pid": os.getpid(), "updated_at": utc_now()})
+    write_json(progress_path, {**point, "status": "starting", "pid": os.getpid(), "updated_at": utc_now(),
+        "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS})
     try:
         scenario = build_scan_scenario(point["model_id"], point["architecture"],
                                        point["prompt_tokens"], point["output_tokens"])
@@ -360,6 +369,7 @@ def worker(output_dir, point):
         row["approximation"] = approximation
     write_json(output_dir / "points" / (point["point_id"] + ".json"), row)
     write_json(progress_path, {**point, "pid": os.getpid(), "simulation_mode": simulation.mode,
+        "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
         "real_prefill_steps": real_steps["prefill"], "real_decode_steps": real_steps["decode"],
         "approximation": row.get("approximation", {}), "status": row["status"], "updated_at": utc_now(),
         "wall_seconds": row["wall_seconds"], "reason": row.get("reason")})
@@ -414,6 +424,7 @@ def retry_group_counts(finished, identifiers):
     rows = {row["point_id"]: row for row in finished if row.get("point_id") in identifiers}
     complete = len(rows) == len(identifiers)
     accepted = all(row.get("status") == "forecast_completed"
+        and row.get("physical_weight_semantics") == PHYSICAL_WEIGHT_SEMANTICS
         and row.get("approximation", {}).get("paired_budget_decision", {}).get("accepted") is True
         for row in rows.values())
     return {"retry_priority_points": list(identifiers), "retry_group_total": len(identifiers),
@@ -421,11 +432,12 @@ def retry_group_counts(finished, identifiers):
 
 
 def validate_retry_selection(output_dir, manifest, identifiers, simulation_mode):
+    validate_physical_weight_semantics(manifest, "retry manifest")
     known = {point["point_id"]: point for point in manifest["points"]}
     if len(set(identifiers)) != len(identifiers) or any(identifier not in known for identifier in identifiers):
         raise ValueError("retry point IDs must be unique members of the same scan")
     if identifiers and simulation_mode != "fast":
-        raise ValueError("forecast retries require fast mode")
+        raise ValueError("priority revalidation requires fast mode")
     if identifiers and (output_dir / "stop.request").exists():
         raise ValueError("a stop marker still pauses this queue; do not clear a user pause implicitly")
     # Validate the entire explicit retry selection before changing any files.
@@ -433,6 +445,7 @@ def validate_retry_selection(output_dir, manifest, identifiers, simulation_mode)
         path = output_dir / "points" / (identifier + ".json")
         if path.exists():
             saved = json.loads(path.read_text(encoding="utf-8"))
+            validate_physical_weight_semantics(saved, "retry point " + identifier)
             if saved.get("status") not in REUSABLE_STATUSES | {"interrupted"}:
                 raise ValueError("retry selection contains an execution failure: " + identifier)
             if saved.get("status") == "capacity_rejected":
@@ -451,9 +464,10 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
     if retry_point_ids:
         path = output_dir / "manifest.json"
         if not path.exists():
-            raise ValueError("forecast retries require the original scan manifest")
+            raise ValueError("priority revalidation requires the original scan manifest")
         validate_retry_selection(output_dir, json.loads(path.read_text(encoding="utf-8")), retry_point_ids, simulation_mode)
     manifest = initialize(output_dir, simulation_mode)
+    validate_physical_weight_semantics(manifest, "queue manifest")
     # Keep one OS file lock for the manager lifetime, preventing two managers
     # from submitting the same scan. No hashes or copied source trees are used.
     with (output_dir / "manager.lock").open("a+b") as lock:
@@ -470,10 +484,18 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert_no_live_workers(output_dir)
         validate_retry_selection(output_dir, manifest, retry_point_ids, simulation_mode)
-        pending, finished = [], []
+        # Validate the active set before archiving any explicitly selected
+        # forecast refusal. A stale result must never cause a partial migration.
+        saved_rows = {}
         for point in manifest["points"]:
             path = output_dir / "points" / (point["point_id"] + ".json")
-            saved = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+            if path.exists():
+                saved = json.loads(path.read_text(encoding="utf-8"))
+                validate_physical_weight_semantics(saved, "active point " + point["point_id"])
+                saved_rows[point["point_id"]] = saved
+        pending, finished = [], []
+        for point in manifest["points"]:
+            saved = saved_rows.get(point["point_id"])
             if point["point_id"] in retry_point_ids and saved is not None and saved["status"] == "forecast_rejected":
                 archive_rejected_point(output_dir, point, saved)
                 saved = None
@@ -524,7 +546,9 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                     path = output_dir / "points" / (identifier + ".json")
                     saved = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
                         **point, "status": "failed", "ttft_ns": None, "tpot_ns": None,
+                        "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
                         "reason": f"worker exited {code} without a complete point result"}
+                    validate_physical_weight_semantics(saved, "finished point " + identifier)
                     if not path.exists():
                         write_json(path, saved)
                     finished.append(saved)
@@ -538,13 +562,14 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
                 if retry_status["retry_group_accepted"] is False and not stop_reason:
                     stop_reason = "retry_group_not_accepted"
                 write_json(output_dir / "status.json", {"status": "needs_attention" if stop_reason else "running",
+                    "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
                     "manager_pid": os.getpid(), "updated_at": utc_now(), "total": len(manifest["points"]),
                     "simulation_mode": simulation_mode, **queue_counts(finished),
                     **retry_status,
                     "pending": len(pending), "running": [{**point, "pid": process.pid, "started_at": start,
                         "simulation_mode": simulation_mode}
                         for process, point, _log, start in running.values()],
-                    "reason": stop_reason or ("budget_correction_retry" if retry_phase else None)})
+                    "reason": stop_reason or ("priority_revalidation" if retry_phase else None)})
                 if changed:
                     write_report(output_dir)
                     last_report_at = time.monotonic()
@@ -587,6 +612,7 @@ def run_queue(output_dir, workers=1, retry_failed=False, simulation_mode="fast",
             elif queue_state == "completed" and any(row["status"] not in SUCCESS_STATUSES for row in finished):
                 queue_state = "completed_with_rejections"
             write_json(output_dir / "status.json", {"status": queue_state,
+                "physical_weight_semantics": PHYSICAL_WEIGHT_SEMANTICS,
                 "manager_pid": os.getpid(), "updated_at": utc_now(), "total": len(manifest["points"]),
                 "simulation_mode": simulation_mode, **queue_counts(finished),
                 **retry_group_counts(finished, retry_point_ids),
@@ -603,7 +629,7 @@ def main():
     parser.add_argument("--simulation-mode", choices=("fast", "detailed"), default="fast")
     parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--retry-point-id", action="append", default=[],
-                        help="Retry only the selected forecast refusals first, preserving prior attempts.")
+                        help="Revalidate selected archived points or forecast refusals first, preserving prior attempts.")
     parser.add_argument("--point-id")
     args = parser.parse_args()
     output_dir = args.output_dir.resolve()

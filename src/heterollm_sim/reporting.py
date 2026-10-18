@@ -171,6 +171,10 @@ def run_scenario(
     scenario = prepare_llama_scenario(scenario)
     if batch_lowerer is not None and scenario is not authored:
         raise ValueError("prepare llama runtime before constructing a custom batch lowerer")
+    if batch_lowerer is not None and type(batch_lowerer) is not TopologyAwareBatchCostProvider:
+        from .hbf_resident_init import has_warm_active_hbf
+        if has_warm_active_hbf(scenario):
+            raise ValueError("warm active HBF requires the standard lowerer's complete resident initialization inventory")
 
     scheduler = scenario.workload.scheduler
     scheduler_mode = (

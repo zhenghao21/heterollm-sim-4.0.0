@@ -39,6 +39,7 @@ def decision(*, accepted=True, paired=True):
 def point(*, accepted=True, paired=True):
     paired_decision = decision(accepted=accepted, paired=paired)
     return {
+        "physical_weight_semantics": "canonical_shared_resident_weights_v1",
         "point_id": "small-HBF-64k-10k", "model_id": "small", "architecture": "HBF",
         "prompt_tokens": 65536, "output_tokens": 10240,
         "simulation_mode": "fast", "status": "forecast_completed" if accepted else "forecast_rejected",
@@ -59,6 +60,7 @@ def scan_directory(tmp_path, row):
     for directory in ("points", "logs", "progress", "points_history"):
         (tmp_path / directory).mkdir()
     manifest = {
+        "physical_weight_semantics": "canonical_shared_resident_weights_v1",
         "models": [{"model_id": "small", "label": "Small", "parameters_b": .5}],
         "architectures": ["HBM", "HBF"], "prompts": [65536], "outputs": [10240],
         "parameters": {"simulation_mode": "fast"},

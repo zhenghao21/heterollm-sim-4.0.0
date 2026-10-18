@@ -22,10 +22,20 @@ import time
 from typing import Any, Callable
 
 
+# A new contract requires an explicit migration of active results. Archived
+# attempts remain historical and are never timing references or plotted rows.
+PHYSICAL_WEIGHT_SEMANTICS = "canonical_shared_resident_weights_v1"
+
+
+def validate_physical_weight_semantics(value: dict[str, Any], source: str) -> None:
+    if value.get("physical_weight_semantics") != PHYSICAL_WEIGHT_SEMANTICS:
+        raise ValueError(f"{source} has incompatible physical weight semantics; explicit result migration required")
+
+
 BASE_COLUMNS = (
     "point_id", "model_id", "architecture", "prompt_tokens", "output_tokens",
     "status", "simulation_mode", "ttft_fidelity", "tpot_fidelity",
-    "physical_execution_scope", "ttft_ns", "tpot_ns", "ttft_s", "tpot_ms",
+    "physical_execution_scope", "physical_weight_semantics", "ttft_ns", "tpot_ns", "ttft_s", "tpot_ms",
     "sampled_decode_steps", "predicted_decode_steps", "method",
     "target_relative_error", "conditional_relative_error_budget", "validation_status",
     "budget_acceptance_strategy", "budget_accepted", "paired_reference_source_id",
@@ -259,6 +269,7 @@ def _atomic_text(path: Path, content: str) -> None:
 
 def _read_inputs(output_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]], int]:
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8-sig"))
+    validate_physical_weight_semantics(manifest, "scan manifest")
     models = manifest["models"]
     expected = list(itertools.product(
         [model["model_id"] for model in models], manifest["architectures"],
@@ -270,6 +281,7 @@ def _read_inputs(output_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]
     rows_by_key: dict[tuple[str, str, int, int], dict[str, Any]] = {}
     for source in sorted((output_dir / "points").glob("*.json")):
         row = json.loads(source.read_text(encoding="utf-8-sig"))
+        validate_physical_weight_semantics(row, source.name)
         key = _key(row)
         if key not in order:
             raise ValueError(f"Point is outside the manifest: {source.name}")
@@ -392,7 +404,7 @@ def _parameter_rows(manifest: dict[str, Any]) -> list[tuple[str, Any]]:
     for key in ("sampling_strategy", "target_relative_error", "max_sample_tokens"):
         if key in fast_decode:
             parameters.setdefault(key, fast_decode[key])
-    result = []
+    result = [("物理权重语义", manifest["physical_weight_semantics"])]
     labels = {
         "gpu_preset": "GPU 预设", "gpu_compute_peak_bf16_tflops": "GPU BF16 峰值（TFLOPS）",
         "simulation_mode": "仿真模式", "sampling_strategy": "Decode 采样策略",
@@ -462,14 +474,15 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
                       "requested_group_completed": "64K/5K 配置已全部完成，按要求暂停后续扫描",
                       "paired_budget_fix_retry": "先重跑 4 个原 HBF 64K/10K 拒绝点，再继续剩余 72 点队列",
                       "budget_correction_retry": "修正配对预算及未来擦除上界后，优先重跑原拒绝点",
+                      "priority_revalidation": "先重测本轮修复影响的配置，验收通过后继续原队列",
                       "retry_group_not_accepted": "重跑组仍有未接受点，暂停队列等待处理"}.get(
                 queue_status["reason"], queue_status["reason"])
             lines.extend([f"队列说明：{_markdown(reason)}。", ""])
         retry_points = queue_status.get("retry_priority_points", [])
         if retry_points:
             lines.extend([
-                f"配对预算修复后优先重跑：**{len(retry_points)} 个点**。"
-                "旧拒绝尝试保留在历史目录，只有 active points 的最新结果计入本报告；"
+                f"修复后优先重测：**{len(retry_points)} 个点**。"
+                "旧尝试保留在历史目录，只有 active points 的最新结果计入本报告；"
                 "重跑不执行完整详细模式。", "",
                 "优先点位：" + "、".join(_markdown(point.get("point_id", point) if isinstance(point, dict)
                                                 else point) for point in retry_points) + "。", "",

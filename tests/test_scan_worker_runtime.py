@@ -105,6 +105,7 @@ def test_queue_contains_all_72_authorized_combinations(scan):
 
 def test_manifest_defaults_to_fast_and_rejects_mode_change(scan, tmp_path):
     manifest = scan.initialize(tmp_path)
+    assert manifest["physical_weight_semantics"] == scan.PHYSICAL_WEIGHT_SEMANTICS
     assert manifest["point_count"] == len(manifest["points"]) == 72
     assert manifest["simulation"]["mode"] == "fast"
     assert manifest["forecast_refusal_policy"] == "record_and_continue_without_detailed_suffix"
@@ -212,11 +213,13 @@ def test_worker_forecast_refusal_is_terminal_without_detailed_suffix(scan, tmp_p
     assert not after_fallback
     row = read_json(tmp_path / "points" / (point["point_id"] + ".json"))
     assert row["status"] == "forecast_rejected" and row["reason"] == "budget above target"
+    assert row["physical_weight_semantics"] == scan.PHYSICAL_WEIGHT_SEMANTICS
     assert row["ttft_ns"] is None and row["tpot_ns"] is None
     assert row["approximation"] == approximation and row["physical_execution_scope"] == "prefix_only"
     assert row["real_prefill_steps"] == row["real_decode_steps"] == 1
     assert {"resource_busy_ns", "storage_traffic", "dram_traffic"}.isdisjoint(row)
     assert read_json(tmp_path / "progress" / (point["point_id"] + ".json"))["status"] == "forecast_rejected"
+    assert read_json(tmp_path / "progress" / (point["point_id"] + ".json"))["physical_weight_semantics"] == scan.PHYSICAL_WEIGHT_SEMANTICS
 
 
 @pytest.mark.parametrize("error_type,message,status,exit_code", (
@@ -242,7 +245,8 @@ def test_worker_distinguishes_modeled_capacity_from_host_memory_failure(
 def mock_queue(scan, tmp_path, monkeypatch, points, statuses):
     import b200_hbm_hbf_scan_report as report
     make_directories(tmp_path)
-    monkeypatch.setattr(scan, "initialize", lambda *args: {"points": points})
+    monkeypatch.setattr(scan, "initialize", lambda *args: {"points": points,
+        "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS})
     monkeypatch.setattr(report, "write_report", lambda *args: None)
     monkeypatch.setattr(report, "refresh_markdown", lambda *args: None)
     monkeypatch.setattr(scan.time, "sleep", lambda seconds: None)
@@ -254,6 +258,7 @@ def mock_queue(scan, tmp_path, monkeypatch, points, statuses):
         status = statuses[len(launches) % len(statuses)]
         launches.append(identifier)
         scan.write_json(tmp_path / "points" / (identifier + ".json"), {**point, "status": status,
+            "physical_weight_semantics": scan.PHYSICAL_WEIGHT_SEMANTICS,
             "ttft_ns": 10. if status == "forecast_completed" else None,
             "tpot_ns": 1. if status == "forecast_completed" else None})
         return SimpleNamespace(pid=500000 + len(launches), poll=lambda: 1 if status == "failed" else 0)

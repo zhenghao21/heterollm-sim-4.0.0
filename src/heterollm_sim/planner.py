@@ -7609,6 +7609,85 @@ def _mtp_descriptor_for_weight(
     )
 
 
+def _shared_input_output_weight_storage(
+    scenario: ScenarioConfig,
+    plan: ParallelPlan,
+    rank: LogicalRank,
+    tensor_id: str,
+    target_component_id: str,
+    metadata: Optional[Mapping[str, object]] = None,
+) -> Optional[Tuple[str, int]]:
+    """Bind proven single-rank BF16 tied tables to one physical allocation.
+
+    The graph keeps its two logical tensor IDs. An embedding hidden-axis TP
+    shard is different from the output vocabulary shard; PP and explicit warm
+    copies also have distinct ownership. They cannot share this allocation.
+    Packed/native layouts retain their source-specific physical descriptors.
+    """
+    if (tensor_id not in {"embedding_weights", "lm_head_weights"}
+            or not scenario.weights_resident or plan.world_size != 1
+            or (plan.tp_degree, plan.pp_degree, plan.ep_degree) != (1, 1, 1)
+            or target_component_id != rank.component_id
+            or scenario.llama_cpp_config is not None):
+        return None
+    supplied = metadata or {}
+    if any(supplied.get(key) is not None for key in (
+            "weight_buffer_id", "weight_allocation_id", "allocation_id",
+            "weight_alias_of", "alias_of", "weight_offset_bytes", "weight_generation",
+            "allocation_generation", "weight_owner_component_id", "weight_source_component",
+            "residency_component_id", "staged_weight_allocation_id", "runtime_copy_of",
+            "f16_weight_tensors", "mmvf_physical_tensor", "physical_allocations")):
+        return None
+    if _canonical_weight_tensor_id(scenario, "lm_head_weights") != "embedding_weights":
+        return None
+    operators = scenario.placement.op_to_component
+    if any(str(operators.get(operator) or rank.component_id) != rank.component_id
+           for operator in ("embedding", "lm_head")):
+        return None
+    decision = _control_plane_decision_metadata(scenario)
+    details = decision.get("weight_tensor_details", {})
+    if isinstance(details, Mapping) and any(
+            isinstance(details.get(name), Mapping) and details[name].get("runtime_copy_of")
+            for name in ("embedding_weights", "lm_head_weights")):
+        return None
+    sources = tuple(_weight_source_for_tensor(scenario, name, target_component_id, rank=rank)
+                    for name in ("embedding_weights", "lm_head_weights"))
+    if (sources[0] != sources[1] or not sources[0][0]
+            or sources[0][1:] != ("embedding_weights", "embedding_weights")):
+        return None
+    placements = scenario.placement.tensor_to_component
+    if (placements.get("lm_head_weights") is not None
+            and placements.get("embedding_weights") is not None
+            and placements["lm_head_weights"] != placements["embedding_weights"]):
+        return None
+    graph_metadata = scenario.model.graph.attributes.get("metadata", {})
+    if isinstance(graph_metadata, Mapping) and any(graph_metadata.get(key) is not None for key in (
+            "gguf_sha256", "gguf_output_binding", "weight_projection_descriptors")):
+        return None
+    tensors = {tensor.tensor_id: tensor for tensor in scenario.model.graph.tensors
+               if tensor.tensor_id in {"embedding_weights", "lm_head_weights"}}
+    if set(tensors) != {"embedding_weights", "lm_head_weights"}:
+        return None
+    if any(str(tensor.dtype).lower() != "bf16" or str(tensor.role) != "weight"
+           or tensor.layout != "logical" for tensor in tensors.values()):
+        return None
+    if any(any(tensor.attributes.get(key) is not None for key in (
+            "strides", "offset", "offset_bytes", "source_path", "is_view", "transposed"))
+            for tensor in tensors.values()):
+        return None
+    view = _execution_view(scenario)
+    hidden = view.layer_instances[0].layer.hidden_size if view.layer_instances else 0
+    byte_count = view.vocabulary_size * hidden * 2
+    if byte_count <= 0 or view.embedding_weight_bytes != byte_count:
+        return None
+    if any(tensor.logical_bytes not in (None, byte_count) for tensor in tensors.values()):
+        return None
+    if (tensors["embedding_weights"].shape != ("V", hidden)
+            or tensors["lm_head_weights"].shape != (hidden, "V")):
+        return None
+    return "embedding_weights", byte_count
+
+
 def _weight_source_for_tensor(
     scenario: ScenarioConfig,
     tensor_id: Optional[str],
@@ -18526,6 +18605,10 @@ def _compile_parallel_embedding(
             target_component_id,
             rank=rank,
         )
+        shared_storage = _shared_input_output_weight_storage(
+            scenario, plan, rank, weight_tensor_id, target_component_id)
+        if shared_storage is not None and shared_storage[1] != rank_weight_bytes:
+            shared_storage = None
         weight_read_decision = _weight_backing_read_gate(
             scenario,
             weight_source,
@@ -18596,6 +18679,8 @@ def _compile_parallel_embedding(
         # allocation remains the complete rank-local weight shard. Qualified
         # gathers have already checked this capacity against their GGUF binding.
         operation_metadata["weight_buffer_size_bytes"] = rank_weight_bytes
+        if shared_storage is not None:
+            operation_metadata["weight_buffer_id"] = shared_storage[0]
         if declared_f32_storage or source_get_rows:
             operation_metadata.update(
                 runtime_output_storage_bits=32,
@@ -18704,7 +18789,7 @@ def _compile_parallel_embedding(
             )
         operation_metadata["weight_source_component"] = weight_source
         operation_metadata.setdefault("lookup_read_bytes", lookup_read_bytes)
-        if (_rank_uses_hbf_host_staging(scenario, rank)
+        if ((_rank_uses_hbf_host_staging(scenario, rank) or shared_storage is not None)
                 and not source_get_rows and not declared_f32_storage):
             # An indexed lookup reads the resident table, then produces the
             # typed hidden edge consumed by the first layer. Keep the table's
@@ -18714,7 +18799,8 @@ def _compile_parallel_embedding(
             while remaining_lookup:
                 row_bytes = min(remaining_lookup, rank_weight_bytes)
                 table_reads.append(_rank_tensor_access(
-                    rank, weight_tensor_id, row_bytes, "read", extent=rank_weight_bytes))
+                    rank, shared_storage[0] if shared_storage is not None else weight_tensor_id,
+                    row_bytes, "read", extent=rank_weight_bytes))
                 remaining_lookup -= row_bytes
             operation_metadata.update(
                 buffer_view_cache_policy="aggregate_directional_v1",
@@ -24599,6 +24685,11 @@ def _compile_parallel_lm_head(
                     weight_storage_bytes=rank_weight_bytes,
                     weight_metadata_bytes=0,
                 )
+        shared_storage = _shared_input_output_weight_storage(
+            scenario, plan, rank, weight_tensor_id, target)
+        if (shared_storage is not None and (shared_storage[1] != workload.weight_bytes
+                                           or workload.packed_weight_formats)):
+            shared_storage = None
         ends.append(
             _add_rank_gemm(
                 builder,
@@ -24631,6 +24722,9 @@ def _compile_parallel_lm_head(
                     "logits_vocabulary_status": vocabulary_status,
                     "declared_weight_bytes": declared_weight_bytes,
                     "rank_weight_capacity_bytes": rank_weight_bytes,
+                    **({"weight_buffer_id": shared_storage[0],
+                        "weight_buffer_size_bytes": shared_storage[1]}
+                       if shared_storage is not None else {}),
                     **({"final_layer_output_selection": _selection_audit(output_selection, "lm_head")}
                        if output_selection is not None else {}),
                 },

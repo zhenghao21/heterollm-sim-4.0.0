@@ -128,11 +128,13 @@ def test_transient_sibling_write_retries_without_publishing_partial_content(repo
 def fixture_scan(tmp_path):
     (tmp_path / "points").mkdir()
     manifest = {
+        "physical_weight_semantics": "canonical_shared_resident_weights_v1",
         "models": [{"model_id": "small", "label": "Small", "parameters_b": .5}],
         "architectures": ["HBM", "HBF"], "prompts": [65536], "outputs": [1024],
     }
     row = {"point_id": "small-hbm", "model_id": "small", "architecture": "HBM",
            "prompt_tokens": 65536, "output_tokens": 1024,
+           "physical_weight_semantics": "canonical_shared_resident_weights_v1",
            "status": "forecast_completed", "ttft_ns": 2e9, "tpot_ns": 3e6}
     (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (tmp_path / "points" / "small-hbm.json").write_text(json.dumps(row), encoding="utf-8")
