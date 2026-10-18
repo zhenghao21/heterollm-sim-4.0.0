@@ -70,12 +70,14 @@ class PhysicalAddressAllocator:
         self._address_keys = []
         self._address_rows = []
         self._largest_allocation = 0
+        self._aliases_by_target = {}
 
     def _store_allocation(self, key, allocation):
         previous = self._allocations.get(key)
         if previous is allocation:
             return
         if previous is not None:
+            self._remove_alias(key, previous)
             old_key = (previous.base_address, previous.buffer_id, previous.generation)
             position = bisect_left(self._address_keys, old_key)
             self._address_keys.pop(position)
@@ -86,6 +88,17 @@ class PhysicalAddressAllocator:
         self._address_rows.insert(position, allocation)
         self._largest_allocation = max(self._largest_allocation, allocation.size_bytes)
         self._allocations[key] = allocation
+        if allocation.alias_of is not None:
+            target = (allocation.alias_of, allocation.alias_generation)
+            self._aliases_by_target.setdefault(target, set()).add(key)
+
+    def _remove_alias(self, key, allocation):
+        if allocation.alias_of is not None:
+            target = (allocation.alias_of, allocation.alias_generation)
+            aliases = self._aliases_by_target[target]
+            aliases.remove(key)
+            if not aliases:
+                del self._aliases_by_target[target]
 
     def _restore_allocations(self, allocations):
         """Rebuild the address index at the existing rollback boundary."""
@@ -96,6 +109,11 @@ class PhysicalAddressAllocator:
         self._address_keys = [(item.base_address, item.buffer_id, item.generation)
                               for item in self._address_rows]
         self._largest_allocation = max((item.size_bytes for item in self._address_rows), default=0)
+        self._aliases_by_target = {}
+        for key, allocation in allocations.items():
+            if allocation.alias_of is not None:
+                target = (allocation.alias_of, allocation.alias_generation)
+                self._aliases_by_target.setdefault(target, set()).add(key)
 
     @staticmethod
     def _key(buffer_id: str, generation: int) -> Tuple[str, int]:
@@ -353,24 +371,13 @@ class PhysicalAddressAllocator:
         key = self._key(buffer_id, generation)
         if key not in self._allocations:
             return
-        for item in self._allocations.values():
-            if item.alias_of is None:
-                continue
-            current = item
-            visited = set()
-            while current.alias_of is not None:
-                current_key = (current.buffer_id, current.generation)
-                if current_key in visited:
-                    break
-                visited.add(current_key)
-                target_key = (current.alias_of, current.alias_generation)
-                if target_key == key:
-                    raise AllocationError("cannot release allocation {} generation {} with live aliases".format(*key))
-                target = self._allocations.get(target_key)
-                if target is None:
-                    break
-                current = target
+        # Every surviving alias chain contains a direct edge to this key.
+        # Retiring a transient workspace buffer must not walk all permanent
+        # weight/KV allocations, or all the chains, once per physical task.
+        if self._aliases_by_target.get(key):
+            raise AllocationError("cannot release allocation {} generation {} with live aliases".format(*key))
         previous = self._allocations.pop(key)
+        self._remove_alias(key, previous)
         position = bisect_left(self._address_keys,
             (previous.base_address, previous.buffer_id, previous.generation))
         self._address_keys.pop(position)

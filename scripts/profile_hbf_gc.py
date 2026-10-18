@@ -37,6 +37,8 @@ def main():
     parser.add_argument('--profile',action='store_true')
     parser.add_argument('--live-pages-per-block',type=int,default=1)
     parser.add_argument('--bind-read-state',action='store_true')
+    parser.add_argument('--seed-ranges',choices=('explicit-list','natural-bulk'),default='explicit-list',
+                        help='Keep historical explicit lists, or copy this implementation\'s actual full-write page representation')
     parser.add_argument('--source-revision',help='read one historical staging module via git show, only in this diagnostic process')
     parser.add_argument('--output-dir',type=Path,default=ROOT/'artifacts/hbf_gc_profile')
     args=parser.parse_args()
@@ -62,9 +64,18 @@ def main():
     resolve_physical_task(task(cfg,binding,'write',offset=2048,count=2048,size=4096,buffer='warm_host'),runtime,0.)
     resolve_physical_task(task(cfg,binding,'write',count=65536,size=65536,buffer='warm_bulk'),runtime,0.)
     ctl=runtime.hbf_staging['flash']['controller']
+    if args.seed_ranges == 'natural-bulk':
+        sample=ctl._pages[('warm_bulk',0,0)]
+        seed_valid=sample._valid if hasattr(sample,'_valid') else sample.valid
+        seed_dirty=sample._dirty if hasattr(sample,'_dirty') else sample.dirty
+    else:
+        seed_valid,seed_dirty=[(0,4096)],[]
     for name in ('warmup','warm_host','warm_bulk'):ctl.release(name,0)
     core=runtime.runtimes['flash'].core
-    core._nand_publish_numeric(exposed=True)
+    # Publish warmup values before seeding PROGRAM frontiers. No cache/array
+    # mapping is handed to external code here, so retain ordinary resident
+    # eligibility instead of permanently marking controller state exposed.
+    core._nand_publish_numeric()
     setup_start=time.perf_counter()
     ctl._used.clear()
     ctl._used.update({block:cfg.pages_per_block for block in range(ctl._block_count-1)})
@@ -81,7 +92,8 @@ def main():
                 index=block*args.live_pages_per_block+page
                 key=('retained',0,index)
                 owners[page]=key
-                ctl._pages[key]=_Page([(0,4096)],[],None,(block,page),0.)
+                ctl._pages[key]=_Page(seed_valid.copy() if type(seed_valid) is list else seed_valid,
+                    seed_dirty.copy() if type(seed_dirty) is list else seed_dirty,None,(block,page),0.)
                 indexes[index]=None
             ctl._owners[block]=owners
         ctl._buffer_pages[('retained',0)]=indexes
@@ -120,12 +132,19 @@ def main():
     wall=time.perf_counter()-started
     stats={key:value-before_stats.get(key,0) for key,value in ctl.stats.items()}
     row={'case':args.case,'tag':args.tag,'profiled':args.profile,'source_revision':args.source_revision or 'workspace',
+         'implementation_root':str(Path(sys.modules['heterollm_sim'].__file__).resolve().parent.parent),
+         'nand_core_source':sys.modules[type(core).__module__].__file__,
          'scope':'controller-level seeded programmed medium; no LLM or detailed reference run',
          'geometry':{'banks':cfg.array_units,'blocks_per_bank':cfg.blocks_per_plane,
           'pages_per_block':cfg.pages_per_block,'page_bytes':cfg.page_bytes,'physical_blocks':ctl._block_count},
          'seed_setup_seconds_excluded':setup_s,'writes':args.writes,'pages_per_write':args.pages,
          'retained_pages':len(ctl._pages),'live_pages_per_block':args.live_pages_per_block,
-         'bind_read_state_per_write':args.bind_read_state,'wall_seconds':wall,'per_write_wall_seconds':per_write,
+         'bind_read_state_per_write':args.bind_read_state,
+         'seed_ranges':args.seed_ranges,
+         'seed_range_types':(type(seed_valid).__qualname__,type(seed_dirty).__qualname__),
+         'resident_numeric_enabled':core._nand_numeric_enabled and not core._nand_state_exposed,
+         'resident_numeric_active_at_finish':core._nand_numeric_state is not None,
+         'wall_seconds':wall,'per_write_wall_seconds':per_write,
          'simulated_completion_ns':completion,'stats_delta':stats,
          'physical_costs_sum':{k:dict(v) for k,v in costs.items()},
          'final_metadata_counts':{'used':len(ctl._used),'owners':len(ctl._owners),

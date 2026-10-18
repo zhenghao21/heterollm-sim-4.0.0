@@ -1,4 +1,6 @@
 """Address ordering survives extent changes, imported overlap, and rollback."""
+import pytest
+
 from heterollm_sim.memory_allocator import PhysicalAddressAllocator, PhysicalAllocation
 
 
@@ -56,3 +58,47 @@ def test_native_snapshot_preserves_stable_order_for_unordered_values():
         "allocations": (first, second),
     })
     assert allocator.allocations() == (first, second)
+
+
+def test_nested_alias_release_and_reuse_preserve_live_target_protection():
+    allocator = PhysicalAddressAllocator(16384, 64)
+    allocator.allocate("base", 1024)
+    allocator.allocate("view", 512, 3, alias_of="base", alias_generation=0,
+                       alias_offset_bytes=128)
+    allocator.allocate("nested", 128, 8, alias_of="view", alias_generation=3,
+                       alias_offset_bytes=64)
+    for buffer_id, generation in (("base", 0), ("view", 3)):
+        with pytest.raises(ValueError, match="with live aliases"):
+            allocator.release(buffer_id, generation)
+    allocator.release("nested", 8)
+    allocator.release("view", 3)
+    allocator.release("base")
+    assert allocator.allocate("reuse", 1024).base_address == 0
+
+
+def test_alias_target_protection_is_rebuilt_after_rollback_and_native_snapshot():
+    allocator = PhysicalAddressAllocator(16384, 64)
+    allocator.allocate("base", 1024)
+    allocator.allocate("view", 128, alias_of="base")
+    saved = dict(allocator._allocations)
+    allocator.release("view")
+    allocator.release("base")
+    allocator._restore_allocations(saved)
+    restored = PhysicalAddressAllocator.from_snapshot(allocator.snapshot())
+    for candidate in (allocator, restored):
+        with pytest.raises(ValueError, match="with live aliases"):
+            candidate.release("base")
+        candidate.release("view")
+        candidate.release("base")
+        assert candidate.allocations() == ()
+
+
+def test_reregistering_alias_arena_does_not_leave_target_pinned_after_release():
+    allocator = PhysicalAddressAllocator(16384, 64, workspace_capacity_bytes=4096)
+    allocator.allocate("base", 1024)
+    first = allocator.allocate("view", 128, alias_of="base")
+    assert allocator.allocate("view", 128, alias_of="base",
+                              allocation_arena="resident") is first
+    allocator.release("view")
+    allocator.release("base")
+    assert allocator.allocations() == ()

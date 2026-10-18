@@ -7,6 +7,8 @@ No NAND command, completion dependency, journal entry or page object is omitted.
 """
 from __future__ import annotations
 
+import numpy as np
+
 try:
     import cython
 except ImportError:
@@ -54,29 +56,36 @@ def _remember_set(mapping: dict, journals: list, key: object,
 
 @cython.cfunc
 @cython.inline
-def _remember_page(pages: dict, transactions: list, key: object,
-                   page_type: object) -> cython.void:
-    token: dict
+def _remember_one_page(pages: dict, token: dict, key: object,
+                       page_type: object) -> cython.void:
     saved_pages: dict
     page: object
     state: object
     saved: object
     ready: object
+    saved_pages = token["pages"]
+    if key not in saved_pages:
+        page = pages.get(key)
+        if page is None:
+            saved_pages[key] = None
+        else:
+            state = page._read_state
+            saved = None if state is None else token["read_ready"].get(id(state))
+            ready = (float(saved[1][page._read_index])
+                     if saved is not None and page._read_index < len(saved[1])
+                     else page.ready_ns)
+            ready = token["page_ready"].pop(key, ready)
+            saved_pages[key] = page_type(page.valid.copy(), page.dirty.copy(),
+                                        page.slot, page.flash, ready)
+
+
+@cython.cfunc
+@cython.inline
+def _remember_page(pages: dict, transactions: list, key: object,
+                   page_type: object) -> cython.void:
+    token: dict
     for token in transactions:
-        saved_pages = token["pages"]
-        if key not in saved_pages:
-            page = pages.get(key)
-            if page is None:
-                saved_pages[key] = None
-            else:
-                state = page._read_state
-                saved = None if state is None else token["read_ready"].get(id(state))
-                ready = (float(saved[1][page._read_index])
-                         if saved is not None and page._read_index < len(saved[1])
-                         else page.ready_ns)
-                ready = token["page_ready"].pop(key, ready)
-                saved_pages[key] = page_type(page.valid.copy(), page.dirty.copy(),
-                                            page.slot, page.flash, ready)
+        _remember_one_page(pages, token, key, page_type)
 
 
 @cython.cfunc
@@ -136,6 +145,8 @@ def prepare_full_write(controller, buffer_id, generation,
     addresses: list = []
     arrivals: list = []
     old_ready: list = []
+    keys: list = []
+    all_new: cython.bint = True
     index: cython.Py_ssize_t
     key: object
     page: object
@@ -148,6 +159,8 @@ def prepare_full_write(controller, buffer_id, generation,
     for index in range(first, stop):
         key = (buffer_id, generation, index)
         page = pages.get(key)
+        keys.append(key)
+        all_new = all_new and page is None
         ready = max(time_ns, page.ready_ns if page is not None else 0.0)
         while len(active) < lanes and free:
             block = free.popleft()
@@ -165,13 +178,15 @@ def prepare_full_write(controller, buffer_id, generation,
         addresses.append((bank * pages_per_block * lanes + number * lanes + lane) * PAGE)
         arrivals.append(arrival)
         old_ready.append(ready)
-    return locations, addresses, arrivals, old_ready
+    return locations, addresses, arrivals, old_ready, keys, bool(all_new)
 
 
 def commit_full_write(controller, buffer_id, generation,
                       first: cython.Py_ssize_t, locations: list,
                       old_ready: list, completions: list, time_ns,
-                      page_type, missing):
+                      page_type, missing, full_ranges, empty_ranges,
+                      keys: list,
+                      page_transactions: list, partial_page_transactions: list):
     """Publish the original page objects, mappings and first-write journals."""
     pages: dict = controller._pages
     owners: dict = controller._owners
@@ -193,15 +208,23 @@ def commit_full_write(controller, buffer_id, generation,
     ready: object
     time: object
     previous: object
+    token: dict
+    lower: object
+    upper: object
+    page_index: cython.Py_ssize_t
     completion: object = time_ns
     for position in range(count):
-        key = (buffer_id, generation, first + position)
+        page_index = first + position
+        key = keys[position]
         physical = locations[position]
         ready, time = old_ready[position], completions[position]
-        _remember_page(pages, transactions, key, page_type)
+        _remember_page(pages, page_transactions, key, page_type)
+        for token, lower, upper in partial_page_transactions:
+            if page_index < lower or page_index >= upper:
+                _remember_one_page(pages, token, key, page_type)
         page = pages.get(key)
         if page is None:
-            page = page_type([(0, PAGE)], [], None, physical, time)
+            page = page_type(full_ranges, empty_ranges, None, physical, time)
             pages[key] = page
             indexes[first + position] = None
         else:
@@ -215,8 +238,8 @@ def commit_full_write(controller, buffer_id, generation,
                 resident.pop(key)
             page.flash = physical
             page.slot = None
-            page.valid = [(0, PAGE)]
-            page.dirty = []
+            page._valid = full_ranges
+            page._dirty = empty_ranges
             page.ready_ns = time
         _remember_owners(owners, transactions, physical[0], gc_dirty)
         owners.setdefault(physical[0], {})[physical[1]] = key
@@ -229,7 +252,45 @@ def commit_full_write(controller, buffer_id, generation,
     return completion
 
 
-def initialize_read_state(controller, owner, indexes: dict, state):
+@cython.cfunc
+@cython.inline
+def _read_array(values: object, dtype: object) -> cython.bint:
+    return (type(values) is np.ndarray and values.ndim == 1
+            and values.dtype == dtype and values.flags.c_contiguous
+            and values.flags.writeable and values.flags.aligned)
+
+
+@cython.cfunc
+@cython.inline
+def _plain_ranges(ranges: object, full_ranges: object,
+                  empty_ranges: object) -> cython.bint:
+    """Whether equality with the one full range cannot execute author code."""
+    return (ranges is full_ranges or ranges is empty_ranges
+            or (type(ranges) is list
+                and (len(ranges) != 1
+                     or (type(ranges[0]) is tuple and len(ranges[0]) == 2
+                         and type(ranges[0][0]) is int
+                         and type(ranges[0][1]) is int))))
+
+
+@cython.cfunc
+@cython.inline
+def _plain_read_keys(owners: dict, indexes: dict,
+                     size: cython.Py_ssize_t) -> cython.bint:
+    """A lookup cannot collide with an authored owner or page-index hook."""
+    key: object
+    for key in owners:
+        if not (type(key) is tuple and len(key) == 2
+                and type(key[0]) is str and type(key[1]) is int):
+            return False
+    for key in indexes:
+        if not (type(key) is int and 0 <= key < size):
+            return False
+    return True
+
+
+def initialize_read_state(controller, owner, indexes: dict, state,
+                          full_ranges, empty_ranges, page_type, state_type):
     """Bind existing page objects to one fresh dense read state, in order."""
     pages: dict = controller._pages
     addresses = state.addresses
@@ -245,16 +306,92 @@ def initialize_read_state(controller, owner, indexes: dict, state):
     number: object
     bank: object
     lane: object
+    ranges: object
+    dirty: object
+    clean_address: object
+    page_state: object
+    time: object
+    offset: cython.Py_ssize_t
+    size: cython.Py_ssize_t = 0
+    address_values: cython.longlong[::1] = None
+    valid_values: cython.uchar[::1] = None
+    ready_values: cython.double[::1] = None
+    valid_bytes: object = None
+    typed: cython.bint = (type(state) is state_type
+        and type(lanes) is int and type(pages_per_block) is int
+        and _read_array(addresses, np.dtype(np.int64))
+        and _read_array(valid, np.dtype(np.bool_))
+        and _read_array(ready, np.dtype(np.float64)))
+    if typed:
+        size = addresses.shape[0]
+        typed = (valid.shape[0] == size and ready.shape[0] == size
+                 and _plain_read_keys(controller._buffer_pages, indexes, size))
+    if typed:
+        address_values = addresses
+        valid_bytes = valid.view(np.uint8)
+        valid_values = valid_bytes
+        ready_values = ready
     for index in indexes:
         page = pages[(*owner, index)]
+        if typed and type(page) is not page_type:
+            typed = False
+            address_values = valid_values = ready_values = valid_bytes = None
         address = -1
         if page.flash is not None:
+            if typed and not (type(page.flash) is tuple and len(page.flash) == 2
+                              and type(page.flash[0]) is int
+                              and type(page.flash[1]) is int):
+                typed = False
+                address_values = valid_values = ready_values = valid_bytes = None
             block, number = page.flash
             bank, lane = divmod(block, lanes)
             address = (bank * pages_per_block * lanes + number * lanes + lane) * PAGE
-        full = page.valid == [(0, PAGE)]
-        addresses[index] = address if full and not page.dirty and page.slot is None else -1
-        valid[index] = full
-        if page._read_state is not state:
-            ready[index] = page.ready_ns
+        if type(page) is page_type:
+            # The caller verified these exact Page property descriptors. A
+            # million clean pages seeded with explicit lists need the same
+            # equality/truth operations, not two Python getter calls each.
+            ranges = page._valid
+            if typed and not _plain_ranges(ranges, full_ranges, empty_ranges):
+                typed = False
+                address_values = valid_values = ready_values = valid_bytes = None
+            full = ranges is full_ranges or ranges == [(0, PAGE)]
+            clean_address = -1
+            if full:
+                dirty = page._dirty
+                if typed and not (dirty is empty_ranges or type(dirty) is list):
+                    typed = False
+                    address_values = valid_values = ready_values = valid_bytes = None
+                if (dirty is empty_ranges or not dirty) and page.slot is None:
+                    clean_address = address
+        else:
+            # An authored Page subclass can replace either property. Do not
+            # inspect its backing representation or bypass those callbacks.
+            full = page.valid == [(0, PAGE)]
+            clean_address = address if full and not page.dirty and page.slot is None else -1
+        if typed and not -(1 << 63) <= clean_address < (1 << 63):
+            typed = False
+            address_values = valid_values = ready_values = valid_bytes = None
+        if typed:
+            offset = index
+            address_values[offset] = clean_address
+            valid_values[offset] = full
+        else:
+            addresses[index] = clean_address
+            valid[index] = full
+        page_state = page._read_state
+        if page_state is not state:
+            # A former binding can contain an authored array/index/float
+            # conversion. Release exported buffers before invoking it, just
+            # as for custom range equality or dirty truth above.
+            if typed and page_state is not None:
+                typed = False
+                address_values = valid_values = ready_values = valid_bytes = None
+            time = page.ready_ns
+            if typed and type(time) is not float:
+                typed = False
+                address_values = valid_values = ready_values = valid_bytes = None
+            if typed:
+                ready_values[offset] = time
+            else:
+                ready[index] = time
             page._read_state, page._read_index = state, index

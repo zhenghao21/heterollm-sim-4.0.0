@@ -531,7 +531,10 @@ def real_physical(*, capture=False, host_updates=None):
 
 @pytest.mark.parametrize("change", ["submit", "submit_read_pages", "_execute_accepted",
                                    "_execute_detailed_accepted", "_host_id",
-                                   "instance_execute", "ordered_native_run"])
+                                   "instance_execute", "ordered_native_run",
+                                   "_resident_scalar_eligible", "_submit_resident_scalar",
+                                   "_resident_resource_contract", "_write_buffer_payload_bytes",
+                                   "instance_resident_dispatch", "staging_page_journals"])
 def test_temporary_dedup_requires_actual_standard_ordered_dispatch(monkeypatch, change):
     from heterollm_sim.nand_core import NandCore
     from heterollm_sim import _compiled_nand
@@ -545,6 +548,10 @@ def test_temporary_dedup_requires_actual_standard_ordered_dispatch(monkeypatch, 
     replacement = lambda *args, **kwargs: pytest.fail("read-only proof executed a read")
     if change == "instance_execute":
         physical.runtimes["flash"].core._execute_accepted = replacement
+    elif change == "instance_resident_dispatch":
+        physical.runtimes["flash"].core._submit_resident_scalar = replacement
+    elif change == "staging_page_journals":
+        controller._full_write_page_journals = replacement
     elif change == "ordered_native_run":
         monkeypatch.setattr(_compiled_nand, "_run", replacement)
     else:

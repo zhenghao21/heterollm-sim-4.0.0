@@ -20,9 +20,12 @@ _HOST_ONLY_METHODS = {name: getattr(HbfStagingController, name) for name in (
 _STAGING_SUBMIT = PreparedStagingIO.submit
 _COLD_CACHE_METHODS = {name: getattr(NandCore, name) for name in (
     "submit", "submit_read_pages", "_cache_slot", "_invalidate_cache",
-    "_submit_ocp_single_page_summary", "_submit_ocp_page_commands")}
+    "_submit_ocp_single_page_summary", "_submit_ocp_page_commands",
+    "_resident_scalar_eligible", "_submit_resident_scalar", "_resident_resource_contract",
+    "_write_buffer_payload_bytes")}
 _COLD_STAGING_METHODS = {name: getattr(HbfStagingController, name) for name in (
     "read", "write", "_read_full_pages", "_write_full_pages", "_prepare_empty_gc_write",
+    "_full_write_page_journals",
     "_new_slot", "_flush_page", "_collect", "_allocate", "_gc_victim", "preload", "release")}
 _COLD_ORDERED_FUNCTIONS = ((_compiled_nand, "_run", _compiled_nand._run),
     (_nand_execution, "execute_pages", _nand_execution.execute_pages),

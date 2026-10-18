@@ -365,7 +365,9 @@ def test_every_bank_needs_k_distinct_non_tail_reads_before_any_old_tail():
     assert result["initial_warm_zero_proof"]["reason"] == "initial_warm_too_few_distinct_pages_before_tail"
 
 
-@pytest.mark.parametrize("change", ["scalar_cache", "native_order", "staging_order"])
+@pytest.mark.parametrize("change", ["scalar_cache", "native_order", "staging_order",
+    "_resident_scalar_eligible", "_submit_resident_scalar", "_resident_resource_contract",
+    "_write_buffer_payload_bytes", "staging_page_journals"])
 def test_custom_cache_or_page_submission_order_cannot_use_zero_warm(change, monkeypatch):
     from heterollm_sim import _compiled_nand, _io_execution
     data = cold_fixture()
@@ -373,11 +375,17 @@ def test_custom_cache_or_page_submission_order_cannot_use_zero_warm(change, monk
         monkeypatch.setattr(data[0].runtimes["flash"].core, "_cache_slot", lambda *args: None)
     elif change == "native_order":
         monkeypatch.setattr(_compiled_nand, "_run", lambda *args: None)
+    elif change == "staging_page_journals":
+        monkeypatch.setattr(data[1], "_full_write_page_journals", lambda *args: None)
+    elif change.startswith("_"):
+        monkeypatch.setattr(data[0].runtimes["flash"].core, change, lambda *args: None)
     else:
         monkeypatch.setattr(_io_execution, "_io_flash_pages", lambda *args: None)
     result = cold_result(data)
     assert result["qualified"] and result["initial_warm_read_pages_per_decode_upper"] == 4
-    assert result["initial_warm_zero_proof"]["reason"] == "initial_warm_standard_ordered_lru_required"
+    assert result["initial_warm_zero_proof"]["reason"] == (
+        "initial_warm_immutable_preload_controller_required" if change == "staging_page_journals"
+        else "initial_warm_standard_ordered_lru_required")
 
 
 def test_fragmented_uneven_preload_scan_tail_formula_matches_actual_page_order():

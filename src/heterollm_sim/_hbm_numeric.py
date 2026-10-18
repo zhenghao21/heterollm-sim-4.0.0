@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import os
 from concurrent.futures import ThreadPoolExecutor, wait
-from threading import Condition
+from threading import Condition, local
 import numpy as np
 from numba import njit
 from ._hbm_clock import align_clock, clock_after
@@ -18,6 +18,8 @@ from ._dram_numeric import _repeat_add
 _CHANNEL_WORKERS = min(8, os.cpu_count() or 1)
 _CHANNEL_EXECUTOR = ThreadPoolExecutor(max_workers=_CHANNEL_WORKERS,
                                        thread_name_prefix="hbm-channel")
+_CHANNEL_SCRATCH = local()
+
 
 # Timing vector indices, shared with the packing module.
 TIMING_FIELDS = (
@@ -624,34 +626,55 @@ def _fold_column_cycles(cycles, channel_first, channel_stop, read, recovery, g, 
 @njit(cache=True, nogil=True, fastmath=False)
 def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses, pc,
                     history, pc_seen, channel, channel_int, resources, moved, directions, touched,
-                    windows, window_counts, channel_first, channel_stop):
+                    windows, window_counts, scratch, channel_first, channel_stop):
     """Run complete bursts; caller commits arrays only after successful return."""
     completion = arrival
     hits = misses = conflicts = 0
     counts = np.zeros(7, dtype=np.float64)
+    # Parallel dispatch probes this exact specialization on the calling
+    # thread before workers can mutate live arrays. An empty interval must
+    # not initialize geometry-sized workspaces or inspect live deadlines.
+    if first >= stop or channel_first >= channel_stop:
+        return completion, hits, misses, conflicts, counts
     channels = g[0] // 2
-    active_deadlines = np.empty(channels, dtype=np.float64)
+    active_deadlines, integers = scratch
+    lanes, bank_count, entries = g[0], rows.shape[0], history.shape[1]
+    history_size = lanes * entries
+    group_size = lanes * ((g[1] + 15) // 16) * 4
+    fold_geometry = (not g[11] and g[2] <= min(g[3], 64)
+                     and g[3] % g[2] == 0 and bank_count * g[2] <= 1048576)
+    cycle_size = bank_count * g[2] if fold_geometry else 0
+    position = 0
+    tick_history = integers[position:position + history_size].reshape((lanes, entries))
+    position += history_size
+    tick_banks = integers[position:position + bank_count]
+    position += bank_count
+    tick_base = integers[position:position + lanes]
+    position += lanes
+    tick_data = integers[position:position + lanes]
+    position += lanes
+    tick_columns = integers[position:position + channels]
+    position += channels
+    tick_valid = integers[position:position + lanes]
+    position += lanes
+    tick_group_tops = integers[position:position + group_size].reshape((lanes, (g[1] + 15) // 16, 4))
+    position += group_size
+    tick_sid_tops = integers[position:position + lanes * 4].reshape((lanes, 4))
+    position += lanes * 4
+    cycle_starts = integers[position:position + cycle_size].reshape(
+        (bank_count if fold_geometry else 0, g[2] if fold_geometry else 0))
+    position += cycle_size
+    previous_columns = integers[position:position + channels]
+    position += channels
+    previous_data = integers[position:position + lanes]
+    position += lanes
+    previous_history = integers[position:position + history_size].reshape((lanes, entries))
     for ch in range(channel_first, channel_stop):
         active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
     tick_candidate = g[12] and stop - first >= 64
     tick_profile = _column_tick_profile(g, t, read) if tick_candidate else np.zeros(8, dtype=np.int64)
     tick_mode = tick_candidate and tick_profile[0]
-    tick_lanes = g[0] if tick_mode else 0
-    tick_channels = channels if tick_mode else 0
-    tick_history = np.empty((tick_lanes, history.shape[1]), dtype=np.int64)
-    tick_banks = np.empty(rows.shape[0] if tick_mode else 0, dtype=np.int64)
-    tick_base = np.empty(tick_lanes, dtype=np.int64)
-    tick_data = np.empty(tick_lanes, dtype=np.int64)
-    tick_columns = np.empty(tick_channels, dtype=np.int64)
-    tick_valid = np.empty(tick_lanes, dtype=np.bool_)
-    tick_group_tops = np.empty((tick_lanes, (g[1] + 15) // 16, 4), dtype=np.int64)
-    tick_sid_tops = np.empty((tick_lanes, 4), dtype=np.int64)
-    fold_mode = (tick_mode and not g[11] and g[2] <= min(g[3], 64)
-                 and g[3] % g[2] == 0 and rows.shape[0] * g[2] <= 1048576)
-    cycle_starts = np.empty((rows.shape[0] if fold_mode else 0, g[2] if fold_mode else 0), dtype=np.int64)
-    previous_columns = np.empty(tick_channels, dtype=np.int64)
-    previous_data = np.empty(tick_lanes, dtype=np.int64)
-    previous_history = np.empty_like(tick_history)
+    fold_mode = tick_mode and fold_geometry
     previous_valid = False
     cycle_fast = False
     if tick_mode:
@@ -939,7 +962,45 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
     return completion, hits, misses, conflicts, counts
 
 
+def _new_channel_scratch(g, arrays):
+    """One channel-partitioned workspace; it contains no controller state."""
+    lanes, banks = int(g[0]), int(g[1])
+    bank_count, history_entries = len(arrays[0]), arrays[4].shape[1]
+    fold = (not g[11] and g[2] <= min(g[3], 64) and g[3] % g[2] == 0
+            and bank_count * int(g[2]) <= 1048576)
+    integers = (2 * lanes * history_entries + bank_count + 4 * lanes + lanes
+                + lanes * ((banks + 15) // 16) * 4 + lanes * 4
+                + (bank_count * int(g[2]) if fold else 0))
+    # Two flat buffers avoid boxing thirteen separate NumPy descriptors at
+    # every compiled worker entry. All views are made inside the controller.
+    return np.empty(lanes // 2, dtype=np.float64), np.empty(integers, dtype=np.int64)
+
+
 def run_hbm_numeric(first, stop, arrival, read, g, t, *arrays):
+    """Lease scratch until every channel finishes, including failure paths.
+
+    Each worker initializes and uses only its own physical channels. Scratch
+    survives successful execution and rollback alike, but no value survives
+    as an input to a later request. Caller-local leases also isolate different
+    controllers, concurrent callers and signal-handler reentrant submissions.
+    """
+    key = (int(g[0]), int(g[1]), int(g[2]), int(g[3]), bool(g[11]),
+           len(arrays[0]), arrays[4].shape[1])
+    cached = getattr(_CHANNEL_SCRATCH, "lease", None)
+    if cached is None or cached[0] != key or cached[2]:
+        lease = [key, _new_channel_scratch(g, arrays), True]
+        if cached is None or not cached[2]:
+            _CHANNEL_SCRATCH.lease = lease
+    else:
+        lease = cached
+        lease[2] = True
+    try:
+        return _run_hbm_numeric(first, stop, arrival, read, g, t, arrays, lease[1])
+    finally:
+        lease[2] = False
+
+
+def _run_hbm_numeric(first, stop, arrival, read, g, t, arrays, scratch):
     """Execute independent channels concurrently, preserving each command."""
     channels = int(g[0]) // 2
     # Small requests often reach only a few adjacent channels. Their command
@@ -955,10 +1016,11 @@ def run_hbm_numeric(first, stop, arrival, read, g, t, *arrays):
     workers = min(_CHANNEL_WORKERS, channel_stop - channel_first,
                   physical_bytes // (32 * 1024))
     if physical_bytes < 128 * 1024 or workers < 2:
-        return _run_hbm_channel_range(first, stop, arrival, read, g, t, *arrays, channel_first, channel_stop)
+        return _run_hbm_channel_range(first, stop, arrival, read, g, t, *arrays, scratch,
+                                      channel_first, channel_stop)
     # Compile/cache-load on the calling thread before touching shared arrays.
     # An empty interval performs no mutation and avoids concurrent first JIT.
-    _run_hbm_channel_range(first, first, arrival, read, g, t, *arrays, 0, 0)
+    _run_hbm_channel_range(first, first, arrival, read, g, t, *arrays, scratch, 0, 0)
     condition = Condition()
     cancelled = False
     active = 0
@@ -971,7 +1033,7 @@ def run_hbm_numeric(first, stop, arrival, read, g, t, *arrays):
             active += 1
         try:
             return _run_hbm_channel_range(first, stop, arrival, read, g, t,
-                                          *arrays, channel_first, channel_stop)
+                                          *arrays, scratch, channel_first, channel_stop)
         finally:
             with condition:
                 active -= 1

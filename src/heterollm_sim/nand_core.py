@@ -856,6 +856,17 @@ class NandCore:
         }
 
     def submit(self, request: AccessRequest) -> TransactionResult:
+        # GC interleaves a scalar read and PROGRAM with bulk page execution.
+        # Hand only that bank to the unchanged scalar state machine instead
+        # of publishing and repacking all banks for every copied page.
+        if (self._nand_numeric_state is not None
+                and "_resident_scalar_eligible" not in self.__dict__
+                and type(self)._resident_scalar_eligible is _RESIDENT_SCALAR_METHODS["_resident_scalar_eligible"]
+                and self._resident_scalar_eligible(request)):
+            self._validate_request(request)
+            result = self._submit_resident_scalar(request)
+            if result is not None:
+                return result
         self._nand_publish_numeric()
         self._validate_request(request)
         if (self.config.protocol_mode == "ocp_hbf_0_7"
@@ -1008,6 +1019,100 @@ class NandCore:
             logical_bytes=request.byte_count, transfer_bytes=transfer_bytes,
             mapping=tuple(mappings), stages=tuple(stages), counters=counters)
 
+    def _resident_scalar_eligible(self, request):
+        if (type(self) is not NandCore or type(request) is not AccessRequest
+                or type(self.timeline) is not ResourceTimeline or self.capture_details
+                or self._observe_media or self._nand_state_exposed
+                or self._cache_use >= 2**63 - 1
+                or self.config.protocol_mode != "ocp_hbf_0_7"
+                or request.address // self.config.page_bytes
+                != (request.address + request.byte_count - 1) // self.config.page_bytes):
+            return False
+        # An authored replacement can access arbitrary controller banks. Such
+        # callbacks continue to receive the fully published controller state.
+        return (all(name not in self.__dict__ and getattr(NandCore, name) is method
+                    for name, method in _RESIDENT_SCALAR_METHODS.items())
+                and getattr(self._nand_numeric_state, "scalar_resource_contract", None)
+                == self._resident_resource_contract())
+
+    def _resident_resource_contract(self):
+        """Immutable layout values, including mutable routing metadata.
+
+        Capture the same authored geometry/prefixes/aliases used by bulk
+        packing. A scalar handoff cannot use an old array name after a caller
+        changes a resource prefix or route between physical submissions.
+        """
+        config = self.config
+        return (config.channels, config.targets_per_channel, config.dies_per_target,
+                config.luns_per_die, config.planes_per_lun, config.planes_independent,
+                config.parallel_units, config.host_channels, config.host_full_duplex,
+                config.pages_per_block,
+                tuple(str(config.metadata.get(name, default)) for name, default in (
+                    ("array_resource_prefix", "nand:array"),
+                    ("parallel_resource_prefix", "nand:parallel"),
+                    ("channel_resource_prefix", "nand:channel"),
+                    ("host_resource_id", "nand:host"))),
+                tuple(self.timeline.resource_aliases.items()))
+
+    def _submit_resident_scalar(self, request):
+        """Bridge one ordinary scalar command to its resident bank exactly.
+
+        The numeric arrays remain the authoritative state. Python slots for
+        this bank retain their identities, and the existing scalar executor
+        performs every cache/admission/calendar transition and bill. Journals
+        capture the resident preimage before this partial publication, just
+        as for a complete publication.
+        """
+        packed = self._nand_numeric_state
+        config = self.config
+        base_units = (config.channels * config.targets_per_channel
+                      * config.dies_per_target * config.luns_per_die)
+        bank = request.address // 4096 % (base_units * config.planes_per_lun)
+        unit = bank if config.planes_independent else bank % base_units
+        arrays, buffers, tags, ready, readers, uses, present = packed.arrays
+        bank_keys, tag_prefixes, array_names, pages_per_block = packed.layout
+        name, key = array_names[unit], bank_keys[bank]
+        array_values = self.__dict__["_array_ready"]
+        buffer_values = self.__dict__["_buffer_ready"]
+        cache = self.__dict__["_read_cache"]
+        for token in self._nand_transactions:
+            token.capture_numeric(packed)
+        if packed.dirty_units[unit]:
+            array_values[name], buffer_values[name] = float(arrays[unit]), float(buffers[unit])
+        if packed.dirty_banks[bank]:
+            if self._nand_transactions:
+                self._touch_cache_bank(key)
+            slots = cache.get(key)
+            if slots is None:
+                slots = [_ReadCacheSlot(), _ReadCacheSlot()]
+                cache[key] = slots
+            prefix = tag_prefixes[bank]
+            for index, slot in enumerate(slots):
+                page = int(tags[bank, index])
+                slot.page_key = None if page < 0 else (*prefix, *divmod(page, pages_per_block))
+                slot.ready_ns = float(ready[bank, index])
+                slot.reader_completion_ns = float(readers[bank, index])
+                slot.last_use = int(uses[bank, index])
+        try:
+            return self._submit_ocp_single_page_summary(request)
+        finally:
+            # The scalar executor can raise after a reservation. Retain its
+            # exact partial state; a transaction still restores the captured
+            # preimage, and a later public inspection publishes this state.
+            if name in array_values:
+                arrays[unit] = array_values[name]
+                buffers[unit] = buffer_values.get(name, 0.)
+                packed.dirty_units[unit] = True
+            slots = cache.get(key)
+            if slots is not None:
+                present[bank] = True
+                packed.dirty_banks[bank] = True
+                for index, slot in enumerate(slots):
+                    page = slot.page_key
+                    tags[bank, index] = -1 if page is None else page[-2] * pages_per_block + page[-1]
+                    ready[bank, index], readers[bank, index] = slot.ready_ns, slot.reader_completion_ns
+                    uses[bank, index] = slot.last_use
+
     def submit_read_pages(self, addresses, arrival_ns, *, link_program=()):
         """Execute full-page reads interleaved with external links in order.
 
@@ -1020,7 +1125,10 @@ class NandCore:
             from ._nand_execution import execute_pages
         except (ImportError, OSError):
             return None
-        return execute_pages(self, addresses, arrival_ns, link_program)
+        result = execute_pages(self, addresses, arrival_ns, link_program)
+        if result is not None and self._nand_numeric_state is not None:
+            self._nand_numeric_state.scalar_resource_contract = self._resident_resource_contract()
+        return result
 
     def submit_write_pages(self, addresses, arrival_ns, *, link_program=()):
         """Program full pages with each page's incoming links before admission."""
@@ -1028,7 +1136,10 @@ class NandCore:
             from ._nand_execution import execute_pages
         except (ImportError, OSError):
             return None
-        return execute_pages(self, addresses, arrival_ns, link_program, operation=Operation.WRITE)
+        result = execute_pages(self, addresses, arrival_ns, link_program, operation=Operation.WRITE)
+        if result is not None and self._nand_numeric_state is not None:
+            self._nand_numeric_state.scalar_resource_contract = self._resident_resource_contract()
+        return result
 
     def _submit_ocp_single_page_summary(self, request: AccessRequest) -> Optional[TransactionResult]:
         """Execute the same strict page transitions without trace allocations.
@@ -1521,6 +1632,15 @@ class NandCore:
         return summarize_batch(results, bandwidth_ceiling_gb_s=max(
             (result.bandwidth_ceiling_gb_s for result in results),
             default=self._bandwidth_ceiling_gb_s()))
+
+
+_RESIDENT_SCALAR_METHODS = {name: getattr(NandCore, name) for name in (
+    "_validate_request", "_validate_program_order", "_write_buffer_payload_bytes",
+    "_resident_scalar_eligible", "_submit_resident_scalar", "_submit_ocp_single_page_summary",
+    "_admit_host_request", "_record_host_admission", "_cache_slot", "_invalidate_cache",
+    "_array_id", "_array_resource_id", "_channel_id", "_host_id", "_host_bandwidth",
+    "_staged_key", "_bank_key", "_block_key", "_set_program_frontier", "_touch_cache_bank",
+    "_bandwidth_ceiling_gb_s", "_admission_depth_scope", "_resident_resource_contract")}
 
 
 def nand_service(config: NandConfig, request: AccessRequest, *, timeline: Optional[ResourceTimeline] = None) -> TransactionResult:

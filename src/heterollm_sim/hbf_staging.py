@@ -8,7 +8,8 @@ HOST DRAM. One host page is reserved for GC and one physical block for GC.
 from __future__ import annotations
 
 from collections import OrderedDict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from enum import Enum
 from functools import cached_property
 from itertools import repeat
 import heapq
@@ -69,15 +70,65 @@ def _intersection(ranges: list[Range], lo: int, hi: int) -> list[Range]:
     return [(max(a, lo), min(b, hi)) for a, b in ranges if a < hi and b > lo]
 
 
-@dataclass(slots=True, eq=False)
+class _PageRangeCode(Enum):
+    EMPTY = 0
+    FULL = 1
+
+
+@dataclass(eq=False, init=False, repr=False)
 class _Page:
-    valid: list[Range] = field(default_factory=list)
-    dirty: list[Range] = field(default_factory=list)
-    slot: int | None = None
-    flash: tuple[int, int] | None = None  # physical block id, page within block
-    _ready_ns: float = 0.0
-    _read_state: object = field(default=None, repr=False, compare=False)
-    _read_index: int = field(default=0, repr=False, compare=False)
+    """One real page; empty/full ranges need no lists until inspected.
+
+    A full clean bulk page dominates temporary activation traffic. Its two
+    range lists are unnecessary allocations during write/read/release. The
+    public properties still expose independent mutable lists, including any
+    explicitly supplied list identity, and scalar partial-page code uses the
+    same ordinary range operations.
+    """
+    __slots__ = ("_valid", "_dirty", "slot", "flash", "_ready_ns", "_read_state", "_read_index")
+    # Keep the serialized dataclass fields semantic, even though the two
+    # list properties now materialize their storage lazily.
+    valid: list[Range]
+    dirty: list[Range]
+    slot: int | None
+    flash: tuple[int, int] | None  # physical block id, page within block
+    _ready_ns: float
+    _read_state: object
+    _read_index: int
+
+    def __init__(self, valid=_PageRangeCode.EMPTY, dirty=_PageRangeCode.EMPTY,
+                 slot=None, flash=None, _ready_ns=0.0, _read_state=None, _read_index=0):
+        self._valid, self._dirty = valid, dirty
+        self.slot, self.flash = slot, flash
+        self._ready_ns, self._read_state, self._read_index = _ready_ns, _read_state, _read_index
+
+    @property
+    def valid(self):
+        ranges = self._valid
+        if ranges is _PageRangeCode.EMPTY:
+            ranges = self._valid = []
+        elif ranges is _PageRangeCode.FULL:
+            ranges = self._valid = [(0, PAGE)]
+        return ranges
+
+    @valid.setter
+    def valid(self, value):
+        self._valid = value
+
+    @property
+    def dirty(self):
+        ranges = self._dirty
+        if ranges is _PageRangeCode.EMPTY:
+            ranges = self._dirty = []
+        return ranges
+
+    @dirty.setter
+    def dirty(self, value):
+        self._dirty = value
+
+    def __repr__(self):
+        return (f"_Page(valid={self.valid!r}, dirty={self.dirty!r}, slot={self.slot!r}, "
+                f"flash={self.flash!r}, _ready_ns={self._ready_ns!r})")
 
     @property
     def ready_ns(self):
@@ -527,8 +578,19 @@ class HbfStagingController:
 
     def begin_transaction(self):
         """Journal changed pages instead of copying every retained KV page."""
+        # Copy existing hashes in C. A frozenset would hash arbitrary authored
+        # buffer identities again; membership against such keys can also call
+        # their equality hooks. Range qualification is only for builtin owner
+        # identities, and custom mappings retain the ordinary page journal.
+        buffer_owners = None
+        if type(self._buffer_pages) is dict and all(
+                type(owner) is tuple and len(owner) == 2
+                and type(owner[0]) is str and type(owner[1]) is int
+                for owner in self._buffer_pages):
+            buffer_owners = dict.copy(self._buffer_pages)
         token = {"state": _copy_controller_state(self.__dict__, include_pages=False),
                  "pages": {}, "page_ready": {}, "owners": {}, "released_order": {},
+                 "buffer_owners": buffer_owners, "new_page_ranges": {},
                  "read_ready": {},
                  "maps": {name: self.__dict__[name].begin() for name in _JOURNALED_MAPS}}
         self._transaction_stack.append(token)
@@ -553,11 +615,19 @@ class HbfStagingController:
         gc_blocks.update(token["maps"]["_used"]["values"])
         gc_blocks.update((self._spare, token["state"]["_spare"]))
         pages_changed = any(token[name] for name in (
-            "pages", "page_ready", "read_ready", "released_order"))
+            "pages", "page_ready", "read_ready", "released_order", "new_page_ranges"))
         for name, journal in token["maps"].items():
             self.__dict__[name].rollback(journal)
         for state, ready in token["read_ready"].values():
             state.ready[:len(ready)] = ready
+        for owner, (first, stop) in token["new_page_ranges"].items():
+            indexes = self._buffer_pages.get(owner)
+            for index in range(first, stop):
+                self._pages.pop((*owner, index), None)
+                if indexes is not None:
+                    indexes.pop(index, None)
+            if indexes is not None and not indexes:
+                self._buffer_pages.pop(owner, None)
         for key, page in token["pages"].items():
             owner = key[:2]
             if page is None:
@@ -606,6 +676,11 @@ class HbfStagingController:
 
     def _touch_page(self, key):
         for token in self._transaction_stack:
+            ranges = token["new_page_ranges"]
+            if ranges and type(key[0]) is str and type(key[1]) is int:
+                bounds = ranges.get(key[:2])
+                if bounds is not None and bounds[0] <= key[2] < bounds[1]:
+                    continue
             if key not in token["pages"]:
                 page = self._pages.get(key)
                 token["pages"][key] = None if page is None else _Page(
@@ -624,8 +699,36 @@ class HbfStagingController:
         # Reads only advance a scalar dependency. Save that scalar until a
         # later write/release in the same transaction requires the full page.
         for token in self._transaction_stack:
+            ranges = token["new_page_ranges"]
+            if ranges and type(key[0]) is str and type(key[1]) is int:
+                bounds = ranges.get(key[:2])
+                if bounds is not None and bounds[0] <= key[2] < bounds[1]:
+                    continue
             if key not in token["pages"]:
                 token["page_ready"].setdefault(key, self._ready_before(token, page))
+
+    def _full_write_page_journals(self, owner, first, stop, *, new_range=False):
+        """Classify undo once per full run, never search ranges per new page.
+
+        A standard new contiguous buffer had no owner index when the token
+        began; preparation additionally proves that every page in this run
+        was absent. One range then carries exactly those ``key -> None``
+        preimages. Old owners, later appended pages and partly intersecting
+        writes retain their original individual page evidence.
+        """
+        complete, partial = [], []
+        for token in self._transaction_stack:
+            ranges = token["new_page_ranges"]
+            buffer_owners = token["buffer_owners"]
+            if (new_range and buffer_owners is not None
+                    and owner not in buffer_owners and owner not in ranges):
+                ranges[owner] = first, stop
+            bounds = ranges.get(owner)
+            if bounds is None or stop <= bounds[0] or bounds[1] <= first:
+                complete.append(token)
+            elif not (bounds[0] <= first and stop <= bounds[1]):
+                partial.append((token, *bounds))
+        return complete, partial
 
     def _touch_read_ready(self, state):
         for token in self._transaction_stack:
@@ -644,7 +747,9 @@ class HbfStagingController:
             return None  # Sparse offsets retain the ordinary sparse page map.
         state = _BufferReadState(size)
         if _use_page_helpers(self, *owner, 0, size):
-            _hbf_page_state.initialize_read_state(self, owner, indexes, state)
+            _hbf_page_state.initialize_read_state(
+                self, owner, indexes, state, _PageRangeCode.FULL, _PageRangeCode.EMPTY,
+                _Page, _BufferReadState)
         else:
             for index in indexes:
                 page = self._pages[(*owner, index)]
@@ -1001,6 +1106,7 @@ class HbfStagingController:
         native = _use_page_helpers(self, buffer_id, generation, first, stop)
         token = self.begin_transaction()
         locations, arrivals, old_ready = [], [], []
+        keys, all_new = None, False
         try:
             if needs_collection:
                 prepared = self._prepare_empty_gc_write(buffer_id, generation, first, stop,
@@ -1008,10 +1114,11 @@ class HbfStagingController:
                 if prepared is None:
                     self.rollback_transaction(token)
                     return None
-                locations, addresses, arrivals, old_ready = prepared
+                locations, addresses, arrivals, old_ready, keys, all_new = prepared
             elif native:
-                locations, addresses, arrivals, old_ready = _hbf_page_state.prepare_full_write(
-                    self, buffer_id, generation, first, stop, time_ns, _MISSING)
+                locations, addresses, arrivals, old_ready, keys, all_new = (
+                    _hbf_page_state.prepare_full_write(
+                        self, buffer_id, generation, first, stop, time_ns, _MISSING))
             else:
                 for index in range(first, stop):
                     key = (buffer_id, generation, index)
@@ -1035,9 +1142,15 @@ class HbfStagingController:
         if isinstance(completions, np.ndarray):
             completions = completions.tolist()
         if native and type(completions) is list:
+            count = min(len(locations), len(old_ready), len(completions))
+            page_journals, partial_journals = self._full_write_page_journals(
+                (buffer_id, generation), first, first + count,
+                new_range=first == 0 and not indexes and all_new and count >= 16)
             completion = _hbf_page_state.commit_full_write(
                 self, buffer_id, generation, first, locations, old_ready,
-                completions, time_ns, _Page, _MISSING)
+                completions, time_ns, _Page, _MISSING,
+                _PageRangeCode.FULL, _PageRangeCode.EMPTY, keys,
+                page_journals, partial_journals)
         else:
             for index, physical, ready, time in zip(range(first, stop), locations, old_ready, completions):
                 key = (buffer_id, generation, index)
@@ -1079,10 +1192,13 @@ class HbfStagingController:
         no IO has then been submitted, so the original scalar path can run.
         Every physical page, page-zero erase and readiness arrival is retained.
         """
-        locations, addresses, arrivals, old_ready = [], [], [], []
+        locations, addresses, arrivals, old_ready, keys = [], [], [], [], []
+        all_new = True
         for index in range(first, stop):
             key = buffer_id, generation, index
             page = self._pages.get(key)
+            keys.append(key)
+            all_new = all_new and page is None
             ready = max(time_ns, page.ready_ns if page is not None else 0.0)
             if not self._active and not self._free_blocks:
                 try:
@@ -1102,7 +1218,7 @@ class HbfStagingController:
             addresses.append(self._address(*physical))
             arrivals.append(arrival)
             old_ready.append(ready)
-        return locations, addresses, arrivals, old_ready
+        return locations, addresses, arrivals, old_ready, keys, all_new
 
     def read(self, buffer_id: Hashable, generation: int, offset: int, byte_count: int,
              time_ns: float, io: HbfStagingIO) -> float:
@@ -1344,13 +1460,22 @@ class HbfStagingController:
 _PAGE_HELPER_METHODS = {
     name: getattr(HbfStagingController, name) for name in (
         "_allocate", "_address", "_touch_page", "_touch_owners", "_touch_slots",
-        "_ready_before", "_refresh_read_state")}
+        "_ready_before", "_refresh_read_state", "_full_write_page_journals",
+        "_prepare_empty_gc_write")}
 _PAGE_HELPER_JOURNAL_SET = _JournalDict.__setitem__
 _PAGE_HELPER_JOURNAL_REMEMBER = _JournalDict._remember
 _PAGE_HELPER_JOURNAL_READS = {
     name: getattr(_JournalDict, name) for name in ("__getitem__", "get", "__contains__")}
 _PAGE_HELPER_BLOCK_POP = _BlockPool.popleft
 _PAGE_HELPER_PAGE_TYPE = _Page
+_PAGE_HELPER_PAGE_INIT = _Page.__init__
+_PAGE_HELPER_PAGE_VALID = _Page.valid
+_PAGE_HELPER_PAGE_DIRTY = _Page.dirty
+_PAGE_HELPER_PAGE_READY = _Page.ready_ns
+_PAGE_HELPER_PAGE_SLOTS = {name: getattr(_Page, name) for name in _Page.__slots__}
+_PAGE_HELPER_READ_TYPE = _BufferReadState
+_PAGE_HELPER_READ_SLOTS = {name: getattr(_BufferReadState, name)
+                           for name in _BufferReadState.__slots__}
 _PAGE_HELPER_READ_UPDATE = _BufferReadState.update
 _EMPTY_GC_METHODS = {name: getattr(HbfStagingController, name) for name in (
     "_allocate", "_collect", "_gc_victim", "_address", "_touch_owners")}
@@ -1378,7 +1503,21 @@ def _use_page_helpers(controller, buffer_id, generation, first, stop):
             or _JournalDict._remember is not _PAGE_HELPER_JOURNAL_REMEMBER
             or _BlockPool.popleft is not _PAGE_HELPER_BLOCK_POP
             or _BufferReadState.update is not _PAGE_HELPER_READ_UPDATE
-            or _Page is not _PAGE_HELPER_PAGE_TYPE):
+            or _Page is not _PAGE_HELPER_PAGE_TYPE
+            or _Page.__init__ is not _PAGE_HELPER_PAGE_INIT
+            or _Page.__getattribute__ is not object.__getattribute__
+            or _Page.__setattr__ is not object.__setattr__
+            or _Page.valid is not _PAGE_HELPER_PAGE_VALID
+            or _Page.dirty is not _PAGE_HELPER_PAGE_DIRTY
+            or _Page.ready_ns is not _PAGE_HELPER_PAGE_READY
+            or _BufferReadState is not _PAGE_HELPER_READ_TYPE
+            or _BufferReadState.__getattribute__ is not object.__getattribute__):
+        return False
+    if any(getattr(_Page, name) is not descriptor
+           for name, descriptor in _PAGE_HELPER_PAGE_SLOTS.items()):
+        return False
+    if any(getattr(_BufferReadState, name) is not descriptor
+           for name, descriptor in _PAGE_HELPER_READ_SLOTS.items()):
         return False
     indexes = controller._buffer_pages.get((buffer_id, generation))
     if indexes is not None and type(indexes) is not dict:
