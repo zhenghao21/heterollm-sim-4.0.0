@@ -1,0 +1,33 @@
+{
+  "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+  "backend": "native_serving_physical",
+  "parameters": {
+    "case_id": "native__llama3_405b__HBM4__SHORT__G8",
+    "phase": "dense_native",
+    "model": "llama3_405b",
+    "hardware": "HBM4",
+    "workload": "SHORT",
+    "input_tokens": 1660,
+    "output_tokens": 373,
+    "gpu_count": 8,
+    "tp": 8,
+    "pp": 1,
+    "ep": 1,
+    "weight_dtype": "bf16",
+    "kv_dtype": "bf16",
+    "batch_size": 1,
+    "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+    "warmup_decode_cohorts": 372,
+    "measurement_decode_cohorts": 744,
+    "slo_tpot_ns": 100000000.0
+  },
+  "candidate_id": "native__llama3_405b__HBM4__SHORT__G8__B1",
+  "status": "paused",
+  "metrics": null,
+  "started_at": "2026-10-19T16:20:52.765564+00:00",
+  "forecast_tokens": 0,
+  "fidelity": "complete_bounded_native_physical_window_no_forecast_no_old_reference",
+  "reason": "仿真任务已取消",
+  "finished_at": "2026-10-20T00:09:35.224105+00:00",
+  "wall_seconds": 28122.45703499997
+}

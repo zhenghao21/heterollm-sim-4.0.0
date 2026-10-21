@@ -1,0 +1,42 @@
+{
+  "scope": "bounded original-model native preflight; not a formal result or SLO acceptance",
+  "status": "terminated_after_unresponsive_cooperative_deadline",
+  "parameters": {
+    "model": "llama3_405b",
+    "hardware": "HBM4",
+    "gpu_count": 8,
+    "tp": 8,
+    "batch_size": 1,
+    "prompt_tokens": 1660,
+    "output_tokens": 373,
+    "warmup_decode_cohorts": 0,
+    "measurement_decode_cohorts": 1
+  },
+  "deadline_wall_seconds": 120,
+  "observed_process_wall_seconds": 258.4171451,
+  "observed_cpu_seconds": 255.703125,
+  "observed_working_set_bytes": 584163328,
+  "progress": [
+    {
+      "wall_seconds": 0.1767662,
+      "stage": "control_plane",
+      "completed": 0
+    },
+    {
+      "wall_seconds": 18.4787471,
+      "stage": "control_plane",
+      "completed": 1,
+      "placement_status": "feasible"
+    },
+    {
+      "wall_seconds": 18.7488606,
+      "stage": "serving_cohorts",
+      "completed": 0
+    }
+  ],
+  "completed_measurement_cohorts": 0,
+  "error": "The 120-second cooperative cancellation callback was not reached inside synchronous external-KV inventory compilation; only this preflight worker was terminated after repeated stack observations.",
+  "hotspot": "serving._external_destination_ranges -> compile_serving_cohort_schedule -> _add_collective_tasks -> TopologyRouter.transfer_phases -> endpoint_service -> DramCore.submit -> _compiled_hbm._pack_hbm_numeric",
+  "stack_log": "artifacts/exploring_hbf_native_20261019/preflight_405b_hbm4_tp8.stacks.log",
+  "formal_experiment_started": false
+}

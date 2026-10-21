@@ -6,6 +6,7 @@ from typing import Mapping, Optional
 
 from .contracts import TaskCategory
 from .event_kernel import KernelEvent
+from .sram_traffic import summarize_sram_task_traffic
 from .engine import _resource_release_points
 from .scalable_serving import (
     ScheduleCostResult, TaskExecutionRecord, _better_path, _coverage_component,
@@ -194,6 +195,7 @@ class LiveCohortMetrics:
             "coverage": summary.coverage,
             "linear_state_bytes": summary.linear_state_bytes,
             "dram_traffic": _summarize_dram_task_traffic(records, resource_owners=self.resource_owners),
+            "sram_traffic": summarize_sram_task_traffic(records),
             "storage_traffic": _summarize_nand_task_traffic(records, resource_owners=self.resource_owners),
             "storage_gc_observations": _summarize_hbf_gc_observations(records),
             "execution_stage_makespan_ns": summary.makespan_ns,

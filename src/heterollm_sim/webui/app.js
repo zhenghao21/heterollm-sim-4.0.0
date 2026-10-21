@@ -1,6 +1,6 @@
 "use strict";
 
-const API_ROOT = "/api";
+const backendConnection = globalThis.SimulatorConnection.createConnection();
 const AUTHORING_SCHEMA_VERSION = "4.0.0";
 const STORAGE_SCENARIO = "heterollm-lab:scenario:v4";
 const STORAGE_UI_SETTINGS = "heterollm-lab:ui-settings:v3";
@@ -2555,7 +2555,10 @@ function runtimeHealthView(payload) {
 
 function runtimeConnectionLabel() {
   const health = state.runtimeHealth;
-  if (!health) return { zh: "本地 API 已连接", en: "Local API connected" };
+  const remote = Boolean(backendConnection.snapshot().backendUrl);
+  const apiZh = remote ? "远程 API" : "本地 API";
+  const apiEn = remote ? "Remote API" : "Local API";
+  if (!health) return { zh: `${apiZh} 已连接`, en: `${apiEn} connected` };
   const solver = health.ortoolsAvailable
     ? `OR-Tools ${health.ortoolsVersion}`
     : "内置求解器";
@@ -2563,8 +2566,8 @@ function runtimeConnectionLabel() {
     ? `OR-Tools ${health.ortoolsVersion}`
     : "Built-in solver";
   return {
-    zh: `本地 API · v${health.serviceVersion} · ${solver}`,
-    en: `Local API · v${health.serviceVersion} · ${solverEn}`,
+    zh: `${apiZh} · v${health.serviceVersion} · ${solver}`,
+    en: `${apiEn} · v${health.serviceVersion} · ${solverEn}`,
   };
 }
 
@@ -2572,6 +2575,11 @@ function renderRuntimeHealth() {
   if (!dom.runtimeHealthPanel) return;
   const health = state.runtimeHealth;
   if (!health) {
+    if (!backendConnection.snapshot().active) {
+      dom.runtimeHealthPanel.className = "runtime-health-card is-checking";
+      dom.runtimeHealthPanel.innerHTML = `<div class="runtime-health-heading"><strong>${escapeHtml(uiText("后端未连接", "Backend disconnected"))}</strong></div><p>${escapeHtml(uiText("请打开顶栏的“后端连接”，输入地址和访问令牌。", "Open Backend connection in the toolbar and enter the address and access token."))}</p>`;
+      return;
+    }
     dom.runtimeHealthPanel.className = "runtime-health-card is-checking";
     dom.runtimeHealthPanel.innerHTML = `
       <div class="runtime-health-heading"><span><strong>${escapeHtml(uiText("运行环境诊断", "Runtime diagnostics"))}</strong><small>${escapeHtml(uiText("运行环境与求解器诊断", "Runtime & Solver Diagnostics"))}</small></span><span class="runtime-health-badge">${escapeHtml(uiText("正在检查", "Checking"))}</span></div>
@@ -2816,6 +2824,7 @@ function restoreDialogFocus(dialog) {
 
 function modalDialogs() {
   return [
+    dom.backendConnectionDialog,
     dom.jsonDialog,
     dom.modelPresetsDialog,
     dom.hardwarePresetsDialog,
@@ -3299,23 +3308,25 @@ function saveTopologyView() {
 }
 
 async function apiRequest(path, options = {}) {
+  const connectionGeneration = backendConnection.snapshot().generation;
   let response;
   try {
-    response = await fetch(`${API_ROOT}${path}`, {
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      ...options,
-    });
+    response = await backendConnection.request(path, options);
   } catch (cause) {
     if (cause?.name === "AbortError") throw cause;
-    if (path !== "/health" && await apiReachableAfterRequestFailure()) {
+    if (cause?.code === "connection_required") throw cause;
+    backendConnection.assertGeneration(connectionGeneration);
+    const reachable = path !== "/health" && await apiReachableAfterRequestFailure();
+    backendConnection.assertGeneration(connectionGeneration);
+    if (reachable) {
       setConnection("online", runtimeConnectionLabel());
-      const error = new Error("当前请求连接被中断，但本地 API 仍可达。请重试；若场景较大，请查看服务端返回的请求体限制。");
+      const error = new Error("当前请求连接被中断，但仿真 API 仍可达。请重试；若场景较大，请查看服务端返回的请求体限制。");
       error.code = "request_transport_error";
       error.cause = cause;
       throw error;
     }
     setConnection("offline", CONNECTION_LABELS.unreachable);
-    const error = new Error("无法连接本地 API。请确认界面服务仍在运行，然后重试。");
+    const error = new Error("无法连接仿真 API。请检查 HTTPS 后端是否在线、网络是否允许连接，以及后端是否允许本网站跨域访问。");
     error.code = "network_error";
     error.cause = cause;
     throw error;
@@ -3326,6 +3337,7 @@ async function apiRequest(path, options = {}) {
   try {
     payload = contentType.includes("json") ? await response.json() : await response.text();
   } catch (_error) {
+    if (_error?.name === "AbortError") throw _error;
     payload = null;
   }
 
@@ -3344,6 +3356,15 @@ async function apiRequest(path, options = {}) {
     error.diagnostic_id = envelope.diagnostic_id || "";
     error.exception_type = envelope.exception_type || "";
     error.status = response.status;
+    if (response.status === 401 || response.status === 403) {
+      backendConnection.disconnect();
+      error.message = response.status === 401
+        ? "访问令牌无效或已失效，请在“后端连接”中重新输入。"
+        : "后端拒绝访问，请检查访问令牌及后端允许的网站地址。";
+      setConnection("offline", { zh: "鉴权失败", en: "Authorization failed" });
+      setBackendConnectionMessage(error.message, true);
+      throw error;
+    }
     const connection = runtimeConnectionLabel();
     setConnection("online", {
       zh: `${connection.zh} · HTTP ${response.status}`,
@@ -3363,7 +3384,7 @@ async function apiReachableAfterRequestFailure() {
     CONNECTION_RECOVERY_PROBE_TIMEOUT_MS,
   );
   try {
-    const response = await fetch(`${API_ROOT}/health`, {
+    const response = await backendConnection.request("/health", {
       method: "GET",
       headers: { Accept: "application/json" },
       cache: "no-store",
@@ -4453,6 +4474,7 @@ async function pollRunJob(jobId) {
     }
     scheduleRunJobPoll(jobId);
   } catch (error) {
+    if (error?.name === "AbortError" || String(asObject(state.runJob).job_id || "") !== String(jobId)) return;
     state.runJobPollFailures += 1;
     if (state.runJobPollFailures < 5) {
       scheduleRunJobPoll(jobId, Math.min(2000, 300 * (2 ** state.runJobPollFailures)));
@@ -20150,6 +20172,7 @@ async function importScenarioFile(file) {
 
 function cacheDom() {
   const ids = [
+    "backendConnectionDialog", "backendConnectionButton",
     "modelEditPresetButton", "importGgufPresetButton", "ggufPresetEditorDialog", "ggufPresetEditorForm", "ggufPresetEditorSource", "ggufPresetEditorNotice", "ggufPresetEditorFields", "ggufPresetEditorError", "closeGgufPresetEditorButton", "previewGgufPresetButton", "saveGgufPresetButton",
     "connectionState", "dirtyMark", "loadReferenceButton", "restoreScenarioButton", "importButton", "fileInput", "exportButton", "importHardwareButton", "hardwareFileInput", "exportHardwareButton", "canonicalExportButton", "jsonButton", "settingsButton",
     "validateButton", "runButton", "architectureStatus", "architectureCount", "modelStatus", "modelCount", "mappingStatus", "mappingCount",
@@ -20614,12 +20637,169 @@ async function probeConnection({ notify = false } = {}) {
     }
     return health;
   } catch (error) {
+    if (error?.name === "AbortError") return null;
     state.runtimeHealth = null;
     renderRuntimeHealth();
-    setConnection("offline", error.code === "network_error" ? CONNECTION_LABELS.unreachable : CONNECTION_LABELS.responseError);
+    setConnection("offline", error.status === 401 || error.status === 403
+      ? { zh: "鉴权失败", en: "Authorization failed" }
+      : error.code === "network_error" ? CONNECTION_LABELS.unreachable : CONNECTION_LABELS.responseError);
     if (notify) showOperationError("运行环境检查失败", error);
     return null;
   }
+}
+
+function setBackendConnectionMessage(message, failed = false) {
+  const output = document.getElementById("backendConnectionStatus");
+  if (!output) return;
+  output.textContent = message;
+  output.classList.toggle("is-error", failed);
+}
+
+function clearBackendDerivedState() {
+  if (runJobPollTimer !== null) window.clearTimeout(runJobPollTimer);
+  runJobPollTimer = null;
+  presetCatalogController?.abort();
+  presetCatalogGeneration += 1;
+  validationRequestGeneration += 1;
+  runEstimateRequestGeneration += 1;
+  tracePageLoadSerial += 1;
+  state.scenarioGeneration += 1;
+  state.mappingGeneration += 1;
+  state.runJob = null;
+  state.runJobSubmitting = false;
+  state.runJobPollFailures = 0;
+  state.runJobScenarioGeneration = null;
+  state.runJobMappingGeneration = null;
+  state.runJobInputFingerprint = "";
+  state.runEstimate = null;
+  state.runEstimateScenarioGeneration = null;
+  state.runEstimateMappingGeneration = null;
+  state.runEstimateInputFingerprint = "";
+  state.runtimeHealth = null;
+  state.report = null;
+  state.reportStale = false;
+  state.comparison = null;
+  state.simulationScore = null;
+  state.architectureScanResult = null;
+  state.architectureScanRunning = false;
+  state.architectureScanScenarioGeneration = null;
+  state.kvAnalysisResults = [];
+  state.kvAnalysisRunning = false;
+  state.kvAnalysisScenarioGeneration = null;
+  state.validation = { errors: [], warnings: [], information: [] };
+  for (const prefix of ["model", "component", "architecture", "protocol"]) {
+    state[`${prefix}Presets`] = [];
+    state[`${prefix}PresetsLoaded`] = false;
+    state[`${prefix}PresetsLoading`] = false;
+    state[`${prefix}PresetDetails`]?.clear();
+  }
+  state.remotePresets = [];
+  state.selectedPresetId = null;
+  state.selectedComponentPresetId = null;
+  state.editingComponentPresetId = null;
+  state.selectedArchitecturePresetId = null;
+  state.selectedProtocolPresetId = null;
+  state.presetCatalog = { total: 0, offset: 0, limit: 12, nextOffset: null, catalogVersion: "", cutoffAt: "" };
+  state.architecturePresetCatalog = {};
+  workloadPresetCatalog = [];
+  workloadPresetCatalogError = "";
+  if (state.scenario?.model?.metadata) delete state.scenario.model.metadata.artifact_id;
+  resetTracePlaybackState();
+  stopTraceParticles();
+  if (dom.runJobDialog?.open) dom.runJobDialog.close("backend-changed");
+  setBusy(false);
+  if (state.scenario) renderAll();
+}
+
+async function setupBackendConnection() {
+  const form = document.getElementById("backendConnectionForm");
+  const dialog = document.getElementById("backendConnectionDialog");
+  const address = document.getElementById("backendUrlInput");
+  const secret = document.getElementById("backendTokenInput");
+  const remember = document.getElementById("backendRememberTokenInput");
+  const connect = document.getElementById("backendConnectButton");
+  const test = document.getElementById("backendTestButton");
+  const disconnect = document.getElementById("backendDisconnectButton");
+  backendConnection.subscribe((connection) => {
+    clearBackendDerivedState();
+    disconnect.disabled = !connection.active;
+    if (!connection.active) {
+      setConnection("offline", { zh: "后端未连接", en: "Backend disconnected" });
+      setBackendConnectionMessage("尚未连接。填写后端 HTTPS 地址和访问令牌后，点击连接。");
+    }
+  });
+  const initial = await backendConnection.initialize();
+  address.value = initial.backendUrl;
+  if (address.value) {
+    secret.value = backendConnection.savedToken(address.value);
+    remember.checked = Boolean(secret.value);
+  }
+  document.getElementById("backendConnectionButton").addEventListener("click", () => {
+    showModalDialog(dialog, document.getElementById("backendConnectionButton"), address);
+  });
+  document.getElementById("closeBackendConnectionButton").addEventListener("click", () => dialog.close());
+  address.addEventListener("input", () => {
+    secret.value = "";
+    remember.checked = false;
+  });
+  async function establishConnection({ testOnly = false } = {}) {
+    const requestedAddress = address.value;
+    let expected;
+    connect.disabled = true;
+    test.disabled = true;
+    try {
+      backendConnection.configure({ url: requestedAddress, accessToken: secret.value, remember: remember.checked });
+      expected = backendConnection.snapshot().generation;
+      setConnection("checking", { zh: "正在鉴权连接", en: "Authorizing connection" });
+      setBackendConnectionMessage("正在连接后端并验证访问令牌…");
+      const controller = new AbortController();
+      const timeout = globalThis.setTimeout(() => controller.abort(), 12000);
+      let health;
+      try {
+        health = await apiRequest("/health", { method: "GET", signal: controller.signal });
+      } finally { globalThis.clearTimeout(timeout); }
+      backendConnection.assertGeneration(expected);
+      if (health?.ok !== true || !health.version) throw new Error("此地址没有返回有效的仿真器健康信息，请检查后端地址。");
+      const version = String(health.version);
+      if (testOnly) {
+        backendConnection.disconnect();
+        setBackendConnectionMessage(`测试通过：仿真器 v${version}，令牌有效。点击“连接”进入工作台。`);
+      } else {
+        applyRuntimeHealth(health);
+        await loadWorkloadPresetCatalog();
+        backendConnection.assertGeneration(expected);
+        renderAll();
+        setBackendConnectionMessage(`已连接：仿真器 v${version}。运行任务将在这台后端电脑执行。`);
+        toast("后端已连接", `仿真器 v${version}`, "success");
+      }
+    } catch (error) {
+      // An older connection's completion must not alter the new backend.
+      if (expected == null || backendConnection.snapshot().generation === expected) {
+        backendConnection.disconnect();
+        setBackendConnectionMessage(error?.name === "AbortError"
+          ? "连接超时，请确认后端 HTTPS 入口在线，以及当前网络允许访问。"
+          : String(error?.message || "连接失败。"), true);
+      } else if (error.status === 401 || error.status === 403) {
+        setBackendConnectionMessage(error.message, true);
+      }
+    } finally {
+      connect.disabled = false;
+      test.disabled = false;
+    }
+  }
+  form.addEventListener("submit", (event) => { event.preventDefault(); void establishConnection(); });
+  test.addEventListener("click", () => { void establishConnection({ testOnly: true }); });
+  disconnect.addEventListener("click", () => {
+    backendConnection.disconnect();
+    secret.value = "";
+    remember.checked = false;
+    setBackendConnectionMessage("已断开。后台已提交任务不会因此被取消；重新连接后可继续使用后端。");
+  });
+  if (!initial.active) {
+    setBackendConnectionMessage(initial.configError || "后端未连接。填写远程地址和访问令牌后即可使用现有仿真工作台。", Boolean(initial.configError));
+    showModalDialog(dialog, document.getElementById("backendConnectionButton"), address);
+  }
+  return initial;
 }
 
 async function restoreStoredScenario(stored) {
@@ -20672,8 +20852,11 @@ async function bootstrap() {
   hydrateConceptHelp();
   bindStaticEvents();
   renderConnectionState();
-  await probeConnection();
-  await loadWorkloadPresetCatalog();
+  const connection = await setupBackendConnection();
+  if (connection.active) {
+    await probeConnection();
+    await loadWorkloadPresetCatalog();
+  }
   initializeEmptyWorkspace();
 }
 

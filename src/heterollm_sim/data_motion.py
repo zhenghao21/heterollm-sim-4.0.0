@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import math
 import copy
+from contextlib import contextmanager
+from contextvars import ContextVar
 from bisect import bisect_left
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -25,6 +27,26 @@ from .nand_core import _copy_nand_read_cache
 # Ordered request batching retains individual DRAM admission, accesses
 # and results. Keep the switch private for strict serial equivalence tests.
 _USE_COMPILED_DRAM_BATCH = True
+
+_DEFER_ENDPOINT_CONSTRUCTION = ContextVar("defer_endpoint_construction", default=None)
+
+
+@contextmanager
+def deferred_endpoint_construction(enabled=True):
+    """Build descriptors when the native caller owns live physical dispatch.
+
+    This does not change standalone estimates: they still price the cold
+    physical preview. Online lowering must not execute an extra cold device
+    simulation whose result its existing deferred cost pass discards.
+    """
+    # The planner owns one immutable authored scenario during this scope.
+    # Drop the identity cache at exit so a later author edit is revalidated.
+    token = _DEFER_ENDPOINT_CONSTRUCTION.set(
+        {} if enabled and _native_construction_callbacks() else None)
+    try:
+        yield
+    finally:
+        _DEFER_ENDPOINT_CONSTRUCTION.reset(token)
 
 _PHYSICAL_ADDITIVE_COUNTERS = frozenset((
     "burst_count", "row_hits", "row_misses", "row_conflicts",
@@ -276,7 +298,7 @@ class PhysicalRuntimeContext:
             self.runtime(self.config, self.physical_owner)
 
     def _owner_config(self, config: Any, owner: str) -> Any:
-        from .memory_types import DramConfig
+        from .memory_types import DramConfig, SramConfig
 
         if not isinstance(owner, str) or not owner.strip():
             raise ValueError("physical owner must be non-empty text")
@@ -292,6 +314,8 @@ class PhysicalRuntimeContext:
             metadata.setdefault("row_command_resource_prefix", f"{owner}:dram:row_command")
             metadata.setdefault("column_command_resource_prefix", f"{owner}:dram:column_command")
             metadata.setdefault("data_resource_prefix", f"{owner}:dram:data")
+        elif isinstance(config, SramConfig):
+            metadata.setdefault("port_resource_prefix", f"{owner}:sram:port")
         else:
             metadata.setdefault("array_resource_prefix", f"{owner}:nand:array")
             metadata.setdefault("parallel_resource_prefix", f"{owner}:nand:parallel")
@@ -302,9 +326,10 @@ class PhysicalRuntimeContext:
         return bound_config
 
     def runtime(self, config: Any, owner: str) -> _PhysicalRuntime:
-        from .memory_types import DramConfig
+        from .memory_types import DramConfig, SramConfig
         from .dram_core import DramCore
         from .nand_core import NandCore
+        from .sram_core import SramCore
         from .memory_allocator import PhysicalAddressAllocator
 
         config = self._owner_config(config, owner)
@@ -324,6 +349,8 @@ class PhysicalRuntimeContext:
         core = (
             DramCore(config, self.timeline, capture_details=self.capture_details)
             if isinstance(config, DramConfig)
+            else SramCore(config, self.timeline, capture_details=self.capture_details)
+            if isinstance(config, SramConfig)
             else NandCore(config, self.timeline, capture_details=self.capture_details)
         )
         if isinstance(core, DramCore):
@@ -331,7 +358,7 @@ class PhysicalRuntimeContext:
                                          and config.control_mode == "jedec_hbm")
         elif isinstance(core, NandCore):
             core._nand_numeric_enabled = (not self.capture_details
-                                          and config.protocol_mode == "ocp_hbf_0_7")
+                                          and config.protocol_mode in ("ocp_hbf_0_7", "generic_nand"))
         capacity = config.effective_capacity_bytes
         if capacity > 0:
             # The direct-backing planner uses burst alignment for DRAM and
@@ -341,7 +368,7 @@ class PhysicalRuntimeContext:
             # NAND page and create spurious read amplification.
             alignment = (
                 int(config.burst_bytes)
-                if isinstance(config, DramConfig)
+                if isinstance(config, (DramConfig, SramConfig))
                 else int(config.page_bytes)
             )
             self.allocators.setdefault(key, PhysicalAddressAllocator(capacity, alignment,
@@ -357,10 +384,11 @@ class PhysicalRuntimeContext:
         *,
         capture_details: Optional[bool] = None,
     ) -> _PhysicalRuntime:
-        from .memory_types import DramConfig
+        from .memory_types import DramConfig, SramConfig
         config = self._owner_config(config, owner)
         from .dram_core import DramCore
         from .nand_core import NandCore
+        from .sram_core import SramCore
         # Preserve detailed preview bills by default.  Summary-only planner
         # callers can disable transient stage/mapping tuples explicitly.
         details = True if capture_details is None else capture_details
@@ -369,11 +397,15 @@ class PhysicalRuntimeContext:
         core = (
             DramCore(config, capture_details=details)
             if isinstance(config, DramConfig)
+            else SramCore(config, capture_details=details)
+            if isinstance(config, SramConfig)
             else NandCore(config, capture_details=details)
         )
         return _PhysicalRuntime(core=core)
 
-    def snapshot(self, *, transactional: bool = False) -> dict[str, Any]:
+    def snapshot(self, *, transactional: bool = False,
+                 owners: Optional[Iterable[str]] = None,
+                 _owned_timeline: bool = False) -> dict[str, Any]:
         """Capture a transaction-local rollback point without copying history.
 
         Physical tasks are submitted one at a time.  The old implementation
@@ -388,14 +420,25 @@ class PhysicalRuntimeContext:
         from .nand_core import NandCore
         from .hbf_staging_runtime import snapshot as snapshot_staging
 
+        selected_owners = None if owners is None else frozenset(owners)
+        native_footprints = {}
+        native_owned_hooks = (transactional and _owned_timeline and selected_owners is not None
+                              and self._owners_have_native_hooks(selected_owners, _footprints=native_footprints))
+        if (transactional and _owned_timeline and selected_owners is not None
+                and not native_owned_hooks):
+            # Unknown execution callbacks may also edit a sibling runtime.
+            # They own neither a narrow resource journal nor an owner subset.
+            selected_owners = None
         runtime_state = {}
         for owner, active in self.runtimes.items():
+            if selected_owners is not None and owner not in selected_owners:
+                continue
             core = active.core
             if not transactional and isinstance(core, DramCore):
                 # Public snapshots may outlive an active transaction. Upgrade
                 # its undo state before copying controller objects so callers
                 # can still finish their original token after a restore.
-                core._hbm_before_reference()
+                core._hbm_before_owned_snapshot()
             if not transactional and isinstance(core, NandCore):
                 core._nand_before_reference()
             hbm_transaction = (core.begin_transaction()
@@ -476,9 +519,26 @@ class PhysicalRuntimeContext:
         allocator_state = {
             owner: dict(allocator._allocations)
             for owner, allocator in self.allocators.items()
+            if selected_owners is None or owner in selected_owners
         }
         timeline = self.timeline
-        timeline_state = {
+        timeline_token = (timeline._begin_owned_transaction()
+            if transactional and _owned_timeline
+            and self._can_own_timeline(selected_owners, _hooks_checked=native_owned_hooks,
+                                      _native_footprints=native_footprints) else None)
+        if timeline_token is not None:
+            for owner in selected_owners:
+                core = self.runtimes[owner].core
+                if type(core) is DramCore and core.config.control_mode != "jedec_hbm":
+                    timeline._remember_resources(native_footprints[owner])
+            if native_owned_hooks:
+                for state in runtime_state.values():
+                    token = state.get("nand_transaction")
+                    if token is not None:
+                        token.native_timeline_qualified = True
+        timeline_state = ({"_owned_transaction": timeline_token,
+                           "lane_available": timeline_token.before_lanes()}
+                          if timeline_token is not None else {
             "ready_ns": dict(timeline.ready_ns),
             "directions": dict(timeline.directions),
             "busy_ns": dict(timeline.busy_ns),
@@ -498,20 +558,145 @@ class PhysicalRuntimeContext:
                 resource: tuple(directions)
                 for resource, directions in timeline.lane_directions.items()
             },
-        }
+        })
         return {
             "runtimes": dict(self.runtimes),
             "runtime_state": runtime_state,
             "allocators": dict(self.allocators),
             "allocator_state": allocator_state,
             "timeline": timeline_state,
+            # Native owner qualification also governs sparse publication after
+            # a successful call. Unknown callbacks can modify a foreign lane
+            # without adding it to the current request's touched-resource bill.
+            "_owned_native_writers": bool(native_owned_hooks),
             "committed_owners": set(self._committed_owners),
             "hbf_staging": snapshot_staging(self.hbf_staging, transactional=transactional),
         }
 
-    def begin_transaction(self) -> dict[str, Any]:
+    def _can_own_timeline(self, owners, *, _hooks_checked=False, _native_footprints=None) -> bool:
+        """Only closed native writers use sparse timeline undo."""
+        from .dram_core import DramCore
+        from .nand_core import NandCore
+        from .sram_core import SramCore
+        from .memory_transfer import ResourceTimeline, _TIMELINE_MAPS, _OWNED_TIMELINE_RESERVE
+        from ._compiled_hbm import can_capture_resource_columns
+        if (not owners or type(self.timeline) is not ResourceTimeline
+                or self.hbf_staging or self.capture_details
+                or any(type(getattr(self.timeline, name)) is not dict for name in _TIMELINE_MAPS)
+                or type(self.timeline.resource_aliases) is not dict
+                or type(self.timeline._touched) is not set
+                or getattr(self.timeline.reserve, "__func__", None) is not _OWNED_TIMELINE_RESERVE):
+            return False
+        if _native_footprints is None:
+            _native_footprints = {}
+        if not _hooks_checked and not self._owners_have_native_hooks(owners, _footprints=_native_footprints):
+            return False
+        for owner in owners:
+            active = self.runtimes.get(owner)
+            if active is None:
+                return False
+            core = active.core
+            if core.capture_details:
+                return False
+            if type(core) is DramCore:
+                if core.config.control_mode != "jedec_hbm":
+                    if owner not in _native_footprints:
+                        return False
+                else:
+                    if not core._hbm_numeric_enabled:
+                        return False
+                    packed = core._hbm_numeric_state
+                    if packed is None or not can_capture_resource_columns(self.timeline, packed.ids):
+                        return False
+            elif type(core) is NandCore:
+                if core.config.protocol_mode != "generic_nand" or core._observe_media:
+                    return False
+            elif type(core) is SramCore:
+                pass
+            else:
+                return False
+        return True
+
+    def _owners_have_native_hooks(self, owners, *, _footprints=None) -> bool:
+        from .dram_core import DramCore, _OWNED_TIMELINE_DRAM_METHODS
+        from .nand_core import NandCore, _OWNED_OWNER_NAND_METHODS
+        from .sram_core import SramCore, _OWNED_OWNER_SRAM_METHODS
+        from .memory_transfer import ResourceTimeline, _OWNED_TIMELINE_METHODS
+        from ._compiled_hbm import _has_native_timeline_hooks
+        from ._nand_acceleration import has_native_timeline_hooks as native_nand_hooks
+        from ._nand_pack import can_own_timeline, can_own_resource_aliases
+        if type(self.timeline) is not ResourceTimeline:
+            return False
+        from .memory_transfer import _TIMELINE_MAPS
+        if (any(type(getattr(self.timeline, name)) is not dict for name in _TIMELINE_MAPS)
+                or type(self.timeline.resource_aliases) is not dict
+                or type(self.timeline._touched) is not set):
+            return False
+        if not can_own_resource_aliases(self.timeline.resource_aliases):
+            return False
+        for name, original in _OWNED_TIMELINE_METHODS:
+            method = getattr(self.timeline, name)
+            if getattr(method, "__func__", method) is not original:
+                return False
+        for owner in owners:
+            active = self.runtimes.get(owner)
+            if active is None:
+                # Allocation registration can create this Core after the
+                # kernel's transaction boundary. Until its class/hooks are
+                # known, a callback may mutate an existing sibling owner.
+                # The first dispatch keeps the original complete undo.
+                return False
+            core = active.core
+            core_type = type(core)
+            methods = (_OWNED_TIMELINE_DRAM_METHODS if core_type is DramCore else
+                       _OWNED_OWNER_NAND_METHODS if core_type is NandCore else
+                       _OWNED_OWNER_SRAM_METHODS if core_type is SramCore else None)
+            if methods is None:
+                return False
+            for name, original in methods:
+                method = getattr(core, name)
+                if getattr(method, "__func__", method) is not original:
+                    return False
+            packed = core._hbm_numeric_state if core_type is DramCore else None
+            if (core_type is DramCore and core.config.control_mode == "jedec_hbm"
+                    and not _has_native_timeline_hooks(packed)):
+                return False
+            if core_type is DramCore and core.config.control_mode != "jedec_hbm":
+                from ._compiled_dram import owned_resource_footprint
+                resources = owned_resource_footprint(core)
+                if resources is None:
+                    return False
+                if _footprints is not None:
+                    _footprints[owner] = resources
+            if core_type is NandCore and not native_nand_hooks():
+                return False
+            if core_type in (NandCore, SramCore):
+                try:
+                    if core_type is NandCore:
+                        from ._nand_acceleration import owned_resource_footprint
+                        if any(type(core.config.metadata.get(name, "")) is not str for name in (
+                                "array_resource_prefix", "parallel_resource_prefix",
+                                "channel_resource_prefix", "host_resource_id")):
+                            return False
+                        resources = owned_resource_footprint(core)
+                    else:
+                        prefix = core.config.metadata.get("port_resource_prefix", "sram:port")
+                        if type(prefix) is not str or core.config.ports > 65536:
+                            return False
+                        resources = tuple(self.timeline.canonical_resource_id(f"{prefix}:{index}")
+                                          for index in range(core.config.ports))
+                except (TypeError, ValueError, RecursionError):
+                    return False
+                if resources is None or not can_own_timeline(self.timeline, resources):
+                    return False
+                if _footprints is not None:
+                    _footprints[owner] = resources
+        return True
+
+    def begin_transaction(self, *, owners: Optional[Iterable[str]] = None,
+                          _owned_timeline: bool = False) -> dict[str, Any]:
         """Protect live dispatch by journaling changed HBM and staging state."""
-        return self.snapshot(transactional=True)
+        return self.snapshot(transactional=True, owners=owners, _owned_timeline=_owned_timeline)
 
     def commit_transaction(self, snapshot: dict[str, Any]) -> None:
         from .hbf_staging_runtime import commit
@@ -523,6 +708,9 @@ class PhysicalRuntimeContext:
             if nand_token is not None:
                 state["active"].core.commit_transaction(nand_token)
         commit(snapshot["hbf_staging"])
+        timeline_token = snapshot["timeline"].get("_owned_transaction")
+        if timeline_token is not None:
+            timeline_token.finish()
 
     def restore(self, snapshot: dict[str, Any]) -> None:
         self.runtimes.clear()
@@ -563,26 +751,30 @@ class PhysicalRuntimeContext:
             allocator._restore_allocations(allocations)
         timeline_state = snapshot["timeline"]
         timeline = self.timeline
-        for name in ("ready_ns", "directions", "busy_ns", "bytes_moved", "last_intervals"):
-            target = getattr(timeline, name)
-            target.clear()
-            target.update(timeline_state[name])
-        timeline._intervals = copy.deepcopy(timeline_state["_intervals"])
-        timeline._interval_limit = timeline_state["_interval_limit"]
-        timeline._interval_count = timeline_state["_interval_count"]
-        timeline._intervals_truncated = timeline_state["_intervals_truncated"]
-        timeline._touched = set(timeline_state["_touched"])
-        timeline._interval_payloads = copy.deepcopy(timeline_state["_interval_payloads"])
-        timeline.lane_available.clear()
-        timeline.lane_available.update({
-            resource: list(lanes)
-            for resource, lanes in timeline_state["lane_available"].items()
-        })
-        timeline.lane_directions.clear()
-        timeline.lane_directions.update({
-            resource: list(directions)
-            for resource, directions in timeline_state["lane_directions"].items()
-        })
+        timeline_token = timeline_state.get("_owned_transaction")
+        if timeline_token is not None:
+            timeline_token.rollback()
+        else:
+            for name in ("ready_ns", "directions", "busy_ns", "bytes_moved", "last_intervals"):
+                target = getattr(timeline, name)
+                target.clear()
+                target.update(timeline_state[name])
+            timeline._intervals = copy.deepcopy(timeline_state["_intervals"])
+            timeline._interval_limit = timeline_state["_interval_limit"]
+            timeline._interval_count = timeline_state["_interval_count"]
+            timeline._intervals_truncated = timeline_state["_intervals_truncated"]
+            timeline._touched = set(timeline_state["_touched"])
+            timeline._interval_payloads = copy.deepcopy(timeline_state["_interval_payloads"])
+            timeline.lane_available.clear()
+            timeline.lane_available.update({
+                resource: list(lanes)
+                for resource, lanes in timeline_state["lane_available"].items()
+            })
+            timeline.lane_directions.clear()
+            timeline.lane_directions.update({
+                resource: list(directions)
+                for resource, directions in timeline_state["lane_directions"].items()
+            })
         self._committed_owners.clear()
         self._committed_owners.update(snapshot["committed_owners"])
         from .hbf_staging_runtime import restore
@@ -1311,6 +1503,31 @@ def is_physical_task(task: TaskSpec) -> bool:
     return True
 
 
+def physical_task_transaction_owners(task: TaskSpec):
+    """Owners that the task's explicit memory descriptors may mutate.
+
+    Host staging can execute additional controller work through its bindings;
+    it keeps the complete transaction. Ordinary DRAM/NAND/SRAM descriptors
+    name their entire memory footprint, including L2 backing allocations.
+    """
+    metadata = task.metadata
+    if metadata.get("hbf_host_staging_by_owner"):
+        return None
+    default = metadata.get("physical_owner")
+    owners = {str(default)} if default else set()
+    for rows in (_memory_accesses(metadata), _physical_allocations(metadata)):
+        for row in rows or ():
+            if not isinstance(row, Mapping):
+                raise ValueError("physical descriptors must be mappings")
+            owner = row.get("physical_owner") or default
+            if owner:
+                owners.add(str(owner))
+    contract = metadata.get("stateful_l2")
+    if isinstance(contract, Mapping) and contract.get("memory_resource"):
+        owners.add(str(contract["memory_resource"]))
+    return frozenset(owners)
+
+
 def physical_task_demands(task: TaskSpec) -> Tuple[ResourceDemand, ...]:
     """Return preview demands that remain externally scheduled for a physical task."""
     metadata = task.metadata
@@ -1631,9 +1848,9 @@ class PhysicalService:
             page_offset_bytes = self.component.metadata.get("memory_access_offset_bytes")
             if page_offset_bytes is not None:
                 _non_negative_int(page_offset_bytes, "memory_access_offset_bytes")
-        from .memory_types import AccessRequest, DramConfig, Operation
-        if kind is AccessKind.ERASE and isinstance(config, DramConfig):
-            raise ValueError("DRAM does not support ERASE operations")
+        from .memory_types import AccessRequest, DramConfig, SramConfig, Operation
+        if kind is AccessKind.ERASE and isinstance(config, (DramConfig, SramConfig)):
+            raise ValueError(("SRAM" if isinstance(config, SramConfig) else "DRAM") + " does not support ERASE operations")
         if page_offset_bytes is None and self.component.metadata.get("memory_access_offset_bytes") is None:
             raise ValueError("physical_memory_config requires an explicit memory address")
         if self.component.metadata.get("host_write_staging") is not None:
@@ -1670,7 +1887,7 @@ class PhysicalService:
                 "timing_model": "physical_transaction_v1",
                 "pages_touched": 0,
             }
-        is_dram = isinstance(config, DramConfig)
+        is_byte_addressed = isinstance(config, (DramConfig, SramConfig))
         operation = Operation.READ if kind is AccessKind.READ else Operation.WRITE if kind is AccessKind.WRITE else Operation.ERASE
         if arrival_ns is not None:
             _non_negative(arrival_ns, "arrival_ns")
@@ -1708,7 +1925,7 @@ class PhysicalService:
             "bandwidth_ceiling_gb_s": result.bandwidth_ceiling_gb_s,
             "operation": operation.value,
             "timing_model": "physical_transaction_v1",
-            "pages_touched": result.counters.get("page_count", 0) if not is_dram else 0,
+            "pages_touched": result.counters.get("page_count", 0) if not is_byte_addressed else 0,
             "write_completion": (
                 result.counters.get("write_completion", "media_program_complete")
                 if operation is Operation.WRITE else "n/a"
@@ -2188,6 +2405,83 @@ class EndpointService:
     metadata: Mapping[str, object]
 
 
+_CONSTRUCTION_NATIVE_SERVICE_METHODS = tuple(
+    (name, getattr(PhysicalService, name)) for name in ("price", "_price"))
+
+
+def _native_construction_callbacks() -> bool:
+    """Only closed native pricing may omit a discarded cold execution."""
+    from .dram_core import DramCore, _OWNED_TIMELINE_DRAM_METHODS
+    from .nand_core import NandCore, _OWNED_OWNER_NAND_METHODS
+    from .sram_core import SramCore, _OWNED_OWNER_SRAM_METHODS
+    from .memory_transfer import ResourceTimeline, _OWNED_TIMELINE_METHODS
+    from ._compiled_hbm import _has_native_timeline_hooks
+    from ._nand_acceleration import has_native_timeline_hooks
+    return (
+        all(getattr(PhysicalService, name) is original
+            for name, original in _CONSTRUCTION_NATIVE_SERVICE_METHODS)
+        and all(getattr(core, name) is original
+                for core, methods in (
+                    (DramCore, _OWNED_TIMELINE_DRAM_METHODS),
+                    (NandCore, _OWNED_OWNER_NAND_METHODS),
+                    (SramCore, _OWNED_OWNER_SRAM_METHODS),
+                    (ResourceTimeline, _OWNED_TIMELINE_METHODS))
+                for name, original in methods)
+        and _has_native_timeline_hooks(None)
+        and has_native_timeline_hooks()
+    )
+
+
+def _construction_service_bill(
+    service: PhysicalService,
+    kind: AccessKind,
+    byte_count: int,
+    *,
+    page_offset_bytes: int,
+    physical_config=None,
+    runtime: Optional[PhysicalRuntimeContext] = None,
+    arrival_ns: Optional[float] = None,
+    preview: bool = False,
+    summary_only: bool = True,
+) -> Mapping[str, object]:
+    """Preserve descriptors when live dispatch owns the physical service.
+
+    Direct GPU backing phases and communication endpoints use the same
+    construction contract. Ordinary pricing, explicit runtime submissions,
+    and host-staged HBF retain their existing preview frontiers.
+    """
+    component = service.component
+    deferred = (
+        _DEFER_ENDPOINT_CONSTRUCTION.get() is not None
+        and runtime is None and summary_only
+        and component is not None
+        and component.metadata.get("host_write_staging") is None
+    )
+    if not deferred:
+        return service.price(
+            kind, byte_count, page_offset_bytes=page_offset_bytes,
+            runtime=runtime, arrival_ns=arrival_ns, preview=preview,
+            summary_only=summary_only,
+        )
+    kind = AccessKind(kind)
+    _non_negative_int(byte_count, "byte_count")
+    _non_negative_int(page_offset_bytes, "memory access address")
+    if kind is AccessKind.COPY:
+        raise ValueError("COPY must be expanded before billing")
+    if physical_config is None:
+        from .physical_contract import require_physical_memory_config
+        physical_config = require_physical_memory_config(component)
+    from .memory_types import DramConfig, SramConfig
+    if kind is AccessKind.ERASE and isinstance(physical_config, (DramConfig, SramConfig)):
+        raise ValueError("byte-addressed memory does not support ERASE operations")
+    if byte_count and page_offset_bytes + byte_count > physical_config.effective_capacity_bytes:
+        raise ValueError("physical access exceeds memory capacity")
+    return {"logical_bytes": byte_count, "physical_bytes": 0,
+            "host_transfer_bytes": 0, "internal_transfer_bytes": 0,
+            "service_ns": 0.0, "physical_cost_deferred": True,
+            "timing_model": "native_dispatch_pending"}
+
+
 def endpoint_service(
     component: ComponentSpec,
     byte_count: int,
@@ -2215,7 +2509,15 @@ def endpoint_service(
     if address is None:
         address = component.metadata.get("memory_access_offset_bytes")
     from .physical_contract import require_physical_memory_config
-    physical_config = require_physical_memory_config(component)
+    cache = _DEFER_ENDPOINT_CONSTRUCTION.get() if compact_preview and runtime is None else None
+    cached = cache.get(id(component)) if cache is not None else None
+    if cached is None:
+        physical_config = require_physical_memory_config(component)
+        service = resolve_service(component)
+        if cache is not None:
+            cache[id(component)] = (component, physical_config, service)
+    else:
+        _component, physical_config, service = cached
     if address is None:
         raise ValueError("physical_memory_config requires an explicit memory address")
     if address is not None:
@@ -2223,14 +2525,11 @@ def endpoint_service(
     op_name = str(operation).lower()
     if op_name not in {"read", "write", "erase"}:
         raise ValueError("operation must be read, write or erase")
-    service = resolve_service(component)
-    billed = service.price(
+    billed = _construction_service_bill(
+        service,
         AccessKind.READ if op_name == "read" else AccessKind.WRITE if op_name == "write" else AccessKind.ERASE,
-        byte_count,
-        page_offset_bytes=address,
-        runtime=runtime,
-        arrival_ns=arrival_ns,
-        preview=preview,
+        byte_count, page_offset_bytes=address, physical_config=physical_config,
+        runtime=runtime, arrival_ns=arrival_ns, preview=preview,
         summary_only=compact_preview,
     )
     if compact_preview and runtime is None and component.metadata.get("physical_memory_config") is not None:

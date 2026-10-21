@@ -188,6 +188,10 @@ class KvPoolTransferPlan:
     # Cancellation drains already-submitted work and releases only this copy's
     # destination. Unlike admission rollback it never rewinds shared calendars.
     cancel: Optional[Callable[[], Mapping[str, Any]]] = field(default=None, repr=False, compare=False)
+    # Only the currently submitted physical phase. A closed native writer
+    # can report its exact calendar footprint; unknown writers retain the
+    # complete shared-calendar publication represented by None.
+    native_changed_resource_ids: Optional[tuple[str, ...]] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         try:
@@ -220,6 +224,10 @@ class KvPoolTransferPlan:
             hook = getattr(self, name)
             if hook is not None and not callable(hook):
                 raise KvPoolError("transfer plan {} hook must be callable".format(name))
+        if self.native_changed_resource_ids is not None and (
+                type(self.native_changed_resource_ids) is not tuple
+                or any(type(resource) is not str for resource in self.native_changed_resource_ids)):
+            raise KvPoolError("native changed resource IDs must be a tuple of strings or None")
 
 
 @dataclass(frozen=True)
@@ -423,8 +431,8 @@ class DynamicKVPool:
             config = physical_configs.get(item.component_id)
             alignment = 1
             if config is not None:
-                from .memory_types import DramConfig
-                alignment = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
+                from .memory_types import DramConfig, SramConfig
+                alignment = config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes
             self._allocation_granularity[item.component_id] = int(alignment)
         self.tokens_per_page = int(tokens_per_page)
         self.default_page_bytes = int(page_bytes)

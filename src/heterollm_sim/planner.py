@@ -24,10 +24,12 @@ from typing import Callable, Dict, FrozenSet, Hashable, Iterator, List, Optional
 from . import __version__
 from .memory_service import DRAM_OPTIONAL_COUNTER_FIELDS, DRAM_OPTIONAL_TIME_FIELDS, DRAM_SERVICE_TIME_SCOPE
 from .kernel_query_ledger import summarize_kernel_queries
+from .sram_traffic import summarize_sram_task_traffic
 from .config import ScenarioConfig
 from .attention_bias import projection_bias_workload, resolve_attention_qkv_bias
 from .cache_state import CacheAccess
-from .data_motion import _memory_accesses, _physical_allocations
+from .data_motion import (_memory_accesses, _physical_allocations,
+                          deferred_endpoint_construction, _DEFER_ENDPOINT_CONSTRUCTION)
 from ._physical_binding import StaticPhysicalBinding, _has_explicit_generation
 from .kernel_memory import attach_l2_contract, paged_buffer_accesses, attention_stream_k_accesses
 from .kernel_model import summarize_kernel_predictions, apply_captured_graph_launch
@@ -88,7 +90,7 @@ from .cost_models import (
     estimate_gpu_tensor_kernel,
 )
 from .engine import ScheduleIR
-from .execution_control import ExecutionControl
+from .execution_control import ExecutionCancelledError, ExecutionControl
 from .ir import (
     ACTIVE_MEMORY_COMPONENT_KINDS,
     OFFLOAD_STORAGE_COMPONENT_KINDS,
@@ -305,6 +307,7 @@ class CompilationContext:
     leaf_cache_entries: int = 4096
     eager_full_attention_segments: bool = True
     compiled_serving_invocation_segments: bool = False
+    execution_control: Optional[ExecutionControl] = None
     _serving_invocation_lean_replay_capability: Optional[object] = None
     _leaf_values: Optional[
         "OrderedDict[Hashable, object]"
@@ -4129,16 +4132,16 @@ def _cached_physical_memory_config(component):
                              lambda: require_physical_memory_config(component))
 
 
-def _physical_dram_config(scenario: ScenarioConfig, component: ComponentSpec):
-    """Resolve once per compilation; NAND is not a CPU cache backing model."""
+def _physical_byte_addressable_config(scenario: ScenarioConfig, component: ComponentSpec):
+    """Resolve native DRAM/SRAM backing without admitting NAND as SRAM."""
     def resolve():
-        from .memory_types import DramConfig
+        from .memory_types import DramConfig, SramConfig
         parsed = _cached_physical_memory_config(component)
-        return parsed if isinstance(parsed, DramConfig) else None
+        return parsed if isinstance(parsed, (DramConfig, SramConfig)) else None
 
     context = _active_compilation_context(scenario)
     return resolve() if context is None else context.invariant(
-        ("physical_dram_config", component.component_id), resolve
+        ("physical_byte_addressable_config", component.component_id), resolve
     )
 
 
@@ -4156,9 +4159,9 @@ def _physical_access_from_cache_access(access: Mapping[str, object]) -> Dict[str
 
 def _direct_backing_descriptors(task, scenario, component, direct):
     """Bind a direct operand to the same stable allocator as local operands."""
-    from .memory_types import DramConfig
+    from .memory_types import DramConfig, SramConfig
     config = _cached_physical_memory_config(component)
-    alignment = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
+    alignment = config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes
     metadata = task.metadata
     reads = _gddr_non_negative_int(direct["read_bytes"], "read_bytes")
     writes = _gddr_non_negative_int(direct["write_bytes"], "write_bytes")
@@ -4384,12 +4387,12 @@ def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfi
 def _physical_backing_candidates(scenario, target_id, target_kind):
     """Reuse the immutable topology-to-resource lookup while lowering tasks."""
     def build():
-        from .physical_contract import DRAM_COMPONENT_KINDS
+        from .physical_contract import DRAM_COMPONENT_KINDS, SRAM_COMPONENT_KINDS
         rows = []
         for component in scenario.hardware.components:
             component_kind = _kind(component)
             hbf_memory = component_kind == "hbf" and component.is_active_memory
-            if component_kind not in DRAM_COMPONENT_KINDS and not hbf_memory:
+            if component_kind not in DRAM_COMPONENT_KINDS | SRAM_COMPONENT_KINDS and not hbf_memory:
                 continue
             service = component.metadata.get("memory_service", {})
             owner = str(service.get("physical_owner") or default_memory_resource_id(component))
@@ -4436,7 +4439,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             scenario, target_id, target_kind):
         if any(str(d.resource_id) in resource_ids and d.bytes_moved > 0 for d in task.demands):
             raw_config = (component.metadata["physical_memory_config"] if hbf_memory
-                          else _physical_dram_config(scenario, component))
+                          else _physical_byte_addressable_config(scenario, component))
             if raw_config is None:
                 raise ValueError("task {} requires a DRAM backing component: {}".format(task.task_id, component.component_id))
             _cached_physical_memory_config(component)
@@ -4487,10 +4490,10 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 task.task_id
             )
         )
-    from .memory_types import DramConfig
+    from .memory_types import DramConfig, SramConfig
     physical = _cached_physical_memory_config(component)
     capacity = physical.effective_capacity_bytes
-    burst = physical.burst_bytes if isinstance(physical, DramConfig) else physical.page_bytes
+    burst = physical.burst_bytes if isinstance(physical, (DramConfig, SramConfig)) else physical.page_bytes
     if capacity <= 0 or burst <= 0:
         raise ValueError(
             "GDDR task {} requires positive capacity_bytes and burst_bytes".format(
@@ -5249,6 +5252,9 @@ class _TaskBuilder:
         earliest_start_ns: float = 0.0,
     ) -> str:
         self.counter += 1
+        context = _COMPILATION_CONTEXT.get()
+        if self.counter % 256 == 0 and context is not None and context.execution_control is not None:
+            context.execution_control.raise_if_cancelled()
         safe_name = _UNSAFE_TASK_NAME_PATTERN.sub("-", name)
         task_id = "{}.{:05d}.{}".format(self.request.request_id, self.counter, safe_name)
         if dependencies is not None:
@@ -5271,7 +5277,6 @@ class _TaskBuilder:
                 metadata=bound_metadata,
             )
         )
-        context = _COMPILATION_CONTEXT.get()
         physical_source = self.tasks[-1]
         if context is not None:
             self.tasks[-1] = _attach_gddr_physical_task(self.tasks[-1], context.scenario)
@@ -5453,16 +5458,12 @@ def _task_segment_trusted_task_spec(
             metadata=rebound_metadata,
         )
     rebound = object.__new__(TaskSpec)
-    object.__setattr__(rebound, "task_id", rebound_task_id)
-    object.__setattr__(rebound, "request_id", rebound_request_id)
-    object.__setattr__(rebound, "name", rebound_name)
-    object.__setattr__(rebound, "category", template.category)
-    object.__setattr__(rebound, "dependencies", rebound_dependencies)
-    object.__setattr__(rebound, "demands", rebound_demands)
-    object.__setattr__(rebound, "earliest_start_ns", template.earliest_start_ns)
-    object.__setattr__(rebound, "marker", template.marker)
-    object.__setattr__(rebound, "token_index", template.token_index)
-    object.__setattr__(rebound, "metadata", rebound_metadata)
+    # This private handoff has already validated every field. Populate the
+    # ordinary dataclass dictionary once, preserving constructor field order.
+    rebound.__dict__.update(task_id=rebound_task_id, request_id=rebound_request_id,
+        name=rebound_name, category=template.category, dependencies=rebound_dependencies,
+        demands=rebound_demands, earliest_start_ns=template.earliest_start_ns,
+        marker=template.marker, token_index=template.token_index, metadata=rebound_metadata)
     return rebound
 
 
@@ -5488,6 +5489,7 @@ class _GenericKVStorageReplayPayload:
     rank: LogicalRank
     tp_degree: int
     part: str = ""
+    access_index: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -5495,6 +5497,138 @@ class _LivePhysicalProjection:
     """Apply the ordinary physical projection to newly bound logical slots."""
 
     pass
+
+
+@dataclass(frozen=True)
+class _DeferredEndpointPhysicalBinding:
+    """Rebind declared collective endpoint addresses before live dispatch.
+
+    This is only valid for unpriced planner endpoints.  A cold preview's
+    timing/counters cannot be reused when its request-owned address changes.
+    """
+
+    binding: StaticPhysicalBinding
+
+    @classmethod
+    def capture(cls, task):
+        metadata = task.metadata
+        by_owner = metadata.get("physical_execution_by_owner")
+        if (metadata.get("physical_execution_role") != "construction_preview"
+                or not isinstance(by_owner, Mapping) or not by_owner
+                or any(not isinstance(row, Mapping)
+                       or row.get("physical_cost_deferred") is not True
+                       for row in by_owner.values())
+                or metadata.get("stateful_l2") is not None
+                or any(demand.service_ns or demand.bytes_moved for demand in task.demands)):
+            return None
+        from .memory_types import DramConfig, SramConfig
+        from .physical_contract import parse_execution_physical_config
+        context = _COMPILATION_CONTEXT.get()
+        component = (context.component_map().get(metadata.get("component_id"))
+                     if context is not None else None)
+        config = (_cached_physical_memory_config(component)
+                  if component is not None and metadata["physical_memory_config"]
+                     is component.metadata.get("physical_memory_config")
+                  else parse_execution_physical_config(metadata["physical_memory_config"]))
+        alignment = config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes
+        generation = int.from_bytes(b"\x01" + task.request_id.encode("utf-8"), "big")
+        generations, addresses = [], []
+        accesses = metadata.get("memory_accesses")
+        if not isinstance(accesses, tuple) or not accesses:
+            return None
+        for index, row in enumerate(accesses):
+            if not isinstance(row, Mapping):
+                return None
+            source = row.get("address_source")
+            if source == "stable_buffer_tensor_offset":
+                if not row.get("buffer_id"):
+                    return None
+                addresses.append(((("memory_accesses", index),), config.capacity_bytes, alignment))
+            elif source not in {"explicit_physical_address", "explicit_buffer_tensor_address"}:
+                return None
+            for field in ("allocation_generation", "alias_generation"):
+                value = row.get(field)
+                if value not in (None, 0):
+                    if value != generation:
+                        return None
+                    generations.append(("memory_accesses", index, field))
+        return cls(StaticPhysicalBinding(tuple(generations), tuple(addresses)))
+
+    def bind(self, metadata, request_id):
+        self.binding.bind(metadata, request_id, _gddr_stable_address)
+        metadata["address"] = metadata["memory_accesses"][0]["address"]
+
+
+class _TaskSegmentBoundMetadata(Mapping):
+    """A native Token prototype with lazily evaluated namespace slots.
+
+    Only planner-owned, value-like metadata enters this view.  Its keys and
+    order are fixed by capture; mutable values are cloned on first access.
+    It owns no physical/controller state and cannot change resource demands.
+    """
+
+    __slots__ = ("source", "plans", "parameters", "overrides", "source_phase",
+                 "rebound_phase", "cache", "memo", "endpoint")
+
+    def __init__(self, source, plans, parameters, overrides, source_phase, rebound_phase, endpoint=None):
+        self.source, self.plans, self.parameters = source, plans, parameters
+        self.overrides, self.source_phase, self.rebound_phase = overrides, source_phase, rebound_phase
+        self.cache = None
+        self.memo = None
+        self.endpoint = endpoint
+
+    def __iter__(self):
+        return iter(self.source)
+
+    def __len__(self):
+        return len(self.source)
+
+    def __getitem__(self, key):
+        if self.cache is not None and key in self.cache:
+            return self.cache[key]
+        value = self.source[key]
+        if self.endpoint is not None and key == "address":
+            return self["memory_accesses"][0]["address"]
+        plan = self.plans.get(key)
+        if plan is not None:
+            if self.memo is None:
+                self.memo = {}
+            value = _task_segment_clone_metadata_with_plan(value, plan, self.memo, **self.parameters)
+        if self.endpoint is not None and key == "memory_accesses":
+            if plan is None:
+                value = tuple(dict(row) for row in value)
+            generation = int.from_bytes(b"\x01" + self.parameters["request_id"].encode("utf-8"), "big")
+            for _collection, index, field in self.endpoint.binding.generation_slots:
+                value[index][field] = generation
+            for slots, capacity, burst in self.endpoint.binding.address_slots:
+                _collection, index = slots[0]
+                row = value[index]
+                address = _gddr_stable_address(row["buffer_id"], row.get("offset_bytes", 0),
+                    row["byte_count"], capacity, burst, row.get("allocation_size_bytes"))
+                for _collection, index in slots:
+                    value[index]["address"] = address
+        if key in self.overrides:
+            if not (key == "phase" and self.source_phase is not None
+                    and value not in (self.source_phase, self.rebound_phase)):
+                value = self.overrides[key]
+        if plan is not None or self.endpoint is not None and key == "memory_accesses":
+            if self.cache is None:
+                self.cache = {}
+            self.cache[key] = value
+        return value
+
+
+def _task_segment_lazy_field_plans(plan):
+    """Keep unknown copy hooks eager and admit only built-in clone plans."""
+    def supported(node):
+        if node is None:
+            return True
+        return (isinstance(node, tuple) and len(node) == 3
+                and node[0] in {"dict", "list", "tuple", "set", "namespace"}
+                and all(supported(child) for _selector, child in node[2]))
+    if not isinstance(plan, tuple) or plan[0] != "dict" or not supported(plan):
+        return None
+    return dict(plan[2])
 
 
 @dataclass(frozen=True)
@@ -6479,6 +6613,7 @@ class _TaskSegmentTemplate:
     physical_bindings: Optional[Tuple[object, ...]] = None
     storage_payloads: Tuple[Optional[_GenericKVStorageReplayPayload], ...] = ()
     physical_post_metadata_keys: Tuple[Tuple[str, ...], ...] = ()
+    lazy_metadata_field_plans: Tuple[Optional[Mapping[str, object]], ...] = ()
 
     @classmethod
     def capture(
@@ -6500,6 +6635,8 @@ class _TaskSegmentTemplate:
         source_tasks = tuple(builder.tasks[first_task_index:])
         if not source_tasks:
             return None
+        context = _COMPILATION_CONTEXT.get()
+        control = context.execution_control if context is not None else None
         storage_payloads = tuple(builder._task_segment_storage_payloads.get(task.task_id)
                                  for task in source_tasks)
         parameterized_physical = bool(physical_sources is not None
@@ -6517,6 +6654,8 @@ class _TaskSegmentTemplate:
                     source_prefix, physical_namespace_memo)
                     or _task_segment_counter_value(value, 1) != value)
             for task_index, task in enumerate(source_tasks):
+                if task_index % 256 == 0 and control is not None:
+                    control.raise_if_cancelled()
                 pair = physical_sources.get(task.task_id)
                 if pair is None:
                     return None
@@ -6525,10 +6664,15 @@ class _TaskSegmentTemplate:
                 # Preserve their completed descriptors, with explicit slots
                 # for every request generation and stable address. Families
                 # outside this proof are compiled through their normal emitter.
-                if task != attached or original.metadata.get("physical_memory_config") is not None:
+                if task != attached:
                     return None
                 storage = storage_payloads[task_index]
-                if parameterized_physical and storage is not None:
+                if original.metadata.get("physical_memory_config") is not None:
+                    binding = (_DeferredEndpointPhysicalBinding.capture(original)
+                               if parameterized_physical else None)
+                    if binding is None:
+                        return None
+                elif parameterized_physical and storage is not None:
                     binding = _LivePhysicalProjection()
                 else:
                     binding = StaticPhysicalBinding.capture(original, attached,
@@ -6540,7 +6684,8 @@ class _TaskSegmentTemplate:
                 if binding is None:
                     return None
                 bindings.append(binding)
-                original_tasks.append(original)
+                original_tasks.append(attached if isinstance(binding, _DeferredEndpointPhysicalBinding)
+                                      else original)
                 # Invocation audit fields are authored after physical lowering.
                 # Keep their original tail position when replay adds the same
                 # physical descriptors to the logical source mapping.
@@ -6704,11 +6849,22 @@ class _TaskSegmentTemplate:
             metadata_plan_memo: Dict[int, Optional[object]] = {}
             metadata_namespace_memo: Dict[str, bool] = {}
             for task_index, task in enumerate(source_tasks):
+                if task_index % 256 == 0 and control is not None:
+                    control.raise_if_cancelled()
+                metadata_memo: Dict[int, object] = {}
+                if (physical_bindings is not None
+                        and isinstance(physical_bindings[task_index], _DeferredEndpointPhysicalBinding)):
+                    # Ordinary endpoint lowering borrows its scenario-owned
+                    # immutable configuration. Preserve the same ownership,
+                    # instead of cloning it for every collective endpoint.
+                    config = task.metadata["physical_memory_config"]
+                    metadata_memo[id(config)] = config
+                    metadata_plan_memo[id(config)] = None
                 cloned_metadata, clone_plan = _task_segment_capture_metadata(
                     task.metadata,
                     source_request_id=source_request_id,
                     source_prefix=source_prefix,
-                    memo={},
+                    memo=metadata_memo,
                     plan_memo=metadata_plan_memo,
                     namespace_memo=metadata_namespace_memo,
                 )
@@ -6751,6 +6907,8 @@ class _TaskSegmentTemplate:
                 if lean_metadata_replay_safe
                 else None
             )
+        except ExecutionCancelledError:
+            raise
         except Exception:
             # A valid uncached compilation must remain valid when metadata is
             # outside the value-like segment-cache contract.
@@ -6778,6 +6936,9 @@ class _TaskSegmentTemplate:
                         ).items()
                     )
                 )
+                if (not required_dynamic_attention_invocations
+                    or task.task_id in {terminal_task_id, final_previous, final_dma})
+                else ()
                 for task in tasks
             ),
             metadata_clone_plans=metadata_clone_plans_tuple,
@@ -6787,6 +6948,8 @@ class _TaskSegmentTemplate:
             physical_bindings=physical_bindings,
             storage_payloads=storage_payloads,
             physical_post_metadata_keys=physical_post_metadata_keys,
+            lazy_metadata_field_plans=tuple(_task_segment_lazy_field_plans(plan)
+                                           for plan in metadata_clone_plans_tuple),
         )
 
     def replay(
@@ -6915,14 +7078,37 @@ class _TaskSegmentTemplate:
             )
             for task_index, name in enumerate(rebound_names)
         )
+        binding_parameters = dict(source_request_id=self.source_request_id,
+            source_prefix=self.source_prefix, request_id=request_id, prefix=prefix,
+            counter_delta=counter_delta)
         for task_index, (task, dependency_refs, rank_values, clone_plan) in enumerate(zip(
             self.tasks,
             self.dependency_refs,
             self.rank_values,
             self.metadata_clone_plans,
         )):
+            if task_index % 256 == 0 and active_context is not None and active_context.execution_control is not None:
+                active_context.execution_control.raise_if_cancelled()
             name = rebound_names[task_index]
-            if use_lean_metadata_replay:
+            physical_binding = (self.physical_bindings[task_index]
+                                if self.physical_bindings is not None else None)
+            field_plans = (self.lazy_metadata_field_plans[task_index]
+                           if self.lazy_metadata_field_plans else None)
+            use_lazy_metadata = bool(active_context is not None
+                and active_context._serving_invocation_lean_replay_capability
+                    is _SERVING_INVOCATION_LEAN_REPLAY_CAPABILITY
+                and field_plans is not None and not metadata_override_rules
+                and dynamic_task_overrides.get(task_index) is None
+                and not (self.storage_payloads and self.storage_payloads[task_index] is not None)
+                and (isinstance(physical_binding, _DeferredEndpointPhysicalBinding)
+                     or isinstance(physical_binding, StaticPhysicalBinding)
+                        and not (physical_binding.metadata_fields or physical_binding.address_slots
+                                 or physical_binding.generation_slots or physical_binding.namespace_slots)))
+            if use_lazy_metadata:
+                replay_metadata = _TaskSegmentBoundMetadata(task.metadata, field_plans,
+                    binding_parameters, metadata_overrides, self.source_phase, rebound_source_phase,
+                    physical_binding if isinstance(physical_binding, _DeferredEndpointPhysicalBinding) else None)
+            elif use_lean_metadata_replay:
                 assert lean_namespace_keys is not None
                 replay_metadata = dict(task.metadata)
                 for key in lean_namespace_keys[task_index]:
@@ -6953,7 +7139,7 @@ class _TaskSegmentTemplate:
                 # Reuse the isolated dict produced by the capture plan. Other
                 # supported Mapping types need a mutable root for overrides.
                 replay_metadata = metadata if type(metadata) is dict else dict(metadata)
-            if metadata_overrides:
+            if metadata_overrides and not use_lazy_metadata:
                 for key, value in metadata_overrides.items():
                     if key not in replay_metadata:
                         continue
@@ -6995,12 +7181,12 @@ class _TaskSegmentTemplate:
             collecting = builder._physical_segment_sources is not None
             logical_metadata = dict(replay_metadata) if collecting else None
             post_metadata = tuple((key, replay_metadata.pop(key))
-                for key in self.physical_post_metadata_keys[task_index]) if self.physical_post_metadata_keys else ()
-            physical_binding = (self.physical_bindings[task_index]
-                                if self.physical_bindings is not None else None)
+                for key in self.physical_post_metadata_keys[task_index]) if self.physical_post_metadata_keys and not use_lazy_metadata else ()
             if isinstance(physical_binding, StaticPhysicalBinding):
                 physical_binding.bind(replay_metadata, request_id,
                     _gddr_stable_address, bind_physical_namespace)
+            elif isinstance(physical_binding, _DeferredEndpointPhysicalBinding) and not use_lazy_metadata:
+                physical_binding.bind(replay_metadata, request_id)
             builder.counter += 1
             task_id = rebound_task_ids[task_index]
             builder.tasks.append(
@@ -7029,6 +7215,8 @@ class _TaskSegmentTemplate:
                 builder.tasks[-1] = _attach_gddr_physical_task(builder.tasks[-1], context.scenario)
                 builder.tasks[-1] = _attach_planned_l2(builder.tasks[-1])
                 builder.tasks[-1] = _attach_hbf_host_staging(builder.tasks[-1], context.scenario)
+            elif isinstance(physical_binding, _DeferredEndpointPhysicalBinding) and not use_lazy_metadata:
+                builder.tasks[-1] = _attach_planned_l2(builder.tasks[-1])
             if post_metadata:
                 builder.tasks[-1].metadata.update(post_metadata)
             if collecting:
@@ -7079,6 +7267,9 @@ def _task_segment_cache_get(
     cache: "OrderedDict[Hashable, _TaskSegmentTemplate]",
     key: Hashable,
 ) -> Optional[_TaskSegmentTemplate]:
+    # A closed native descriptor must never survive into a compilation whose
+    # unknown physical callback requires the original cold execution.
+    key = (_DEFER_ENDPOINT_CONSTRUCTION.get() is not None, key)
     try:
         template = cache[key]
     except KeyError:
@@ -7101,6 +7292,7 @@ def _task_segment_cache_put(
                 else min(context.leaf_cache_entries, max_entries))
     if capacity <= 0:
         return
+    key = (_DEFER_ENDPOINT_CONSTRUCTION.get() is not None, key)
     cache[key] = template
     cache.move_to_end(key)
     while len(cache) > capacity:
@@ -8194,7 +8386,7 @@ def _direct_memory_address(
     address = component.metadata.get("memory_access_offset_bytes")
     if address is not None:
         return _gddr_non_negative_int(address, "memory_access_offset_bytes")
-    from .memory_types import DramConfig
+    from .memory_types import DramConfig, SramConfig
     physical = _cached_physical_memory_config(component)
     capacity = physical.capacity_bytes
     rank_index = _gddr_non_negative_int(rank.rank, "rank")
@@ -8204,7 +8396,7 @@ def _direct_memory_address(
     )
     match = re.search(r"(\d+)(?:\D*)$", label)
     label_index = int(match.group(1)) if match else sum(ord(char) for char in label)
-    page_bytes = physical.burst_bytes if isinstance(physical, DramConfig) else physical.page_bytes
+    page_bytes = physical.burst_bytes if isinstance(physical, (DramConfig, SramConfig)) else physical.page_bytes
     transfer_bytes = _gddr_non_negative_int(values.get("transfer_granularity_bytes", page_bytes), "transfer_granularity_bytes")
     if transfer_bytes <= 0:
         raise ValueError("transfer_granularity_bytes must be positive")
@@ -8242,7 +8434,7 @@ def _direct_memory_phase(
     backing = next((d for d in phase.demands if d.resource_id == local.resource_id), None)
     if backing is None or not (read_bytes or write_bytes):
         return phase
-    from .data_motion import AccessKind, resolve_service
+    from .data_motion import AccessKind, resolve_service, _construction_service_bill
     profile = _resolve_component_profile(scenario, storage)
     service = resolve_service(_component(scenario, storage), profile)
     cache = dict(phase.metadata.get("cache", {}))
@@ -8309,10 +8501,11 @@ def _direct_memory_phase(
 
     read_bill = (
         compact_service_bill(
-            dict(service.price(
-                AccessKind.READ,
+            dict(_construction_service_bill(
+                service, AccessKind.READ,
                 moved_reads,
                 page_offset_bytes=page_offset,
+                physical_config=_cached_physical_memory_config(_component(scenario, storage)),
                 summary_only=True,
             ))
         )
@@ -8320,10 +8513,11 @@ def _direct_memory_phase(
     )
     write_bill = (
         compact_service_bill(
-            dict(service.price(
-                AccessKind.WRITE,
+            dict(_construction_service_bill(
+                service, AccessKind.WRITE,
                 moved_writes,
                 page_offset_bytes=page_offset,
+                physical_config=_cached_physical_memory_config(_component(scenario, storage)),
                 summary_only=True,
             ))
         )
@@ -8450,7 +8644,8 @@ def _linear_state_endpoint_binding(
         if temporary else 0
     )
     capacity = int(config.capacity_bytes)
-    alignment = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
+    from .memory_types import SramConfig
+    alignment = config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes
     if explicit_address is None:
         explicit_address = component.metadata.get("memory_access_offset_bytes")
     address = (
@@ -9162,9 +9357,9 @@ def _add_transfer_tasks(
                 continue
             if not authored or sum(int(row["size_bytes"]) for row in authored) != byte_count:
                 raise ValueError("explicit transfer ranges must cover its bytes exactly")
-            from .memory_types import DramConfig
+            from .memory_types import DramConfig, SramConfig
             config = _cached_physical_memory_config(_component(scenario, component_id))
-            granularity = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
+            granularity = config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes
             rows = []
             for row in authored:
                 address = _gddr_stable_address(row["buffer_id"], row.get("offset_bytes", 0), row["size_bytes"],
@@ -9198,9 +9393,9 @@ def _add_transfer_tasks(
             raw_config = component.metadata.get("physical_memory_config")
             if component_id in state_bindings or address is not None or raw_config is None:
                 continue
-            from .memory_types import DramConfig
+            from .memory_types import DramConfig, SramConfig
             config = _cached_physical_memory_config(component)
-            if not isinstance(config, DramConfig) and not component.metadata.get("host_write_staging"):
+            if not isinstance(config, (DramConfig, SramConfig)) and not component.metadata.get("host_write_staging"):
                 continue
             # The authoring IR may omit native addresses. Use an allocator
             # binding, never one fixed address for all DMA payloads.
@@ -9210,7 +9405,7 @@ def _add_transfer_tasks(
                 transfer_metadata, "read", fallback_identity=builder.request.request_id
             )
             address = _gddr_stable_address(identity, 0, byte_count,
-                config.capacity_bytes, config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes)
+                config.capacity_bytes, config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes)
             row = {"address": address, "buffer_id": identity,
                    "byte_count": byte_count, "offset_bytes": 0,
                    "address_source": "stable_buffer_tensor_offset",
@@ -15798,8 +15993,18 @@ def _kv_components(
     # --kvo is enabled.  Keep the authored policy as the fallback, but honor
     # an explicit per-layer map emitted by the native parity adapter.
     policy = _kv_configuration(scenario)
+    rank_owners = scenario.placement.metadata.get("rank_kv_components", {})
+    if not isinstance(rank_owners, Mapping):
+        raise ValueError("rank_kv_components must be a mapping")
+    rank_owner = rank_owners.get(str(rank.rank), rank_owners.get(rank.rank))
+    if rank_owners and rank_owner is None:
+        raise ValueError("rank_kv_components is missing rank {}".format(rank.rank))
+    if rank_owner is not None:
+        endpoint = _component(scenario, str(rank_owner))
+        if not endpoint.is_active_memory or not endpoint.is_writable:
+            raise ValueError("rank KV owner must be writable active memory")
     configured_cache = (
-        policy.cache_component
+        rank_owner or policy.cache_component
     ) or scenario.placement.tensor_to_component.get(
         "kv_cache"
     ) or rank.memory_component_id
@@ -15988,6 +16193,8 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
     Reusing a scheduler slot for another request therefore cannot alias KV.
     """
     row_bytes = _kv_tensor_bytes(scenario, layer, plan.tp_degree, 1)
+    if layer.attention_chunk_size and includes_current:
+        raise ValueError("fixed-chunk KV cannot use the undeclared full unified-scan view")
     requests = {request.request_id: request for request in scenario.workload.requests}
     lanes = tuple(getattr(builder, "_attention_invocation_lanes", ()))
     owners = []
@@ -15996,7 +16203,11 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
             rows = tuple(lane for lane in lanes if lane.request_id == request_id)
             end = max(lane.context_tokens for lane in rows)
             materialized = tuple(lane.context_tokens - 1 for lane in rows if lane.kv_materialized_tokens)
-            ranges = [(0, lane.kv_read_tokens) for lane in rows if lane.kv_read_tokens]
+            ranges = [(layer.attention_kv_start(lane.context_tokens - 1),
+                       max(0, lane.kv_read_tokens - layer.attention_kv_start(lane.context_tokens - 1)))
+                      for lane in rows if lane.kv_read_tokens]
+            if layer.attention_chunk_size and len({layer.attention_kv_start(pos) for pos in materialized}) > 1:
+                raise ValueError("fixed-chunk Prefill must split its physical invocation at the attention chunk boundary")
             ranges.extend((position, 1) for position in materialized)
             owners.append((request_id, end, materialized, ranges))
     else:
@@ -16007,7 +16218,8 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
             prior = max(1, context_tokens - 1)
         end = prior + materialized_tokens
         full, tail = divmod(history_tokens, prior) if prior else (0, 0)
-        ranges = [(0, prior)] * full + ([(0, tail)] if tail else [])
+        start = layer.attention_kv_start(max(0, end - 1))
+        ranges = [(start, max(0, prior - start))] * full + ([(start, max(0, tail - start))] if tail else [])
         ranges += [(prior, materialized_tokens)] if materialized_tokens else []
         owners.append((request_id, end, tuple(range(prior, end)), ranges))
     if includes_current:
@@ -16050,14 +16262,25 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
             elif length:
                 coalesced.append((start, length))
         ranges = coalesced
-        extent = capacities.get(request_id, total_capacity)
-        if end > extent or any(position >= extent or position < 0 for position in materialized):
+        logical_extent = capacities.get(request_id, total_capacity)
+        if end > logical_extent or any(position >= logical_extent or position < 0 for position in materialized):
             raise ValueError("KV view exceeds its request's declared context capacity")
+        extent = min(logical_extent, layer.attention_chunk_size) if layer.attention_chunk_size else logical_extent
+        logical_ranges, absolute_positions = tuple(ranges), tuple(materialized)
+        if layer.attention_chunk_size:
+            ranges = [(start % layer.attention_chunk_size, length) for start, length in ranges if length]
+            materialized = tuple(position % layer.attention_chunk_size for position in materialized)
+            if any(start + length > extent for start, length in ranges):
+                raise ValueError("fixed-chunk KV read crosses its physical ring boundary")
         result["read_tokens"] += sum(length for _start, length in ranges)
         result["materialized_tokens"] += len(materialized)
         result["owners"].append({"request_id": request_id, "read_tokens": sum(length for _start, length in ranges),
             "read_ranges": ranges,
             "write_positions": materialized, "capacity_tokens": extent,
+            **({"storage_policy": "fixed_chunk_ring", "attention_chunk_size": layer.attention_chunk_size,
+                "logical_capacity_tokens": logical_extent, "logical_read_ranges": logical_ranges,
+                "absolute_write_positions": absolute_positions,
+                "live_range": layer.attention_live_range(end)} if layer.attention_chunk_size else {}),
             "id": "kv:{}:{}:rank{}:tp{}:pp{}".format(request_id, layer.layer_id,
                                                       rank.rank, rank.tp_rank, rank.pp_rank)})
     page_table = getattr(builder, "_physical_kv_page_table", None)
@@ -16142,6 +16365,77 @@ def _generic_kv_accesses(contract, part, *, write=False):
     return accesses
 
 
+def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
+                                history_tokens: int, *,
+                                execution_control: Optional[ExecutionControl] = None):
+    """Declare the same resident KV buffers as one final-prompt invocation.
+
+    This is inventory only: it shares the ordinary serving lane, KV contract,
+    access descriptor and allocation lowerer, without constructing compute or
+    collective tasks and without submitting memory work. The caller must pay
+    for source reads, transport and destination writes before admitting KV.
+    """
+    from types import SimpleNamespace
+    from .data_motion import lower_physical_allocations, resolve_service
+
+    control = execution_control or ExecutionControl()
+    control.raise_if_cancelled()
+    if type(history_tokens) is not int or history_tokens < 0:
+        raise ValueError("native KV ingress history must be a non-negative integer")
+    request = next((row for row in scenario.workload.requests if row.request_id == request_id), None)
+    if request is None or history_tokens != request.prompt_tokens - 1:
+        raise ValueError("native KV ingress requires the request's final-prompt history")
+    if (scenario.llama_cpp_config is not None or scenario.workload.mtp is not None
+            or scenario.placement.kv_policy.layout_mode == "paged_pool"
+            or scenario.workload.metadata.get("native_rope_source_contract") is not None
+            or _f32_hidden_storage_enabled(scenario)):
+        raise ValueError("native KV ingress inventory requires ordinary generic KV storage")
+    # Use serving's lane projection rather than a second causal-range rule.
+    item = SimpleNamespace(request_id=request_id, phase="prefill", token_count=1,
+        context_tokens=history_tokens, kv_append_tokens=1, kv_materialized_tokens=1,
+        logit_tokens=1, committed_tokens=0)
+    lanes, = _serving_invocation_lanes(SimpleNamespace(kind="prefill", items=(item,)),
+        inter_invocation_positions=False)
+    builder = SimpleNamespace(request=request, _attention_invocation_lanes=lanes)
+    declarations, configs, contracts = {}, {}, []
+    with _compilation_scope(scenario):
+        plan = _parallel_plan(scenario)
+        if plan.ep_degree != 1:
+            raise ValueError("native KV ingress has no declared EP request/attention ownership")
+        for layer in _execution_layers(scenario):
+            control.raise_if_cancelled()
+            if layer.is_linear_attention or _qwen35_attention_source_work(layer) is not None:
+                raise ValueError("native KV ingress inventory requires ordinary generic attention")
+            for rank in plan.tp_group(plan.stage_for_layer(layer), 0):
+                control.raise_if_cancelled()
+                contract = _generic_kv_contract(builder, scenario, plan, rank, layer,
+                    token_batch=1, context_tokens=history_tokens, history_tokens=history_tokens,
+                    materialized_tokens=1)
+                target = _parallel_target(scenario, layer, "attention", rank)
+                component_id, _offload, _ratio = _kv_components(scenario, rank, target, layer)
+                component = _component(scenario, component_id)
+                _cached_physical_memory_config(component)
+                owner = resolve_service(component).physical_owner
+                config = component.metadata["physical_memory_config"]
+                configs[owner] = config
+                accesses = tuple({**_physical_access_from_cache_access(access),
+                    "physical_owner": owner, "allocation_arena": "resident"}
+                    for part in ("k", "v")
+                    for write in (False, True)
+                    for access in _generic_kv_accesses(contract, part, write=write))
+                task = lower_physical_allocations(TaskSpec(
+                    "@native-pd-inventory:{}:{}".format(layer.layer_id, rank.rank), request_id,
+                    "Declare native external KV destinations", TaskCategory.MEMORY,
+                    metadata={"physical_owner": owner, "physical_memory_config": config,
+                        "memory_accesses": accesses, **_generic_kv_persistence(contract)}))
+                for row in task.metadata["physical_allocations"]:
+                    declarations[(owner, row["buffer_id"], row.get("generation", 0))] = row
+                contracts.append(contract)
+    control.raise_if_cancelled()
+    return {"physical_allocations": tuple(declarations.values()),
+        "physical_memory_configs": configs, "contracts": tuple(contracts)}
+
+
 def _paged_kv_accesses(contract, part, *, write=False):
     """Split logical K/V token spans into the pool's actual page allocations."""
     accesses = []
@@ -16224,12 +16518,19 @@ def _add_generic_kv_writeback(builder, scenario, router, plan, rank, layer,
         if cache != local and not direct:
             prior = copied
             for index, access in enumerate(writes):
+                first_store_task = len(builder.tasks)
                 prior = _add_transfer_tasks(builder, router, local, cache, access["size_bytes"],
                     (prior,), name=name + ".{}.store{}".format(part, index), routing_policy=plan.routing_policy,
                     metadata={"event_kind": "kv_store", "layer_id": layer.layer_id,
                         "coverage_component": "full_attention", "rank": rank.rank,
+                        "generic_kv_storage": contract, "kv_operand": part,
                         "source_buffer_accesses": [{**access, "operation": "read"}],
                         "target_buffer_accesses": [access]})
+                if contract.get("schema") == "analytical-token-major-kv/v1":
+                    for task in builder.tasks[first_store_task:]:
+                        if task.metadata.get("generic_kv_storage") is contract:
+                            builder._task_segment_storage_payloads[task.task_id] = _GenericKVStorageReplayPayload(
+                                "kv_store", layer, rank, plan.tp_degree, part, index)
             copied = prior
         endpoints.append(copied)
     byte_count = 2 * contract["row_bytes"] * contract["materialized_tokens"]
@@ -16558,6 +16859,13 @@ def _bind_generic_kv_storage(metadata, payload, replay):
         reads = [row for row in metadata["buffer_accesses"] if row["operation"] == "read"]
         metadata["buffer_accesses"] = reads + writes
         metadata["kv_writeback_accesses"] = writes
+    elif payload.role == "kv_store":
+        writes = _generic_kv_accesses(contract, payload.part, write=True)
+        if type(payload.access_index) is not int or not 0 <= payload.access_index < len(writes):
+            raise ValueError("native KV store replay descriptor is unavailable")
+        access = writes[payload.access_index]
+        metadata["source_buffer_accesses"] = [{**access, "operation": "read"}]
+        metadata["target_buffer_accesses"] = [access]
     elif payload.role == "kv_read":
         tokens = contract["read_tokens"]
         byte_count = _kv_bytes_per_token(replay.scenario, payload.layer, payload.tp_degree) * tokens
@@ -19655,6 +19963,34 @@ def _compile_parallel_layer_body(
             (mixer_end,),
         )
 
+    absolute_context_tokens = context_tokens
+    visibility_lengths, visibility_groups = (), ()
+    if layer.attention_chunk_size or not layer.use_rope:
+        lanes = tuple(getattr(builder, "_attention_invocation_lanes", ()))
+        if lanes:
+            visibility_lengths = tuple(lane.context_tokens - layer.attention_kv_start(lane.context_tokens - 1) for lane in lanes)
+            sizes = []
+            previous_lane = None
+            for lane in lanes:
+                if (previous_lane is not None and lane.request_id == previous_lane.request_id
+                        and lane.phase in {"prefill", "recompute"}
+                        and lane.context_tokens == previous_lane.context_tokens + 1
+                        and layer.attention_kv_start(lane.context_tokens - 1) == layer.attention_kv_start(previous_lane.context_tokens - 1)):
+                    sizes[-1] += 1
+                else:
+                    sizes.append(1)
+                previous_lane = lane
+            visibility_groups = tuple(sizes)
+            context_tokens = max(visibility_lengths)
+        else:
+            positions = tuple(range(max(0, context_tokens - token_batch), context_tokens))
+            if len(positions) != token_batch:
+                raise ValueError("independent attention needs explicit query positions")
+            if layer.attention_chunk_size and len({layer.attention_kv_start(pos) for pos in positions}) > 1:
+                raise ValueError("fixed-chunk Prefill must split its physical invocation at the attention chunk boundary")
+            visibility_lengths = tuple(position - layer.attention_kv_start(position) + 1 for position in positions)
+            visibility_groups = (token_batch,) if "prefill" in phase else (1,) * token_batch
+            context_tokens = max(visibility_lengths)
     tail_rows = output_selection.ffn_rows if output_selection is not None else token_batch
     stage = plan.stage_for_layer(layer)
     tp_ranks = plan.tp_group(stage, 0)
@@ -19777,7 +20113,7 @@ def _compile_parallel_layer_body(
     prefix = "{}.{}".format(phase, layer.layer_id)
     logical_context_tokens = (kv_read_tokens + kv_materialized_tokens
         if scenario.workload.metadata.get("native_rope_source_contract") is not None
-        else context_tokens)
+        else absolute_context_tokens)
     for rank in tp_ranks:
         source_attention = source_geometry
         if source_geometry is not None and not _qwen35_cuda_source_layer(scenario, plan, rank, layer, source_geometry):
@@ -19838,7 +20174,7 @@ def _compile_parallel_layer_body(
             raise ValueError("physical paged KV does not support an undeclared native/source KV page layout")
         generic_kv = None if source_f32 or native_qkv_output or source_attention is not None else _generic_kv_contract(
             builder, scenario, plan, rank, layer, token_batch=token_batch,
-            context_tokens=context_tokens, history_tokens=kv_read_tokens,
+            context_tokens=absolute_context_tokens, history_tokens=kv_read_tokens,
             materialized_tokens=kv_materialized_tokens,
             includes_current=getattr(builder, "_attention_read_includes_current", False))
         attention_kv_read_tokens = (generic_kv["read_tokens"] if generic_kv is not None else kv_read_tokens)
@@ -19897,8 +20233,11 @@ def _compile_parallel_layer_body(
             "layer_id": layer.layer_id,
             "stage": stage,
             "shard_padding": 0,
-            "sequence_mixer": "full_attention",
-            "coverage_component": "full_attention",
+            "sequence_mixer": layer.sequence_mixer,
+            "coverage_component": layer.sequence_mixer,
+            **({"attention_chunk_size": layer.attention_chunk_size,
+                "query_context_lengths": visibility_lengths, "query_group_sizes": visibility_groups,
+                "use_rope": layer.use_rope} if visibility_lengths else {}),
         }
         if generic_kv is not None:
             rank_meta["buffer_view_cache_policy"] = "aggregate_directional_v1"
@@ -20138,6 +20477,9 @@ def _compile_parallel_layer_body(
                 ),
             )
             qkv_rope_audit = dict(qkv_rope_audit)
+            if not layer.use_rope:
+                qkv_rope_fused = False
+                qkv_rope_audit.update(fusion_enabled=False, fusion_decision="NoPE_layer_has_no_rotary_operation")
             if qkv_rope_fused and not _gemm_epilogue_declared(
                 scenario, rank, qkv_target, qkv_workload, "rope", phase
             ):
@@ -20483,7 +20825,11 @@ def _compile_parallel_layer_body(
                 ),
             )
         native_kv_append = source_append
-        if source_attention is not None:
+        if not layer.use_rope:
+            if source_attention is not None or native_qkv_output or source_f32:
+                raise ValueError("NoPE requires the ordinary graph-native attention contract")
+            rope, rope_component = rope_dependencies[-1], rope_source_component
+        elif source_attention is not None:
             rope, rope_component = source_rope, rank.component_id
         elif native_qkv_output:
             rope, native_kv_append = _add_native_local_kv_writeback(
@@ -20678,14 +21024,16 @@ def _compile_parallel_layer_body(
             rope,
             rope_component,
             _activation_bytes(layer, token_batch * qkv_workload.n, scenario=scenario),
-            name="{}.rank{:03d}.rope.output_to_gpu".format(prefix, rank.rank),
-            metadata={**rank_meta, "operator_id": "{}.attention.rope".format(layer.layer_id)},
+            name=("{}.rank{:03d}.rope.output_to_gpu" if layer.use_rope else
+                  "{}.rank{:03d}.projection.output_to_gpu").format(prefix, rank.rank),
+            metadata={**rank_meta, "operator_id": ("{}.attention.rope" if layer.use_rope else
+                                                   "{}.attention").format(layer.layer_id)},
         )
         if generic_kv is not None:
             generic_q = generic_access("rope", q_bytes, "read", extent=q_bytes + kv_activation_bytes)
             generic_k = generic_access("rope", kv_activation_bytes, "read", offset=q_bytes,
                                         extent=q_bytes + kv_activation_bytes)
-            if qkv_rope_fused:
+            if qkv_rope_fused or not layer.use_rope:
                 generic_q, generic_k = generic_projection("q"), generic_projection("k")
             generic_v = generic_projection("v")
             native_kv_append = _add_generic_kv_writeback(
@@ -20725,6 +21073,36 @@ def _compile_parallel_layer_body(
             (qkv_ready, kv_read) + ((native_kv_append,) if native_kv_append else ()),
             metadata=rank_meta,
         )
+        if layer.attention_temperature_tuning:
+            lanes = tuple(getattr(builder, "_attention_invocation_lanes", ()))
+            positions = tuple(lane.context_tokens - 1 for lane in lanes) if lanes else tuple(
+                range(max(0, context_tokens - token_batch), context_tokens))
+            scales = tuple(1.0 + layer.attention_temperature_scale * math.log1p(
+                (position + 1) // layer.attention_temperature_floor_scale) for position in positions)
+            temperature, temperature_component = _add_rank_primitive(
+                builder, scenario, router, plan, rank, OperatorClass.ELEMENTWISE,
+                ElementwiseWorkload(elements=token_batch * query_shard.local_size,
+                    operations_per_element=1, fixed_operations=3 * token_batch,
+                    fixed_transcendental_operations=token_batch, input_count=1,
+                    input_bits=activation_bits, output_bits=activation_bits,
+                    read_storage_bytes=q_bytes, write_storage_bytes=q_bytes,
+                    working_set_bytes=2 * q_bytes, name="attention_nope_query_temperature"),
+                "{}.attention.temperature".format(layer.layer_id),
+                "{}.rank{:03d}.attention_temperature".format(prefix, rank.rank),
+                (qkv_ready,), source_component_id=rank.component_id,
+                fallback_keys=("{}.attention".format(layer.layer_id),),
+                metadata={**rank_meta, "event_kind": "attention_temperature",
+                    "absolute_query_positions": positions, "query_scales": scales,
+                    "temperature_formula": "1+scale*log1p(floor((position+1)/floor_scale))",
+                    "temperature_scale": layer.attention_temperature_scale,
+                    "temperature_floor_scale": layer.attention_temperature_floor_scale,
+                    **({"buffer_accesses": [generic_q,
+                        generic_access("temperature_q", q_bytes, "write")]} if generic_kv is not None else {})})
+            if generic_kv is not None:
+                generic_q = generic_access("temperature_q", q_bytes, "read")
+            attention_ready = _add_join(builder,
+                "{}.rank{:03d}.attention_temperature_ready".format(prefix, rank.rank),
+                (attention_ready, temperature), metadata=rank_meta)
         qk_target = _parallel_named_target(
             scenario,
             "{}.attention.qk".format(layer.layer_id),
@@ -20797,12 +21175,15 @@ def _compile_parallel_layer_body(
             execution_phase=_execution_phase_from_name(phase) or "unspecified",
             causal_query_positions=(
                 tuple(range(context_tokens - token_batch, context_tokens))
-                if scenario.workload.scheduler.max_num_seqs == 1
+                if not visibility_lengths and scenario.workload.scheduler.max_num_seqs == 1
                 and len(scenario.workload.requests) == 1
                 and 0 < token_batch <= context_tokens
                 and scenario.workload.mtp is None
                 else ()
             ),
+            query_context_lengths=visibility_lengths,
+            query_group_sizes=visibility_groups,
+            query_tile_tokens=(1 if visibility_groups and all(size == 1 for size in visibility_groups) else 64),
             kv_hidden_size=kv_hidden_size,
             kv_input_bits=kv_input_bits,
             kv_read_tokens=max(0, attention_kv_read_tokens),
@@ -20836,6 +21217,8 @@ def _compile_parallel_layer_body(
             flash_fusion_targets,
         )
         flash_audit = dict(flash_audit)
+        if visibility_lengths and not flash_allowed:
+            raise ValueError("explicit independent fixed-chunk/NoPE query masks require native FlashAttention fusion")
         flash_audit.update(
             {
                 "fusion_qk_target": qk_target,
@@ -23329,8 +23712,18 @@ def _compile_parallel_moe(
         raise ValueError("moe_routing must be a mapping")
     if route_contract and not {"gating", "normalize_selected_weights", "weight_scale"} <= set(route_contract):
         raise ValueError("moe_routing requires gating, normalize_selected_weights, and weight_scale")
-    if route_contract.get("gating", "softmax") != "softmax":
-        raise ValueError("MoE routing requires the modeled softmax gating contract")
+    gating = route_contract.get("gating", "softmax")
+    if gating not in {"softmax", "sigmoid"}:
+        raise ValueError("MoE routing requires softmax or selected-logit sigmoid gating")
+    weight_application = route_contract.get("weight_application", "output")
+    if weight_application not in {"input", "output"}:
+        raise ValueError("MoE weight_application must be input or output")
+    if gating == "sigmoid" and (weight_application != "input" or route_contract.get("normalize_selected_weights") is not False):
+        raise ValueError("selected-logit sigmoid routing requires unnormalized expert-input weighting")
+    if gating == "sigmoid" and route_contract.get("selection_before_gating") is not True:
+        raise ValueError("sigmoid routing requires explicit top-k selection before gating")
+    if route_contract.get("load_model", "deterministic_balanced_histogram") != "deterministic_balanced_histogram":
+        raise ValueError("native MoE currently requires deterministic_balanced_histogram load model")
     normalize_weights = route_contract.get("normalize_selected_weights", False)
     if type(normalize_weights) is not bool:
         raise ValueError("normalize_selected_weights must be boolean")
@@ -23344,74 +23737,80 @@ def _compile_parallel_moe(
                        "ffn_path": "routed", "coverage_component": "routed_expert",
                        "moe_routing_contract": ("declared" if route_contract else "generic_unnormalized_softmax"),
                        "normalize_selected_weights": normalize_weights,
-                       "selected_weight_scale": weight_scale}
+                       "selected_weight_scale": weight_scale, "gating": gating,
+                       "weight_application": weight_application}
         router_component = rank.component_id
         score_elements = max(
             1, token_batch * layer.num_experts
         )
-        router_reduce, router_component = _add_rank_primitive(
-            builder,
-            scenario,
-            router,
-            plan,
-            rank,
-            OperatorClass.REDUCTION,
-            ReductionWorkload(
-                input_elements=score_elements,
-                output_elements=max(1, token_batch),
-                operations_per_combine=2,
-                input_bits=activation_bits,
-                output_bits=max(16, activation_bits),
-                dependency_depth=max(
-                    1,
-                    int(
-                        math.ceil(
-                            math.log2(
-                                max(1, layer.num_experts)
+        if gating == "softmax":
+            router_reduce, router_component = _add_rank_primitive(
+                builder,
+                scenario,
+                router,
+                plan,
+                rank,
+                OperatorClass.REDUCTION,
+                ReductionWorkload(
+                    input_elements=score_elements,
+                    output_elements=max(1, token_batch),
+                    operations_per_combine=2,
+                    input_bits=activation_bits,
+                    output_bits=max(16, activation_bits),
+                    dependency_depth=max(
+                        1,
+                        int(
+                            math.ceil(
+                                math.log2(
+                                    max(1, layer.num_experts)
+                                )
                             )
-                        )
+                        ),
                     ),
+                    working_set_bytes=_activation_bytes(layer, score_elements, scenario=scenario),
+                    reuse_factor=2.0,
+                    name="moe_router_softmax_reduce_max_sum",
                 ),
-                working_set_bytes=_activation_bytes(layer, score_elements, scenario=scenario),
-                reuse_factor=2.0,
-                name="moe_router_softmax_reduce_max_sum",
-            ),
-            "{}.router.softmax.reduce".format(layer.layer_id),
-            "{}.rank{:03d}.router_softmax_reduce".format(prefix, rank.rank),
-            (router_logits_ready,),
-            source_component_id=router_component,
-            fallback_keys=("{}.router.softmax.normalize".format(layer.layer_id), "{}.router".format(layer.layer_id)),
-            metadata={**router_meta, "event_kind": "router_softmax_reduce"},
-        )
-        router_softmax, router_component = _add_rank_primitive(
-            builder,
-            scenario,
-            router,
-            plan,
-            rank,
-            OperatorClass.ELEMENTWISE,
-            ElementwiseWorkload(
-                elements=score_elements,
-                operations_per_element=2,
-                transcendental_ops_per_element=1,
-                input_count=2,
-                input_bits=activation_bits,
-                output_bits=activation_bits,
-                dependency_depth=3,
-                working_set_bytes=_activation_bytes(
-                    layer, score_elements * 2,
-                    scenario=scenario,
+                "{}.router.softmax.reduce".format(layer.layer_id),
+                "{}.rank{:03d}.router_softmax_reduce".format(prefix, rank.rank),
+                (router_logits_ready,),
+                source_component_id=router_component,
+                fallback_keys=("{}.router.softmax.normalize".format(layer.layer_id), "{}.router".format(layer.layer_id)),
+                metadata={**router_meta, "event_kind": "router_softmax_reduce"},
+            )
+            router_softmax, router_component = _add_rank_primitive(
+                builder,
+                scenario,
+                router,
+                plan,
+                rank,
+                OperatorClass.ELEMENTWISE,
+                ElementwiseWorkload(
+                    elements=score_elements,
+                    operations_per_element=2,
+                    transcendental_ops_per_element=1,
+                    input_count=2,
+                    input_bits=activation_bits,
+                    output_bits=activation_bits,
+                    dependency_depth=3,
+                    working_set_bytes=_activation_bytes(
+                        layer, score_elements * 2,
+                        scenario=scenario,
+                    ),
+                    reuse_factor=2.0,
+                    name="moe_router_softmax_sub_exp_normalize",
                 ),
-                reuse_factor=2.0,
-                name="moe_router_softmax_sub_exp_normalize",
-            ),
-            "{}.router.softmax.normalize".format(layer.layer_id),
-            "{}.rank{:03d}.router_softmax_normalize".format(prefix, rank.rank),
-            (router_reduce,),
-            source_component_id=router_component,
-            fallback_keys=("{}.router.softmax.normalize".format(layer.layer_id), "{}.router".format(layer.layer_id)),
-            metadata={**router_meta, "event_kind": "router_softmax_normalize"},
-        )
+                "{}.router.softmax.normalize".format(layer.layer_id),
+                "{}.rank{:03d}.router_softmax_normalize".format(prefix, rank.rank),
+                (router_reduce,),
+                source_component_id=router_component,
+                fallback_keys=("{}.router.softmax.normalize".format(layer.layer_id), "{}.router".format(layer.layer_id)),
+                metadata={**router_meta, "event_kind": "router_softmax_normalize"},
+            )
+        else:
+            # Llama4 selects logits before sigmoid; it does not normalize all
+            # experts and does not make top-1 probability equal to one.
+            router_softmax = router_logits_ready
         router_topk, router_component = _add_rank_primitive(
             builder,
             scenario,
@@ -23452,6 +23851,20 @@ def _compile_parallel_moe(
             metadata={**router_meta, "event_kind": "router_weight_gather",
                       "selected_experts_per_token": layer.experts_per_token},
         )
+        if gating == "sigmoid":
+            router_topk, router_component = _add_rank_primitive(
+                builder, scenario, router, plan, rank, OperatorClass.ELEMENTWISE,
+                ElementwiseWorkload(elements=selected_elements, operations_per_element=3,
+                    transcendental_ops_per_element=1, input_count=1,
+                    input_bits=32, output_bits=activation_bits,
+                    read_storage_bytes=probability_bytes, write_storage_bytes=probability_bytes,
+                    name="moe_selected_logits_sigmoid_fp32"),
+                "{}.router.sigmoid".format(layer.layer_id),
+                "{}.rank{:03d}.router_sigmoid".format(prefix, rank.rank), (router_topk,),
+                source_component_id=router_component,
+                fallback_keys=("{}.router.softmax.normalize".format(layer.layer_id), "{}.router".format(layer.layer_id)),
+                metadata={**router_meta, "event_kind": "router_sigmoid", "selection_before_gating": True,
+                    "sigmoid_accumulator_bits": 32, "selected_elements": selected_elements})
         if normalize_weights:
             route_sum, sum_component = _add_rank_primitive(
                 builder, scenario, router, plan, rank, OperatorClass.REDUCTION,
@@ -23516,6 +23929,27 @@ def _compile_parallel_moe(
     router_ready = _add_join(builder, prefix + ".router.complete", router_ends,
                              metadata={"event_kind": "router_complete"})
     routed_tokens = token_batch * layer.experts_per_token
+    if weight_application == "input":
+        weighted_inputs = []
+        for rank in tp_ranks:
+            bits = _activation_storage_bits(layer, scenario)
+            count = routed_tokens * layer.hidden_size
+            weighted, component = _add_rank_primitive(
+                builder, scenario, router, plan, rank, OperatorClass.ELEMENTWISE,
+                ElementwiseWorkload(elements=count, operations_per_element=1, input_count=2,
+                    input_bits=bits, output_bits=bits,
+                    read_storage_bytes=_activation_bytes(layer, count + routed_tokens, scenario=scenario),
+                    name="moe_expert_input_weight_multiply"),
+                "{}.experts.input_weight".format(layer.layer_id),
+                "{}.rank{:03d}.expert_input_weight".format(prefix, rank.rank), (router_ready,),
+                source_component_id=rank.component_id,
+                fallback_keys=("{}.experts.activation".format(layer.layer_id), "{}.experts".format(layer.layer_id)),
+                metadata={"event_kind": "expert_input_weight", "layer_id": layer.layer_id,
+                    "stage": stage, "weight_application": "input", "routing_model": "deterministic_balanced_histogram"})
+            weighted_inputs.append(_return_rank_value(builder, router, plan, rank, weighted, component,
+                _activation_bytes(layer, count, scenario=scenario),
+                name="{}.rank{:03d}.expert_input_weight.output_to_gpu".format(prefix, rank.rank)))
+        router_ready = _add_join(builder, prefix + ".expert_input_weight.complete", weighted_inputs)
     dispatch_ends: List[str] = []
     for tp_rank in range(plan.tp_degree):
         ep_group = plan.ep_group(stage, tp_rank)
@@ -23783,20 +24217,23 @@ def _compile_parallel_moe(
         weighted_elements = routed_tokens * layer.hidden_size
         output_elements = token_batch * layer.hidden_size
         route_bytes = _activation_bytes(layer, routed_tokens, scenario=scenario)
-        weighted, weighted_component = _add_rank_primitive(
-            builder, scenario, router, plan, rank, OperatorClass.ELEMENTWISE,
-            ElementwiseWorkload(
-                elements=weighted_elements, operations_per_element=1,
-                input_count=2, input_bits=bits, output_bits=bits,
-                read_storage_bytes=_activation_bytes(layer, weighted_elements, scenario=scenario) + route_bytes,
-                name="moe_expert_route_weight_multiply"),
-            "{}.experts.weight_multiply".format(layer.layer_id),
-            "{}.rank{:03d}.expert_route_weight".format(prefix, rank.rank), (combined,),
-            source_component_id=rank.component_id,
-            fallback_keys=("{}.experts.activation".format(layer.layer_id), "{}.experts".format(layer.layer_id)),
-            metadata={"event_kind": "expert_route_weight", "layer_id": layer.layer_id,
-                      "stage": stage, "experts_per_token": layer.experts_per_token},
-        )
+        if weight_application == "output":
+            weighted, weighted_component = _add_rank_primitive(
+                builder, scenario, router, plan, rank, OperatorClass.ELEMENTWISE,
+                ElementwiseWorkload(
+                    elements=weighted_elements, operations_per_element=1,
+                    input_count=2, input_bits=bits, output_bits=bits,
+                    read_storage_bytes=_activation_bytes(layer, weighted_elements, scenario=scenario) + route_bytes,
+                    name="moe_expert_route_weight_multiply"),
+                "{}.experts.weight_multiply".format(layer.layer_id),
+                "{}.rank{:03d}.expert_route_weight".format(prefix, rank.rank), (combined,),
+                source_component_id=rank.component_id,
+                fallback_keys=("{}.experts.activation".format(layer.layer_id), "{}.experts".format(layer.layer_id)),
+                metadata={"event_kind": "expert_route_weight", "layer_id": layer.layer_id,
+                          "stage": stage, "experts_per_token": layer.experts_per_token},
+            )
+        else:
+            weighted, weighted_component = combined, rank.component_id
         weighted_sum, weighted_component = _add_rank_primitive(
             builder, scenario, router, plan, rank, OperatorClass.REDUCTION,
             ReductionWorkload(input_elements=weighted_elements, output_elements=output_elements,
@@ -26455,6 +26892,10 @@ def _serving_invocation_segment_binding(
     full_attention_layers = tuple(
         layer for layer in _execution_layers(scenario) if not layer.is_linear_attention
     )
+    if any(layer.attention_chunk_size or not layer.use_rope for layer in full_attention_layers):
+        # The old dynamic template only rebinds a rectangular context count;
+        # it cannot reconstruct fixed-block rings or per-query visibility.
+        return None
     if not full_attention_layers:
         return None
     required_dynamic_attention_invocations = sum(
@@ -26519,7 +26960,7 @@ def _serving_invocation_segment_binding(
 
 def _parameterized_physical_decode(scenario, plan, group):
     """Admit only the declared ordinary BF16 token-major Decode family."""
-    if group.kind != "decode" or plan.world_size != 1 or len(group.lanes) != 1:
+    if group.kind != "decode" or plan.pp_degree != 1 or plan.ep_degree != 1 or len(group.lanes) != 1:
         return False
     def qualify():
         if (not any(component.metadata.get("physical_memory_config") is not None
@@ -27783,6 +28224,46 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
     )
 
 
+def _private_physical_construction_context(scenario: ScenarioConfig) -> bool:
+    """Keep authored cross-owner physical sharing on its original preview.
+
+    Native owner-prefixed calendars are private even when many requests and
+    routes use one HOST component. A second component declaring that owner,
+    or a foreign/custom physical prefix, does not establish this contract.
+    """
+    def qualify():
+        from .data_motion import resolve_service
+        owners = set()
+        routing_fields = (
+            "bank_resource_prefix", "command_resource_prefix",
+            "row_command_resource_prefix", "column_command_resource_prefix",
+            "data_resource_prefix", "shared_command_resource",
+            "port_resource_prefix", "array_resource_prefix",
+            "parallel_resource_prefix", "channel_resource_prefix", "host_resource_id",
+        )
+        for component in scenario.hardware.components:
+            if component.metadata.get("physical_memory_config") is None:
+                continue
+            if component.metadata.get("host_write_staging"):
+                return False
+            service = resolve_service(component)
+            owner = service.physical_owner
+            if owner in owners:
+                return False
+            owners.add(owner)
+            config = _cached_physical_memory_config(component)
+            for field in routing_fields:
+                value = config.metadata.get(field)
+                if value is None or field == "shared_command_resource" and value == "":
+                    continue
+                if type(value) is not str or not (value == owner or value.startswith(owner + ":")):
+                    return False
+        return bool(owners)
+    context = _active_compilation_context(scenario)
+    return qualify() if context is None else context.invariant(
+        ("private_physical_construction_context_v1",), qualify)
+
+
 class TopologyAwareBatchCostProvider:
     """Per-run topology-aware lowerer with immutable scenario invariants."""
 
@@ -27798,12 +28279,19 @@ class TopologyAwareBatchCostProvider:
         self._template_cache_entries = template_cache_entries
         self._leaf_cache_entries = leaf_cache_entries
         self._defer_physical_execution = defer_physical_execution
+        self._defer_endpoint_construction = bool(
+            defer_physical_execution
+            and not any(component.metadata.get("host_write_staging")
+                        for component in scenario.hardware.components)
+        )
         self._scenario = scenario
+        self._execution_control = execution_control or ExecutionControl()
         self._compilation_context = CompilationContext(
             scenario,
             leaf_cache_entries=leaf_cache_entries,
             eager_full_attention_segments=False,
             compiled_serving_invocation_segments=True,
+            execution_control=self._execution_control,
             _serving_invocation_lean_replay_capability=(
                 _SERVING_INVOCATION_LEAN_REPLAY_CAPABILITY
             ),
@@ -27812,8 +28300,8 @@ class TopologyAwareBatchCostProvider:
         self._router = self._compilation_context.router()
         self._scenario_hash = stable_hash(scenario)
         self._control_plane_source: Optional[ScenarioConfig] = None
-        self._execution_control = execution_control or ExecutionControl()
         self._templates = ExactTemplateCache(template_cache_entries)
+        self._template_bypasses = 0
         self._compiled_executor = CompiledGraphExecutor(max_layouts=8)
 
     def _rebind_control_plane_successor(
@@ -27836,6 +28324,7 @@ class TopologyAwareBatchCostProvider:
                 leaf_cache_entries=self._leaf_cache_entries,
                 eager_full_attention_segments=False,
                 compiled_serving_invocation_segments=True,
+                execution_control=self._execution_control,
                 _serving_invocation_lean_replay_capability=(
                     _SERVING_INVOCATION_LEAN_REPLAY_CAPABILITY
                 ),
@@ -27864,7 +28353,9 @@ class TopologyAwareBatchCostProvider:
             raise ValueError(
                 "拓扑感知的批成本提供器绑定到了另一个场景"
             )
-        with _compilation_scope(scenario, self._compilation_context):
+        with _compilation_scope(scenario, self._compilation_context), deferred_endpoint_construction(
+            self._defer_endpoint_construction and _private_physical_construction_context(scenario)
+        ):
             return self._estimate_exact_in_context(scenario, cohort)
 
     def _estimate_exact_in_context(
@@ -27872,10 +28363,14 @@ class TopologyAwareBatchCostProvider:
     ) -> Mapping[str, object]:
         self._execution_control.raise_if_cancelled()
         from .cuda_graph_serving import active_cuda_graph_cohort
-        if active_cuda_graph_cohort() is not None:
+        if self._defer_physical_execution or active_cuda_graph_cohort() is not None:
             # Lifecycle is runtime state, so immutable whole-cost memoization
             # cannot reuse a prior warmup/capture/replay decision. Leaf and
             # operator task templates remain safe: binding occurs afterward.
+            # A live physical cost also holds its complete cohort DAG. Exact
+            # contexts almost never repeat, so retaining hundreds of these
+            # graphs would hold the whole Token history instead of structure.
+            self._template_bypasses += 1
             return _estimate_serving_cohort_cost(
                 scenario, cohort, cached_plan=self._plan, cached_router=self._router,
                 scenario_hash=self._scenario_hash, execution_control=self._execution_control,
@@ -27902,6 +28397,7 @@ class TopologyAwareBatchCostProvider:
             "hits": self._templates.hits,
             "misses": self._templates.misses,
             "size": self._templates.size,
+            "bypasses": self._template_bypasses,
         }
 
     @property
@@ -28046,7 +28542,7 @@ class _PreparedExecutionStageRows(tuple):
         instance._prepared_capsule = (
             (
                 _PREPARED_EXECUTION_STAGE_TOKEN,
-                instance,
+                id(instance),
                 tuple(prepared_stages),
             )
             if _token is _PREPARED_EXECUTION_STAGE_TOKEN
@@ -28067,7 +28563,7 @@ def _trusted_execution_stages(
         not isinstance(capsule, tuple)
         or len(capsule) != 3
         or capsule[0] is not _PREPARED_EXECUTION_STAGE_TOKEN
-        or capsule[1] is not value
+        or capsule[1] != id(value)
         or not isinstance(capsule[2], tuple)
     ):
         return None
@@ -29887,6 +30383,7 @@ def _estimate_serving_cohort_cost(
                 summary.execution_records,
                 resource_owners=lowering.schedule.resource_owners,
             ),
+            "sram_traffic": summarize_sram_task_traffic(summary.execution_records),
             "linear_state_bytes": summary.linear_state_bytes,
             **execution_time_breakdown(
                 summary.execution_records,

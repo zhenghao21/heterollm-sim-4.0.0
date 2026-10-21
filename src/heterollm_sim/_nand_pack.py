@@ -148,6 +148,83 @@ def _double(value: object) -> cython.double:
     return float(np.float64(value))
 
 
+def validate_buffered_cache(cache, bank_keys, prefixes, slot_type, pages_per_block, finite):
+    """Read the ordinary two-slot cache in the scalar validation order."""
+    if type(cache) is not dict:
+        return None
+    rows: list = []
+    seen: set = set()
+    bank: object
+    prefix: object
+    slots: object
+    slot: object
+    tag: object
+    for bank, prefix in zip(bank_keys, prefixes):
+        slots = cache.get(bank, ())
+        if bank in cache and (type(slots) is not list or len(slots) != 2):
+            return None
+        for slot in slots:
+            if (type(slot) is not slot_type or id(slot) in seen
+                    or vars(slot).keys() != {"page_key", "ready_ns", "reader_completion_ns", "last_use"}
+                    or type(slot.last_use) is not int or not 0 <= slot.last_use <= 2**63 - 1
+                    or any(type(value) not in (int, float) or not finite(value) or value < 0
+                           for value in (slot.ready_ns, slot.reader_completion_ns))):
+                return None
+            seen.add(id(slot))
+            tag = slot.page_key
+            if tag is not None and (type(tag) is not tuple or len(tag) != len(prefix) + 2
+                    or tag[:-2] != prefix or any(type(value) is not int or value < 0 for value in tag)
+                    or tag[-1] >= pages_per_block
+                    or tag[-2] * pages_per_block + tag[-1] > 2**63 - 1):
+                return None
+        rows.append(slots)
+    return rows
+
+
+def pack_buffered_cache(rows, banks, pages_per_block):
+    """Copy every validated slot to fresh arrays without retaining numeric state."""
+    tags = np.full((banks, 2), -1, dtype=np.int64)
+    ready, readers, uses = np.zeros((banks, 2)), np.zeros((banks, 2)), np.zeros((banks, 2), dtype=np.int64)
+    present = np.zeros(banks, dtype=np.bool_)
+    bank: cython.Py_ssize_t
+    index: cython.Py_ssize_t
+    slots: object
+    slot: object
+    for bank, slots in enumerate(rows):
+        present[bank] = bool(slots)
+        for index, slot in enumerate(slots):
+            if slot.page_key is not None:
+                tags[bank, index] = slot.page_key[-2] * pages_per_block + slot.page_key[-1]
+            ready[bank, index], readers[bank, index], uses[bank, index] = (
+                slot.ready_ns, slot.reader_completion_ns, slot.last_use)
+    return tags, ready, readers, uses, present
+
+
+def publish_buffered_cache(core, cache, bank_keys, prefixes, pages_per_block,
+                           tags, ready, readers, uses, active_banks, slot_type):
+    """Write the same touched slots, including transaction callbacks, in order."""
+    tag_values, ready_values, reader_values, use_values = tags.tolist(), ready.tolist(), readers.tolist(), uses.tolist()
+    bank: object
+    key: object
+    slots: object
+    slot: object
+    tag: object
+    index: cython.Py_ssize_t
+    for bank in np.flatnonzero(active_banks).tolist():
+        key = bank_keys[bank]
+        if core._nand_transactions:
+            core._touch_cache_bank(key)
+        slots = cache.get(key)
+        if slots is None:
+            slots = [slot_type(), slot_type()]
+            cache[key] = slots
+        for index, slot in enumerate(slots):
+            tag = tag_values[bank][index]
+            slot.page_key = None if tag < 0 else (*prefixes[bank], *divmod(tag, pages_per_block))
+            slot.ready_ns, slot.reader_completion_ns, slot.last_use = (
+                ready_values[bank][index], reader_values[bank][index], use_values[bank][index])
+
+
 def pack_single_lane(timeline, names, count, transfer_page_bytes):
     """Read ordinary single-slot calendars, or decline before mutation."""
     lane_map: object = timeline.lane_available
@@ -289,6 +366,7 @@ def publish_timeline(timeline, names, state_values: list, moved_values: list,
                      start_values: list, lane_count_values: list, active_resources,
                      link_names, byte_values: list, direction_names: list, single_lane):
     """Publish each affected resource once, retaining mutable lane aliases."""
+    timeline._remember_resources(active_resources)
     lane_map: object = timeline.lane_available
     direction_map: object = timeline.directions
     lane_direction_map: object = timeline.lane_directions
@@ -335,6 +413,154 @@ def publish_timeline(timeline, names, state_values: list, moved_values: list,
             cython.cast(dict, lane_direction_map).pop(name, None)
         else:
             lane_direction_map.pop(name, None)
+
+
+def can_own_resource_aliases(aliases):
+    """Inspect plain entries before a geometry key can hash caller objects."""
+    if type(aliases) is not dict:
+        return False
+    name: object
+    target: object
+    values: dict = aliases
+    for name, target in values.items():
+        if type(name) is not str or type(target) is not str:
+            return False
+    return True
+
+
+def can_own_timeline(timeline, resource_ids):
+    """Reject authored conversion/setter callbacks on this owner's footprint."""
+    columns = _native_timeline_columns(timeline)
+    if columns is not None and type(resource_ids) is tuple:
+        accepted = _can_own_native_columns(resource_ids, columns)
+        if accepted is not None:
+            return accepted
+    rid: object
+    value: object
+    item: object
+    mapping: object
+    for rid in resource_ids:
+        for mapping in (timeline.ready_ns, timeline.busy_ns):
+            value = mapping.get(rid)
+            if value is not None and type(value) is not int and type(value) is not float:
+                return False
+        value = timeline.bytes_moved.get(rid)
+        if value is not None and type(value) is not int:
+            return False
+        value = timeline.last_intervals.get(rid)
+        if value is not None:
+            if type(value) is not tuple and type(value) is not list:
+                return False
+            if len(value) != 2:
+                return False
+            for item in value:
+                if type(item) is not int and type(item) is not float:
+                    return False
+        value = timeline.lane_available.get(rid)
+        if value is not None:
+            if type(value) is not list:
+                return False
+            for item in value:
+                if type(item) is not int and type(item) is not float:
+                    return False
+        value = timeline.directions.get(rid)
+        if value is not None and type(value) is not str:
+            return False
+        value = timeline.lane_directions.get(rid)
+        if value is not None:
+            if type(value) is not list:
+                return False
+            for item in value:
+                if item is not None and type(item) is not str:
+                    return False
+        for mapping in (timeline._intervals, timeline._interval_payloads):
+            value = mapping.get(rid)
+            if value is not None and type(value) is not list:
+                return False
+    return True
+
+
+def _native_timeline_columns(timeline):
+    """Read plain native maps once; public protocols retain the old walk."""
+    if type(timeline) is not _NATIVE_TIMELINE_TYPE:
+        return None
+    namespace = vars(_NATIVE_TIMELINE_TYPE)
+    slotnames = namespace.get("__slotnames__")
+    if (slotnames is not None and (type(slotnames) is not list or slotnames)
+            or len(namespace) - ("__slotnames__" in namespace) != len(_NATIVE_TIMELINE_NAMESPACE)
+            or any(namespace.get(name) is not value for name, value in _NATIVE_TIMELINE_NAMESPACE)):
+        return None
+    state = vars(timeline)
+    columns = tuple(state.get(name) for name in _NATIVE_TIMELINE_COLUMN_NAMES)
+    return columns if all(type(column) is dict for column in columns) else None
+
+
+def _can_own_native_columns(resource_ids, columns):
+    # Cython's exact-dict locals avoid nine bound attribute/method lookups
+    # per NAND bank. Values and shared mutable lanes are reread each call;
+    # this is never a cached ownership verdict across physical phases.
+    ready: dict = columns[0]
+    busy: dict = columns[1]
+    moved: dict = columns[2]
+    last: dict = columns[3]
+    lanes: dict = columns[4]
+    directions: dict = columns[5]
+    lane_directions: dict = columns[6]
+    intervals: dict = columns[7]
+    payloads: dict = columns[8]
+    rid: object
+    value: object
+    item: object
+    for rid in resource_ids:
+        if type(rid) is not str:
+            return None
+        value = ready.get(rid)
+        if value is not None and type(value) is not int and type(value) is not float:
+            return False
+        value = busy.get(rid)
+        if value is not None and type(value) is not int and type(value) is not float:
+            return False
+        value = moved.get(rid)
+        if value is not None and type(value) is not int:
+            return False
+        value = last.get(rid)
+        if value is not None:
+            if (type(value) is not tuple and type(value) is not list) or len(value) != 2:
+                return False
+            for item in value:
+                if type(item) is not int and type(item) is not float:
+                    return False
+        value = lanes.get(rid)
+        if value is not None:
+            if type(value) is not list:
+                return False
+            for item in value:
+                if type(item) is not int and type(item) is not float:
+                    return False
+        value = directions.get(rid)
+        if value is not None and type(value) is not str:
+            return False
+        value = lane_directions.get(rid)
+        if value is not None:
+            if type(value) is not list:
+                return False
+            for item in value:
+                if item is not None and type(item) is not str:
+                    return False
+        value = intervals.get(rid)
+        if value is not None and type(value) is not list:
+            return False
+        value = payloads.get(rid)
+        if value is not None and type(value) is not list:
+            return False
+    return True
+
+
+from heterollm_sim.memory_transfer import ResourceTimeline as _NATIVE_TIMELINE_TYPE
+_NATIVE_TIMELINE_NAMESPACE = tuple((name, value) for name, value in vars(_NATIVE_TIMELINE_TYPE).items()
+                                    if name != "__slotnames__")
+_NATIVE_TIMELINE_COLUMN_NAMES = ("ready_ns", "busy_ns", "bytes_moved", "last_intervals", "lane_available",
+                               "directions", "lane_directions", "_intervals", "_interval_payloads")
 
 
 @cython.cfunc
@@ -431,3 +657,181 @@ def publish_host_admission(queues, acceptances, admission, operations,
                         read_operation if kinds[host, index] == 1 else write_operation))
         _put(queues, host, row)
         _put(acceptances, host, float(ready[host]))
+
+
+def publish_active_timeline(timeline, names, state, moved, directions,
+                            lane_values, lane_direction_values, starts, counts,
+                            indexes, active_resources, bus_mask, direction_names, single_lane):
+    """Publish only the native machine's touched columns, in original order.
+
+    The page executor, its float64 calculations and the live calendar reads
+    are unchanged. Reading typed active columns avoids converting thousands
+    of unrelated resource rows to Python lists for a 256-page PD chunk.
+    """
+    rows: cython.double[:, ::1] = state
+    byte_counts: cython.longlong[::1] = moved
+    direction_values: cython.longlong[::1] = directions
+    lanes: cython.double[::1] = lane_values
+    lane_directions: cython.longlong[::1] = lane_direction_values
+    firsts: cython.longlong[::1] = starts
+    sizes: cython.longlong[::1] = counts
+    positions: cython.longlong[::1] = indexes
+    timeline._remember_resources(active_resources)
+    lane_map: object = timeline.lane_available
+    direction_map: object = timeline.directions
+    lane_direction_map: object = timeline.lane_directions
+    ready_map: object = timeline.ready_ns
+    busy_map: object = timeline.busy_ns
+    moved_map: object = timeline.bytes_moved
+    interval_map: object = timeline.last_intervals
+    offset: cython.Py_ssize_t
+    index: cython.Py_ssize_t
+    first: cython.Py_ssize_t
+    size: cython.Py_ssize_t
+    lane: cython.Py_ssize_t
+    name: object
+    slots: object
+    values: list
+    for offset in range(len(indexes)):
+        index = positions[offset]
+        name = names[index]
+        first, size = firsts[index], sizes[index]
+        if single_lane:
+            slots = _item(lane_map, name)
+            if cython.compiled and type(slots) is list:
+                cython.cast(list, slots)[0] = float(lanes[first])
+            else:
+                slots[0] = float(lanes[first])
+        else:
+            values = []
+            for lane in range(first, first + size):
+                values.append(float(lanes[lane]))
+            if name in lane_map:
+                slots = _item(lane_map, name)
+                slots[:] = values
+            else:
+                _put(lane_map, name, values)
+        _put(ready_map, name, float(rows[index, 0]))
+        _put(busy_map, name, float(rows[index, 1]))
+        _put(interval_map, name, (float(rows[index, 2]), float(rows[index, 3])))
+        if bus_mask[index] or name in moved_map:
+            _put(moved_map, name, int(byte_counts[index]))
+        if direction_values[index]:
+            _put(direction_map, name, direction_names[direction_values[index]])
+        if size > 1:
+            values = []
+            for lane in range(first, first + size):
+                values.append(direction_names[lane_directions[lane]])
+            _put(lane_direction_map, name, values)
+        elif cython.compiled and type(lane_direction_map) is dict:
+            cython.cast(dict, lane_direction_map).pop(name, None)
+        else:
+            lane_direction_map.pop(name, None)
+
+
+def generic_request_resource_indexes(first_page, count, base_units, planes, independent,
+                                     per_channel, host_channels, array_ids, channel_ids, host_ids):
+    """Exact potential resource footprint of the unchanged sequential page loop."""
+    first: cython.longlong = first_page
+    base_count: cython.longlong = base_units
+    bank_count: cython.longlong = base_units * planes
+    plane: cython.longlong
+    base: cython.longlong
+    bank: cython.longlong
+    unit: cython.longlong
+    channel: cython.longlong
+    page: cython.longlong
+    offset: cython.Py_ssize_t
+    arrays: cython.const[cython.longlong][::1] = array_ids
+    channels: cython.const[cython.longlong][::1] = channel_ids
+    hosts: cython.const[cython.longlong][::1] = host_ids
+    selected: set = set()
+    for offset in range(min(count, bank_count)):
+        page = first + offset
+        base = page % base_count
+        plane = (page // base_count) % planes
+        bank = base + plane * base_count
+        unit = bank if independent else base
+        channel = base // per_channel
+        selected.add(int(arrays[unit]))
+        selected.add(int(channels[channel]))
+        selected.add(int(hosts[channel % host_channels]))
+    return np.asarray(sorted(selected), dtype=np.int64)
+
+
+def pack_selected_single_lane(timeline, names, indexes, count, transfer_page_bytes):
+    """Pack the proven native request footprint without observing other banks.
+
+    The outer owner transaction has already validated the full dynamic
+    public state. Only the exact sequential page footprint is read here;
+    selected aliases, multi-lane clocks and unusual values still decline to
+    the complete original packer before any state is changed.
+    """
+    positions: cython.const[cython.longlong][::1] = indexes
+    lane_map: object = timeline.lane_available
+    direction_map: object = timeline.directions
+    ready_map: object = timeline.ready_ns
+    busy_map: object = timeline.busy_ns
+    moved_map: object = timeline.bytes_moved
+    interval_map: object = timeline.last_intervals
+    rows: list = []
+    previous: list = []
+    moved_values: list = []
+    seen: set = set()
+    name: object
+    row: object
+    value: object
+    direction: object
+    interval: object
+    offset: cython.Py_ssize_t
+    index: cython.Py_ssize_t
+    size: cython.Py_ssize_t = len(names)
+    active_size: cython.Py_ssize_t = len(indexes)
+    limit: object = 2**63 - 1 - count * max(4096, transfer_page_bytes)
+    for offset in range(active_size):
+        rows.append(_get(lane_map, names[positions[offset]]))
+    for row in rows:
+        if (type(row) is not list or len(row) != 1 or type(row[0]) not in (float, int)
+                or id(row) in seen):
+            return None
+        seen.add(id(row))
+    for offset in range(active_size):
+        previous.append(_get(direction_map, names[positions[offset]]))
+    for direction in previous:
+        if direction is not None and direction != "read" and direction != "write":
+            return None
+    lanes = np.zeros(size, dtype=np.float64)
+    lane_view: cython.double[::1] = lanes
+    for offset in range(active_size):
+        value = rows[offset][0]
+        if not math.isfinite(value) or value < 0:
+            return None
+        lane_view[positions[offset]] = value
+    for offset in range(active_size):
+        moved_values.append(_get(moved_map, names[positions[offset]], 0))
+    for value in moved_values:
+        if not isinstance(value, int) or not 0 <= value <= limit:
+            return None
+    directions = np.zeros(size, dtype=np.int64)
+    direction_view: cython.longlong[::1] = directions
+    state = np.zeros((size, 4), dtype=np.float64)
+    state_view: cython.double[:, ::1] = state
+    moved = np.zeros(size, dtype=np.int64)
+    moved_view: cython.longlong[::1] = moved
+    for offset in range(active_size):
+        index = positions[offset]
+        direction = previous[offset]
+        direction_view[index] = 0 if direction is None else 1 if direction == "read" else 2
+        moved_view[index] = moved_values[offset]
+    for offset in range(active_size):
+        index = positions[offset]
+        state_view[index, 0] = _double(_get(ready_map, names[index], 0.))
+    for offset in range(active_size):
+        index = positions[offset]
+        state_view[index, 1] = _double(_get(busy_map, names[index], 0.))
+    for offset in range(active_size):
+        index = positions[offset]
+        interval = _get(interval_map, names[index], (0., 0.))
+        state_view[index, 2], state_view[index, 3] = _double(interval[0]), _double(interval[1])
+    return (np.arange(size, dtype=np.int64), np.ones(size, dtype=np.int64),
+            lanes, directions.copy(), state, moved, directions)

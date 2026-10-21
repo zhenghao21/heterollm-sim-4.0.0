@@ -87,6 +87,7 @@ from .planner import (
     _request_modalities,
     _topology_router,
     _trusted_execution_stages,
+    compile_serving_cohort_schedule,
     materialize_requests,
     TopologyAwareBatchCostProvider,
 )
@@ -132,6 +133,7 @@ class ServingPolicy:
     preemption_policy: str = "auto"
     slo_ttft_ns: Optional[float] = None
     slo_tbt_ns: Optional[float] = None
+    slo_tpot_ns: Optional[float] = None
     prefill_stop_offsets: Tuple[int, ...] = ()
 
 
@@ -254,6 +256,7 @@ class KVCachePolicy:
     kv_layer_bytes_per_token: Mapping[str, int] = field(default_factory=dict)
     kv_layer_bytes_per_page: Mapping[str, int] = field(default_factory=dict)
     kv_layer_component_shards: Mapping[str, Tuple[str, ...]] = field(default_factory=dict)
+    kv_layer_attention_limits: Mapping[str, int] = field(default_factory=dict)
     capacity_bytes_by_component: Mapping[str, int] = field(default_factory=dict)
     bottleneck_component: Optional[str] = None
 
@@ -1637,6 +1640,22 @@ class ServingRequestMetrics:
     deadline_met: Optional[bool]
     rejection_reason: Optional[str] = None
     engine_start_ns: Optional[float] = None
+    # None means disabled or undefined (<2 visible tokens), never an SLO pass.
+    slo_tpot_met: Optional[bool] = None
+    last_token_ns: Optional[float] = None
+
+
+def evaluate_tpot_slo(
+    tpot_ns: Optional[float], visible_output_tokens: int, threshold_ns: Optional[float]
+) -> Optional[bool]:
+    """Evaluate mean TPOT; a missing interval is not a successful observation.
+
+    TPOT is (last visible token - first visible token) / (N - 1). It is
+    independent of the maximum adjacent-token gap used by a TBT constraint.
+    """
+    if threshold_ns is None or visible_output_tokens < 2 or tpot_ns is None:
+        return None
+    return tpot_ns <= threshold_ns
 
 
 @dataclass(frozen=True)
@@ -1886,6 +1905,8 @@ class ServingResult:
     # timestamp as a duration.
     runtime_origin_ns: float = 0.0
     agent_lifecycle_metrics: Mapping[str, Any] = field(default_factory=dict)
+    external_kv_ingress_metrics: Mapping[str, Any] = field(default_factory=dict)
+    decode_measurement: Mapping[str, Any] = field(default_factory=dict)
 
     @property
     def prompt_cache_save_timing(self) -> Mapping[str, object]:
@@ -1997,6 +2018,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         preemption_policy=str(scheduler_spec.preemption_policy),
         slo_ttft_ns=_optional_float(scheduler_spec.slo_ttft_ns),
         slo_tbt_ns=_optional_float(scheduler_spec.slo_tbt_ns),
+        slo_tpot_ns=_optional_float(scheduler_spec.slo_tpot_ns),
     )
     if scheduler.starvation_ns <= 0:
         raise ValueError("scheduler starvation_ns must be positive")
@@ -2054,6 +2076,18 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     else:
         layout_mode = requested_layout
     layer_map = dict(native_layer_map or tier_layer_map)
+    rank_kv_components = scenario.placement.metadata.get("rank_kv_components")
+    if rank_kv_components is not None:
+        parallel = _parallel_plan(scenario)
+        if (not isinstance(rank_kv_components, Mapping)
+                or set(rank_kv_components) != {str(rank.rank) for rank in parallel.ranks}):
+            raise ValueError("rank_kv_components must cover every native logical rank")
+        for target in rank_kv_components.values():
+            component = scenario.hardware.get_component(str(target))
+            if not component.is_active_memory or not component.is_writable:
+                raise ValueError("rank KV targets must be writable active memory")
+        layer_map = {layer.layer_id: str(rank_kv_components[str(parallel.ranks_for_layer(layer)[0].rank)])
+                     for layer in _execution_layers(scenario) if not layer.is_linear_attention}
     if requested_layout == "manual" and not layer_map:
         raise ValueError(
             "manual KV layout requires a generated kv_layer_components mapping"
@@ -2062,7 +2096,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     layer_bytes_per_page: Dict[str, int] = {}
     layer_component_shards: Dict[str, Tuple[str, ...]] = {}
     layer_component_bytes: Dict[str, int] = {}
-    if layout_mode == "llama_static_layer" and layer_map:
+    if (layout_mode == "llama_static_layer" and layer_map) or rank_kv_components is not None:
         layer_ids = {
             layer.layer_id
             for layer in _execution_layers(scenario)
@@ -2098,6 +2132,8 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
             layer_bytes_per_page[layer.layer_id] = physical_layer_bytes * page_tokens
             parallel = _parallel_plan(scenario)
             rank_components = (
+                tuple(str(rank_kv_components[str(rank.rank)]) for rank in parallel.ranks_for_layer(layer))
+                if rank_kv_components is not None else
                 (str(owner),)
                 if (tier_layer_map and not native_layer_map) or native_layer_map
                 else tuple(
@@ -2110,6 +2146,10 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
             )
             if not rank_components:
                 rank_components = (str(owner),)
+            if rank_kv_components is not None:
+                physical_layer_bytes = physical_layer_bytes // parallel.tp_degree * len(rank_components)
+                layer_bytes_per_token[layer.layer_id] = physical_layer_bytes
+                layer_bytes_per_page[layer.layer_id] = physical_layer_bytes * page_tokens
             layer_component_shards[layer.layer_id] = rank_components
             shard_bytes = (
                 physical_layer_bytes // len(rank_components)
@@ -2122,6 +2162,8 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
                     + shard_bytes * page_tokens
                 )
         layer_map = {str(key): str(value) for key, value in layer_map.items()}
+        if rank_kv_components is not None:
+            bytes_per_page = sum(layer_component_bytes.values())
     kv_unified = bool(kv_spec.kv_unified)
     logical_context_tokens = 0
     n_seq_max = max_num_seqs
@@ -2419,7 +2461,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     kv_component_bytes, state_component_bytes = _tier_state_layout(
         scenario, cache_component, state_cache_component, page_tokens, kv_dtype
     )
-    if layout_mode == "llama_static_layer" and layer_component_bytes:
+    if (layout_mode == "llama_static_layer" or rank_kv_components is not None) and layer_component_bytes:
         # Native adapter placement is authoritative even when no V4
         # memory_tiers authoring block exists.  The per-component map is the
         # only capacity ledger input; no components are summed as one pool.
@@ -2474,6 +2516,23 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
             capacity_pages = min(capacity_pages, capacity_bytes // bytes_per_page)
         capacity_bytes = capacity_pages * bytes_per_page
         state_offload_capacity = offload_capacity = 0
+    chunk_limits = {layer.layer_id: int(getattr(layer, "attention_chunk_size", 0))
+                    for layer in _execution_layers(scenario) if getattr(layer, "attention_chunk_size", 0)}
+    if chunk_limits and layer_map:
+        # Full-attention bytes give a necessary address-space upper bound;
+        # per-request layer/ring ledgers below enforce the exact capacity.
+        full_bytes = {}
+        for layer_id, bpt in layer_bytes_per_token.items():
+            if layer_id in chunk_limits:
+                continue
+            owners = layer_component_shards[layer_id]
+            for owner in owners:
+                full_bytes[owner] = full_bytes.get(owner, 0) + bpt // len(owners) * page_tokens
+        bounds = [budgets[owner] // value for owner, value in full_bytes.items() if value]
+        capacity_pages = min(bounds) if bounds else max(
+            (int(request.prompt_tokens) + int(request.output_tokens) + page_tokens-1)//page_tokens
+            for request in materialize_requests(scenario)) * (max_num_seqs + 2)
+        capacity_bytes = capacity_pages * bytes_per_page
     # llama.cpp non-unified KV allocates an independent context window per
     # sequence.  Keep the physical buffer bound and the logical per-slot
     # bound separate, then apply the product only to the aggregate page cap.
@@ -2561,6 +2620,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         kv_layer_bytes_per_token=layer_bytes_per_token,
         kv_layer_bytes_per_page=layer_bytes_per_page,
         kv_layer_component_shards=layer_component_shards,
+        kv_layer_attention_limits=chunk_limits if layer_map else {},
         capacity_bytes_by_component=component_capacity_bytes,
         bottleneck_component=bottleneck_component,
     )
@@ -2704,7 +2764,7 @@ def _request_admission_reason(
     if plan.kv_policy.component_bytes_per_page or plan.linear_state_policy.component_bytes_per_request:
         for component, capacity in _physical_runtime_limits(plan).items():
             required = (
-                required_pages * plan.kv_policy.component_bytes_per_page.get(component, 0)
+                _kv_policy_component_usage(plan.kv_policy, required_pages).get(component, 0)
                 + plan.linear_state_policy.component_bytes_per_request.get(component, 0)
             )
             if required > capacity:
@@ -2847,6 +2907,7 @@ class _MutableRequest:
     started_ns: Optional[float] = None
     engine_start_ns: Optional[float] = None
     first_token_ns: Optional[float] = None
+    last_token_ns: Optional[float] = None
     finished_ns: Optional[float] = None
     preemptions: int = 0
     swaps: int = 0
@@ -3010,6 +3071,22 @@ class _PhysicalCapacityLedger:
         return True
 
 
+def _kv_policy_component_usage(policy: KVCachePolicy, pages: int) -> Mapping[str, int]:
+    """Exact bounded-ring footprints plus ordinary full-attention pages."""
+    if not policy.kv_layer_attention_limits:
+        if policy.component_bytes_per_page:
+            return {owner: pages*amount for owner, amount in policy.component_bytes_per_page.items()}
+        return {policy.cache_component: pages*policy.bytes_per_page} if policy.cache_component else {}
+    result = {}
+    tokens = pages*policy.tokens_per_page
+    for layer, amount in policy.kv_layer_bytes_per_token.items():
+        owners = policy.kv_layer_component_shards[layer]
+        live = min(tokens, policy.kv_layer_attention_limits.get(layer, tokens))
+        for owner in owners:
+            result[owner] = result.get(owner, 0) + live*(amount//len(owners))
+    return result
+
+
 class _KVLedger:
     def __init__(
         self, policy: KVCachePolicy, physical: _PhysicalCapacityLedger
@@ -3126,6 +3203,13 @@ class _KVLedger:
         pages = byte_count // self.policy.bytes_per_page
         return {component: pages * n for component, n in self.policy.component_bytes_per_page.items()}
 
+    def _request_deltas(self, request: _MutableRequest, pages: int) -> Mapping[str, int]:
+        if not self.policy.kv_layer_attention_limits:
+            return self._active_deltas((pages-request.kv_pages)*self.policy.bytes_per_page)
+        before = _kv_policy_component_usage(self.policy, request.kv_pages)
+        after = _kv_policy_component_usage(self.policy, pages)
+        return {owner:after.get(owner,0)-before.get(owner,0) for owner in set(before)|set(after)}
+
     def pages_for_tokens(self, token_count: int) -> int:
         if token_count <= 0 or self.policy.bytes_per_page <= 0:
             return 0
@@ -3138,10 +3222,9 @@ class _KVLedger:
             if pages == request.kv_pages:
                 return True
             return self.paged_pool.can_resize(request.spec.request_id, pages)
-        delta_bytes = (pages - request.kv_pages) * self.policy.bytes_per_page
         return (
             self.used_pages + pages - request.kv_pages <= self.policy.capacity_pages
-            and self.physical.can_adjust_many(self._active_deltas(delta_bytes))
+            and self.physical.can_adjust_many(self._request_deltas(request, pages))
         )
 
     def resize(self, request: _MutableRequest, pages: int) -> bool:
@@ -3180,7 +3263,7 @@ class _KVLedger:
         if pages < 0 or not self.can_resize(request, pages):
             return False
         delta = pages - request.kv_pages
-        if not self.physical.adjust_many(self._active_deltas(delta * self.policy.bytes_per_page)):
+        if not self.physical.adjust_many(self._request_deltas(request, pages)):
             return False
         self.used_pages += delta
         self.persistent_used_pages += delta
@@ -5428,6 +5511,12 @@ class _OnlineRuntime:
             raise TypeError("execution_kernel must be a UnifiedEventKernel")
         if execution_kernel is not None and execution_kernel.has_active_tasks:
             raise ValueError("execution_kernel must be drained before serving append")
+        # Normal reporting hands over the original native control-plane
+        # kernel. Its provenance does not replace the live state/hook checks;
+        # it only distinguishes that path from an arbitrary external kernel.
+        from .control_plane import _is_native_bootstrap_kernel
+        self._native_window_owns_execution_kernel = (
+            execution_kernel is None or _is_native_bootstrap_kernel(execution_kernel))
         self._requested_kv_allocation_policy = plan.kv_policy.allocation_policy
         self._kv_allocation_policy_reason = None
         cache_components = set(plan.kv_policy.component_bytes_per_page)
@@ -5728,6 +5817,11 @@ class _OnlineRuntime:
         self.rounds = 0
         self._run_initialized = False
         self._completed_decode_steps = 0
+        # Observations count only successfully committed native cohorts/events.
+        # They are separate from the current cohort's topology task counter.
+        self._progress_counters = {"cohorts": 0, "prefill_cohorts": 0,
+            "decode_cohorts": 0, "prefill_compute_tokens": 0, "visible_output_tokens": 0,
+            "measurement_visible_output_tokens": 0}
         self.idle_ns = self.now
         self.preemptions = 0
         self.priority_preemptions = 0
@@ -5782,6 +5876,232 @@ class _OnlineRuntime:
         # mistaken for a fully touched GPU working set.
         self._resource_kv_host_backed_pages = 0
         self._resource_state_host_backed_allocations = 0
+        self._configure_external_kv_ingress()
+
+    def _configure_external_kv_ingress(self) -> None:
+        self._external_ingress = self.plan.scenario.workload.metadata.get("external_kv_ingress")
+        self._external_pending = {}
+        self._external_ready = set()
+        self._external_initialized = set()
+        self._external_executor = None
+        self._external_imported_requests = 0
+        self._external_imported_bytes = 0
+        self._external_buffer_peak_bytes = 0
+        self._decode_window = {}
+        if self._external_ingress is None:
+            return
+        config = self._external_ingress
+        allowed = {"protocol", "source_component", "buffer_bytes", "chunk_bytes", "max_inflight_requests",
+            "relay_components", "warmup_decode_cohorts", "measurement_decode_cohorts",
+            "finish_after_measurement", "require_full_batch"}
+        if not isinstance(config, Mapping) or set(config) - allowed:
+            raise ValueError("external_kv_ingress contains unsupported fields")
+        if config.get("protocol", "native_external_kv_v1") != "native_external_kv_v1":
+            raise ValueError("unsupported external KV ingress protocol")
+        sampling = self.plan.scenario.simulation
+        native_physical = (sampling.mode == "detailed" or
+            sampling.mode == "fast" and sampling.native_window is not None)
+        if (not native_physical or self.plan.mtp.enabled
+                or self._agent_config or self.prompt_cache.enabled
+                or self.plan.kv_policy.layout_mode != "legacy_single"
+                or any(layer.is_linear_attention for layer in _execution_layers(self.plan.scenario))):
+            raise ValueError("external KV requires ordinary native physical per-rank contiguous KV without MTP/agent/prompt-cache")
+        for key, default, minimum in (("buffer_bytes", 64*1024**2, 1), ("chunk_bytes", 1024**2, 1),
+                ("max_inflight_requests", 2, 1), ("warmup_decode_cohorts", 0, 0),
+                ("measurement_decode_cohorts", 0, 0)):
+            value = config.get(key, default)
+            if type(value) is not int or value < minimum:
+                raise ValueError("external KV " + key + " has an invalid integer value")
+        for key in ("finish_after_measurement", "require_full_batch"):
+            if key in config and not isinstance(config[key], bool):
+                raise ValueError("external KV " + key + " must be boolean")
+        if any(state.spec.prompt_tokens < 1 or state.spec.output_tokens < 1 for state in self._state_values):
+            raise ValueError("external KV requests require a final prompt query and at least one real output")
+        if config.get("buffer_bytes", 64*1024**2) < config.get("max_inflight_requests", 2):
+            raise ValueError("external KV source buffer is smaller than its finite slot count")
+        source = self.plan.scenario.hardware.get_component(str(config.get("source_component", "")))
+        if source.normalized_kind not in {"host_memory", "ddr", "memory"}:
+            raise ValueError("external KV source must be explicit HOST DRAM")
+        from .communication import TopologyRouter
+        from .kv_transfer import PhysicalKVTransferExecutor
+        self._external_executor = PhysicalKVTransferExecutor(self.plan.scenario.hardware.components,
+            runtime=self._execution_resource_kernel.physical_runtime,
+            topology=TopologyRouter(self.plan.scenario.hardware),
+            relay_components=tuple(config.get("relay_components", ())), namespace="native-pd",
+            cache_states=self._execution_resource_kernel._l2_states,
+            cache_owners=self._execution_resource_kernel._physical_allocation_cache_owners,
+            retain_phase_details=False)
+        self._decode_window = {"warmup_decode_cohorts": config.get("warmup_decode_cohorts", 0),
+            "requested_decode_cohorts": config.get("measurement_decode_cohorts", 0),
+            "measured_decode_cohorts": 0, "start_ns": None, "end_ns": None, "complete": False,
+            "scope": "same native runtime; fixed Decode-cohort window including paid admission gaps; no final queue drain"}
+
+    def _external_destination_ranges(self, state):
+        """Read exact native KV identities/geometry; never execute this inventory."""
+        from .contracts import TaskSpec
+        from .data_motion import register_physical_allocations
+        from .planner import native_kv_ingress_inventory
+        scenario = self.plan.scenario
+        history = state.spec.prompt_tokens - 1
+        inventory = native_kv_ingress_inventory(scenario, state.spec.request_id, history,
+            execution_control=self.execution_control)
+        configs, contracts = inventory["physical_memory_configs"], inventory["contracts"]
+        declarations = {(row["physical_owner"], row["buffer_id"], row.get("generation", 0)): row
+            for row in inventory["physical_allocations"]}
+        if not declarations:
+            raise ValueError("native external KV has no explicit lowerer storage declarations")
+        for owner, _identity, _generation in declarations:
+            if owner not in configs:
+                raise ValueError("native external KV owner has no physical configuration")
+        first_owner = next(iter(declarations))[0]
+        task = TaskSpec("@native-pd-register", state.spec.request_id, "Register native external KV destinations",
+            TaskCategory.MEMORY, metadata={"physical_owner": first_owner,
+                "physical_memory_config": configs[first_owner], "physical_memory_configs": configs,
+                "physical_allocations": tuple(declarations.values())})
+        register_physical_allocations(task, self._execution_resource_kernel.physical_runtime)
+        self._execution_resource_kernel._request_physical_buffers.setdefault(state.spec.request_id, set()).update(declarations)
+        component_by_owner = {service.physical_owner: component
+            for component, service in self._external_executor.services.items()}
+        spans = {}
+        for contract in contracts:
+            self.execution_control.raise_if_cancelled()
+            row_bytes = int(contract["row_bytes"])
+            for owner in contract["owners"]:
+                if owner["request_id"] != state.spec.request_id:
+                    continue
+                physical = owner.get("read_ranges", ())
+                logical = owner.get("logical_read_ranges", physical)
+                if len(physical) != len(logical):
+                    raise ValueError("native external KV requires matching logical and physical range maps")
+                for (logical_start, logical_length), (physical_start, physical_length) in zip(logical, physical):
+                    start, end = max(0, logical_start), min(history, logical_start+logical_length)
+                    if end <= start:
+                        continue
+                    if logical_length != physical_length:
+                        raise ValueError("native external KV range maps disagree")
+                    for part in ("k", "v"):
+                        identity = owner["id"] + ":" + part
+                        keys = [key for key in declarations if key[1] == identity]
+                        if len(keys) != 1:
+                            raise ValueError("native external KV identity does not select one private owner")
+                        key = keys[0]
+                        spans.setdefault(key, set()).add(((physical_start+start-logical_start)*row_bytes,
+                            (physical_start+end-logical_start)*row_bytes))
+        destinations = []
+        for (owner, identity, generation), intervals in spans.items():
+            merged = []
+            for start, end in sorted(intervals):
+                if merged and start <= merged[-1][1]:
+                    merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+                else:
+                    merged.append((start, end))
+            for start, end in merged:
+                destinations.append({"component_id": component_by_owner[owner], "buffer_id": identity,
+                    "generation": generation, "offset_bytes": start, "size_bytes": end-start})
+        return destinations
+
+    def _start_external_imports(self):
+        if self._external_executor is None:
+            return
+        config = self._external_ingress
+        limit = config.get("max_inflight_requests", 2)
+        for state in self._state_values:
+            request_id = state.spec.request_id
+            if len(self._external_pending) + len(self._external_ready) >= limit:
+                break
+            if state.status != RequestStatus.WAITING or request_id in self._external_pending or request_id in self._external_ready:
+                continue
+            pages = self.ledger.pages_for_tokens(_max_live_kv_tokens(state.spec.prompt_tokens, state.spec.output_tokens))
+            if not self.ledger.can_resize(state, pages):
+                continue
+            previous = state.kv_pages
+            snapshot = self._external_executor.snapshot()
+            try:
+                if not self.ledger.resize(state, pages):
+                    continue
+                destinations = self._external_destination_ranges(state)
+                size = sum(row["size_bytes"] for row in destinations)
+                if not destinations:
+                    state.prefill_cursor = state.spec.prompt_tokens-1
+                    self._external_ready.add(request_id)
+                    self._external_initialized.add(request_id)
+                    continue
+                plan = self._external_executor.prepare_external_import(source_component=config["source_component"],
+                    destinations=destinations, buffer_bytes=config.get("buffer_bytes", 64*1024**2)//limit,
+                    chunk_bytes=config.get("chunk_bytes", 1024**2), request_id=request_id, arrival_ns=self.now)
+                self._external_pending[request_id] = {"plan": plan, "bytes": size}
+                self._external_buffer_peak_bytes = max(self._external_buffer_peak_bytes,
+                    len(self._external_pending)*min(config.get("chunk_bytes", 1024**2), config.get("buffer_bytes",64*1024**2)//limit))
+                self.events.append(ServingEvent(self.now, "external_kv_import_start", request_id,
+                    details={"logical_bytes": size, "history_tokens": state.spec.prompt_tokens-1}))
+                self._publish_prefetch_resource_availability(plan=plan, executor=self._external_executor)
+            except BaseException:
+                self._external_executor.restore(snapshot)
+                self._execution_resource_kernel._request_physical_buffers.pop(request_id, None)
+                self.ledger.resize(state, previous)
+                raise
+
+    def _advance_external_imports_until(self, timestamp_ns):
+        while True:
+            ready = [(entry["plan"].completion_ns, request_id) for request_id, entry in self._external_pending.items()
+                     if entry["plan"].advance is not None and entry["plan"].completion_ns <= timestamp_ns]
+            if not ready:
+                break
+            _completion, request_id = min(ready)
+            entry = self._external_pending[request_id]
+            entry["plan"] = entry["plan"].advance()
+            self._publish_prefetch_resource_availability(plan=entry["plan"], executor=self._external_executor)
+
+    def _complete_external_imports(self):
+        self._advance_external_imports_until(self.now)
+        for request_id, entry in tuple(self._external_pending.items()):
+            plan = entry["plan"]
+            if plan.advance is not None or plan.completion_ns > self.now:
+                continue
+            plan.commit()
+            self.states[request_id].prefill_cursor = self.states[request_id].spec.prompt_tokens-1
+            self._request_device_ready_ns[request_id] = max(self._request_device_ready_ns[request_id], plan.completion_ns)
+            self._external_ready.add(request_id)
+            self._external_initialized.add(request_id)
+            self._external_imported_requests += 1
+            self._external_imported_bytes += entry["bytes"]
+            self.events.append(ServingEvent(plan.completion_ns, "external_kv_import_complete", request_id,
+                details={"logical_bytes": entry["bytes"], "first_output_free": False}))
+            del self._external_pending[request_id]
+
+    def _next_external_phase(self):
+        return min((entry["plan"].completion_ns for entry in self._external_pending.values()), default=None)
+
+    def _cancel_external_imports(self):
+        for request_id, entry in tuple(self._external_pending.items()):
+            plan = entry["plan"]
+            self.now = max(self.now, plan.completion_ns)
+            self._execution_resource_kernel.makespan_ns = max(
+                self._execution_resource_kernel.makespan_ns, self.now)
+            plan.cancel()
+            self.ledger.resize(self.states[request_id], 0)
+            self._execution_resource_kernel.release_request_physical_allocations(request_id)
+            del self._external_pending[request_id]
+        for request_id in tuple(self._external_ready):
+            self.ledger.resize(self.states[request_id], 0)
+            self._execution_resource_kernel.release_request_physical_allocations(request_id)
+            self.states[request_id].prefill_cursor = 0
+            self._external_initialized.discard(request_id)
+        self._external_ready.clear()
+
+    def _observe_decode_measurement(self, cohort):
+        window = self._decode_window
+        if not window or not window["requested_decode_cohorts"] or window["complete"]:
+            return
+        if window["start_ns"] is None and self._completed_decode_steps >= window["warmup_decode_cohorts"]:
+            window["start_ns"] = self.now
+            self.events.append(ServingEvent(self.now, "decode_measurement_start"))
+        if (cohort.kind == "decode" and window["start_ns"] is not None
+                and self._completed_decode_steps > window["warmup_decode_cohorts"]):
+            window["measured_decode_cohorts"] += 1
+            if window["measured_decode_cohorts"] >= window["requested_decode_cohorts"]:
+                window.update(end_ns=self.now, complete=True)
+                self.events.append(ServingEvent(self.now, "decode_measurement_end"))
 
     def _state_trace(self, state: _MutableRequest) -> Mapping[str, Any]:
         return {
@@ -10023,21 +10343,26 @@ class _OnlineRuntime:
                 self.events.append(ServingEvent(info["resume_ns"], "request_arrival", request_id))
                 del self._agent_paused[request_id]
 
-    def run_until_decode_steps(self, target: int) -> bool:
+    def run_until_decode_steps(self, target: int, *, strict_cohort_cutoff: bool = False) -> bool:
         """Advance the original request budget to a resumable exact boundary.
 
         ``target`` counts completed ordinary Decode cohorts cumulatively.
         Zero runs Prefill before stopping.  A prefix never manufactures a
         completion or releases request allocations; ``run`` resumes this
         same runtime, including all physical controller calendars.
+        ``strict_cohort_cutoff`` stops at that native cohort boundary even
+        when later requests still await PD import or Prefill. It never marks
+        those queued requests as complete or advances their controller state.
         """
         if isinstance(target, bool) or not isinstance(target, int):
             raise TypeError("target must be a non-negative integer")
         if target < 0:
             raise ValueError("target must be a non-negative integer")
-        return self._run_until_decode_steps(target)
+        if not isinstance(strict_cohort_cutoff, bool):
+            raise TypeError("strict_cohort_cutoff must be a boolean")
+        return self._run_until_decode_steps(target, strict_cohort_cutoff=strict_cohort_cutoff)
 
-    def _run_until_decode_steps(self, target: Optional[int]) -> bool:
+    def _run_until_decode_steps(self, target: Optional[int], *, strict_cohort_cutoff: bool = False) -> bool:
         self.execution_control.raise_if_cancelled()
         if not self._run_initialized:
             self.execution_control.report(
@@ -10045,38 +10370,76 @@ class _OnlineRuntime:
                 0,
                 message="online serving started",
                 simulated_time_ns=self.now,
-                metadata={"request_count": self._request_count},
+                metadata={"request_count": self._request_count,
+                    "cumulative_progress": self._progress_observation()},
             )
             self._reject_impossible_requests()
             self._run_initialized = True
         safety_limit = max(10_000, sum(state.spec.prompt_tokens + state.spec.output_tokens + 1 for state in self._state_values) * 32)
         while not self._terminal():
             self.execution_control.raise_if_cancelled()
+            if (self._decode_window.get("complete")
+                    and self._external_ingress.get("finish_after_measurement", True)):
+                break
             if (
                 target is not None
                 and self._completed_decode_steps >= target
-                and all(
+                and (strict_cohort_cutoff or all(
                     state.status in _TERMINAL_STATUSES
                     or (
                         state.status is RequestStatus.RUNNING
                         and state.prefill_cursor >= state.spec.prompt_tokens
                     )
                     for state in self._state_values
-                )
+                ))
             ):
                 return False
             self.rounds += 1
             if self.rounds > safety_limit:
                 raise RuntimeError("online scheduler made no progress")
+            self.execution_control.report("serving_boundary", len(self.batches),
+                simulated_time_ns=self.now, message="正在处理原生准入与PD入站边界",
+                metadata={"cumulative_progress": self._progress_observation()})
             self._stabilize_boundary()
             self._sync_paged_pool_events()
             cohort = self._select_cohort()
             if cohort is not None:
+                observed_event_start = len(self.events)
+                self.execution_control.report("cohort_preparation", len(self.batches),
+                    simulated_time_ns=self.now, message="正在准备下一原生批次",
+                    metadata={"current_cohort": {"cohort_id": cohort.cohort_id,
+                        "index": len(self.batches) + 1, "kind": cohort.kind,
+                        "request_count": len(cohort.request_ids), "logical_tokens": cohort.token_count,
+                        "completed_tasks": 0, "total_tasks": None},
+                        "cumulative_progress": self._progress_observation()})
                 self._record_schedule_trace("decision", selected=cohort)
                 self._execute(cohort)
                 if cohort.kind == "decode":
                     self._completed_decode_steps += 1
+                self._observe_decode_measurement(cohort)
                 self._sync_paged_pool_events()
+                if (self.execution_control.progress_callback is not None
+                        or self.execution_control.progress_queue is not None):
+                    self._progress_counters["cohorts"] += 1
+                    if cohort.kind in {"prefill", "decode"}:
+                        self._progress_counters[cohort.kind + "_cohorts"] += 1
+                    self._progress_counters["prefill_compute_tokens"] += sum(
+                        event.details["chunk_tokens"]
+                        for event in self.events[observed_event_start:]
+                        if event.event_type == "prefill_chunk_complete")
+                    self._progress_counters["visible_output_tokens"] += sum(
+                        event.details.get("visible_tokens", 0)
+                        for event in self.events[observed_event_start:]
+                        if event.event_type == "tokens_committed")
+                    measurement_start = self._decode_window.get("start_ns")
+                    measurement_end = self._decode_window.get("end_ns")
+                    if measurement_start is not None:
+                        self._progress_counters["measurement_visible_output_tokens"] += sum(
+                            event.details.get("visible_tokens", 0)
+                            for event in self.events[observed_event_start:]
+                            if event.event_type == "tokens_committed"
+                            and event.timestamp_ns > measurement_start
+                            and (measurement_end is None or event.timestamp_ns <= measurement_end))
                 self.execution_control.report(
                     "serving_cohorts",
                     len(self.batches),
@@ -10085,10 +10448,11 @@ class _OnlineRuntime:
                         "cohort_kind": cohort.kind,
                         "finished_requests": self._finished_count,
                         "request_count": self._request_count,
+                        "cumulative_progress": self._progress_observation(),
                     },
                 )
                 continue
-            wakeups = [time for time in (self._next_arrival(), self._next_prefetch_completion(), self._next_agent_event())
+            wakeups = [time for time in (self._next_arrival(), self._next_prefetch_completion(), self._next_agent_event(), self._next_external_phase())
                        if time is not None and time > self.now]
             if wakeups:
                 next_wakeup = min(wakeups)
@@ -10101,8 +10465,34 @@ class _OnlineRuntime:
         self.execution_control.raise_if_cancelled()
         return self._terminal()
 
+    def _progress_observation(self) -> Mapping[str, Any]:
+        """Native committed counters, never extrapolated from DAG tasks."""
+        window = self._decode_window
+        warmup = int(window.get("warmup_decode_cohorts", 0))
+        requested = int(window.get("requested_decode_cohorts", 0))
+        return {**self._progress_counters,
+            "warmup_decode_cohorts": min(self._completed_decode_steps, warmup),
+            "measurement_decode_cohorts": int(window.get("measured_decode_cohorts", 0)),
+            "target_decode_cohorts": warmup + requested if requested else None,
+            "finished_requests": self._finished_count,
+            "request_count": self._request_count,
+            "external_imported_requests": self._external_imported_requests,
+            "external_imported_logical_bytes": self._external_imported_bytes,
+            "external_submitted_source_read_bytes": (
+                self._external_executor.counters["read_bytes"] if self._external_executor else 0),
+            "external_submitted_target_write_bytes": (
+                self._external_executor.counters["write_bytes"] if self._external_executor else 0),
+            "external_pending_requests": len(self._external_pending)}
+
     def run(self) -> ServingResult:
-        self._run_until_decode_steps(None)
+        try:
+            self._run_until_decode_steps(None)
+        except BaseException:
+            if self._external_executor is not None:
+                self._cancel_external_imports()
+            raise
+        if self._decode_window.get("complete"):
+            self._cancel_external_imports()
         self._cuda_graph_runtime.assert_complete()
         result = self._result()
         self.execution_control.report(
@@ -10111,6 +10501,7 @@ class _OnlineRuntime:
             len(self.batches),
             message="online serving completed",
             simulated_time_ns=self.now,
+            metadata={"cumulative_progress": self._progress_observation()},
         )
         return result
 
@@ -10125,9 +10516,12 @@ class _OnlineRuntime:
         for _ in range(limit):
             before = self.now
             self._complete_prefetches()
+            self._complete_external_imports()
             self._process_agent_events()
             self._arrive()
             self._priority_preempt()
+            self._fill_slots()
+            self._start_external_imports()
             self._fill_slots()
             self._prefetch_waiting()
             if self.now == before:
@@ -10263,29 +10657,100 @@ class _OnlineRuntime:
             entry["details"]["completion_is_final"] = all(item.advance is None for _page, item in prepared)
             self._publish_prefetch_resource_availability()
 
-    def _publish_prefetch_resource_availability(self) -> None:
+    def _publish_prefetch_resource_availability(self, *, plan=None, executor=None) -> None:
         # Physical cores reserve the shared lane calendar directly. Ordinary
         # link/controller tasks read the kernel's scalar readiness mirror;
         # update it just as kernel.step does after physical task resolution.
         kernel = self._execution_resource_kernel
-        for resource_id, lanes in kernel.physical_runtime.timeline.lane_available.items():
-            if lanes:
-                kernel.resource_available[resource_id] = min(lanes)
-        for logical_id, owner in kernel.resource_owners.items():
-            if owner in kernel.resource_available:
-                kernel.resource_available[logical_id] = kernel.resource_available[owner]
+        from ._resource_ledger import publish_timeline_frontiers, publish_owner_frontiers
+        lanes, available, owners = (kernel.physical_runtime.timeline.lane_available,
+                                    kernel.resource_available, kernel.resource_owners)
+        from .kv_pool import KvPoolTransferPlan
+        from .kv_transfer import native_external_publication_supported
+        from .execution_control import native_callback_free_control
+        from types import MappingProxyType
+
+        def full_publication():
+            publish_timeline_frontiers(lanes, available)
+            publish_owner_frontiers(owners, available)
+
+        # Initial native PD has no model Task changing the mirror between
+        # phases. Later overlapping model work retains complete publication
+        # until that larger mutation domain has a separate closed contract.
+        changed = plan.native_changed_resource_ids if type(plan) is KvPoolTransferPlan else None
+        if (changed is None or type(kernel) is not UnifiedEventKernel
+                or kernel._tasks or self._batch_kind_counts
+                or type(lanes) is not dict or type(available) is not dict
+                or type(owners) is not MappingProxyType
+                or not native_callback_free_control(self.execution_control)
+                or not native_external_publication_supported(executor)):
+            self._native_prefetch_publication = None
+            full_publication()
+            return
+        cached = getattr(self, "_native_prefetch_publication", None)
+        identity = (kernel, lanes, available, owners)
+        same = (cached is not None and all(left is right for left, right in zip(cached[0], identity))
+                and cached[1] == len(lanes))
+        if not same:
+            full_publication()
+            # Native reserve creates distinct lane lists. Public aliases,
+            # custom scalars or chained owner maps are not a closed sparse
+            # footprint and keep the original full publisher.
+            lane_ids, seen, qualified = {}, set(), True
+            for resource, values in lanes.items():
+                if (type(resource) is not str or type(values) is not list
+                        or id(values) in seen
+                        or any(type(value) not in (int, float) for value in values)):
+                    qualified = False
+                    break
+                seen.add(id(values)); lane_ids[resource] = id(values)
+            inverse = {}
+            for position, (resource, owner) in enumerate(owners.items()):
+                if (type(resource) is not str or type(owner) is not str
+                        or owner in owners and owners[owner] != owner):
+                    qualified = False
+                    break
+                inverse.setdefault(owner, []).append((position, resource))
+            self._native_prefetch_publication = ((identity, len(lanes), lane_ids, inverse)
+                                                if qualified else None)
+            return
+        selected = []
+        for resource in changed:
+            values = lanes.get(resource)
+            if values is None:
+                continue
+            if (id(values) != cached[2].get(resource) or type(values) is not list
+                    or resource not in available
+                    or any(type(value) not in (int, float) for value in values)):
+                self._native_prefetch_publication = None
+                full_publication()
+                return
+            if values:
+                selected.append((resource, values))
+        aliases = []
+        for resource, values in selected:
+            available[resource] = values[0] if len(values) == 1 else min(values)
+            aliases.extend((position, alias, resource) for position, alias in cached[3].get(resource, ()))
+        # Existing dictionary entries retain their positions. Any newly
+        # reachable logical alias is inserted in the full owner's order.
+        for _position, alias, resource in sorted(aliases):
+            available[alias] = available[resource]
 
     def _advance_prefetches_before_kernel_step(self, kernel: UnifiedEventKernel) -> None:
-        while self._pending_prefetches:
+        while self._pending_prefetches or self._external_pending:
             ready = kernel.peek_ready_key()
             if ready is None:
                 return
             phase_ready = min((float(plan.completion_ns)
                 for entry in self._pending_prefetches.values() for _page, plan in entry["prepared"]
                 if entry.get("cancel_requested_ns") is None and plan.advance is not None), default=None)
+            external = min((entry["plan"].completion_ns for entry in self._external_pending.values()
+                            if entry["plan"].advance is not None), default=None)
+            phase_ready = min((value for value in (phase_ready, external) if value is not None), default=None)
             if phase_ready is None or phase_ready > float(ready[0]):
                 return
             self._advance_prefetches_until(phase_ready)
+            self._advance_external_imports_until(phase_ready)
 
     def _complete_prefetches(self) -> None:
         """Publish ready copies before admission; retain both copies until then."""
@@ -10455,6 +10920,9 @@ class _OnlineRuntime:
             candidates.sort(key=self._service_rank)
             admitted = False
             for state in candidates:
+                if (self._external_executor is not None
+                        and state.spec.request_id not in self._external_initialized):
+                    continue
                 if not self._eager_slot_available(1):
                     # Eager allocation commits a full logical slot even when
                     # only a prefix has been touched.  Host backing may make
@@ -10505,6 +10973,7 @@ class _OnlineRuntime:
                         raise ValueError("KV scan lower bound does not support slot reuse inside a wave")
                     self._kv_scan_wave_requests.add(state.spec.request_id)
                 self._set_status(state, RequestStatus.RUNNING)
+                self._external_ready.discard(state.spec.request_id)
                 if state.admission_sequence is None:
                     state.admission_sequence = self._admission_sequence
                     self._admission_sequence += 1
@@ -11729,6 +12198,10 @@ class _OnlineRuntime:
                 return
 
     def _select_cohort(self) -> Optional[BatchCohort]:
+        if (self._external_ingress is not None and self._external_ingress.get("require_full_batch", True)
+                and self._running_count < self.plan.scheduler.max_num_seqs
+                and any(state.status == RequestStatus.WAITING for state in self._state_values)):
+            return None
         active: List[_MutableRequest] = []
         decode: List[_MutableRequest] = []
         recompute: List[_MutableRequest] = []
@@ -12117,6 +12590,10 @@ class _OnlineRuntime:
             if not recompute:
                 self._record_llama_engine_start(state)
             current_cached = state.recompute_cursor if recompute else state.prefill_cursor
+            for layer in _execution_layers(self.plan.scenario):
+                limit = int(getattr(layer, "attention_chunk_size", 0))
+                if limit:
+                    chunk = min(chunk, limit-current_cached % limit)
             target_pages = self.ledger.pages_for_tokens(current_cached + chunk)
             if not self._reserve_with_pressure(
                 state, target_pages, batch_protected_request_ids
@@ -13379,17 +13856,27 @@ class _OnlineRuntime:
             completed_ids.append(event.task.task_id)
             completed = len(completed_ids)
             if completed == len(specs) or completed % 256 == 0:
-                control.raise_if_cancelled()
-                control.report("cohort_tasks", completed, len(specs),
-                    message="正在连续物理状态上执行当前批次", simulated_time_ns=event.end_ns)
+                try:
+                    control.raise_if_cancelled()
+                    control.report("cohort_tasks", completed, len(specs),
+                        message="正在连续物理状态上执行当前批次", simulated_time_ns=event.end_ns)
+                finally:
+                    # Progress/cancellation callbacks are public observers.
+                    # Their edits must be mirrored at the next physical task,
+                    # as in the original full-calendar publication path.
+                    frame = getattr(kernel, "_token_frame", None)
+                    if frame is not None:
+                        frame.invalidate_frontiers()
 
         kernel._drain_prevalidated_compiled(
             specs, program.compiled, validate_tasks=False,
             event_observer=observe,
             index_physical_allocations=live_metrics is not None,
             on_submitted=submitted,
+            seen_namespace=(namespace + ".", program.suffixes),
+            owned_physical_frontiers=True,
             before_step=(self._advance_prefetches_before_kernel_step
-                         if self._pending_prefetches else None),
+                         if self._pending_prefetches or self._external_pending else None),
         )
         for task_id in completed_ids:
             kernel.release_completed(task_id)
@@ -14672,7 +15159,7 @@ class _OnlineRuntime:
                 isolated_shadow,
                 self._live_cohort_metrics,
                 self.execution_control if live_physical else None,
-                self._advance_prefetches_before_kernel_step if self._pending_prefetches else None,
+                self._advance_prefetches_before_kernel_step if self._pending_prefetches or self._external_pending else None,
             )
         else:
             stage_envelopes = self._replay_cached_execution_stage_tasks(
@@ -15100,6 +15587,8 @@ class _OnlineRuntime:
             request_id: (entry["prepared"], entry["completion_ns"], dict(entry["details"]))
             for request_id, entry in self._pending_prefetches.items()
         }
+        external_snapshot = self._external_executor.snapshot() if self._external_pending else None
+        external_pending_snapshot = {key: dict(value) for key, value in self._external_pending.items()}
         lifecycle_snapshot = {
             key: getattr(self, key)
             for key in (
@@ -15143,8 +15632,18 @@ class _OnlineRuntime:
         try:
             self._execute_cohort(cohort)
         except BaseException as error:
+            from .execution_control import _NativeLayerSamplingCutoff
+            if isinstance(error, _NativeLayerSamplingCutoff):
+                if retained is not None:
+                    retained.mark_invalid("native layer windows are not a resumable complete cohort")
+                # This is an intentional observation cutoff. The enclosing
+                # runtime is discarded; no cohort, request or Token commits.
+                raise
             self._llama_graph_runtime.failed(cohort.cohort_id, error)
             self._cuda_graph_runtime.failed()
+            if external_snapshot is not None:
+                self._external_executor.restore(external_snapshot)
+                self._external_pending = external_pending_snapshot
             # Lowering can reserve KV before a provider or graph validation
             # fails.  Restore the reservation boundary so a diagnostic failure
             # cannot leak capacity into a later replay.
@@ -15231,8 +15730,14 @@ class _OnlineRuntime:
             cohort = replace(cohort, metadata={**cohort.metadata,
                 "physical_kv_page_table": {"tokens_per_page": pool.tokens_per_page,
                     "requests": table}})
+        self.execution_control.raise_if_cancelled()
+        self.execution_control.report("cohort_lowering", len(self.batches),
+            simulated_time_ns=self.now, message="正在生成原生批次任务图")
         with self._cuda_graph_runtime.scope(cohort, self.now) as cuda_transition:
             cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
+        self.execution_control.raise_if_cancelled()
+        self.execution_control.report("cohort_scheduling", len(self.batches),
+            simulated_time_ns=self.now, message="正在准备原生资源日历与任务调度")
         planning_duration_ns = cost.duration_ns
         execution_plan = self._execution_plan_for(cohort, cost.metadata)
         cost = BatchCost(
@@ -15307,7 +15812,25 @@ class _OnlineRuntime:
             runtime_controller_ledger = self._runtime_controller_ledger(
                 stages
             )
+        if self.plan.scenario.simulation.native_window is not None and stages:
+            # Summarize the actual native IR before aggregate retention drops
+            # it. This observes task requirements without executing extra work
+            # or advancing any physical controller/calendar.
+            from .native_window_producer import summarize_native_stages
+            layer_bounds = self.plan.scenario.simulation.native_window.sampling_unit == "layer_windows"
+            cost = BatchCost(cost.duration_ns, {**cost.metadata,
+                "native_fast_budget_observations": summarize_native_stages(
+                    stages, self.plan.scenario,
+                    self._execution_resource_kernel.physical_runtime,
+                    allow_bounded_clock=layer_bounds,
+                    native_runtime=self if layer_bounds else None)})
+        layer_sampler = getattr(self, "_native_layer_sampler", None)
+        if layer_sampler is not None:
+            layer_sampler(self, cohort, cost, stages, request_ready_ns)
+            raise RuntimeError("native layer sampler must stop without committing its partial cohort")
         realized_stages: Tuple[Mapping[str, Any], ...] = ()
+        self.execution_control.report("cohort_execution", len(self.batches),
+            simulated_time_ns=self.now, message="正在执行原生物理任务")
         if stages:
             (
                 host_start_ns,
@@ -15362,6 +15885,8 @@ class _OnlineRuntime:
             self._gpu_available_ns = end_ns
             self._last_gpu_start_ns = device_start_ns
             self._last_serial_device_end_ns = end_ns
+        self.execution_control.report("cohort_commit", len(self.batches),
+            simulated_time_ns=self.now, message="正在提交原生批次状态与Token事件")
         task_stage_ids = {
             task.task_id: stage.stage_id
             for stage in stages
@@ -15728,6 +16253,7 @@ class _OnlineRuntime:
                     state.accepted += 1
                     state.committed += 1
                     state.first_token_ns = item_end_ns
+                    state.last_token_ns = item_end_ns
                     self.events.append(
                         ServingEvent(
                             item_end_ns,
@@ -15782,6 +16308,8 @@ class _OnlineRuntime:
                 state.proposed += proposed
                 state.accepted += accepted
                 state.committed += accepted
+                if accepted:
+                    state.last_token_ns = item_end_ns
                 committed_pages = self.ledger.pages_for_tokens(state.cached_tokens)
                 self.ledger.resize(state, committed_pages)
                 if state.first_token_ns is None:
@@ -15979,6 +16507,19 @@ class _OnlineRuntime:
             self.events.append(ServingEvent(self.now, "request_rejected", state.spec.request_id, details={"reason": reason}))
         return False
 
+    def _external_ingress_report(self):
+        if self._external_executor is None:
+            return {}
+        return {"protocol": "native_external_kv_v1", "config": dict(self._external_ingress),
+            "imported_requests": self._external_imported_requests,
+            "imported_logical_bytes": self._external_imported_bytes,
+            "source_buffer_peak_bytes": self._external_buffer_peak_bytes,
+            "pending_imports": len(self._external_pending),
+            "counters": dict(self._external_executor.counters),
+            "cost_ledger": self._external_executor.cost_ledger(),
+            "first_output": "historical P-1 KV imported; final prompt query really executes on native operator graph",
+            "native_kv_target": "same per-rank/layer buffer identities and physical offsets as native lowerer"}
+
     def _result(self) -> ServingResult:
         states: Dict[str, ServingRequestState] = {}
         metrics: Dict[str, ServingRequestMetrics] = {}
@@ -15998,8 +16539,8 @@ class _OnlineRuntime:
             queue_delay = state.started_ns - spec.arrival_ns if state.started_ns is not None else None
             ttft = state.first_token_ns - spec.arrival_ns if state.first_token_ns is not None else None
             tpot = None
-            if state.first_token_ns is not None and state.finished_ns is not None and state.committed > 1:
-                tpot = (state.finished_ns - state.first_token_ns) / (state.committed - 1)
+            if state.first_token_ns is not None and state.last_token_ns is not None and state.committed > 1:
+                tpot = (state.last_token_ns - state.first_token_ns) / (state.committed - 1)
             if spec.deadline_ns is None:
                 deadline_met = None
             elif state.status == RequestStatus.FINISHED and state.finished_ns is not None:
@@ -16013,6 +16554,10 @@ class _OnlineRuntime:
                 state.preemptions, state.swaps, state.recomputes, deadline_met,
                 state.rejection_reason,
                 engine_start_ns=state.engine_start_ns,
+                slo_tpot_met=evaluate_tpot_slo(
+                    tpot, state.committed, self.plan.scheduler.slo_tpot_ns
+                ),
+                last_token_ns=state.last_token_ns,
             )
         self.events.sort(key=_event_sort_key)
         events = tuple(self.events)
@@ -16330,7 +16875,31 @@ class _OnlineRuntime:
                     0, interval_peak - interval_baseline
                 ),
             )
+        measurement = dict(self._decode_window)
+        if measurement.get("start_ns") is not None:
+            start, end = measurement["start_ns"], measurement.get("end_ns") or self.now
+            elapsed = end-start
+            visible = sum(int(event.details.get("visible_tokens", 0)) for event in events
+                          if event.event_type == "tokens_committed" and start < event.timestamp_ns <= end)
+            decode_batches = [batch for batch in self.batches if batch.kind == "decode" and start < batch.end_ns <= end]
+            endpoints = [start] + [batch.end_ns for batch in decode_batches]
+            intervals = [b-a for a,b in zip(endpoints,endpoints[1:])]
+            complete_requests = [metric for metric in metrics.values() if metric.status == RequestStatus.FINISHED
+                and metric.first_token_ns is not None and metric.last_token_ns is not None
+                and start < metric.first_token_ns <= metric.last_token_ns <= end
+                and not self.states[metric.request_id].spec.metadata.get("warmup_seed", False)]
+            measurement.update(duration_ns=elapsed, visible_output_tokens=visible,
+                visible_tokens_per_second=visible*1e9/elapsed if elapsed > 0 else None,
+                mean_iteration_ns=elapsed/len(decode_batches) if decode_batches else None,
+                max_iteration_ns=max(intervals, default=None),
+                complete_fresh_requests=len(complete_requests),
+                complete_request_tpot_ns={metric.request_id:metric.tpot_ns for metric in complete_requests},
+                interval_semantics="start exclusive, end inclusive; complete cohorts and complete fresh request lifetimes only",
+                batch_sizes=[len(batch.request_ids) for batch in decode_batches])
+        ingress = self._external_ingress_report()
         makespan = max((state.finished_ns or 0.0 for state in self._state_values), default=0.0)
+        if self._external_executor is not None:
+            makespan = max(makespan, self.now)
         return ServingResult(
             self.plan,
             events,
@@ -16343,6 +16912,8 @@ class _OnlineRuntime:
             makespan,
             runtime_origin_ns=self._runtime_origin_ns,
             agent_lifecycle_metrics=dict(self._agent_metrics),
+            external_kv_ingress_metrics=ingress,
+            decode_measurement=measurement,
             prompt_cache_metrics=self.prompt_cache.metrics(),
             owner_residency_metrics=owner_residency_metrics,
             schedule_trace=tuple(self._schedule_trace),

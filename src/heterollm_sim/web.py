@@ -7,10 +7,11 @@ import json
 import mimetypes
 from pathlib import Path
 import re
+import secrets
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 from urllib.parse import parse_qs, unquote, urlsplit
 import sys
 import webbrowser
@@ -68,6 +69,8 @@ from .workload_presets import workload_preset_detail, workload_preset_page
 JSON_BODY_LIMIT_BYTES = 8 * 1024 * 1024
 JSON_BODY_DRAIN_CHUNK_BYTES = 64 * 1024
 JSON_BODY_DRAIN_TIMEOUT_S = 2.0
+REMOTE_API_METHODS = frozenset({"GET", "POST", "PUT", "DELETE", "OPTIONS"})
+REMOTE_API_REQUEST_HEADERS = frozenset({"authorization", "content-type"})
 STATIC_DIR = "webui"
 FALLBACK_INDEX = """<!doctype html>
 <html lang="zh-CN">
@@ -135,6 +138,41 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
     """HTTP handler for the local simulator API."""
 
     server_version = "HeteroLLMSim/{}".format(__version__)
+
+    def parse_request(self) -> bool:
+        if not super().parse_request():
+            return False
+        # Authorize before dispatch, including unknown API routes and methods.
+        # An allowlisted browser origin is a CORS policy, never authentication.
+        if self._is_remote_api() and self.command != "OPTIONS":
+            try:
+                self._require_remote_access()
+            except HttpError as exc:
+                self._send_error(exc)
+                return False
+        return True
+
+    def do_OPTIONS(self) -> None:  # noqa: N802 - stdlib API name
+        try:
+            if not self._is_remote_api():
+                self._reject_cross_origin_request()
+            self._require_trusted_remote_origin(required=True)
+            method = self.headers.get("Access-Control-Request-Method", "").strip()
+            requested_headers = {
+                header.strip().lower()
+                for value in self.headers.get_all("Access-Control-Request-Headers", [])
+                for header in value.split(",")
+                if header.strip()
+            }
+            if method not in REMOTE_API_METHODS or not requested_headers <= REMOTE_API_REQUEST_HEADERS:
+                self._drain_declared_request_body()
+                raise HttpError(
+                    403, "preflight_forbidden", "不允许此跨源请求方法或请求头",
+                    message_en="cross-origin request method or headers are not allowed",
+                )
+            self._send_bytes(204, b"", "application/json; charset=utf-8")
+        except HttpError as exc:
+            self._send_error(exc)
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib API name
         split = urlsplit(self.path)
@@ -1006,6 +1044,9 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
         return manager
 
     def _require_same_origin(self) -> None:
+        if self._is_remote_api():
+            # parse_request has already enforced both the token and allowlist.
+            return
         origin = self.headers.get("Origin")
         host = self.headers.get("Host")
         if origin and (not host or origin.rstrip("/") != "http://{}".format(host)):
@@ -1013,8 +1054,36 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
         if self.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
             self._reject_cross_origin_request()
 
-    def _reject_cross_origin_request(self) -> None:
-        """Drain a declared POST body so Windows can deliver the 403 envelope."""
+    def _is_remote_api(self) -> bool:
+        path = urlsplit(self.path).path
+        return bool(getattr(self.server, "remote_access_token", None)) and (
+            path == "/api" or path.startswith("/api/")
+        )
+
+    def _require_trusted_remote_origin(self, *, required: bool = False) -> None:
+        origins = self.headers.get_all("Origin", [])
+        if not origins:
+            if required:
+                self._reject_cross_origin_request()
+            return
+        if len(origins) != 1 or origins[0] not in self.server.trusted_origins:
+            self._reject_cross_origin_request()
+
+    def _require_remote_access(self) -> None:
+        self._require_trusted_remote_origin()
+        values = self.headers.get_all("Authorization", [])
+        value = values[0] if len(values) == 1 else ""
+        scheme, separator, token = value.partition(" ")
+        supplied = token.encode("utf-8") if separator and scheme.lower() == "bearer" else b""
+        if not secrets.compare_digest(supplied, self.server.remote_access_token):
+            self._drain_declared_request_body()
+            raise HttpError(
+                401, "authentication_required", "请提供有效的后端访问令牌",
+                message_en="a valid backend access token is required",
+            )
+
+    def _drain_declared_request_body(self) -> None:
+        """Consume a rejected body so Windows delivers the JSON error envelope."""
 
         raw_length = self.headers.get("Content-Length")
         if raw_length is not None:
@@ -1025,6 +1094,11 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
             else:
                 if length > 0:
                     self._drain_rejected_body(length)
+
+    def _reject_cross_origin_request(self) -> None:
+        """Drain a declared POST body so Windows can deliver the 403 envelope."""
+
+        self._drain_declared_request_body()
         raise HttpError(
             403,
             "cross_origin_forbidden",
@@ -1091,10 +1165,21 @@ class HeteroLLMRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Content-Type-Options", "nosniff")
+        if self._is_remote_api():
+            self.send_header("Vary", "Origin")
+            origin = self.headers.get("Origin")
+            if len(self.headers.get_all("Origin", [])) == 1 and origin in self.server.trusted_origins:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                if self.command == "OPTIONS" and status == 204:
+                    self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+                    self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            if status == 401:
+                self.send_header("WWW-Authenticate", "Bearer")
         self.send_header("Content-Length", str(len(body)))
         try:
             self.end_headers()
-            self.wfile.write(body)
+            if self.command != "HEAD":
+                self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             # Closing a polling page may disconnect during either write. The
             # background job is independent of this response; do not retry an
@@ -2088,8 +2173,36 @@ def build_server(
     model_artifact_dir: Optional[Any] = None,
     diagnostic_log_path: Optional[Any] = None,
     run_job_manager: Optional[RunJobManager] = None,
+    remote_access_token: Optional[str] = None,
+    trusted_origins: Iterable[str] = (),
 ) -> ThreadingHTTPServer:
+    if remote_access_token is not None and not isinstance(remote_access_token, str):
+        raise TypeError("remote_access_token must be a string or None")
+    if remote_access_token and (
+        not remote_access_token.isascii()
+        or any(not 33 <= ord(character) <= 126 for character in remote_access_token)
+    ):
+        raise ValueError("remote_access_token must contain only visible ASCII characters")
+    allowed_origins = frozenset(trusted_origins)
+    for origin in allowed_origins:
+        if not isinstance(origin, str):
+            raise ValueError("trusted_origins must contain HTTPS origins")
+        try:
+            parsed = urlsplit(origin)
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("trusted_origins must contain valid HTTPS origins") from exc
+        if (
+            parsed.scheme != "https" or not parsed.hostname
+            or parsed.username is not None or parsed.password is not None
+            or parsed.path or parsed.query or parsed.fragment
+            or any(character.isspace() or ord(character) < 33 for character in origin)
+            or origin != "https://{}".format(parsed.netloc)
+        ):
+            raise ValueError("trusted_origins must contain HTTPS origins without paths")
     server = HeteroLLMThreadingHTTPServer((host, port), HeteroLLMRequestHandler)
+    server.remote_access_token = (remote_access_token or "").encode("ascii")
+    server.trusted_origins = allowed_origins
     server.model_catalog = model_catalog or GGUFModelCatalog(  # type: ignore[attr-defined]
         catalog_cache_dir,
         hf_client=hf_client,
@@ -2111,8 +2224,14 @@ def serve(
     port: int = 8765,
     *,
     open_browser: bool = True,
+    remote_access_token: Optional[str] = None,
+    trusted_origins: Iterable[str] = (),
 ) -> None:
-    server = build_server(host, port)
+    server = build_server(
+        host, port,
+        remote_access_token=remote_access_token,
+        trusted_origins=trusted_origins,
+    )
     actual_host, actual_port = server.server_address[:2]
     url = "http://{}:{}/".format(_url_host(actual_host), actual_port)
     print("HeteroLLM Simulator UI 正在监听 {}".format(url), flush=True)

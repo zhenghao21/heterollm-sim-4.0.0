@@ -51,6 +51,23 @@ def _same(left, right):
         assert left == right
 
 
+@pytest.mark.parametrize("proxy", [False, True])
+def test_owner_frontiers_preserve_alias_chain_order_and_float_types(ledger, proxy):
+    from types import MappingProxyType
+    owners = {"late": "source", "chain": "late", "absent": "missing",
+              "zero": "negative_zero", "source": "chain"}
+    if proxy:
+        owners = MappingProxyType(owners)
+    before = {"source": .1 + .2, "late": 7, "negative_zero": -0.0}
+    expected = dict(before)
+    for resource, owner in owners.items():
+        if owner in expected:
+            expected[resource] = expected[owner]
+    actual = dict(before)
+    ledger.publish_owner_frontiers(owners, actual)
+    _same(expected, actual)
+
+
 @pytest.mark.parametrize("count,touched_count", [(8, 8), (64, 16), (64, 2)])
 def test_timeline_delta_preserves_counter_types_and_resource_order(ledger, count, touched_count):
     from heterollm_sim.memory_transfer import ResourceTimeline
@@ -455,3 +472,85 @@ def test_physical_demands_keeps_conversions_nan_filter_and_cache_identity(ledger
     with pytest.raises(ValueError):
         ledger.physical_demands({"bad": BecomesNaN()}, {}, cache, ResourceDemand)
     _same(cache, before)
+
+
+def test_native_physical_demand_keeps_complete_dataclass_fields_and_order(ledger):
+    actual = ledger.physical_demands({"wire": .1 + .2}, {"wire": 2**180}, {}, ResourceDemand)[0]
+    expected = ResourceDemand("wire", .1 + .2, 2**180)
+    assert type(actual) is type(expected)
+    _same(vars(actual), vars(expected))
+    assert actual == expected and hash(actual) == hash(expected)
+
+
+@pytest.mark.parametrize("hook", ("init", "post_init", "setattr", "getattribute"))
+def test_native_demand_callbacks_still_observe_regular_constructor(ledger, monkeypatch, hook):
+    events = []
+    if hook == "init":
+        original = ResourceDemand.__init__
+        def init(self, *args, **kwargs):
+            events.append(("init", args, kwargs))
+            original(self, *args, **kwargs)
+        monkeypatch.setattr(ResourceDemand, "__init__", init)
+    elif hook == "post_init":
+        original = ResourceDemand.__post_init__
+        def post_init(self):
+            events.append("post_init")
+            original(self)
+        monkeypatch.setattr(ResourceDemand, "__post_init__", post_init)
+    elif hook == "setattr":
+        def set_attribute(self, name, value):
+            events.append(("setattr", name, value))
+            object.__setattr__(self, name, value)
+        monkeypatch.setattr(ResourceDemand, "__setattr__", set_attribute)
+    else:
+        original = ResourceDemand.__getattribute__
+        def get_attribute(self, name):
+            if name == "__post_init__":
+                events.append("getattribute")
+            return original(self, name)
+        monkeypatch.setattr(ResourceDemand, "__getattribute__", get_attribute)
+    result = ledger.physical_demands({"wire": 3.}, {"wire": 11}, {}, ResourceDemand)[0]
+    before = list(events)
+    expected = ResourceDemand("wire", 3., bytes_moved=11)
+    # A frozen dataclass initializer uses object.__setattr__, so a replaced
+    # class __setattr__ does not receive calls on either ordinary construction.
+    assert before == events[len(before):]
+    assert result == expected
+
+
+@pytest.mark.parametrize("busy,moved", (({"": 1.}, {}), ({"wire": float("inf")}, {}),
+                                        ({"wire": 1.}, {"wire": -1})))
+def test_native_demand_invalid_fields_keep_original_error(ledger, busy, moved):
+    key, value = next(iter(busy.items()))
+    with pytest.raises(ValueError) as reference:
+        ResourceDemand(str(key), float(value), bytes_moved=int(moved.get(key, 0)))
+    with pytest.raises(ValueError, match=str(reference.value)):
+        ledger.physical_demands(busy, moved, {}, ResourceDemand)
+
+
+def test_native_demand_rechecks_callbacks_after_authored_numeric_conversion(ledger, monkeypatch):
+    events = []
+    original = ResourceDemand.__post_init__
+    def post_init(self):
+        events.append("post_init")
+        original(self)
+    class Duration:
+        def __float__(self):
+            monkeypatch.setattr(ResourceDemand, "__post_init__", post_init)
+            return 3.
+    result = ledger.physical_demands({"wire": Duration()}, {"wire": 5}, {}, ResourceDemand)
+    assert events == ["post_init"]
+    assert result[0].service_ns == 3.
+
+
+def test_native_demand_keeps_authored_finite_validator_calls(ledger, monkeypatch):
+    import math
+    original = math.isfinite
+    events = []
+    def finite(value):
+        events.append(value)
+        return original(value)
+    monkeypatch.setattr(math, "isfinite", finite)
+    result = ledger.physical_demands({"wire": 3.}, {"wire": 5}, {}, ResourceDemand)
+    assert events == [3., 0.]
+    assert result[0].bytes_moved == 5

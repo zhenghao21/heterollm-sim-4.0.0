@@ -1,0 +1,501 @@
+{
+  "backend": "paper_bulk_tile_events",
+  "cases": [
+    {
+      "model": "llama3_405b",
+      "hardware": "HBM4",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "HBM4",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "HBM4",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "CONV",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "CONV",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "CONV",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "CONV+",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "CONV+",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "CONV+",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "HBF",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "HBF",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "HBF",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "HBF+",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "HBF+",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama3_405b",
+      "hardware": "HBF+",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBM4",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBM4",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBM4",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "CONV",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "CONV",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "CONV",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "CONV+",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "CONV+",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "CONV+",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBF",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBF",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBF",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBF+",
+      "workload": "SHORT",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBF+",
+      "workload": "MID",
+      "gpus": 8,
+      "slo": 0.1
+    },
+    {
+      "model": "llama4_maverick",
+      "hardware": "HBF+",
+      "workload": "LONG",
+      "gpus": 8,
+      "slo": 0.1
+    }
+  ],
+  "original_scan_restarted": false,
+  "catalogue": {
+    "paper_id": "son_exploring_hbf_2608_13868_v1",
+    "source_url": "https://arxiv.org/html/2608.13868v1",
+    "source_doi": "https://doi.org/10.1109/LCA.2026.3705817",
+    "source_version": "arXiv v1, 14 August 2026; 4 pages, Table I only",
+    "units": {
+      "GB_bytes": 1000000000,
+      "MB_bytes": 1000000,
+      "TB_s_bytes_per_second": 1000000000000,
+      "bandwidth_field_units": "decimal GB/s",
+      "latency_field_units": "ns",
+      "read_page_bytes": 4096
+    },
+    "hardware": [
+      {
+        "configuration_id": "HBM4",
+        "hbm_stacks": 8,
+        "hbf_stacks": 0,
+        "total_capacity_gb": 288,
+        "hbm_read_gb_s": 12800.0,
+        "hbm_write_gb_s": 12800.0,
+        "hbf_read_gb_s": 0.0,
+        "hbf_write_gb_s": 0.0,
+        "dies_per_hbf_stack": 0,
+        "planes_per_hbf_die": 0,
+        "page_read_ns": 0.0,
+        "page_program_ns": 0.0,
+        "intermediate_storage": "HBM",
+        "intermediate_sram_bytes_per_stack": 0,
+        "read_staging_bytes_per_hbf_stack": 0,
+        "hbm_capacity_bytes": 288000000000,
+        "hbf_capacity_bytes": 0,
+        "nand_array_units": 0,
+        "intermediate_sram_bytes": 0,
+        "read_staging_bytes": 0,
+        "source": "paper p2 Table I, Figure 2 and Section III",
+        "gpu_core_reference": "NVIDIA DGX Rubin NVL8 [5]; arithmetic peak/efficiency not tabulated",
+        "paper_workload_reproduced": false
+      },
+      {
+        "configuration_id": "CONV",
+        "hbm_stacks": 1,
+        "hbf_stacks": 7,
+        "total_capacity_gb": 3620,
+        "hbm_read_gb_s": 1600.0,
+        "hbm_write_gb_s": 1600.0,
+        "hbf_read_gb_s": 2450.0,
+        "hbf_write_gb_s": 73.0,
+        "dies_per_hbf_stack": 16,
+        "planes_per_hbf_die": 16,
+        "page_read_ns": 3000.0,
+        "page_program_ns": 100000.0,
+        "intermediate_storage": "HBM",
+        "intermediate_sram_bytes_per_stack": 0,
+        "read_staging_bytes_per_hbf_stack": 3130000,
+        "hbm_capacity_bytes": 36000000000,
+        "hbf_capacity_bytes": 3584000000000,
+        "nand_array_units": 1792,
+        "intermediate_sram_bytes": 0,
+        "read_staging_bytes": 21910000,
+        "source": "paper p2 Table I, Figure 2 and Section III",
+        "gpu_core_reference": "NVIDIA DGX Rubin NVL8 [5]; arithmetic peak/efficiency not tabulated",
+        "paper_workload_reproduced": false
+      },
+      {
+        "configuration_id": "CONV+",
+        "hbm_stacks": 0,
+        "hbf_stacks": 8,
+        "total_capacity_gb": 4096,
+        "hbm_read_gb_s": 0.0,
+        "hbm_write_gb_s": 0.0,
+        "hbf_read_gb_s": 2800.0,
+        "hbf_write_gb_s": 84.0,
+        "dies_per_hbf_stack": 16,
+        "planes_per_hbf_die": 16,
+        "page_read_ns": 3000.0,
+        "page_program_ns": 100000.0,
+        "intermediate_storage": "logic_die_SRAM",
+        "intermediate_sram_bytes_per_stack": 40000000,
+        "read_staging_bytes_per_hbf_stack": 3130000,
+        "hbm_capacity_bytes": 0,
+        "hbf_capacity_bytes": 4096000000000,
+        "nand_array_units": 2048,
+        "intermediate_sram_bytes": 320000000,
+        "read_staging_bytes": 25040000,
+        "source": "paper p2 Table I, Figure 2 and Section III",
+        "gpu_core_reference": "NVIDIA DGX Rubin NVL8 [5]; arithmetic peak/efficiency not tabulated",
+        "paper_workload_reproduced": false
+      },
+      {
+        "configuration_id": "HBF",
+        "hbm_stacks": 1,
+        "hbf_stacks": 7,
+        "total_capacity_gb": 3620,
+        "hbm_read_gb_s": 1600.0,
+        "hbm_write_gb_s": 1600.0,
+        "hbf_read_gb_s": 11200.0,
+        "hbf_write_gb_s": 112.0,
+        "dies_per_hbf_stack": 16,
+        "planes_per_hbf_die": 25,
+        "page_read_ns": 1000.0,
+        "page_program_ns": 100000.0,
+        "intermediate_storage": "HBM",
+        "intermediate_sram_bytes_per_stack": 0,
+        "read_staging_bytes_per_hbf_stack": 3130000,
+        "hbm_capacity_bytes": 36000000000,
+        "hbf_capacity_bytes": 3584000000000,
+        "nand_array_units": 2800,
+        "intermediate_sram_bytes": 0,
+        "read_staging_bytes": 21910000,
+        "source": "paper p2 Table I, Figure 2 and Section III",
+        "gpu_core_reference": "NVIDIA DGX Rubin NVL8 [5]; arithmetic peak/efficiency not tabulated",
+        "paper_workload_reproduced": false
+      },
+      {
+        "configuration_id": "HBF+",
+        "hbm_stacks": 0,
+        "hbf_stacks": 8,
+        "total_capacity_gb": 4096,
+        "hbm_read_gb_s": 0.0,
+        "hbm_write_gb_s": 0.0,
+        "hbf_read_gb_s": 12800.0,
+        "hbf_write_gb_s": 128.0,
+        "dies_per_hbf_stack": 16,
+        "planes_per_hbf_die": 25,
+        "page_read_ns": 1000.0,
+        "page_program_ns": 100000.0,
+        "intermediate_storage": "logic_die_SRAM",
+        "intermediate_sram_bytes_per_stack": 40000000,
+        "read_staging_bytes_per_hbf_stack": 3130000,
+        "hbm_capacity_bytes": 0,
+        "hbf_capacity_bytes": 4096000000000,
+        "nand_array_units": 3200,
+        "intermediate_sram_bytes": 320000000,
+        "read_staging_bytes": 25040000,
+        "source": "paper p2 Table I, Figure 2 and Section III",
+        "gpu_core_reference": "NVIDIA DGX Rubin NVL8 [5]; arithmetic peak/efficiency not tabulated",
+        "paper_workload_reproduced": false
+      }
+    ],
+    "workloads": [
+      {
+        "workload_id": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "paper_input_label": "1,660",
+        "paper_output_label": "373",
+        "dataset": "shareGPT",
+        "length_basis": "exact integer averages printed in paper"
+      },
+      {
+        "workload_id": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "paper_input_label": "5.9K",
+        "paper_output_label": "499",
+        "dataset": "LongBench",
+        "length_basis": "input K expanded as decimal 1000 for this catalog; paper gives a rounded average"
+      },
+      {
+        "workload_id": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "paper_input_label": "103.5K",
+        "paper_output_label": "1.1K",
+        "dataset": "English summarization / InfinityBench",
+        "length_basis": "K expanded as decimal 1000 for this catalog; paper gives rounded averages"
+      }
+    ],
+    "serving": {
+      "models": [
+        "Llama 3 405B",
+        "Llama 4 Maverick"
+      ],
+      "gpu_counts": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "decode_nodes_only": true,
+      "continuous_full_batch": true,
+      "query_arrival_policy": "completion-matched steady state",
+      "default_tpot_slo_seconds": 0.1,
+      "tpot_slo_sweep_seconds": [
+        0.05,
+        0.1,
+        0.2
+      ],
+      "offline_deadline_seconds": 86400,
+      "nvlink_gb_s": 1800,
+      "gpus_per_node": 8,
+      "infiniband_gb_s": 100,
+      "parallelism_search": [
+        "DP",
+        "TP",
+        "PP",
+        "EP"
+      ]
+    },
+    "unsupported_execution": [
+      {
+        "configuration_id": "HBM4",
+        "status": "unsupported",
+        "paper_serving_supported": false,
+        "memory_mechanism_builder_supported": true,
+        "unsupported_reasons": [
+          "paper GPU arithmetic peak, precision and efficiency are not fully disclosed",
+          "disaggregated decode admission/KV-import and full-batch steady-state execution",
+          "throughput-maximizing DP/TP/PP/EP search under memory and TPOT constraints"
+        ],
+        "scope": "builders provide explicit media/DRAM controls only; HBF+ never silently gains HBM"
+      },
+      {
+        "configuration_id": "CONV",
+        "status": "unsupported",
+        "paper_serving_supported": false,
+        "memory_mechanism_builder_supported": true,
+        "unsupported_reasons": [
+          "paper GPU arithmetic peak, precision and efficiency are not fully disclosed",
+          "disaggregated decode admission/KV-import and full-batch steady-state execution",
+          "throughput-maximizing DP/TP/PP/EP search under memory and TPOT constraints",
+          "per-stack 3.13 MB prefetch/double-buffer staging controller"
+        ],
+        "scope": "builders provide explicit media/DRAM controls only; HBF+ never silently gains HBM"
+      },
+      {
+        "configuration_id": "CONV+",
+        "status": "unsupported",
+        "paper_serving_supported": false,
+        "memory_mechanism_builder_supported": true,
+        "unsupported_reasons": [
+          "paper GPU arithmetic peak, precision and efficiency are not fully disclosed",
+          "disaggregated decode admission/KV-import and full-batch steady-state execution",
+          "throughput-maximizing DP/TP/PP/EP search under memory and TPOT constraints",
+          "per-stack 3.13 MB prefetch/double-buffer staging controller",
+          "40 MB per-stack activation SRAM lifetime/capacity controller"
+        ],
+        "scope": "builders provide explicit media/DRAM controls only; HBF+ never silently gains HBM"
+      },
+      {
+        "configuration_id": "HBF",
+        "status": "unsupported",
+        "paper_serving_supported": false,
+        "memory_mechanism_builder_supported": true,
+        "unsupported_reasons": [
+          "paper GPU arithmetic peak, precision and efficiency are not fully disclosed",
+          "disaggregated decode admission/KV-import and full-batch steady-state execution",
+          "throughput-maximizing DP/TP/PP/EP search under memory and TPOT constraints",
+          "per-stack 3.13 MB prefetch/double-buffer staging controller"
+        ],
+        "scope": "builders provide explicit media/DRAM controls only; HBF+ never silently gains HBM"
+      },
+      {
+        "configuration_id": "HBF+",
+        "status": "unsupported",
+        "paper_serving_supported": false,
+        "memory_mechanism_builder_supported": true,
+        "unsupported_reasons": [
+          "paper GPU arithmetic peak, precision and efficiency are not fully disclosed",
+          "disaggregated decode admission/KV-import and full-batch steady-state execution",
+          "throughput-maximizing DP/TP/PP/EP search under memory and TPOT constraints",
+          "per-stack 3.13 MB prefetch/double-buffer staging controller",
+          "40 MB per-stack activation SRAM lifetime/capacity controller"
+        ],
+        "scope": "builders provide explicit media/DRAM controls only; HBF+ never silently gains HBM"
+      }
+    ],
+    "undisclosed_paper_parameters": [
+      "GPU arithmetic peak and achieved efficiency",
+      "weight/KV precision",
+      "exact full model configurations and per-operator kernels",
+      "NAND blocks per plane and pages per block",
+      "erase timing and endurance allocation policy",
+      "FTL, GC and overprovisioning",
+      "internal transfer topology/bandwidth and command front delay",
+      "request admission credits and duplex policy",
+      "exact interpretation of rounded K workload averages"
+    ],
+    "comparison_scope": "independent mechanism catalog; does not alter or restart existing scans or reproduce paper TPS"
+  },
+  "warmup": "one full output lifetime",
+  "measurement": "two full output lifetimes",
+  "source_pdf": "C:/Users/A/Downloads/HBF_HBM_LLM_2026-10-15/01_HBF/HBF05_2026_Exploring_HBF.pdf"
+}

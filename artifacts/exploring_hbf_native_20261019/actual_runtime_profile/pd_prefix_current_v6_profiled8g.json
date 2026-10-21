@@ -1,0 +1,25 @@
+{
+  "scope": "actual unchanged 405B HBF LONG TP8 B1 PD prefix; not a complete candidate",
+  "comparison": "Current unchanged native LONG PD prefix; no historical elapsed comparison",
+  "order": "single_current_prefix_non_ABBA",
+  "rows": [
+    {
+      "mode": "B",
+      "setup_seconds": 14.762132500007283,
+      "pd_prefix_seconds": 51.17899300000863,
+      "whole_prefix_seconds": 65.94112550001591,
+      "steady_seconds": 49.266271400032565,
+      "warm_write_bytes": 134294528,
+      "target_write_bytes": 8590912512,
+      "steady_write_bytes": 8456617984,
+      "steady_mib_per_second": 163.6994062228681,
+      "whole_prefix_mib_per_second": 124.2461749790049,
+      "exact_physical_state_equal": null,
+      "complete_imports": 0,
+      "complete_cohorts": 0,
+      "visible_output_tokens": 0,
+      "submitted_source_read_bytes": 8590912512,
+      "phase_count": 33720
+    }
+  ]
+}

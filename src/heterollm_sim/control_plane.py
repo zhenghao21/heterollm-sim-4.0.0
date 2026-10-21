@@ -21,6 +21,14 @@ from .runtime_state import RuntimeState
 from .planner import ScenarioValidationError
 
 
+_NATIVE_BOOTSTRAP_KERNEL_ORIGIN = object()
+
+
+def _is_native_bootstrap_kernel(kernel: object) -> bool:
+    return (type(kernel) is UnifiedEventKernel
+        and vars(kernel).get("_native_bootstrap_origin") is _NATIVE_BOOTSTRAP_KERNEL_ORIGIN)
+
+
 @dataclass(frozen=True)
 class ControlPlaneBootstrap:
     """Mapped scenario plus the realized control-plane DAG and live kernel."""
@@ -1015,6 +1023,7 @@ def bootstrap_control_plane(
         raise RuntimeError("control-plane runtime did not create a kernel")
     from .hbf_resident_init import initialize_hbf_resident_weights
     initialize_hbf_resident_weights(mapped, kernel)
+    kernel._native_bootstrap_origin = _NATIVE_BOOTSTRAP_KERNEL_ORIGIN
     return ControlPlaneBootstrap(mapped, decision, result, kernel)
 
 

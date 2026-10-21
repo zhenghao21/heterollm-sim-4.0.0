@@ -448,7 +448,7 @@ def _column_tick_profile(g, t, read):
     result = np.zeros(8, dtype=np.int64)
     limit = 2 ** 38
     result[1] = limit
-    if (g[8] or t[3] != 1.
+    if (t[3] != 1.
             or (read and (t[9] != 0. or t[16] != 0. or t[17] != 0. or t[25] != 0.))
             # WRITE has no SID-specific gap. A custom group spanning several
             # SIDs would need the same-group gap across those SID histories.
@@ -523,7 +523,7 @@ def _fold_column_cycles(cycles, channel_first, channel_stop, read, recovery, g, 
                       previous_columns, previous_data, previous_history,
                       tick_columns, tick_data, tick_history, tick_base, tick_banks,
                       cycle_starts, group_tops, sid_tops, deadlines,
-                      bf, pc, history, resources, moved, counts):
+                      bf, pc, history, channel, resources, moved, counts):
     """Repeat an exact translation orbit of the integer max-plus controller.
 
     Every dynamic input of the directional recurrence must translate by one common
@@ -557,8 +557,11 @@ def _fold_column_cycles(cycles, channel_first, channel_stop, read, recovery, g, 
         while cycles > 0:
             last = tick_columns[ch] - 1 + cycles * delta
             horizon = last * t[0] if read else _after(last * t[0], recovery, t[0] / 2)
+            deadline = deadlines[ch]
+            if g[8]:
+                deadline = min(deadline, channel[ch, 1])
             if (last + profile[2] + max(profile[3], profile[4]) < profile[1]
-                    and horizon < deadlines[ch]):
+                    and horizon < deadline):
                 break
             cycles -= 1
         if cycles == 0:
@@ -669,6 +672,7 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
     previous_data = integers[position:position + lanes]
     position += lanes
     previous_history = integers[position:position + history_size].reshape((lanes, entries))
+    position += history_size
     for ch in range(channel_first, channel_stop):
         active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
     tick_candidate = g[12] and stop - first >= 64
@@ -736,7 +740,7 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                             read, recovery, g, t, tick_profile, previous_columns, previous_data, previous_history,
                             tick_columns, tick_data, tick_history, tick_base, tick_banks, cycle_starts,
                             tick_group_tops, tick_sid_tops, active_deadlines,
-                            bf, pc, history, resources, moved, counts)
+                            bf, pc, history, channel, resources, moved, counts)
                         if folded:
                             hits += folded * 2 * (channel_stop - channel_first) * g[1] * g[2]
                             completion = max(completion, folded_completion)
@@ -790,6 +794,10 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
             pc_seen[lane] = True
             if (tick_mode and tick_valid[lane] and rows[bank] == row
                     and tick_data[lane] >= 0 and tick_columns[ch] >= 0):
+                if g[8] and channel[ch, 1] < 0:
+                    # Establish the ordinary first-burst refresh phase before
+                    # a row-hit shortcut. Untouched channels remain absent.
+                    channel[ch, 1] = max(t[20], math.floor(arrival / t[20]) * t[20])
                 if tick_banks[bank] == -2:
                     tick_banks[bank] = _bounded_tick(bf[bank, 3 if read else 4], t[0], tick_profile[1], True)
                 if tick_banks[bank] >= 0:
@@ -811,7 +819,8 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                     start = tick * t[0]
                     last_tick = tick + tick_profile[2] + max(tick_profile[3], tick_profile[4])
                     horizon = start if read else _after(start, recovery, t[0] / 2)
-                    if last_tick < tick_profile[1] and horizon < active_deadlines[ch]:
+                    if (last_tick < tick_profile[1] and horizon < active_deadlines[ch]
+                            and (not g[8] or start < channel[ch, 1])):
                         # These are exactly clock_after's integer tick sums,
                         # expressed in full rather than half clock units.
                         end = (tick + 1) * t[0]
@@ -956,6 +965,14 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                     if fold_mode:
                         cycle_starts[bank, inner] = tick_history[lane, entry]
                 tick_data[lane] = _bounded_tick(max(data_end, pc[lane, 2 if read else 3]), t[0], tick_profile[1], False)
+                if g[8]:
+                    # REFab changes the PC's blocked frontier. The next
+                    # row-hit recurrence must include that new lower bound.
+                    base = max(arrival, pc[lane, 1])
+                    for entry in range(history.shape[1]):
+                        base = max(base, history[lane, entry, 3 if read else 1])
+                    tick_base[lane] = _bounded_tick(base, t[0], tick_profile[1], True)
+                    tick_valid[lane] = tick_valid[lane] and tick_base[lane] >= 0
         if period >= stop - stripe_start:
             break
         stripe_start += period

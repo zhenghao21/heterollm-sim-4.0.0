@@ -62,19 +62,11 @@ class AuthoredTokenProgram:
             # Prepared stages validated these fields at planner handoff.  Live
             # ResourceDemand constructors still validate all dynamic quantities.
             spec = object.__new__(TaskSpec)
-            object.__setattr__(spec, "task_id", task_ids[position])
-            object.__setattr__(spec, "request_id", task.request_ids[0])
-            object.__setattr__(spec, "name", task.task_id)
-            object.__setattr__(spec, "category", task.category)
-            object.__setattr__(spec, "dependencies", tuple(
-                task_ids[parent] for parent in self.compiled.dependency_positions[position]))
-            object.__setattr__(spec, "demands", task.demands)
-            object.__setattr__(spec, "earliest_start_ns", ready_values[stage_position])
-            object.__setattr__(spec, "marker", None)
-            object.__setattr__(spec, "token_index", None)
-            object.__setattr__(spec, "metadata", {
-                **bind_metadata(task.metadata, namespace),
-                "execution_stage_id": stage.stage_id,
-            })
+            spec.__dict__.update(task_id=task_ids[position], request_id=task.request_ids[0],
+                name=task.task_id, category=task.category, dependencies=tuple(
+                    task_ids[parent] for parent in self.compiled.dependency_positions[position]),
+                demands=task.demands, earliest_start_ns=ready_values[stage_position], marker=None,
+                token_index=None, metadata={**bind_metadata(task.metadata, namespace),
+                                           "execution_stage_id": stage.stage_id})
             specs.append(spec)
         return tuple(specs)

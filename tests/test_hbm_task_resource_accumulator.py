@@ -61,6 +61,11 @@ def test_singletons_and_mixed_batches_preserve_exact_bills_and_results(helpers, 
         max_outstanding_requests=1, refresh_policy="all_bank",
         refresh_interval_ns=400.0, refresh_cycle_ns=40.0)
     reference, actual = (DramCore(config, capture_details=False) for _ in range(2))
+    # These compare task-local accounting on the numeric controller used by
+    # the live physical runtime. The public cold tiny-request dispatcher may
+    # deliberately select the separate Python controller, whose diagnostic
+    # marker and resource insertion order are not this reducer's contract.
+    reference._hbm_numeric_enabled = actual._hbm_numeric_enabled = True
     expected, accumulated = helpers.HBMResourceAccumulator(), helpers.HBMResourceAccumulator()
     span = config.row_bytes * config.bank_count if mapping == "row_local" else 128
     next_id = 0
@@ -103,6 +108,7 @@ def test_numeric_consumption_uses_checkpoint_without_public_metrics_snapshot(hel
 def test_native_failure_preserves_successful_prefix_and_consumes_fallback_once(helpers, monkeypatch, failure):
     config = configuration(channels=8)
     reference, actual = (DramCore(config, capture_details=False) for _ in range(2))
+    reference._hbm_numeric_enabled = actual._hbm_numeric_enabled = True
     requests = (AccessRequest("prefix", "read", 3, 65),
                 AccessRequest("stop", "write", 128, 2048),
                 AccessRequest("last", "read", 4096, 4096))

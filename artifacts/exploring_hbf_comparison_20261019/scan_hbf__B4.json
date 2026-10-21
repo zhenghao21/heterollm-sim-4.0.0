@@ -1,0 +1,2201 @@
+{
+  "case": "scan_hbf",
+  "label": "现有全 HBF 部署",
+  "status": "completed",
+  "batch_size": 4,
+  "model_id": "qwen2_5-0_5b",
+  "prompt_tokens": 1660,
+  "output_tokens": 17,
+  "wall_seconds": 26.521119399985764,
+  "ttft_ns_mean": 832894784.9525841,
+  "tpot_ns_mean": 115096015.7647734,
+  "tpot_slo_ns": 100000000.0,
+  "tpot_slo_met": false,
+  "decode_window_tps": 34.75359223706726,
+  "request_tpot_ns": [
+    115096015.7647734,
+    115096015.7647734,
+    115096015.7647734,
+    115096015.7647734
+  ],
+  "phase_metrics": [
+    {
+      "phase": "prefill",
+      "batches": 1,
+      "batch_occupied_ns": 832787145.8646793,
+      "scope": "real physical cohorts; initialization excluded; not an exclusive hardware attribution"
+    },
+    {
+      "phase": "decode",
+      "batches": 16,
+      "batch_occupied_ns": 1841400304.5697079,
+      "scope": "real physical cohorts; initialization excluded; not an exclusive hardware attribution"
+    }
+  ],
+  "request_token_windows": {
+    "control-0": {
+      "first_token_ns": 832894784.9525841,
+      "last_token_ns": 2674431037.1889586
+    },
+    "control-1": {
+      "first_token_ns": 832894784.9525841,
+      "last_token_ns": 2674431037.1889586
+    },
+    "control-2": {
+      "first_token_ns": 832894784.9525841,
+      "last_token_ns": 2674431037.1889586
+    },
+    "control-3": {
+      "first_token_ns": 832894784.9525841,
+      "last_token_ns": 2674431037.1889586
+    }
+  },
+  "storage_traffic": {
+    "schema_version": "heterollm.nand-traffic/v1",
+    "task_count": 6309,
+    "logical_bytes": 33961623552,
+    "host_transfer_bytes": 33961623552,
+    "physical_bytes": 33961533440,
+    "physical_read_bytes": 25442377728,
+    "physical_write_bytes": 8519155712,
+    "queue_wait_ns": 4839812721721.105,
+    "erase_operations": 8192,
+    "service_ns": 2687966900.0690217,
+    "logical_read_bytes": 25442467840,
+    "logical_write_bytes": 8519155712,
+    "internal_transfer_bytes": 33961533440,
+    "pages_read": 6211518,
+    "pages_programmed": 2079872,
+    "pages_touched": 8294530,
+    "media_waves": null,
+    "read_cache_hits": 3140,
+    "read_cache_misses": 6211518,
+    "read_operations": 6211518,
+    "program_operations": 2079872,
+    "rmw_read_operations": 0,
+    "page_access_payload_bytes": 33961623552,
+    "page_access_capacity_bytes": 33974394880,
+    "host_admission_samples": 8294530,
+    "host_queue_wait_ns": null,
+    "media_queue_wait_ns": null,
+    "host_outstanding_at_admission_peak": 256,
+    "host_read_outstanding_at_admission_peak": 256,
+    "host_write_outstanding_at_admission_peak": 64,
+    "page_access_payload_utilization": 0.999624089610864,
+    "nand_observations": null,
+    "nand_read_queue_depth": null,
+    "nand_program_queue_depth": null,
+    "queue_depth_scope": "max across physical owners: outstanding page commands per host channel sampled at admission, including the admitted command",
+    "queue_depth_scopes_by_owner": {
+      "hbf0.memory": [
+        "outstanding page commands per host channel sampled at admission, including the admitted command"
+      ]
+    },
+    "page_utilization_scope": "logical payload / sum of per-access page-rounded spans; repeated accesses count again; not unique resident capacity utilization",
+    "metric_availability": {
+      "nand_read_queue_depth": {
+        "status": "not_recorded",
+        "reason": "page-level observation is opt-in; host requests are separate"
+      },
+      "nand_program_queue_depth": {
+        "status": "not_recorded",
+        "reason": "page-level observation is opt-in; host writes are separate"
+      },
+      "logical_read_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "logical_write_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "internal_transfer_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "pages_read": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "pages_programmed": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "pages_touched": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "media_waves": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "read_cache_hits": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "read_cache_misses": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "read_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "program_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "rmw_read_operations": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "page_access_payload_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "page_access_capacity_bytes": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "host_admission_samples": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "host_queue_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "media_queue_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "host_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "host_read_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "host_write_outstanding_at_admission_peak": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "organization_profiles": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      }
+    },
+    "operation_counts": {
+      "read": 1145,
+      "read_write": 4731,
+      "write": 433
+    },
+    "resource_totals": {
+      "hbf0.memory:nand:array:0": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 787032000.0
+      },
+      "hbf0.memory:nand:array:1": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 787008000.0
+      },
+      "hbf0.memory:nand:array:10": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 787136000.0
+      },
+      "hbf0.memory:nand:array:100": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773755000.0
+      },
+      "hbf0.memory:nand:array:101": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773743000.0
+      },
+      "hbf0.memory:nand:array:102": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772895000.0
+      },
+      "hbf0.memory:nand:array:103": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773959000.0
+      },
+      "hbf0.memory:nand:array:104": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774007000.0
+      },
+      "hbf0.memory:nand:array:105": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756851000.0
+      },
+      "hbf0.memory:nand:array:106": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756851000.0
+      },
+      "hbf0.memory:nand:array:107": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756827000.0
+      },
+      "hbf0.memory:nand:array:108": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770175000.0
+      },
+      "hbf0.memory:nand:array:109": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770143000.0
+      },
+      "hbf0.memory:nand:array:11": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 789940000.0
+      },
+      "hbf0.memory:nand:array:110": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773027000.0
+      },
+      "hbf0.memory:nand:array:111": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774067000.0
+      },
+      "hbf0.memory:nand:array:112": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774091000.0
+      },
+      "hbf0.memory:nand:array:113": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756959000.0
+      },
+      "hbf0.memory:nand:array:114": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756867000.0
+      },
+      "hbf0.memory:nand:array:115": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756839000.0
+      },
+      "hbf0.memory:nand:array:116": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770063000.0
+      },
+      "hbf0.memory:nand:array:117": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770095000.0
+      },
+      "hbf0.memory:nand:array:118": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773875000.0
+      },
+      "hbf0.memory:nand:array:119": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774935000.0
+      },
+      "hbf0.memory:nand:array:12": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 791008000.0
+      },
+      "hbf0.memory:nand:array:120": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774983000.0
+      },
+      "hbf0.memory:nand:array:121": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757835000.0
+      },
+      "hbf0.memory:nand:array:122": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757891000.0
+      },
+      "hbf0.memory:nand:array:123": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757883000.0
+      },
+      "hbf0.memory:nand:array:124": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 771123000.0
+      },
+      "hbf0.memory:nand:array:125": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 771123000.0
+      },
+      "hbf0.memory:nand:array:126": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774943000.0
+      },
+      "hbf0.memory:nand:array:127": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774059000.0
+      },
+      "hbf0.memory:nand:array:128": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774071000.0
+      },
+      "hbf0.memory:nand:array:129": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774059000.0
+      },
+      "hbf0.memory:nand:array:13": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 790972000.0
+      },
+      "hbf0.memory:nand:array:130": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773975000.0
+      },
+      "hbf0.memory:nand:array:131": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773867000.0
+      },
+      "hbf0.memory:nand:array:132": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773775000.0
+      },
+      "hbf0.memory:nand:array:133": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773747000.0
+      },
+      "hbf0.memory:nand:array:134": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773775000.0
+      },
+      "hbf0.memory:nand:array:135": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772855000.0
+      },
+      "hbf0.memory:nand:array:136": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773979000.0
+      },
+      "hbf0.memory:nand:array:137": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773931000.0
+      },
+      "hbf0.memory:nand:array:138": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756903000.0
+      },
+      "hbf0.memory:nand:array:139": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756731000.0
+      },
+      "hbf0.memory:nand:array:14": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773936000.0
+      },
+      "hbf0.memory:nand:array:140": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756803000.0
+      },
+      "hbf0.memory:nand:array:141": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770035000.0
+      },
+      "hbf0.memory:nand:array:142": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770131000.0
+      },
+      "hbf0.memory:nand:array:143": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772963000.0
+      },
+      "hbf0.memory:nand:array:144": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774079000.0
+      },
+      "hbf0.memory:nand:array:145": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774055000.0
+      },
+      "hbf0.memory:nand:array:146": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757011000.0
+      },
+      "hbf0.memory:nand:array:147": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756903000.0
+      },
+      "hbf0.memory:nand:array:148": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756871000.0
+      },
+      "hbf0.memory:nand:array:149": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770051000.0
+      },
+      "hbf0.memory:nand:array:15": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773912000.0
+      },
+      "hbf0.memory:nand:array:150": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770059000.0
+      },
+      "hbf0.memory:nand:array:151": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773855000.0
+      },
+      "hbf0.memory:nand:array:152": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774975000.0
+      },
+      "hbf0.memory:nand:array:153": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774955000.0
+      },
+      "hbf0.memory:nand:array:154": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757931000.0
+      },
+      "hbf0.memory:nand:array:155": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757847000.0
+      },
+      "hbf0.memory:nand:array:156": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757844000.0
+      },
+      "hbf0.memory:nand:array:157": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 771012000.0
+      },
+      "hbf0.memory:nand:array:158": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 771080000.0
+      },
+      "hbf0.memory:nand:array:159": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774792000.0
+      },
+      "hbf0.memory:nand:array:16": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773956000.0
+      },
+      "hbf0.memory:nand:array:160": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774000000.0
+      },
+      "hbf0.memory:nand:array:161": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773972000.0
+      },
+      "hbf0.memory:nand:array:162": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773992000.0
+      },
+      "hbf0.memory:nand:array:163": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773952000.0
+      },
+      "hbf0.memory:nand:array:164": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773792000.0
+      },
+      "hbf0.memory:nand:array:165": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773676000.0
+      },
+      "hbf0.memory:nand:array:166": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773652000.0
+      },
+      "hbf0.memory:nand:array:167": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773620000.0
+      },
+      "hbf0.memory:nand:array:168": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772772000.0
+      },
+      "hbf0.memory:nand:array:169": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773836000.0
+      },
+      "hbf0.memory:nand:array:17": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 787116000.0
+      },
+      "hbf0.memory:nand:array:170": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773876000.0
+      },
+      "hbf0.memory:nand:array:171": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756784000.0
+      },
+      "hbf0.memory:nand:array:172": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756748000.0
+      },
+      "hbf0.memory:nand:array:173": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756676000.0
+      },
+      "hbf0.memory:nand:array:174": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 769976000.0
+      },
+      "hbf0.memory:nand:array:175": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 769968000.0
+      },
+      "hbf0.memory:nand:array:176": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772892000.0
+      },
+      "hbf0.memory:nand:array:177": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773976000.0
+      },
+      "hbf0.memory:nand:array:178": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773996000.0
+      },
+      "hbf0.memory:nand:array:179": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756920000.0
+      },
+      "hbf0.memory:nand:array:18": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 787148000.0
+      },
+      "hbf0.memory:nand:array:180": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756868000.0
+      },
+      "hbf0.memory:nand:array:181": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756824000.0
+      },
+      "hbf0.memory:nand:array:182": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 769932000.0
+      },
+      "hbf0.memory:nand:array:183": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 769904000.0
+      },
+      "hbf0.memory:nand:array:184": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773672000.0
+      },
+      "hbf0.memory:nand:array:185": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774788000.0
+      },
+      "hbf0.memory:nand:array:186": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774812000.0
+      },
+      "hbf0.memory:nand:array:187": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757700000.0
+      },
+      "hbf0.memory:nand:array:188": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757748000.0
+      },
+      "hbf0.memory:nand:array:189": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757704000.0
+      },
+      "hbf0.memory:nand:array:19": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 789924000.0
+      },
+      "hbf0.memory:nand:array:190": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770964000.0
+      },
+      "hbf0.memory:nand:array:191": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770928000.0
+      },
+      "hbf0.memory:nand:array:192": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774744000.0
+      },
+      "hbf0.memory:nand:array:193": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773836000.0
+      },
+      "hbf0.memory:nand:array:194": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773932000.0
+      },
+      "hbf0.memory:nand:array:195": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773920000.0
+      },
+      "hbf0.memory:nand:array:196": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773948000.0
+      },
+      "hbf0.memory:nand:array:197": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773868000.0
+      },
+      "hbf0.memory:nand:array:198": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773704000.0
+      },
+      "hbf0.memory:nand:array:199": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773688000.0
+      },
+      "hbf0.memory:nand:array:2": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 790748000.0
+      },
+      "hbf0.memory:nand:array:20": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 791060000.0
+      },
+      "hbf0.memory:nand:array:200": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773652000.0
+      },
+      "hbf0.memory:nand:array:201": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772760000.0
+      },
+      "hbf0.memory:nand:array:202": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773856000.0
+      },
+      "hbf0.memory:nand:array:203": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773848000.0
+      },
+      "hbf0.memory:nand:array:204": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756816000.0
+      },
+      "hbf0.memory:nand:array:205": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756724000.0
+      },
+      "hbf0.memory:nand:array:206": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756764000.0
+      },
+      "hbf0.memory:nand:array:207": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 769940000.0
+      },
+      "hbf0.memory:nand:array:208": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770000000.0
+      },
+      "hbf0.memory:nand:array:209": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772832000.0
+      },
+      "hbf0.memory:nand:array:21": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 791056000.0
+      },
+      "hbf0.memory:nand:array:210": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774008000.0
+      },
+      "hbf0.memory:nand:array:211": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773972000.0
+      },
+      "hbf0.memory:nand:array:212": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756932000.0
+      },
+      "hbf0.memory:nand:array:213": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756828000.0
+      },
+      "hbf0.memory:nand:array:214": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756852000.0
+      },
+      "hbf0.memory:nand:array:215": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770008000.0
+      },
+      "hbf0.memory:nand:array:216": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 769920000.0
+      },
+      "hbf0.memory:nand:array:217": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773624000.0
+      },
+      "hbf0.memory:nand:array:218": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774740000.0
+      },
+      "hbf0.memory:nand:array:219": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774776000.0
+      },
+      "hbf0.memory:nand:array:22": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774040000.0
+      },
+      "hbf0.memory:nand:array:220": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757744000.0
+      },
+      "hbf0.memory:nand:array:221": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757716000.0
+      },
+      "hbf0.memory:nand:array:222": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757764000.0
+      },
+      "hbf0.memory:nand:array:223": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770940000.0
+      },
+      "hbf0.memory:nand:array:224": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770988000.0
+      },
+      "hbf0.memory:nand:array:225": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774724000.0
+      },
+      "hbf0.memory:nand:array:226": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773892000.0
+      },
+      "hbf0.memory:nand:array:227": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773888000.0
+      },
+      "hbf0.memory:nand:array:228": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773956000.0
+      },
+      "hbf0.memory:nand:array:229": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773964000.0
+      },
+      "hbf0.memory:nand:array:23": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773968000.0
+      },
+      "hbf0.memory:nand:array:230": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773916000.0
+      },
+      "hbf0.memory:nand:array:231": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773848000.0
+      },
+      "hbf0.memory:nand:array:232": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773756000.0
+      },
+      "hbf0.memory:nand:array:233": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773724000.0
+      },
+      "hbf0.memory:nand:array:234": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772816000.0
+      },
+      "hbf0.memory:nand:array:235": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773880000.0
+      },
+      "hbf0.memory:nand:array:236": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773908000.0
+      },
+      "hbf0.memory:nand:array:237": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756864000.0
+      },
+      "hbf0.memory:nand:array:238": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756828000.0
+      },
+      "hbf0.memory:nand:array:239": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756780000.0
+      },
+      "hbf0.memory:nand:array:24": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773984000.0
+      },
+      "hbf0.memory:nand:array:240": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770076000.0
+      },
+      "hbf0.memory:nand:array:241": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 769968000.0
+      },
+      "hbf0.memory:nand:array:242": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772884000.0
+      },
+      "hbf0.memory:nand:array:243": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773940000.0
+      },
+      "hbf0.memory:nand:array:244": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774032000.0
+      },
+      "hbf0.memory:nand:array:245": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756944000.0
+      },
+      "hbf0.memory:nand:array:246": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756916000.0
+      },
+      "hbf0.memory:nand:array:247": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756900000.0
+      },
+      "hbf0.memory:nand:array:248": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770116000.0
+      },
+      "hbf0.memory:nand:array:249": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770108000.0
+      },
+      "hbf0.memory:nand:array:25": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 787176000.0
+      },
+      "hbf0.memory:nand:array:250": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773752000.0
+      },
+      "hbf0.memory:nand:array:251": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774832000.0
+      },
+      "hbf0.memory:nand:array:252": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774844000.0
+      },
+      "hbf0.memory:nand:array:253": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757828000.0
+      },
+      "hbf0.memory:nand:array:254": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757840000.0
+      },
+      "hbf0.memory:nand:array:255": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757828000.0
+      },
+      "hbf0.memory:nand:array:26": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 787200000.0
+      },
+      "hbf0.memory:nand:array:27": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 790928000.0
+      },
+      "hbf0.memory:nand:array:28": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773987000.0
+      },
+      "hbf0.memory:nand:array:29": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773959000.0
+      },
+      "hbf0.memory:nand:array:3": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 789840000.0
+      },
+      "hbf0.memory:nand:array:30": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773935000.0
+      },
+      "hbf0.memory:nand:array:31": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773967000.0
+      },
+      "hbf0.memory:nand:array:32": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773923000.0
+      },
+      "hbf0.memory:nand:array:33": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773811000.0
+      },
+      "hbf0.memory:nand:array:34": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773847000.0
+      },
+      "hbf0.memory:nand:array:35": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773799000.0
+      },
+      "hbf0.memory:nand:array:36": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772971000.0
+      },
+      "hbf0.memory:nand:array:37": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773959000.0
+      },
+      "hbf0.memory:nand:array:38": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774035000.0
+      },
+      "hbf0.memory:nand:array:39": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756939000.0
+      },
+      "hbf0.memory:nand:array:4": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 791132000.0
+      },
+      "hbf0.memory:nand:array:40": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756963000.0
+      },
+      "hbf0.memory:nand:array:41": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756955000.0
+      },
+      "hbf0.memory:nand:array:42": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770251000.0
+      },
+      "hbf0.memory:nand:array:43": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770247000.0
+      },
+      "hbf0.memory:nand:array:44": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773011000.0
+      },
+      "hbf0.memory:nand:array:45": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774071000.0
+      },
+      "hbf0.memory:nand:array:46": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774035000.0
+      },
+      "hbf0.memory:nand:array:47": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756959000.0
+      },
+      "hbf0.memory:nand:array:48": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756903000.0
+      },
+      "hbf0.memory:nand:array:49": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756955000.0
+      },
+      "hbf0.memory:nand:array:5": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 791108000.0
+      },
+      "hbf0.memory:nand:array:50": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770175000.0
+      },
+      "hbf0.memory:nand:array:51": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770155000.0
+      },
+      "hbf0.memory:nand:array:52": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773939000.0
+      },
+      "hbf0.memory:nand:array:53": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774939000.0
+      },
+      "hbf0.memory:nand:array:54": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 775007000.0
+      },
+      "hbf0.memory:nand:array:55": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757915000.0
+      },
+      "hbf0.memory:nand:array:56": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757983000.0
+      },
+      "hbf0.memory:nand:array:57": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757955000.0
+      },
+      "hbf0.memory:nand:array:58": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 771175000.0
+      },
+      "hbf0.memory:nand:array:59": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 771143000.0
+      },
+      "hbf0.memory:nand:array:6": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774128000.0
+      },
+      "hbf0.memory:nand:array:60": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774907000.0
+      },
+      "hbf0.memory:nand:array:61": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773983000.0
+      },
+      "hbf0.memory:nand:array:62": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773895000.0
+      },
+      "hbf0.memory:nand:array:63": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773847000.0
+      },
+      "hbf0.memory:nand:array:64": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773827000.0
+      },
+      "hbf0.memory:nand:array:65": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773791000.0
+      },
+      "hbf0.memory:nand:array:66": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773751000.0
+      },
+      "hbf0.memory:nand:array:67": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773731000.0
+      },
+      "hbf0.memory:nand:array:68": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773771000.0
+      },
+      "hbf0.memory:nand:array:69": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 772863000.0
+      },
+      "hbf0.memory:nand:array:7": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774032000.0
+      },
+      "hbf0.memory:nand:array:70": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773959000.0
+      },
+      "hbf0.memory:nand:array:71": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773887000.0
+      },
+      "hbf0.memory:nand:array:72": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756867000.0
+      },
+      "hbf0.memory:nand:array:73": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756799000.0
+      },
+      "hbf0.memory:nand:array:74": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756871000.0
+      },
+      "hbf0.memory:nand:array:75": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770127000.0
+      },
+      "hbf0.memory:nand:array:76": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770143000.0
+      },
+      "hbf0.memory:nand:array:77": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773007000.0
+      },
+      "hbf0.memory:nand:array:78": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774123000.0
+      },
+      "hbf0.memory:nand:array:79": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774079000.0
+      },
+      "hbf0.memory:nand:array:8": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773988000.0
+      },
+      "hbf0.memory:nand:array:80": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756987000.0
+      },
+      "hbf0.memory:nand:array:81": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756895000.0
+      },
+      "hbf0.memory:nand:array:82": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 756923000.0
+      },
+      "hbf0.memory:nand:array:83": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770143000.0
+      },
+      "hbf0.memory:nand:array:84": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 770179000.0
+      },
+      "hbf0.memory:nand:array:85": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773867000.0
+      },
+      "hbf0.memory:nand:array:86": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774991000.0
+      },
+      "hbf0.memory:nand:array:87": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774883000.0
+      },
+      "hbf0.memory:nand:array:88": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757883000.0
+      },
+      "hbf0.memory:nand:array:89": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757847000.0
+      },
+      "hbf0.memory:nand:array:9": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 787220000.0
+      },
+      "hbf0.memory:nand:array:90": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 757927000.0
+      },
+      "hbf0.memory:nand:array:91": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 771091000.0
+      },
+      "hbf0.memory:nand:array:92": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 771119000.0
+      },
+      "hbf0.memory:nand:array:93": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 774851000.0
+      },
+      "hbf0.memory:nand:array:94": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773995000.0
+      },
+      "hbf0.memory:nand:array:95": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773979000.0
+      },
+      "hbf0.memory:nand:array:96": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773879000.0
+      },
+      "hbf0.memory:nand:array:97": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773855000.0
+      },
+      "hbf0.memory:nand:array:98": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773747000.0
+      },
+      "hbf0.memory:nand:array:99": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 0,
+        "service_ns": 773739000.0
+      },
+      "hbf0.memory:nand:channel:0": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2148368384,
+        "service_ns": 22378837.333398703
+      },
+      "hbf0.memory:nand:channel:1": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2150789120,
+        "service_ns": 22404053.333399437
+      },
+      "hbf0.memory:nand:channel:10": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2099769344,
+        "service_ns": 21872597.33338397
+      },
+      "hbf0.memory:nand:channel:11": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2100379648,
+        "service_ns": 21878954.66671749
+      },
+      "hbf0.memory:nand:channel:12": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2083323904,
+        "service_ns": 21701290.666712318
+      },
+      "hbf0.memory:nand:channel:13": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2082033664,
+        "service_ns": 21687850.666711926
+      },
+      "hbf0.memory:nand:channel:14": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2098999296,
+        "service_ns": 21864576.000050403
+      },
+      "hbf0.memory:nand:channel:15": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2115149824,
+        "service_ns": 22032810.666721966
+      },
+      "hbf0.memory:nand:channel:2": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2153947136,
+        "service_ns": 22436949.333400395
+      },
+      "hbf0.memory:nand:channel:3": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2152550400,
+        "service_ns": 22422400.000066638
+      },
+      "hbf0.memory:nand:channel:4": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2154098688,
+        "service_ns": 22438528.000067107
+      },
+      "hbf0.memory:nand:channel:5": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2154598400,
+        "service_ns": 22443733.333400592
+      },
+      "hbf0.memory:nand:channel:6": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2138423296,
+        "service_ns": 22275242.66672902
+      },
+      "hbf0.memory:nand:channel:7": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2121486336,
+        "service_ns": 22098816.00005722
+      },
+      "hbf0.memory:nand:channel:8": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2105413632,
+        "service_ns": 21931392.000052348
+      },
+      "hbf0.memory:nand:channel:9": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 2102202368,
+        "service_ns": 21897941.333384708
+      },
+      "hbf0.memory:nand:host:0:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1616076672,
+        "service_ns": 16834131.99990395
+      },
+      "hbf0.memory:nand:host:0:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:10:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1567324608,
+        "service_ns": 16326297.999908848
+      },
+      "hbf0.memory:nand:host:10:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:11:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1567769024,
+        "service_ns": 16330927.333242118
+      },
+      "hbf0.memory:nand:host:11:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:12:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1550860608,
+        "service_ns": 16154797.999911347
+      },
+      "hbf0.memory:nand:host:12:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:13:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1549403584,
+        "service_ns": 16139620.666578237
+      },
+      "hbf0.memory:nand:host:13:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:14:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1566563008,
+        "service_ns": 16318364.666575635
+      },
+      "hbf0.memory:nand:host:14:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:15:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1582623040,
+        "service_ns": 16485656.666573208
+      },
+      "hbf0.memory:nand:host:15:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:1:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1618330496,
+        "service_ns": 16857609.33323798
+      },
+      "hbf0.memory:nand:host:1:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:2:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1621667840,
+        "service_ns": 16892373.33323898
+      },
+      "hbf0.memory:nand:host:2:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:3:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1620122752,
+        "service_ns": 16876278.666571848
+      },
+      "hbf0.memory:nand:host:3:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:4:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1621837952,
+        "service_ns": 16894145.33323903
+      },
+      "hbf0.memory:nand:host:4:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:5:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1622190208,
+        "service_ns": 16897814.666572478
+      },
+      "hbf0.memory:nand:host:5:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:6:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1606135552,
+        "service_ns": 16730578.666569639
+      },
+      "hbf0.memory:nand:host:6:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:7:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1588971648,
+        "service_ns": 16551787.999905573
+      },
+      "hbf0.memory:nand:host:7:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:8:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1572984512,
+        "service_ns": 16385255.333241323
+      },
+      "hbf0.memory:nand:host:8:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      },
+      "hbf0.memory:nand:host:9:read": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 1569606336,
+        "service_ns": 16350065.999908507
+      },
+      "hbf0.memory:nand:host:9:write": {
+        "owner": "hbf0.memory",
+        "bytes_moved": 532447232,
+        "service_ns": 5546325.333337067
+      }
+    },
+    "owner_ids": [
+      "hbf0.memory"
+    ],
+    "profile_evidence": [],
+    "background_work": [],
+    "organization_profiles": [],
+    "organization_profile_limit": 32,
+    "accounting_semantics": "host_transfer_bytes is logical host payload; physical_* and pages_read/pages_programmed are NAND media accounting; null means not fully recorded; operation_counts classifies task-owner ledgers, not media operations; service_ns is analytical"
+  },
+  "dram_traffic": {
+    "schema_version": "heterollm.dram-traffic/v1",
+    "task_count": 5631,
+    "logical_read_bytes": 17617826,
+    "logical_write_bytes": 13026328,
+    "physical_read_bytes": 17644224,
+    "physical_write_bytes": 13052672,
+    "physical_bytes": 30696896,
+    "logical_bytes": 30644154,
+    "burst_count": 479639,
+    "row_hits": 459438,
+    "row_misses": 16,
+    "row_conflicts": 20185,
+    "queue_wait_ns": 2625578.39205873,
+    "service_ns": 14995453.417659894,
+    "read_write_switches": null,
+    "scheduler_reordered_requests": 0,
+    "scheduler_batches": 0,
+    "controller_direction_switches": 8151,
+    "refresh_wait_ns": null,
+    "turnaround_wait_ns": null,
+    "row_command_bus_busy_ns": null,
+    "column_command_bus_busy_ns": null,
+    "activate_commands": null,
+    "precharge_commands": null,
+    "read_commands": null,
+    "write_commands": null,
+    "refresh_commands": null,
+    "metric_availability": {
+      "read_write_switches": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "scheduler_reordered_requests": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "scheduler_batches": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "controller_direction_switches": {
+        "status": "recorded",
+        "recorded_batch_count": 17,
+        "physical_batch_count": 17
+      },
+      "refresh_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "turnaround_wait_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "row_command_bus_busy_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "column_command_bus_busy_ns": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "activate_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "precharge_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "read_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "write_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "refresh_commands": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      },
+      "organization_profiles": {
+        "status": "not_recorded",
+        "recorded_batch_count": 0,
+        "physical_batch_count": 17
+      }
+    },
+    "resource_totals": {
+      "hostmem0.memory:dram:bank:0:0:0:0:0:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 36134.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 36106.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 36106.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:0:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 36106.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 37170.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 37170.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 37170.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:1:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 37170.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 35742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 35742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 35742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:2:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 35742.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 32774.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:1": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 32774.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:2": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 31878.0
+      },
+      "hostmem0.memory:dram:bank:0:0:0:0:3:3": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 31878.0
+      },
+      "hostmem0.memory:dram:command:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 0,
+        "service_ns": 685198.5714249861
+      },
+      "hostmem0.memory:dram:data:0": {
+        "owner": "hostmem0.memory",
+        "bytes_moved": 30696896,
+        "service_ns": 685198.5714249861
+      }
+    },
+    "owner_ids": [
+      "hostmem0.memory"
+    ],
+    "organization_profiles": [],
+    "organization_profile_limit": 32,
+    "service_time_scope": "service_ns sums per-task/owner completion spans, which may overlap; it is neither elapsed wall time nor data-bus busy time. resource_totals contains actual per-resource occupied time and bytes.",
+    "accounting_semantics": "resolved analytical burst bytes and controller waits; null means not fully recorded; empty organization_profiles is not evidence of complete geometry reporting; no device accuracy claim"
+  },
+  "physical_configs": {
+    "hbf0": {
+      "kind": "HBF",
+      "protocol_mode": "ocp_hbf_0_7",
+      "host_channels": 16,
+      "host_full_duplex": true,
+      "read_cache_pages_per_bank": 2,
+      "generation": "",
+      "channels": 16,
+      "targets_per_channel": 1,
+      "dies_per_target": 1,
+      "luns_per_die": 1,
+      "planes_per_lun": 16,
+      "planes_independent": true,
+      "parallel_units": null,
+      "blocks_per_plane": 2048,
+      "pages_per_block": 256,
+      "page_bytes": 4096,
+      "host_granularity_bytes": 64,
+      "internal_transfer_bytes": null,
+      "host_bandwidth_gb_s": 1536.0,
+      "internal_bandwidth_gb_s": 96.0,
+      "host_read_bandwidth_gb_s": 1536.0,
+      "host_write_bandwidth_gb_s": 1536.0,
+      "page_read_ns": 4000.0,
+      "page_program_ns": 75000.0,
+      "block_erase_ns": 2000000.0,
+      "front_ns": 0.0,
+      "write_buffer_bytes": 0,
+      "wear_model": null,
+      "detailed_observability": false,
+      "partial_page_policy": "read_modify_write",
+      "capacity_bytes": 549755813888,
+      "max_outstanding_requests": 256,
+      "queue_scope": "host_channel",
+      "max_outstanding_write_requests": 64,
+      "max_expanded_segments": 1000000,
+      "metadata": {
+        "parameter_basis": "ocp_protocol_with_flashlab_research_reference",
+        "configuration_scope": "explicit_physical_memory_research",
+        "geometry_basis": "FlashLabAE 16 channels * 1 die/channel * 16 banks/die; target and LUN are singleton mapping levels",
+        "timing_basis": "4 us read, 75 us program and 2 ms erase are upstream exploratory assumptions, not OCP mandated latencies",
+        "model_abstraction": "ocp_physical_protocol_subset",
+        "model_scope": "Research adaptation, not a complete FlashLabAE reproduction, UCIe/AXI implementation or calibrated HBF device",
+        "protocol_basis": "OCP HBF v0.7.0 full-page writes, sequential block programming, page-0 erase, 64-byte reads and host-channel admission",
+        "geometry_status": "research_reference",
+        "parallelism_mapping": "Independent bank resources derived from geometry; parallel_units override forbidden in OCP mode",
+        "queue_basis": "256 combined requests and 64 writes per host channel are local research assumptions; not a measured MOCS or an exact copy of upstream read/write queues",
+        "internal_transfer_basis": "96 GB/s payload per core channel = upstream 101.25 GB/s raw * 4096/(4096+224 OOB); no separate OOB/ECC/TSV stages",
+        "source_revision": "7a6cb439235d721137f8c5c3a952e2ecc520a47b",
+        "source_documents": {
+          "ocp_hbf_v0_7_0": "https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf",
+          "flashlab_configuration": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp",
+          "flashlab_provenance": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/configs/parameter-provenance.json#L509",
+          "flashlab_speed_grades": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_standard.hpp"
+        },
+        "parameter_provenance": {
+          "channels": {
+            "value": 16,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "targets_per_channel": {
+            "value": 1,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "dies_per_target": {
+            "value": 1,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "luns_per_die": {
+            "value": 1,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "planes_per_lun": {
+            "value": 16,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "planes_independent": {
+            "value": true,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "parallel_units": {
+            "value": null,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "blocks_per_plane": {
+            "value": 2048,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "pages_per_block": {
+            "value": 256,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "page_bytes": {
+            "value": 4096,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "capacity_bytes": {
+            "value": 549755813888,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L12",
+            "basis": "Research geometry: one core channel/die per host channel; independent planes model banks. 16 * 1 * 16 banks * 2048 blocks * 256 pages * 4096 B = 512 GiB; not disclosed vendor geometry."
+          },
+          "page_read_ns": {
+            "value": 4000.0,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L26",
+            "basis": "Upstream exploratory NAND timing assumptions; not OCP requirements or measured HBF timings."
+          },
+          "page_program_ns": {
+            "value": 75000.0,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L26",
+            "basis": "Upstream exploratory NAND timing assumptions; not OCP requirements or measured HBF timings."
+          },
+          "block_erase_ns": {
+            "value": 2000000.0,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp#L26",
+            "basis": "Upstream exploratory NAND timing assumptions; not OCP requirements or measured HBF timings."
+          },
+          "host_channels": {
+            "value": 16,
+            "status": "research_reference",
+            "source": "https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf",
+            "basis": "Selected 16-channel composition with OCP full-duplex, two cache pages per bank, 64 B read granularity and media-complete ordinary writes; protocol subset only."
+          },
+          "host_full_duplex": {
+            "value": true,
+            "status": "research_reference",
+            "source": "https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf",
+            "basis": "Selected 16-channel composition with OCP full-duplex, two cache pages per bank, 64 B read granularity and media-complete ordinary writes; protocol subset only."
+          },
+          "read_cache_pages_per_bank": {
+            "value": 2,
+            "status": "research_reference",
+            "source": "https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf",
+            "basis": "Selected 16-channel composition with OCP full-duplex, two cache pages per bank, 64 B read granularity and media-complete ordinary writes; protocol subset only."
+          },
+          "host_granularity_bytes": {
+            "value": 64,
+            "status": "research_reference",
+            "source": "https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf",
+            "basis": "Selected 16-channel composition with OCP full-duplex, two cache pages per bank, 64 B read granularity and media-complete ordinary writes; protocol subset only."
+          },
+          "write_buffer_bytes": {
+            "value": 0,
+            "status": "research_reference",
+            "source": "https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf",
+            "basis": "Selected 16-channel composition with OCP full-duplex, two cache pages per bank, 64 B read granularity and media-complete ordinary writes; protocol subset only."
+          },
+          "host_bandwidth_gb_s": {
+            "value": 1536.0,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_standard.hpp#L11",
+            "basis": "Grade-2 interface payload budget: 16 channels * x64 * 16 GT/s / 8 * 75% = 1536 GB/s per direction. Program latency separately limits media writes; no extra 16 GB/s write cap. OCP p16 vs pp32/35 payload-rate discrepancy remains unresolved."
+          },
+          "host_read_bandwidth_gb_s": {
+            "value": 1536.0,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_standard.hpp#L11",
+            "basis": "Grade-2 interface payload budget: 16 channels * x64 * 16 GT/s / 8 * 75% = 1536 GB/s per direction. Program latency separately limits media writes; no extra 16 GB/s write cap. OCP p16 vs pp32/35 payload-rate discrepancy remains unresolved."
+          },
+          "host_write_bandwidth_gb_s": {
+            "value": 1536.0,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_standard.hpp#L11",
+            "basis": "Grade-2 interface payload budget: 16 channels * x64 * 16 GT/s / 8 * 75% = 1536 GB/s per direction. Program latency separately limits media writes; no extra 16 GB/s write cap. OCP p16 vs pp32/35 payload-rate discrepancy remains unresolved."
+          },
+          "queue_scope": {
+            "value": "host_channel",
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp",
+            "basis": "Local research translation: divide upstream 4096 read-page credits/stack over 16 host channels, then use 256 combined read/write credits and a 64-write subset per host channel. Not upstream queue semantics or OCP-mandated values."
+          },
+          "max_outstanding_requests": {
+            "value": 256,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp",
+            "basis": "Local research translation: divide upstream 4096 read-page credits/stack over 16 host channels, then use 256 combined read/write credits and a 64-write subset per host channel. Not upstream queue semantics or OCP-mandated values."
+          },
+          "max_outstanding_write_requests": {
+            "value": 64,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp",
+            "basis": "Local research translation: divide upstream 4096 read-page credits/stack over 16 host channels, then use 256 combined read/write credits and a 64-write subset per host channel. Not upstream queue semantics or OCP-mandated values."
+          },
+          "internal_bandwidth_gb_s": {
+            "value": 96.0,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp",
+            "basis": "Per-core-channel payload rate = upstream raw 101.25 GB/s * 4096 / (4096 + 224 OOB) = 96 GB/s. No separate OOB, ECC or TSV stage is reproduced; zero fixed front delay is a local simplification."
+          },
+          "front_ns": {
+            "value": 0.0,
+            "status": "research_reference",
+            "source": "https://github.com/FlashLabAE/HBFSim/blob/7a6cb439235d721137f8c5c3a952e2ecc520a47b/src/physical/hbf/hbf_config.hpp",
+            "basis": "Per-core-channel payload rate = upstream raw 101.25 GB/s * 4096 / (4096 + 224 OOB) = 96 GB/s. No separate OOB, ECC or TSV stage is reproduced; zero fixed front delay is a local simplification."
+          }
+        },
+        "unknown_parameters": [
+          "vendor_bank_plane_mapping",
+          "vendor_visible_capacity_and_reserves",
+          "vendor_media_timing",
+          "vendor_mocs",
+          "shared_internal_links",
+          "ecc_throughput"
+        ],
+        "vendor_calibrated": false,
+        "vendor_verified": false,
+        "target_hardware_calibrated": false,
+        "physical_config_profile_id": "hbf_ocp_0_7",
+        "physical_config_override_fields": [],
+        "physical_config_geometry_expansion": false
+      }
+    }
+  },
+  "assumptions": [
+    "B200 and Qwen are controlled substitutions, not the paper Rubin/Llama workload.",
+    "Finite closed batch: no departure-driven refill, no disaggregated KV reception, no paper staging SRAM.",
+    "Short real execution; no forecast and no full-length detailed-reference rerun.",
+    "Paper-memory cases use generic page service with explicit research controls; not OCP/GC parity with scan cases."
+  ],
+  "resolved_placement": {
+    "tensor_owners": [
+      "hbf0"
+    ],
+    "kv_owner": "hbf0",
+    "rank_active_memory": [
+      "hbf0"
+    ]
+  },
+  "fidelity": "short_native_physical_execution_no_forecast",
+  "paper_tps_reproduced": false,
+  "throughput_scope": "finite closed-batch decode window after first visible token; not continuous steady-state TPS"
+}

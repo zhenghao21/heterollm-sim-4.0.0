@@ -19,7 +19,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from .data_motion import AccessKind, PhysicalRuntimeContext, PhysicalService, resolve_service
 from .ir import ComponentSpec
 from .memory_allocator import PhysicalAddressAllocator, PhysicalAllocation
-from .memory_types import DramConfig, NandConfig
+from .memory_types import DramConfig, NandConfig, SramConfig
 from .physical_contract import require_physical_memory_config
 from .kv_pool import KvPoolError, KvPoolTransferPlan, KvPoolTransferRequest
 
@@ -57,6 +57,7 @@ class PhysicalKVTransferExecutor:
         namespace: str = "kv-pool",
         cache_states: Optional[Mapping[str, Any]] = None,
         cache_owners: Optional[Mapping[str, Any]] = None,
+        retain_phase_details: bool = True,
     ) -> None:
         self.runtime = runtime or PhysicalRuntimeContext()
         self.topology = topology
@@ -74,7 +75,7 @@ class PhysicalKVTransferExecutor:
         if unknown:
             raise ValueError("unknown relay component(s): " + ", ".join(unknown))
         self.services: dict[str, PhysicalService] = {}
-        self._configs: dict[str, DramConfig | NandConfig] = {}
+        self._configs: dict[str, DramConfig | NandConfig | SramConfig] = {}
         self._bindings: dict[int, _PageBinding] = {}
         # Plan/phase ownership belongs to snapshot-restorable executor state,
         # including synchronous plans whose commit is retained by the pool.
@@ -88,6 +89,10 @@ class PhysicalKVTransferExecutor:
         # Submitted work survives cancellation and detail-event retention. Rows
         # are immutable after append; snapshots need not clone the full history.
         self._cost_phases: list[dict[str, Any]] = []
+        self.retain_phase_details = bool(retain_phase_details)
+        self._cost_groups: dict[tuple[str, ...], dict[str, Any]] = {}
+        self._cost_phase_total = 0
+        self._compact_cost_savepoints = []
         self.counters = {"read_bytes": 0, "write_bytes": 0, "link_bytes": 0,
                          "relay_bytes": 0, "transfer_count": 0,
                          "service_ns": 0.0, "link_ns": 0.0}
@@ -325,26 +330,101 @@ class PhysicalKVTransferExecutor:
                 total[key] = value
 
     @contextmanager
-    def _io_transaction(self):
+    def _io_transaction(self, *, owners=None, _owned_timeline=False):
         """Roll back one logical access/phase without copying event history."""
-        saved_runtime = self.runtime.snapshot()
+        saved_runtime = (self.runtime.snapshot() if owners is None else
+            self.runtime.begin_transaction(owners=owners, _owned_timeline=_owned_timeline))
         saved_counters = dict(self.counters)
         cost_count = len(self._cost_phases)
+        compact_costs = None
+        if not self.retain_phase_details:
+            protect_all = (owners is None or not self._native_compact_cost_writer()
+                or _owned_timeline and not saved_runtime.get("_owned_native_writers", False))
+            # A nested phase may introduce an owner outside its parent's
+            # declared phase. Save that group's original value in each outer
+            # checkpoint before an unknown writer can mutate the shared
+            # object. Closed native retention replaces flat group maps;
+            # its previous values remain immutable for every ancestor.
+            if protect_all:
+                for ancestor in self._compact_cost_savepoints:
+                    for key, group in self._cost_groups.items():
+                        if ancestor.get(key) is group:
+                            ancestor[key] = copy.deepcopy(group)
+                saved_groups = copy.deepcopy(self._cost_groups)
+            else:
+                saved_groups = dict(self._cost_groups)
+            compact_costs = saved_groups, self._cost_phase_total
+            self._compact_cost_savepoints.append(saved_groups)
         cache_transactions = []
         try:
             for _key, (_signature, cache) in self.cache_states.items():
                 cache_transactions.append((cache, cache.begin_transaction()))
-            yield
+            yield saved_runtime
         except Exception:
             self.runtime.restore(saved_runtime)
             self.counters = saved_counters
             del self._cost_phases[cost_count:]
+            if compact_costs is not None:
+                self._cost_groups, self._cost_phase_total = compact_costs
             for cache, transaction in reversed(cache_transactions):
                 cache.rollback_transaction(transaction)
             raise
         else:
+            if owners is not None:
+                self.runtime.commit_transaction(saved_runtime)
             for cache, transaction in cache_transactions:
                 cache.commit_transaction(transaction)
+        finally:
+            if compact_costs is not None:
+                self._compact_cost_savepoints.pop()
+
+    def _native_compact_cost_writer(self):
+        """Unknown statistics hooks keep the original whole-ledger rollback."""
+        return all(getattr(getattr(self, name), "__func__", getattr(self, name)) is original
+            for name, original in _NATIVE_COMPACT_COST_WRITERS)
+
+    def _retain_cost_phase(self, phase):
+        if self.retain_phase_details:
+            self._cost_phases.append(phase)
+            return
+        # Only reporting retention changes. Each phase has already made its
+        # original Core/link submission, and every byte/service counter stays
+        # additive. Interval and page-event populations are explicitly absent
+        # rather than growing with the number of imported prompt chunks.
+        key = (phase["kind"], str(phase.get("owner", phase.get("link_id"))),
+            str(phase.get("component_id", "")), str(phase["operation"]))
+        previous = self._cost_groups.get(key)
+        # Native aggregation mutates only each group's outer dictionary and
+        # its flat metric maps. Copy these columns in C instead of recursively
+        # cloning accumulated scalar resource counters before every PD chunk.
+        # Unknown callbacks retain the full transactional copy above.
+        group = {} if previous is None else {name: dict(value) if isinstance(value, Mapping) else value
+                                             for name, value in previous.items()}
+        count = group.get("submitted_phase_count", 0) + 1
+        start = min(group.get("start_ns", phase.get("start_ns", phase["arrival_ns"])),
+            phase.get("start_ns", phase["arrival_ns"]))
+        skip = {"resource_intervals", "resource_interval_payloads", "nand_observations",
+            "resource_busy_by_direction_ns", "start_ns", "duration_ns"}
+        # Physical bills may expose expanded stages/pages under opt-in trace
+        # settings. Keep fixed resource maps and scalar/owner facts only.
+        values = {name: value for name, value in phase.items() if name not in skip
+            and (value is None or isinstance(value, (str, bool, int, float))
+                 or (isinstance(value, Mapping) and all(
+                     isinstance(amount, (str, bool, int, float)) for amount in value.values()))
+                 or name in {"host_admission_depth_scopes"})}
+        values = {name: value for name, value in values.items()
+            if not (name in group and group[name] is None and isinstance(value, (int, float)))}
+        self._sum_counters(group, values)
+        direction = "read_write" if phase["kind"] == "link" else str(phase["operation"]).lower()
+        self._cost_groups[key] = group
+        group.update(start_ns=start, duration_ns=group["completion_ns"]-group["arrival_ns"],
+            phase_id="paged-kv-physical-group-" + str(tuple(self._cost_groups).index(key)),
+            submitted_phase_count=count, intervals_truncated=True,
+            resource_busy_by_direction_ns={direction: dict(group.get("resource_busy_ns", {}))})
+        self._cost_phase_total += 1
+
+    def _cost_phase_count(self):
+        return len(self._cost_phases) if self.retain_phase_details else self._cost_phase_total
 
     def _record_memory_cost(self, component_id, kind, bill):
         owner = self.services[component_id].physical_owner
@@ -352,13 +432,13 @@ class PhysicalKVTransferExecutor:
         raw["logical_read_bytes"] = int(raw.get("logical_bytes", 0)) if kind is AccessKind.READ else 0
         raw["logical_write_bytes"] = int(raw.get("logical_bytes", 0)) if kind is AccessKind.WRITE else 0
         direction = "read" if kind is AccessKind.READ else "write"
-        raw.update({"phase_id": "paged-kv-physical-" + str(len(self._cost_phases)),
+        raw.update({"phase_id": "paged-kv-physical-" + str(self._cost_phase_count()),
             "kind": "memory", "component_id": component_id, "owner": owner,
             "memory_kind": self._configs[component_id].kind.value,
             "resource_owners": {resource: owner for resource in raw.get("resource_busy_ns", {})},
             "resource_busy_by_direction_ns": {direction: dict(raw.get("resource_busy_ns", {}))},
             "direction_semantics": "attributed to the submitted transaction direction; a NAND write may include RMW reads"})
-        self._cost_phases.append(raw)
+        self._retain_cost_phase(raw)
         return raw
 
     def _submit_link_phase(self, hop, size, arrival_ns):
@@ -389,7 +469,7 @@ class PhysicalKVTransferExecutor:
             intervals[resource] = ((reservation.start_ns, reservation.end_ns),)
             payloads[resource] = ((reservation.start_ns, reservation.end_ns, cost["bytes"]),)
         phase = {
-            "phase_id": "paged-kv-physical-" + str(len(self._cost_phases)),
+            "phase_id": "paged-kv-physical-" + str(self._cost_phase_count()),
             "kind": "link", "link_id": hop.link_id, "operation": "copy",
             "resource_id": timeline.canonical_resource_id(hop.resource_id), "bytes": size,
             "arrival_ns": arrival_ns, "start_ns": start, "completion_ns": end,
@@ -399,7 +479,7 @@ class PhysicalKVTransferExecutor:
             "resource_interval_payloads": payloads,
             "resource_busy_by_direction_ns": {"read_write": busy},
             "intervals_truncated": False}
-        self._cost_phases.append(phase)
+        self._retain_cost_phase(phase)
         self.counters["link_bytes"] += size
         self.counters["link_ns"] += end - start
         return phase
@@ -413,11 +493,14 @@ class PhysicalKVTransferExecutor:
         """
         from .planner import _summarize_dram_task_traffic, _summarize_nand_task_traffic
         result = {"schema": "heterollm.paged-kv-physical-cost/v1",
-            "phase_count": len(self._cost_phases), "resource_accounted_bytes": 0, "resource_busy_ns": {},
+            "phase_count": self._cost_phase_count(), "resource_accounted_bytes": 0, "resource_busy_ns": {},
             "resource_bytes": {}, "resource_busy_by_direction_ns": {}, "owners": {}, "links": {},
             "first_arrival_ns": None, "last_completion_ns": None}
         adapters = []
-        for phase in self._cost_phases:
+        phases = self._cost_phases if self.retain_phase_details else self._cost_groups.values()
+        memory_counts, operation_counts = {}, {}
+        for phase in phases:
+            count = phase.get("submitted_phase_count", 1)
             start, end = phase["arrival_ns"], phase["completion_ns"]
             result["first_arrival_ns"] = start if result["first_arrival_ns"] is None else min(start, result["first_arrival_ns"])
             result["last_completion_ns"] = end if result["last_completion_ns"] is None else max(end, result["last_completion_ns"])
@@ -434,7 +517,7 @@ class PhysicalKVTransferExecutor:
                     "memory_kind": phase["memory_kind"], "transaction_count": 0})
                 if phase["component_id"] not in row["component_ids"]:
                     row["component_ids"].append(phase["component_id"])
-                row["transaction_count"] += 1
+                row["transaction_count"] += count
                 for key in ("logical_bytes", "logical_read_bytes", "logical_write_bytes",
                             "physical_bytes", "physical_read_bytes", "physical_write_bytes",
                             "host_transfer_bytes", "internal_transfer_bytes"):
@@ -442,20 +525,38 @@ class PhysicalKVTransferExecutor:
                     value = phase.get(key)
                     row[key] = None if value is None or (key in row and row[key] is None) else row.get(key, 0) + value
                 raw = {**phase, "kind": phase["memory_kind"]}
+                traffic = ("storage_traffic" if str(phase["memory_kind"]).upper() in {"HBF", "SSD"}
+                    else "dram_traffic")
+                memory_counts[traffic] = memory_counts.get(traffic, 0) + count
+                operations = operation_counts.setdefault(traffic, {})
+                operation = str(phase.get("operation", "unknown"))
+                operations[operation] = operations.get(operation, 0) + count
                 adapters.append(SimpleNamespace(task_id=phase["phase_id"],
                     metadata={"physical_execution_by_owner": {owner: raw}},
                     demands=tuple(SimpleNamespace(resource_id=resource)
                                   for resource in phase.get("resource_busy_ns", {}))))
             else:
                 row = result["links"].setdefault(phase["link_id"], {"phase_count": 0, "bytes": 0})
-                row["phase_count"] += 1
+                row["phase_count"] += count
                 row["bytes"] += phase["physical_bytes"]
         result["resource_accounted_bytes"] = sum(result["resource_bytes"].values())
         result["storage_traffic"] = _summarize_nand_task_traffic(adapters)
         result["dram_traffic"] = _summarize_dram_task_traffic(adapters)
         for key in ("storage_traffic", "dram_traffic"):
             result[key] = {**result[key], "count_semantics": "task_count here counts submitted migration memory phases, not kernel tasks"}
+            if not self.retain_phase_details:
+                result[key]["task_count"] = memory_counts.get(key, 0)
+                if "operation_counts" in result[key]:
+                    result[key]["operation_counts"] = dict(sorted(operation_counts.get(key, {}).items()))
+                result[key]["detail_scope"] = "bounded owner/direction totals; interval and NAND page-event detail not retained"
+                for availability in result[key].get("metric_availability", {}).values():
+                    for field in ("recorded_owner_rows", "physical_owner_rows"):
+                        if field in availability:
+                            availability[field] = memory_counts.get(key, 0) if (
+                                field == "physical_owner_rows" or availability["status"] == "recorded") else 0
         result["phases"] = tuple(copy.deepcopy(self._cost_phases))
+        if not self.retain_phase_details:
+            result.update(phase_detail_retained=False, phase_group_count=len(self._cost_groups))
         return result
 
     def _price_chunks(self, component_id: str, kind: AccessKind, address: int,
@@ -531,6 +632,194 @@ class PhysicalKVTransferExecutor:
         if self.topology is None:
             return ()
         return tuple(self.topology.route(source, target, size))
+
+    def prepare_external_import(self, *, source_component: str, destinations: Sequence[Mapping[str, Any]],
+                                buffer_bytes: int, chunk_bytes: int, request_id: str,
+                                arrival_ns: float) -> KvPoolTransferPlan:
+        """Stream external historical KV into the native lowerer's declared buffers.
+
+        Only the current source/read, link, or target/write phase is submitted.
+        Consumers may publish the imported context only after final completion
+        and commit. The finite source buffer is reused for every chunk; external
+        Prefill production is outside this Decode-node runtime, never a free
+        destination-memory initialization.
+        """
+        if (type(buffer_bytes) is not int or type(chunk_bytes) is not int
+                or min(buffer_bytes, chunk_bytes) <= 0 or not request_id):
+            raise KvPoolError("external KV requires positive finite buffer/chunk sizes and a request id")
+        rows = []
+        for item in destinations:
+            row = dict(item)
+            if (not row.get("component_id") or not row.get("buffer_id")
+                    or type(row.get("offset_bytes")) is not int or row["offset_bytes"] < 0
+                    or type(row.get("size_bytes")) is not int or row["size_bytes"] <= 0):
+                raise KvPoolError("invalid external KV destination range")
+            service = self._ensure_service(row["component_id"])
+            row["physical_owner"] = service.physical_owner
+            row["generation"] = int(row.get("generation", 0))
+            # Validate exact owner-scoped bounds before reserving any I/O.
+            self._allocator(service.physical_owner).address(row["buffer_id"], row["offset_bytes"],
+                row["size_bytes"], row["generation"])
+            rows.append(row)
+        if not rows:
+            raise KvPoolError("external KV import requires at least one nonempty destination")
+        snapshot = self.snapshot()
+        source = self._ensure_service(source_component)
+        size = min(buffer_bytes, chunk_bytes)
+        identity = self.namespace + ":external:" + request_id
+        allocation = self._allocator(source.physical_owner).allocate(identity, size, 0,
+            allocation_arena="workspace")
+        relays = []
+        try:
+            for component in self.relay_components:
+                owner = self._ensure_service(component).physical_owner
+                allocated = self._allocator(owner).allocate(identity + ":relay:" + component,
+                    self.allocation_bytes(component, size), 0, allocation_arena="workspace")
+                relays.append((component, owner, allocated))
+            plan_id = self._next_async_plan_id
+            self._next_async_plan_id += 1
+            state = {"plan_id": plan_id, "done": False, "phase": 0,
+                "request_id": request_id, "source_component": source_component,
+                "source_owner": source.physical_owner, "source_allocation": allocation,
+                "relays": tuple(relays), "destinations": tuple(rows), "row": 0, "offset": 0,
+                "chunk_bytes": size, "actions": (), "action": 0, "logical_bytes": sum(r["size_bytes"] for r in rows),
+                "start_ns": self._arrival(None, arrival_ns), "completion_ns": self._arrival(None, arrival_ns),
+                "rollback_snapshot": snapshot}
+            self._async_plan_states[plan_id] = state
+            return self._submit_external_phase(state, state["start_ns"])
+        except BaseException:
+            self.restore(snapshot)
+            raise
+
+    def _external_chunk_actions(self, state):
+        row = state["destinations"][state["row"]]
+        amount = min(state["chunk_bytes"], row["size_bytes"] - state["offset"])
+        actions = [("memory", state["source_component"], "read",
+                    state["source_allocation"].base_address, amount)]
+        previous = state["source_component"]
+        for component, _owner, allocation in state["relays"]:
+            actions.extend(("link", hop, amount) for hop in self._route(previous, component, amount)
+                           if not hop.service_ref)
+            actions.extend((("memory", component, "write", allocation.base_address, amount),
+                            ("memory", component, "read", allocation.base_address, amount)))
+            previous = component
+        actions.extend(("link", hop, amount) for hop in self._route(previous, row["component_id"], amount)
+                       if not hop.service_ref)
+        address = self._allocator(row["physical_owner"]).address(row["buffer_id"],
+            row["offset_bytes"] + state["offset"], amount, row["generation"])
+        actions.append(("memory", row["component_id"], "write", address, amount))
+        state.update(actions=tuple(actions), action=0, amount=amount)
+
+    def _submit_external_phase(self, callback_state, now):
+        state = self._transfer_state(callback_state)
+        if state["done"]:
+            raise KvPoolError("external KV import is no longer active")
+        if not state["actions"]:
+            self._external_chunk_actions(state)
+        action = state["actions"][state["action"]]
+        changed_resources = None
+        if action[0] == "memory":
+            _, component, operation, address, amount = action
+            # Protect exactly the submitted owner, using the native Core undo
+            # journal. PhysicalService.price would snapshot all GPU cores for
+            # every prompt chunk even though only this owner can be changed.
+            service = self._ensure_service(component)
+            owner = service.physical_owner
+            native_writer = (type(self) is PhysicalKVTransferExecutor
+                and self._native_compact_cost_writer()
+                and type(service) is PhysicalService
+                and getattr(service._price, "__func__", service._price) is _NATIVE_EXTERNAL_MEMORY_PRICE)
+            # This private native phase submits one known memory owner. Its
+            # Core may journal the touched resource columns. Unknown service
+            # or statistics hooks can edit other owners and keep a full undo.
+            with self._io_transaction(owners=(owner,) if native_writer else None,
+                                      _owned_timeline=native_writer) as checkpoint:
+                bills = self._price_chunks(component, AccessKind.READ if operation == "read" else AccessKind.WRITE,
+                    address, amount, arrival_ns=now, caller_managed_transaction=True)
+            completion = float(bills[-1]["completion_ns"])
+            journal = checkpoint["timeline"].get("_owned_transaction")
+            if native_writer and checkpoint.get("_owned_native_writers") and journal is not None:
+                # The committed undo journal names every potentially written
+                # lane, including virtual NAND array frontiers and HOST's
+                # direct native publication. It is independent of retained
+                # traffic summaries and never infers an owner from a prefix.
+                changed_resources = tuple(dict.fromkeys(resource
+                    for entries in journal.entries.values() for resource in entries))
+        else:
+            _, hop, amount = action
+            bill = self._submit_link_phase(hop, amount, now)
+            completion = bill["completion_ns"]
+            changed_resources = _native_external_link_resources(self, hop, bill)
+        state["action"] += 1
+        last_chunk_action = state["action"] == len(state["actions"])
+        last_row_chunk = state["offset"] + state["amount"] == state["destinations"][state["row"]]["size_bytes"]
+        final = last_chunk_action and last_row_chunk and state["row"] + 1 == len(state["destinations"])
+        token = self._new_phase_token()
+        state.update(completion_ns=completion, phase_token=token, final=final)
+        phase = state["phase"]
+        return KvPoolTransferPlan(duration_ns=completion-state["start_ns"], start_ns=state["start_ns"],
+            completion_ns=completion,
+            native_changed_resource_ids=changed_resources,
+            advance=None if final else lambda: self._advance_external_phase(callback_state, token),
+            commit=lambda: self._finish_external_import(callback_state, token, cancelled=False),
+            cancel=lambda: self._finish_external_import(callback_state, token, cancelled=True),
+            rollback=lambda: self._rollback_external_import(callback_state, token, phase))
+
+    def _advance_external_phase(self, callback_state, token):
+        state = self._transfer_state(callback_state)
+        self._check_phase_token(state, token)
+        if state["final"]:
+            raise KvPoolError("external KV import has no unsubmitted phases")
+        saved_state = dict(state)
+        try:
+            now = state["completion_ns"]
+            if state["action"] == len(state["actions"]):
+                state["offset"] += state["amount"]
+                if state["offset"] == state["destinations"][state["row"]]["size_bytes"]:
+                    state["row"] += 1
+                    state["offset"] = 0
+                state["actions"] = ()
+            state["phase"] += 1
+            state.pop("rollback_snapshot", None)
+            return self._submit_external_phase(callback_state, now)
+        except BaseException:
+            state.clear()
+            state.update(saved_state)
+            raise
+
+    def _finish_external_import(self, callback_state, token, *, cancelled):
+        with self._finalization_transaction(callback_state):
+            state = self._transfer_state(callback_state)
+            self._check_phase_token(state, token)
+            if state["done"]:
+                if state.get("cancelled") != cancelled:
+                    raise KvPoolError("external KV import already finalized with a different outcome")
+                return state["terminal_event"]
+            if not cancelled and not state["final"]:
+                raise KvPoolError("cannot publish external KV before all phases complete")
+            self._release_allocation(state["source_owner"], state["source_allocation"].buffer_id, 0)
+            for _component, owner, allocation in state["relays"]:
+                self._release_allocation(owner, allocation.buffer_id, 0)
+            billed = {"kind": "external_kv_cancelled" if cancelled else "external_kv_import",
+                "request_id": state["request_id"], "logical_bytes": state["logical_bytes"],
+                "start_ns": state["start_ns"], "completion_ns": state["completion_ns"],
+                "submitted_phases": state["phase"] + 1, "buffer_bytes": state["source_allocation"].size_bytes}
+            self.events.append(billed)
+            counter = "cancelled_transfer_count" if cancelled else "transfer_count"
+            self.counters[counter] = self.counters.get(counter, 0) + 1
+            state.update(cancelled=cancelled, terminal_event=billed)
+            state.pop("rollback_snapshot", None)
+            self._finish_transfer(state, callback_state)
+            return billed
+
+    def _rollback_external_import(self, callback_state, token, phase):
+        state = self._transfer_state(callback_state)
+        self._check_phase_token(state, token)
+        if phase != 0 or state["phase"] != 0:
+            raise KvPoolError("only a just-prepared external import can roll back")
+        snapshot = state["rollback_snapshot"]
+        self.restore(snapshot)
+        callback_state.update(done=True, terminal_epoch=self._async_restore_epoch)
 
     def _link_segment(self, source: str, target: str, size: int, *, arrival_ns: float) -> tuple[float, list[dict[str, Any]]]:
         current = arrival_ns
@@ -924,6 +1213,7 @@ class PhysicalKVTransferExecutor:
                 "cache_states": self._snapshot_caches(),
                 "events": copy.deepcopy(self.events), "counters": copy.deepcopy(self.counters),
                 "cost_phases": tuple(self._cost_phases),
+                "cost_groups": copy.deepcopy(self._cost_groups), "cost_phase_total": self._cost_phase_total,
                 "async_plan_states": copy.deepcopy(self._async_plan_states)}
 
     def restore(self, snapshot: Mapping[str, Any]) -> None:
@@ -933,6 +1223,8 @@ class PhysicalKVTransferExecutor:
         self.events = copy.deepcopy(snapshot["events"])
         self.counters = copy.deepcopy(snapshot["counters"])
         self._cost_phases = list(snapshot["cost_phases"])
+        self._cost_groups = copy.deepcopy(snapshot["cost_groups"])
+        self._cost_phase_total = snapshot["cost_phase_total"]
         self._async_plan_states = copy.deepcopy(snapshot["async_plan_states"])
         # An absent plan cannot inherit terminal authority from a discarded
         # future. Active phase tokens explicitly contained in the snapshot
@@ -941,6 +1233,81 @@ class PhysicalKVTransferExecutor:
 
     def stats(self) -> Mapping[str, Any]:
         return {**self.counters, "events": len(self.events)}
+
+
+_NATIVE_COMPACT_COST_WRITERS = tuple((name, getattr(PhysicalKVTransferExecutor, name))
+    for name in ("_price_chunks", "_record_memory_cost", "_retain_cost_phase", "_sum_counters"))
+_NATIVE_EXTERNAL_MEMORY_PRICE = PhysicalService._price
+
+
+# Link callbacks have no memory-owner journal. Their native demand builder
+# closes the footprint over the byte wire and its in-flight credit resource.
+# A replaced class, demand constructor, timeline writer or scalar validation
+# hook keeps the complete publication contract instead.
+from . import communication as _sparse_communication
+from . import data_motion as _sparse_data_motion
+from .contracts import ResourceDemand as _SparseResourceDemand
+from .memory_transfer import ResourceTimeline as _SparseTimeline, _OWNED_TIMELINE_METHODS as _SPARSE_TIMELINE_METHODS
+_SPARSE_LINK_CLASSES = tuple((cls, tuple((name, value) for name, value in vars(cls).items()
+    if name != "__slotnames__")) for cls in (
+        _sparse_communication.RouteHop, _sparse_data_motion.LinkService, _SparseResourceDemand))
+_SPARSE_LINK_CALLBACKS = (
+    (_sparse_communication, "RouteHop", _sparse_communication.RouteHop),
+    (_sparse_communication, "LinkService", _sparse_data_motion.LinkService),
+    (_sparse_communication, "_non_negative_integer", _sparse_communication._non_negative_integer),
+    *tuple((_sparse_data_motion, name, getattr(_sparse_data_motion, name)) for name in (
+        "ResourceDemand", "_positive", "_non_negative", "_positive_int", "_non_negative_int")),
+)
+_SPARSE_LINK_SUBMIT = PhysicalKVTransferExecutor._submit_link_phase
+
+
+def _native_external_link_resources(executor, hop, bill):
+    from ._nand_pack import can_own_resource_aliases, can_own_timeline
+    from .memory_transfer import _TIMELINE_MAPS
+    timeline = executor.runtime.timeline
+    if (type(executor) is not PhysicalKVTransferExecutor
+            or type(hop) is not _SPARSE_LINK_CLASSES[0][0]
+            or type(timeline) is not _SparseTimeline
+            or getattr(executor._submit_link_phase, "__func__", None) is not _SPARSE_LINK_SUBMIT
+            or not executor._native_compact_cost_writer()
+            or any(getattr(module, name) is not original for module, name, original in _SPARSE_LINK_CALLBACKS)
+            or any(getattr(getattr(timeline, name), "__func__", getattr(timeline, name)) is not original
+                   for name, original in _SPARSE_TIMELINE_METHODS)
+            or any(type(getattr(timeline, name)) is not dict for name in _TIMELINE_MAPS)
+            or not can_own_resource_aliases(timeline.resource_aliases)
+            or not can_own_timeline(timeline, tuple(bill["resource_busy_ns"]))
+            or any(type(value) not in (str, int, float, bool, type(None)) for value in vars(hop).values())):
+        return None
+    for cls, original in _SPARSE_LINK_CLASSES:
+        current = vars(cls)
+        cached_slots = current.get("__slotnames__")
+        if (cached_slots is not None and (type(cached_slots) is not list or cached_slots)
+                or len(current) - ("__slotnames__" in current) != len(original)
+                or any(current.get(name) is not value for name, value in original)):
+            return None
+    # These are the actual emitted demands, including credit lanes, after
+    # canonical alias resolution. No guessed per-device resource list.
+    return tuple(bill["resource_busy_ns"])
+
+
+_NATIVE_EXTERNAL_PUBLICATION_METHODS = tuple((name, getattr(PhysicalKVTransferExecutor, name)) for name in (
+    "prepare_external_import", "_submit_external_phase", "_advance_external_phase", "_external_chunk_actions",
+    "_native_compact_cost_writer", "_io_transaction", "_price_chunks", "_record_memory_cost", "_retain_cost_phase",
+    "_sum_counters", "_submit_link_phase", "_ensure_service", "_allocator", "_route"))
+_NATIVE_EXTERNAL_RUNTIME_METHODS = tuple((name, getattr(PhysicalRuntimeContext, name)) for name in (
+    "snapshot", "begin_transaction", "commit_transaction", "restore", "_owners_have_native_hooks", "_can_own_timeline"))
+_NATIVE_EXTERNAL_LINK_RESOURCE_EXPORT = _native_external_link_resources
+
+
+def native_external_publication_supported(executor):
+    """An authored transfer plan is never trusted merely for carrying IDs."""
+    return (type(executor) is PhysicalKVTransferExecutor
+        and type(executor.runtime) is PhysicalRuntimeContext
+        and _native_external_link_resources is _NATIVE_EXTERNAL_LINK_RESOURCE_EXPORT
+        and all(getattr(getattr(executor, name), "__func__", getattr(executor, name)) is original
+                for name, original in _NATIVE_EXTERNAL_PUBLICATION_METHODS)
+        and all(getattr(getattr(executor.runtime, name), "__func__", getattr(executor.runtime, name)) is original
+                for name, original in _NATIVE_EXTERNAL_RUNTIME_METHODS))
 
 
 __all__ = ["PhysicalKVTransferExecutor"]

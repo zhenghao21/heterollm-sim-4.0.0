@@ -1,6 +1,6 @@
 <!--
 ASSUMPTIONS
-- 本页由 heterollm_sim 的同源 HTTP 服务托管；API 根路径固定为 /api。
+- 本页复用本地工作台；云端部署通过显式 HTTPS 后端连接和 Bearer 令牌访问仿真服务。
 - 场景的服务端事实来源是 schema_version 4.0.0；界面只提交 V4 graph-only 场景，不执行旧版迁移。
 - 拓扑编辑视图写入 hardware.metadata.topology_view；分组、折叠、坐标和视口不会改变组件、链路或仿真语义。
 
@@ -36,6 +36,8 @@ PLACEHOLDERS / BOUNDARIES
         <span class="dirty-mark is-clean" id="dirtyMark">未修改</span>
       </div>
       <div class="top-actions" aria-label="场景操作">
+        <a class="button button-quiet experiment-monitor-link" href="https://zh.gripe/">实验监测</a>
+        <button type="button" class="button button-quiet" id="backendConnectionButton" aria-haspopup="dialog" aria-controls="backendConnectionDialog">后端连接</button>
         <button type="button" class="button button-quiet" id="loadReferenceButton">载入参考</button>
         <button type="button" class="button button-quiet" id="restoreScenarioButton" data-i18n-zh="恢复上次场景" data-i18n-en="Restore last scenario" hidden>恢复上次场景</button>
         <button type="button" class="button button-quiet" id="importButton">导入 JSON / 模型文件</button>
@@ -948,6 +950,26 @@ PLACEHOLDERS / BOUNDARIES
     </div>
   </dialog>
 
+  <dialog class="backend-connection-dialog" id="backendConnectionDialog" aria-labelledby="backendConnectionTitle">
+    <form id="backendConnectionForm" autocomplete="off">
+      <header class="backend-connection-heading">
+        <div><span class="eyebrow">仿真工作台 · HTTPS</span><h2 id="backendConnectionTitle">连接仿真后端</h2></div>
+        <button type="button" class="icon-button" id="closeBackendConnectionButton" aria-label="关闭后端连接">×</button>
+      </header>
+      <p class="backend-connection-intro">公司电脑只运行界面，仿真任务由 F 盘项目所在电脑执行。连接不会启动或恢复已有扫描。</p>
+      <label class="backend-connection-field"><span>后端 HTTPS 地址</span><input id="backendUrlInput" type="url" placeholder="https://your-backend.example.com" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="backendConnectionHelp"></label>
+      <label class="backend-connection-field"><span>访问令牌</span><input id="backendTokenInput" type="password" placeholder="输入后端访问令牌" spellcheck="false" autocomplete="new-password"></label>
+      <label class="backend-connection-remember"><input id="backendRememberTokenInput" type="checkbox"><span>在当前浏览器会话记住令牌（关闭此会话后清除）</span></label>
+      <p class="backend-connection-help" id="backendConnectionHelp">远程连接需要 HTTPS 和令牌。仅在本机 localhost 打开的工作台可留空地址，使用同源后端；本机开发地址可使用 HTTP。</p>
+      <p class="backend-connection-status" id="backendConnectionStatus" role="status" aria-live="polite">后端未连接。</p>
+      <footer class="backend-connection-actions">
+        <button type="button" class="button button-quiet" id="backendDisconnectButton" disabled>断开</button>
+        <button type="button" class="button button-secondary" id="backendTestButton">测试连接</button>
+        <button type="submit" class="button button-primary" id="backendConnectButton">连接</button>
+      </footer>
+    </form>
+  </dialog>
+
   <div class="toast-region" id="toastRegion" aria-label="通知" aria-live="polite" aria-atomic="false"></div>
   <div class="busy-overlay" id="busyOverlay" hidden aria-live="assertive" aria-busy="true">
     <div class="busy-panel"><span class="busy-line"></span><strong id="busyTitle">正在运行分析模型</strong><small id="busyDetail">正在编译 ScheduleIR 与事件轨迹…</small></div>
@@ -972,6 +994,7 @@ PLACEHOLDERS / BOUNDARIES
   <script src="./model-graph-core.js" defer></script>
   <script src="./trace-view-core.js" defer></script>
   <script src="./ui-i18n.js" defer></script>
+  <script src="./api-connection.js" defer></script>
   <script src="./app.js" defer></script>
 </body>
 </html>

@@ -14,6 +14,137 @@ from .memory_types import BatchResult, TransactionResult
 from .memory_service import DRAM_OPTIONAL_COUNTER_FIELDS
 
 
+_TIMELINE_MISSING = object()
+_TIMELINE_MAPS = ("ready_ns", "directions", "busy_ns", "bytes_moved", "last_intervals",
+                  "lane_available", "lane_directions", "_intervals", "_interval_payloads")
+
+
+class _TimelineBefore(Mapping):
+    """Read the transaction's original lanes without copying unrelated owners."""
+
+    def __init__(self, transaction, name):
+        self.transaction, self.name = transaction, name
+
+    def __getitem__(self, key):
+        entries = self.transaction.entries[self.name]
+        value = (entries[key] if key in entries else
+                 self.transaction.roots[self.name].get(key, _TIMELINE_MISSING))
+        if value is _TIMELINE_MISSING:
+            raise KeyError(key)
+        if type(value) is list:
+            previous = self.transaction.objects.get(id(value))
+            return tuple(value if previous is None else previous[1])
+        return value
+
+    def get(self, key, default=None):
+        if type(self) is not _TimelineBefore or type(self).__getitem__ is not _NATIVE_BEFORE_GETITEM:
+            return Mapping.get(self, key, default)
+        # The owned native reader avoids a second Python mapping frame and
+        # a KeyError for every untouched resource in a physical task bill.
+        # Keep the original lookup order and catch authored KeyErrors too.
+        try:
+            entries = self.transaction.entries[self.name]
+            value = (entries[key] if key in entries else
+                     self.transaction.roots[self.name].get(key, _TIMELINE_MISSING))
+            if value is _TIMELINE_MISSING:
+                return default
+            if type(value) is list:
+                previous = self.transaction.objects.get(id(value))
+                return tuple(value if previous is None else previous[1])
+            return value
+        except KeyError:
+            return default
+
+    def __iter__(self):
+        return (key for key in self.transaction.roots[self.name]
+                if self.transaction.entries[self.name].get(key) is not _TIMELINE_MISSING)
+
+    def __len__(self):
+        return sum(1 for _ in self)
+
+
+_NATIVE_BEFORE_GETITEM = _TimelineBefore.__getitem__
+
+
+class _OwnedTimelineTransaction:
+    """Undo known native controller writes; public transactions remain full copies."""
+
+    def __init__(self, timeline, *, accounting=False):
+        self.timeline = timeline
+        # The inner Core checkpoint only supplies the three before-images
+        # consumed by metrics_delta. Physical rollback belongs to the outer
+        # owner transaction, which still journals every calendar and recorder.
+        names = ("busy_ns", "bytes_moved", "last_intervals") if accounting else _TIMELINE_MAPS
+        self.roots = {name: getattr(timeline, name) for name in names}
+        self.entries = {name: {} for name in names}
+        self.objects = {}
+        self.deleted_orders = {}
+        self.touched = timeline._touched
+        self.added_touches = set()
+        self.scalars = (timeline._interval_limit, timeline._interval_count, timeline._intervals_truncated)
+        self.metric_orders = dict(timeline._metric_key_orders)
+        self.finished = False
+        self.accounting = accounting
+
+    def remember(self, resource_id):
+        timeline = self.timeline
+        for name, root in self.roots.items():
+            # Per-request recorders can be replaced wholesale. Their original
+            # roots remain unmodified and already constitute the undo point.
+            if getattr(timeline, name) is not root or resource_id in self.entries[name]:
+                continue
+            previous = root.get(resource_id, _TIMELINE_MISSING)
+            self.entries[name][resource_id] = previous
+            if type(previous) is list and id(previous) not in self.objects:
+                self.objects[id(previous)] = (previous, list(previous))
+            # Native HBM publication only deletes lane direction keys. Keep
+            # its original insertion order when such a deletion is possible.
+            if (name == "lane_directions" and previous is not _TIMELINE_MISSING
+                    and name not in self.deleted_orders):
+                self.deleted_orders[name] = tuple(root)
+        if not self.accounting and timeline._touched is self.touched and resource_id not in self.touched:
+            self.added_touches.add(resource_id)
+
+    def before_lanes(self):
+        return _TimelineBefore(self, "lane_available")
+
+    def finish(self):
+        timeline = self.timeline
+        if self.finished or not timeline._owned_transactions or timeline._owned_transactions[-1] is not self:
+            raise ValueError("timeline transactions must finish once in reverse begin order")
+        timeline._owned_transactions.pop()
+        self.finished = True
+
+    def rollback(self):
+        if self.accounting:
+            raise ValueError("Core accounting checkpoints do not own physical rollback")
+        self.finish()
+        timeline = self.timeline
+        for original, values in self.objects.values():
+            original[:] = values
+        for name, root in self.roots.items():
+            for resource_id, previous in self.entries[name].items():
+                if previous is _TIMELINE_MISSING:
+                    root.pop(resource_id, None)
+                else:
+                    root[resource_id] = previous
+            order = self.deleted_orders.get(name)
+            if order is not None:
+                values = {key: root[key] for key in order}
+                root.clear()
+                root.update(values)
+            setattr(timeline, name, root)
+        self.touched.difference_update(self.added_touches)
+        timeline._touched = self.touched
+        timeline._interval_limit, timeline._interval_count, timeline._intervals_truncated = self.scalars
+        timeline._metric_key_orders.clear()
+        timeline._metric_key_orders.update(self.metric_orders)
+
+
+_OWNED_TIMELINE_TOKEN_TYPE = _OwnedTimelineTransaction
+_OWNED_TIMELINE_REMEMBER = _OwnedTimelineTransaction.remember
+
+
 def _number(name: str, value: float, *, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name} must be a finite number")
@@ -76,6 +207,23 @@ class ResourceTimeline:
     lane_directions: Dict[str, list[Optional[str]]] = field(default_factory=dict, repr=False)
     resource_aliases: Mapping[str, str] = field(default_factory=dict, repr=False)
     _metric_key_orders: dict = field(default_factory=dict, init=False, repr=False, compare=False)
+    _owned_transactions: list = field(default_factory=list, init=False, repr=False, compare=False)
+
+    def _begin_owned_transaction(self, *, accounting=False):
+        token = _OwnedTimelineTransaction(self, accounting=accounting)
+        self._owned_transactions.append(token)
+        return token
+
+    def _remember_resource(self, resource_id):
+        for token in self._owned_transactions:
+            token.remember(resource_id)
+
+    def _remember_resources(self, resource_ids):
+        if self._owned_transactions:
+            from ._resource_ledger import remember_owned_timeline_resources
+            remember_owned_timeline_resources(
+                self, resource_ids, _TIMELINE_MISSING, _OWNED_TIMELINE_TOKEN_TYPE,
+                _OWNED_TIMELINE_REMEMBER, _OWNED_TIMELINE_RESOURCE_REMEMBER)
 
     def canonical_resource_id(self, resource_id: str) -> str:
         """Resolve a wire name idempotently, rejecting cyclic aliases."""
@@ -105,6 +253,7 @@ class ResourceTimeline:
         if not isinstance(resource_id, str) or not resource_id:
             raise ValueError("resource_id must be a non-empty string")
         resource_id = self.canonical_resource_id(resource_id)
+        self._remember_resource(resource_id)
         earliest_ns = _number("earliest_ns", earliest_ns)
         duration_ns = _number("duration_ns", duration_ns)
         switch_ns = _number("switch_ns", switch_ns)
@@ -180,18 +329,40 @@ class ResourceTimeline:
         Pipeline stages are latency annotations and never enter this recorder.
         The detail bound does not change resource calendars or summary counters.
         """
-        self._intervals = {}
-        self._interval_limit = max_intervals
-        self._interval_count = 0
-        self._intervals_truncated = False
-        self._touched = set()
-        self._interval_payloads = {}
+        self._reset_metric_recorder(max_intervals)
         return {
             "busy_ns": dict(self.busy_ns),
             "bytes_moved": dict(self.bytes_moved),
             "last_intervals": dict(self.last_intervals),
             "resource_interval_payloads": {},
         }
+
+    def _reset_metric_recorder(self, max_intervals):
+        self._intervals = {}
+        self._interval_limit = max_intervals
+        self._interval_count = 0
+        self._intervals_truncated = False
+        self._touched = set()
+        self._interval_payloads = {}
+    def _core_metrics_snapshot(self, *, max_intervals=0):
+        if not self._owned_transactions:
+            return self.metrics_snapshot(max_intervals=max_intervals)
+        token = self._begin_owned_transaction(accounting=True)
+        self._reset_metric_recorder(max_intervals)
+        return {
+            "busy_ns": _TimelineBefore(token, "busy_ns"),
+            "bytes_moved": _TimelineBefore(token, "bytes_moved"),
+            "last_intervals": _TimelineBefore(token, "last_intervals"),
+            "resource_interval_payloads": {},
+            "_owned_metric_transaction": token,
+        }
+
+    def _finish_core_accounting(self, depth):
+        while len(self._owned_transactions) > depth:
+            token = self._owned_transactions[-1]
+            if not token.accounting:
+                break
+            token.finish()
 
     def metrics_delta(self, before: dict) -> dict:
         from ._resource_ledger import timeline_metrics_delta
@@ -204,14 +375,19 @@ class ResourceTimeline:
         execution has no caller callback between snapshot and reduction, so
         unrelated resources cannot change and need no counter lookups.
         """
-        if (type(self) is not ResourceTimeline or type(self.busy_ns) is not dict
-                or type(self.bytes_moved) is not dict):
-            return self.metrics_delta(before)
-        touched = self._touched
-        if len(touched) * 2 >= len(self.busy_ns):
-            return self.metrics_delta(before)
-        from ._resource_ledger import core_timeline_metrics_delta
-        return core_timeline_metrics_delta(self, before)
+        token = before.get("_owned_metric_transaction")
+        try:
+            if (type(self) is not ResourceTimeline or type(self.busy_ns) is not dict
+                    or type(self.bytes_moved) is not dict):
+                return self.metrics_delta(before)
+            touched = self._touched
+            if len(touched) * 2 >= len(self.busy_ns):
+                return self.metrics_delta(before)
+            from ._resource_ledger import core_timeline_metrics_delta
+            return core_timeline_metrics_delta(self, before)
+        finally:
+            if token is not None:
+                token.finish()
 
     def _ordered_metric_touches(self, name, values, touched):
         # Constructing the key tuple runs in C. Comparing it on every call
@@ -228,6 +404,12 @@ class ResourceTimeline:
 
     def snapshot(self) -> dict[str, float]:
         return dict(self.ready_ns)
+
+
+_OWNED_TIMELINE_RESOURCE_REMEMBER = ResourceTimeline._remember_resource
+_OWNED_TIMELINE_RESERVE = ResourceTimeline.reserve
+_OWNED_TIMELINE_METHODS = tuple((name, value) for name, value in vars(ResourceTimeline).items()
+                              if callable(value))
 
 
 def transfer_duration_ns(bytes: int, bandwidth_gb_s: float) -> float:

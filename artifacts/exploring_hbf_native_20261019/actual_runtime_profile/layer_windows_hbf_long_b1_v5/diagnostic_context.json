@@ -1,0 +1,48 @@
+{
+  "started_at": "2026-10-20T05:20:33.837114+00:00",
+  "scope": "single actual 405B HBF LONG TP8 B1 native fast layer candidate; not formal scan restoration",
+  "parameters": {
+    "case_id": "native__llama3_405b__HBF__LONG__G8",
+    "phase": "dense_native",
+    "model": "llama3_405b",
+    "hardware": "HBF",
+    "workload": "LONG",
+    "input_tokens": 103500,
+    "output_tokens": 1100,
+    "gpu_count": 8,
+    "tp": 8,
+    "pp": 1,
+    "ep": 1,
+    "weight_dtype": "bf16",
+    "kv_dtype": "bf16",
+    "batch_size": 1,
+    "runner_contract": "native_layer_sampled_tp8_finite_batch_controls_v3",
+    "simulation_mode": "fast",
+    "candidate_wall_budget_seconds": 1800.0,
+    "candidate_wall_target_seconds": 600.0,
+    "target_relative_error": 0.1,
+    "sampling_unit": "layer_windows",
+    "warmup_decode_cohorts": 1099,
+    "measurement_decode_cohorts": 2198,
+    "slo_tpot_ns": 100000000.0
+  },
+  "native_nand_binary": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\_nand_pack.cp312-win_amd64.pyd",
+  "native_ledger_binary": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\src\\heterollm_sim\\_resource_ledger.cp312-win_amd64.pyd",
+  "runtime_scope": [
+    "native fixed-RMW metadata inheritance for remote KV",
+    "native HOST empty-copy-cache qualification",
+    "native NAND exact page machine and request active resource columns",
+    "native dynamic owner qualification and metric-only accounting journals",
+    "native SimpleQueue progress with file stop and total deadline",
+    "native layer/REF/domain closure guards; target error remains 10 percent"
+  ],
+  "source_status": "current shared working tree and freshly verified main-directory strict-float native modules; no source changes during this attempt",
+  "native_nand_interfaces": {
+    "publish_active_timeline": true,
+    "generic_request_resource_indexes": true,
+    "pack_selected_single_lane": true,
+    "_native_timeline_columns": true
+  },
+  "formal_stop_preserved": "user_pause_actual_scan_optimization_20261020",
+  "old_detailed_references_run": false
+}

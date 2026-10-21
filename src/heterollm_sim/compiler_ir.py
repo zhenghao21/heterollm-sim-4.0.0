@@ -749,6 +749,11 @@ def _build_model_graph(
             attributes={
                 "sequence_mixer": layer.sequence_mixer,
                 "linear_attention": to_primitive(layer.linear_attention),
+                "attention_chunk_size": layer.attention_chunk_size,
+                "use_rope": layer.use_rope,
+                "attention_temperature_tuning": layer.attention_temperature_tuning,
+                "attention_temperature_scale": layer.attention_temperature_scale,
+                "attention_temperature_floor_scale": layer.attention_temperature_floor_scale,
             },
             authoring_operator_id=_source_child_id(
                 source_ids,
@@ -791,6 +796,7 @@ def _build_model_graph(
             attributes={
                 "num_experts": layer.num_experts,
                 "experts_per_token": layer.experts_per_token,
+                "moe_routing": to_primitive(layer.metadata.get("moe_routing", {})),
             },
             authoring_operator_id=_source_child_id(
                 source_ids,

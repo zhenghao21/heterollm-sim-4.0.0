@@ -143,6 +143,9 @@ def compact_execution_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any]
             "request_ids", "resource_directions", "serving_cohort_complete",
             "serving_output_stage", "target_component", "tensor_id",
             "transfer_execution", "weight_tensor_id",
+            "native_cost_model", "operator_class", "rank", "expert_index",
+            "cache_input_bits", "cache_output_bits", "cache_artifact_format",
+            "conversion_instructions_priced", "timing_completeness", "unpriced_terms",
         )
         if key in metadata
     }
@@ -150,6 +153,24 @@ def compact_execution_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any]
         # Stage refinement only checks presence; retaining the full
         # kernel model per task needlessly repeats a large mapping.
         record_metadata["cost_model"] = True
+        cost = metadata["cost_model"]
+        if isinstance(cost, Mapping):
+            # Native prediction needs the actual estimator identity even for
+            # nonphysical phases whose expanded metadata is discarded. Keep
+            # only formula qualification inputs, never kernel traces or a
+            # user assertion that an arbitrary function is monotone.
+            small = {key: cost[key] for key in (
+                "model", "profile", "device", "launch_only", "tensor_dtype",
+                "quantized_weight_path", "source_partial_service_ns",
+                "quantized_shape_efficiency", "mmvq_work", "mmq_work",
+            ) if key in cost}
+            cache = cost.get("cache")
+            if isinstance(cache, Mapping):
+                small["cache"] = {key: cache[key] for key in (
+                    "cache_model", "logical_read_bytes", "logical_write_bytes",
+                    "cross_invocation_cache_state",
+                ) if key in cache}
+            record_metadata["native_cost_model"] = small
     by_owner = metadata.get("physical_execution_by_owner")
     if isinstance(by_owner, Mapping):
         excluded = {"resource_intervals", "resource_interval_payloads", "resource_last_intervals",
@@ -253,8 +274,9 @@ def execute_cost_schedule(
             capture_physical_details=retain_task_metadata,
         )
     total_tasks = len(schedule.tasks)
+    progress_stage = "cohort_preview_tasks" if defer_physical_execution else "cohort_tasks"
     if compiled_preview is None:
-        execution_control.report("cohort_tasks", 0, total_tasks)
+        execution_control.report(progress_stage, 0, total_tasks)
     resource_last_path: Dict[
         Tuple[str, int], Tuple[float, Optional[_PathLink]]
     ] = {}
@@ -344,7 +366,7 @@ def execute_cost_schedule(
         if kernel.completed_count % 256 == 0:
             execution_control.raise_if_cancelled()
             execution_control.report(
-                "cohort_tasks", kernel.completed_count, total_tasks
+                progress_stage, kernel.completed_count, total_tasks
             )
 
     if compiled_preview is not None:
@@ -352,7 +374,7 @@ def execute_cost_schedule(
         kernel._drain_prevalidated_compiled(
             compiled_tasks, compiled_layout, validate_tasks=False,
             event_observer=observe_event,
-            on_submitted=lambda: execution_control.report("cohort_tasks", 0, total_tasks),
+            on_submitted=lambda: execution_control.report(progress_stage, 0, total_tasks),
         )
     else:
         bulk_iterator = iter(bulk_events) if bulk_events is not None else None

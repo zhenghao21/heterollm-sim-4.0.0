@@ -65,7 +65,7 @@ def test_http_and_background_errors_reach_current_browser_diagnostics():
   assert.equal(wrapped.valid, false);
 })().catch(error => { console.error(error); process.exitCode = 1; });
 """, """
-const API_ROOT = '';
+const backendConnection = {request: (...args) => fetch(...args), snapshot: () => ({generation: 1}), assertGeneration: () => {}};
 const ISSUE_MESSAGE_BY_CODE = {};
 const state = {settings: {language: 'zh-CN'}};
 const dom = {};

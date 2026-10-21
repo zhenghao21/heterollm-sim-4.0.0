@@ -16,7 +16,7 @@ from ._hbm_errors import HBMConfigError
 
 from .memory_types import (
     DRAM_BANK_GROUP_TIMING_FIELDS, HBM_CONTROL_TIMING_FIELDS, DRAM_CONTROLLER_FIELDS,
-    DramConfig, NandConfig, Operation, parse_physical_memory_config,
+    DramConfig, NandConfig, SramConfig, Operation, parse_physical_memory_config,
 )
 
 
@@ -25,7 +25,8 @@ DRAM_COMPONENT_KINDS = frozenset({
     "lpddr", "lpddr_memory", "cxl_memory", "host_memory", "memory",
 })
 NAND_COMPONENT_KINDS = frozenset({"hbf", "ssd", "high_io_ssd", "nvme"})
-PHYSICAL_MEMORY_COMPONENT_KINDS = DRAM_COMPONENT_KINDS | NAND_COMPONENT_KINDS
+SRAM_COMPONENT_KINDS = frozenset({"sram", "shared_memory"})
+PHYSICAL_MEMORY_COMPONENT_KINDS = DRAM_COMPONENT_KINDS | NAND_COMPONENT_KINDS | SRAM_COMPONENT_KINDS
 
 _PARSED_CONFIGS = OrderedDict()
 _PARSED_CONFIGS_LOCK = RLock()
@@ -83,6 +84,11 @@ _NAND_REQUIRED = frozenset({
     "protocol_mode", "host_channels", "host_full_duplex", "read_cache_pages_per_bank",
     "queue_scope",
 })
+_SRAM_REQUIRED = frozenset({
+    "kind", "capacity_bytes", "burst_bytes", "interface_bandwidth_gb_s",
+    "read_bandwidth_gb_s", "write_bandwidth_gb_s", "read_latency_ns",
+    "write_latency_ns", "ports", "max_outstanding_requests",
+})
 
 
 def _validate_standard_hbm_organization(config, prefix):
@@ -130,12 +136,13 @@ def parse_required_physical_config(component_id, kind, raw):
     """Validate authored fields before dataclass defaults can fill omissions."""
     prefix = "component {} ({}): ".format(component_id, kind)
     if kind not in PHYSICAL_MEMORY_COMPONENT_KINDS:
-        raise ValueError(prefix + "no supported physical memory core; select a DRAM or NAND component")
+        raise ValueError(prefix + "no supported physical memory core; select a DRAM, NAND or SRAM component")
     if is_dataclass(raw):
         raw = asdict(raw)
     if not isinstance(raw, Mapping):
         raise ValueError(prefix + "physical_memory_config is required; reload a complete hardware preset or configure the physical memory core. Aggregate-cost fallback is disabled")
-    required = _NAND_REQUIRED if kind in NAND_COMPONENT_KINDS else _DRAM_REQUIRED
+    required = (_NAND_REQUIRED if kind in NAND_COMPONENT_KINDS else
+                _SRAM_REQUIRED if kind in SRAM_COMPONENT_KINDS else _DRAM_REQUIRED)
     missing = sorted(name for name in required if raw.get(name) is None)
     if kind in NAND_COMPONENT_KINDS and "max_outstanding_write_requests" not in raw:
         missing.append("max_outstanding_write_requests")  # Explicit None shares the combined limit.
@@ -160,7 +167,8 @@ def parse_required_physical_config(component_id, kind, raw):
     except (TypeError, ValueError) as exc:
         raise ValueError(prefix + "invalid physical_memory_config: " + str(exc)) from exc
     allowed = (
-        {"HBF"} if kind == "hbf" else {"SSD"} if kind in NAND_COMPONENT_KINDS
+        {"SRAM"} if kind in SRAM_COMPONENT_KINDS
+        else {"HBF"} if kind == "hbf" else {"SSD"} if kind in NAND_COMPONENT_KINDS
         else {"HBM"} if kind in {"hbm", "hbm_stack"}
         else {"GDDR"} if kind in {"gddr", "gddr_memory"}
         else {"DDR"} if kind in {"ddr", "ddr_memory"}
@@ -199,7 +207,7 @@ def physical_memory_bandwidth_caps_gbps(component, *, physical_config=None):
     """
     parsed = (require_physical_memory_config(component)
               if physical_config is None else physical_config)
-    if isinstance(parsed, DramConfig):
+    if isinstance(parsed, (DramConfig, SramConfig)):
         caps = (parsed.physical_interface_bandwidth_gb_s,
                 parsed.directional_bandwidth_gb_s(Operation.READ),
                 parsed.directional_bandwidth_gb_s(Operation.WRITE))
@@ -208,7 +216,7 @@ def physical_memory_bandwidth_caps_gbps(component, *, physical_config=None):
                 parsed.host_bandwidth_for(Operation.READ),
                 parsed.host_bandwidth_for(Operation.WRITE))
     else:
-        raise TypeError("physical_config must be a validated DramConfig or NandConfig")
+        raise TypeError("physical_config must be a validated DramConfig, NandConfig or SramConfig")
     caps = tuple(float(value) * 8.0 for value in caps)
     for label, declared, physical in zip(
         ("shared", "read", "write"),
@@ -230,7 +238,7 @@ def parse_execution_physical_config(raw):
     boundary. A serialized execution request must carry those choices rather
     than silently acquiring a different geometry or timing configuration.
     """
-    if isinstance(raw, (DramConfig, NandConfig)):
+    if isinstance(raw, (DramConfig, NandConfig, SramConfig)):
         _validate_standard_hbm_organization(raw, "execution: ")
         return raw
     if not isinstance(raw, Mapping) or raw.get("kind") is None:
@@ -306,7 +314,7 @@ def reconfigure_physical_config(config, *, overrides=None, expand_geometry=False
                     row_multiple = interleave // gcd(interleave, row_bytes)
                     rows = ((rows + row_multiple - 1) // row_multiple) * row_multiple
                 payload["rows_per_bank"] = rows
-            else:
+            elif isinstance(parsed, NandConfig):
                 stripe = 1
                 for name in ("channels", "targets_per_channel", "dies_per_target", "luns_per_die",
                              "planes_per_lun", "pages_per_block", "page_bytes"):

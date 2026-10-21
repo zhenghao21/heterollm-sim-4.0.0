@@ -2127,30 +2127,25 @@ def _derive_requirements(
                 else 0
             )
             rope_traffic_elements = q_width + kv_width
-            add_primitive(
-                "attention.rope",
-                "rope",
-                OperatorClass.ELEMENTWISE,
-                elements_per_token=rope_traffic_elements,
-                operation_elements_per_token=rope_compute_elements,
-                operations_per_element=3,
-                input_count=3 if attention_descriptor is not None else 1,
-                read_bytes_per_token=(
-                    _storage_bytes(
-                        rope_traffic_elements + 2 * rope_compute_elements,
-                        _activation_bits(layer),
-                    )
-                    if attention_descriptor is not None
-                    else 0
-                ),
-                write_bytes_per_token=(
-                    _storage_bytes(
-                        rope_traffic_elements, _activation_bits(layer)
-                    )
-                    if attention_descriptor is not None
-                    else 0
-                ),
-            )
+            if layer.use_rope:
+                add_primitive(
+                    "attention.rope", "rope", OperatorClass.ELEMENTWISE,
+                    elements_per_token=rope_traffic_elements,
+                    operation_elements_per_token=rope_compute_elements,
+                    operations_per_element=3,
+                    input_count=3 if attention_descriptor is not None else 1,
+                    read_bytes_per_token=(
+                        _storage_bytes(rope_traffic_elements + 2 * rope_compute_elements,
+                                       _activation_bits(layer))
+                        if attention_descriptor is not None else 0),
+                    write_bytes_per_token=(
+                        _storage_bytes(rope_traffic_elements, _activation_bits(layer))
+                        if attention_descriptor is not None else 0),
+                )
+            if layer.attention_temperature_tuning:
+                add_primitive("attention.temperature", "attention_temperature", OperatorClass.ELEMENTWISE,
+                    elements_per_token=q_width, operations_per_element=2,
+                    fixed_transcendental_operations_per_token=1)
             for suffix in ("attention.qk", "attention.pv"):
                 item_id = "{}.{}".format(layer.layer_id, suffix)
                 dynamic_kind = suffix.rsplit(".", 1)[-1]
@@ -2248,22 +2243,18 @@ def _derive_requirements(
             )
 
         if layer.is_moe:
-            add_primitive(
-                "router.softmax.reduce",
-                "router_softmax_reduce",
-                OperatorClass.REDUCTION,
-                elements_per_token=layer.num_experts,
-                output_elements_per_token=1,
-                operations_per_element=2,
-            )
-            add_primitive(
-                "router.softmax.normalize",
-                "router_softmax_normalize",
-                OperatorClass.ELEMENTWISE,
-                elements_per_token=layer.num_experts,
-                operations_per_element=5,
-                input_count=2,
-            )
+            routing = layer.metadata.get("moe_routing", {})
+            if not isinstance(routing, Mapping):
+                raise ValueError("moe_routing must be a mapping")
+            if routing.get("gating", "softmax") == "sigmoid":
+                add_primitive("router.sigmoid", "router_sigmoid", OperatorClass.ELEMENTWISE,
+                    elements_per_token=layer.experts_per_token, operations_per_element=3,
+                    transcendental_operations_per_element=1)
+            else:
+                add_primitive("router.softmax.reduce", "router_softmax_reduce", OperatorClass.REDUCTION,
+                    elements_per_token=layer.num_experts, output_elements_per_token=1, operations_per_element=2)
+                add_primitive("router.softmax.normalize", "router_softmax_normalize", OperatorClass.ELEMENTWISE,
+                    elements_per_token=layer.num_experts, operations_per_element=5, input_count=2)
             add_primitive(
                 "router.topk",
                 "router_topk",
@@ -2271,6 +2262,9 @@ def _derive_requirements(
                 elements_per_token=layer.num_experts,
                 output_elements_per_token=layer.experts_per_token,
             )
+            if routing.get("weight_application", "output") == "input":
+                add_primitive("experts.input_weight", "expert_input_weight", OperatorClass.ELEMENTWISE,
+                    elements_per_token=h * layer.experts_per_token, operations_per_element=1, input_count=2)
             if layer.gated_mlp:
                 add_primitive(
                     "experts.activation",
@@ -2678,9 +2672,16 @@ def _rank_local_store_pools(
         )
 
     result: List[Tuple[ComponentSpec, ...]] = []
+    weight_owners = scenario.placement.metadata.get("rank_weight_components", {})
+    if not isinstance(weight_owners, Mapping):
+        raise ValueError("rank_weight_components must be a mapping")
     for rank in ranks:
-        if rank.memory_component_id:
-            explicit = components.get(rank.memory_component_id)
+        selected_owner = weight_owners.get(str(rank.rank), weight_owners.get(rank.rank))
+        if weight_owners and selected_owner is None:
+            raise ValueError("rank_weight_components is missing rank {}".format(rank.rank))
+        explicit_owner = selected_owner or rank.memory_component_id
+        if explicit_owner:
+            explicit = components.get(str(explicit_owner))
             if (
                 explicit is not None
                 and explicit.is_active_memory
@@ -3191,6 +3192,13 @@ def _candidates_for_requirement(
     gpu_selector: Optional[ComponentSpec] = execution_gpus[
         index % len(execution_gpus)
     ]
+    requested_compute = options.operator_targets.get(requirement.mapping_key)
+    if requested_compute is not None:
+        # A GPU authoring target must participate in candidate generation.
+        # Filtering only after choosing a round-robin representative erased
+        # valid TP/PP GPU candidates whenever that representative differed.
+        gpu_selector = next((gpu for gpu in execution_gpus
+                             if gpu.component_id == requested_compute), gpu_selector)
     if load_policy_target == "cpu":
         compute_candidates = cpus
         if not compute_candidates:

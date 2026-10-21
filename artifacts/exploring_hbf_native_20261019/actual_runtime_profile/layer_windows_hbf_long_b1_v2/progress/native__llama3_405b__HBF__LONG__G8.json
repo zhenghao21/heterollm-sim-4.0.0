@@ -1,0 +1,58 @@
+{
+  "case_id": "native__llama3_405b__HBF__LONG__G8",
+  "pid": 10076,
+  "state": "running",
+  "stage": "serving_boundary",
+  "batch_size": 1,
+  "candidate_id": "native__llama3_405b__HBF__LONG__G8__B1",
+  "candidate_started_at": "2026-10-20T03:40:51.454191+00:00",
+  "cumulative_progress": {
+    "cohorts": 0,
+    "prefill_cohorts": 0,
+    "decode_cohorts": 0,
+    "prefill_compute_tokens": 0,
+    "visible_output_tokens": 0,
+    "measurement_visible_output_tokens": 0,
+    "warmup_decode_cohorts": 0,
+    "measurement_decode_cohorts": 0,
+    "target_decode_cohorts": 3297,
+    "finished_requests": 0,
+    "request_count": 4,
+    "external_imported_requests": 0,
+    "external_imported_logical_bytes": 0
+  },
+  "current_cohort": null,
+  "completed": 0,
+  "total": null,
+  "simulated_time_ns": 2592351816.9675074,
+  "message": "正在处理原生准入与PD入站边界",
+  "last_progress_at": "2026-10-20T03:50:51.725884+00:00",
+  "metadata": {
+    "cumulative_progress": {
+      "cohorts": 0,
+      "prefill_cohorts": 0,
+      "decode_cohorts": 0,
+      "prefill_compute_tokens": 0,
+      "visible_output_tokens": 0,
+      "measurement_visible_output_tokens": 0,
+      "warmup_decode_cohorts": 0,
+      "measurement_decode_cohorts": 0,
+      "target_decode_cohorts": 3297,
+      "finished_requests": 0,
+      "request_count": 4,
+      "external_imported_requests": 0,
+      "external_imported_logical_bytes": 0
+    }
+  },
+  "updated_at": "2026-10-20T03:50:51.755202+00:00",
+  "wall_seconds": 600.3024988000398,
+  "candidate_wall_seconds": 600.3007267000503,
+  "wall_breakdown_seconds": {
+    "starting": 0.5259538000100292,
+    "control_plane": 14.665057600010186,
+    "validation": 0.25352159998146817,
+    "serving_cohorts": 0.001556500035803765,
+    "serving_boundary": 584.8546372000128
+  },
+  "wall_breakdown_scope": "exclusive wall intervals between native progress stage transitions; not simulated hardware latency"
+}

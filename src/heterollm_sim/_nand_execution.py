@@ -116,6 +116,8 @@ class _NandNumericState:
         array_values, buffer_values = array_ready.tolist(), buffer_ready.tolist()
         for unit in np.flatnonzero(units).tolist():
             name = array_names[unit]
+            if core is not None:
+                core._touch_frontiers(name)
             array_frontiers[name], buffer_frontiers[name] = array_values[unit], buffer_values[unit]
         tag_values, ready_values = tags.tolist(), ready.tolist()
         reader_values, use_values = readers.tolist(), uses.tolist()
@@ -303,12 +305,15 @@ def execute_pages(core, addresses, arrival_ns, link_program, *, operation=Operat
                      single_lane_state is not None)
     array_values = arrays.tolist()
     for unit in active_units:
+        timeline._remember_resource(array_names[unit])
         timeline.ready_ns[array_names[unit]] = array_values[unit]
     if packed is None:
         array_values, buffer_values = arrays.tolist(), buffers.tolist()
         for unit in active_units:
             name = array_names[unit]
+            core._touch_frontiers(name)
             core.__dict__["_array_ready"][name], core.__dict__["_buffer_ready"][name] = array_values[unit], buffer_values[unit]
+            timeline._remember_resource(name)
             timeline.ready_ns[name] = array_values[unit]
         tag_values, ready_values, reader_values, use_values = tags.tolist(), ready.tolist(), readers.tolist(), uses.tolist()
         for bank in active_banks:

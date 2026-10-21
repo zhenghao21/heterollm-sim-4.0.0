@@ -1,0 +1,53 @@
+{
+  "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+  "backend": "native_serving_physical",
+  "parameters": {
+    "case_id": "native__llama3_405b__HBM4__MID__G8",
+    "phase": "dense_native",
+    "model": "llama3_405b",
+    "hardware": "HBM4",
+    "workload": "MID",
+    "input_tokens": 5900,
+    "output_tokens": 499,
+    "gpu_count": 8,
+    "tp": 8,
+    "pp": 1,
+    "ep": 1,
+    "weight_dtype": "bf16",
+    "kv_dtype": "bf16",
+    "batch_size": 1,
+    "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+    "warmup_decode_cohorts": 498,
+    "measurement_decode_cohorts": 996,
+    "slo_tpot_ns": 100000000.0
+  },
+  "candidate_id": "native__llama3_405b__HBM4__MID__G8__B1",
+  "status": "paused",
+  "metrics": null,
+  "forecast_tokens": 0,
+  "finished_at": "2026-10-20T00:15:39.855288+00:00",
+  "wall_seconds": 28481.86500609998,
+  "reason": "User pause: terminated after cooperative cancellation could not interrupt ongoing native graph construction; no completed candidate was discarded.",
+  "progress": {
+    "case_id": "native__llama3_405b__HBM4__MID__G8",
+    "pid": 29120,
+    "state": "paused",
+    "stage": "paused",
+    "batch_size": 1,
+    "candidate_id": "native__llama3_405b__HBM4__MID__G8__B1",
+    "completed": 2,
+    "total": null,
+    "simulated_time_ns": 196277728.22857144,
+    "message": "",
+    "last_progress_at": "2026-10-20T00:03:52.837521+00:00",
+    "metadata": {
+      "cohort_kind": "decode",
+      "finished_requests": 0,
+      "request_count": 4
+    },
+    "updated_at": "2026-10-20T00:15:39.853939+00:00",
+    "wall_seconds": 28481.86500609998,
+    "pause_reason": "User pause: terminated after cooperative cancellation could not interrupt ongoing native graph construction; no completed candidate was discarded."
+  },
+  "fidelity": "incomplete_native_physical_attempt_no_result"
+}

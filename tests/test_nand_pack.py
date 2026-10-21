@@ -19,6 +19,41 @@ def python_source():
     return module
 
 
+def test_owned_calendar_qualification_rereads_same_size_public_edits_and_shared_lanes():
+    source = python_source()
+    timeline = ResourceTimeline(lane_available={"a": [1.], "b": [2.]})
+    for module in (source, _nand_pack):
+        assert module.can_own_timeline(timeline, ("a", "b"))
+    class AuthoredNumber(float):
+        pass
+    timeline.lane_available["a"][0] = AuthoredNumber(3.)
+    for module in (source, _nand_pack):
+        assert not module.can_own_timeline(timeline, ("a", "b"))
+    timeline.lane_available["a"][0] = 3.
+    timeline.lane_available["b"] = timeline.lane_available["a"]
+    for module in (source, _nand_pack):
+        assert module.can_own_timeline(timeline, ("a", "b"))
+    timeline.lane_available["a"].append(AuthoredNumber(4.))
+    for module in (source, _nand_pack):
+        assert not module.can_own_timeline(timeline, ("a", "b"))
+
+
+def test_owned_calendar_custom_mapping_keeps_its_original_get_protocol():
+    source = python_source()
+    traces = []
+    for module in (source, _nand_pack):
+        calls = []
+        class Mapping(dict):
+            def get(self, key, default=None):
+                calls.append((key, default))
+                return super().get(key, default)
+        timeline = ResourceTimeline(ready_ns=Mapping(a=1., b=2.),
+                                    lane_available={"a": [1.], "b": [2.]})
+        assert module.can_own_timeline(timeline, ("a", "b"))
+        traces.append(calls)
+    assert traces[0] == traces[1] == [("a", None), ("b", None)]
+
+
 def test_pack_reloads_public_values_with_identical_float64_bits():
     source = python_source()
     names = ("a", "b", "c")

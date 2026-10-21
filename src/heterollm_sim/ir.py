@@ -195,6 +195,11 @@ class LayerSpec:
     kv_heads: int = 0
     attention_head_dim: int = 0
     sequence_mixer: str = "full_attention"
+    attention_chunk_size: int = 0
+    use_rope: bool = True
+    attention_temperature_tuning: bool = False
+    attention_temperature_scale: float = 0.1
+    attention_temperature_floor_scale: int = 8192
     linear_attention: Optional[LinearAttentionSpec] = None
     num_experts: int = 1
     experts_per_token: int = 1
@@ -219,6 +224,11 @@ class LayerSpec:
         _require_int(self.attention_heads, "attention_heads", minimum=1)
         _require_int(self.kv_heads, "kv_heads")
         _require_int(self.attention_head_dim, "attention_head_dim")
+        _require_int(self.attention_chunk_size, "attention_chunk_size")
+        _require_int(self.attention_temperature_floor_scale, "attention_temperature_floor_scale", minimum=1)
+        _require_number(self.attention_temperature_scale, "attention_temperature_scale", minimum=0.0)
+        if type(self.use_rope) is not bool or type(self.attention_temperature_tuning) is not bool:
+            raise ValueError("use_rope and attention_temperature_tuning must be boolean")
         _require_int(self.num_experts, "num_experts", minimum=1)
         _require_int(self.experts_per_token, "experts_per_token", minimum=1)
         _require_int(
@@ -245,10 +255,14 @@ class LayerSpec:
         if normalized_kind not in {"dense", "moe"}:
             raise ValueError("kind must be dense or moe")
         normalized_mixer = self.sequence_mixer.strip().lower().replace("-", "_")
-        if normalized_mixer not in {"full_attention", "linear_attention"}:
+        if normalized_mixer not in {"full_attention", "chunked_attention", "linear_attention"}:
             raise ValueError(
-                "sequence_mixer must be full_attention or linear_attention"
+                "sequence_mixer must be full_attention, chunked_attention or linear_attention"
             )
+        if (normalized_mixer == "chunked_attention") != (self.attention_chunk_size > 0):
+            raise ValueError("only chunked_attention requires a positive attention_chunk_size")
+        if self.attention_temperature_tuning and (self.use_rope or normalized_mixer == "linear_attention"):
+            raise ValueError("attention temperature tuning requires NoPE non-recurrent attention")
         if normalized_mixer == "linear_attention":
             if not isinstance(self.linear_attention, LinearAttentionSpec):
                 raise ValueError(
@@ -297,6 +311,17 @@ class LayerSpec:
     @property
     def has_shared_expert(self) -> bool:
         return self.is_moe and self.shared_expert_intermediate_size > 0
+
+    def attention_kv_start(self, query_position: int) -> int:
+        """Absolute start of the causal fixed block for a zero-based query."""
+        _require_int(query_position, "query_position")
+        return ((query_position // self.attention_chunk_size) * self.attention_chunk_size
+                if self.attention_chunk_size else 0)
+
+    def attention_live_range(self, materialized_tokens: int) -> Tuple[int, int]:
+        """Keep a full block at its end; the next query starts a fresh block."""
+        _require_int(materialized_tokens, "materialized_tokens")
+        return (self.attention_kv_start(materialized_tokens - 1), materialized_tokens) if materialized_tokens else (0, 0)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -490,6 +515,11 @@ def _layer_graph_template(layer: LayerSpec) -> Dict[str, Any]:
         "kv_heads": layer.kv_heads,
         "attention_head_dim": layer.attention_head_dim,
         "sequence_mixer": layer.sequence_mixer,
+        "attention_chunk_size": layer.attention_chunk_size,
+        "use_rope": layer.use_rope,
+        "attention_temperature_tuning": layer.attention_temperature_tuning,
+        "attention_temperature_scale": layer.attention_temperature_scale,
+        "attention_temperature_floor_scale": layer.attention_temperature_floor_scale,
         "linear_attention": linear,
         "num_experts": layer.num_experts,
         "experts_per_token": layer.experts_per_token,
@@ -692,6 +722,11 @@ def build_model_graph_from_layer_specs(
             weights=((group_id + ".attention_weights", dtype, (hidden, hidden), None),),
             parameters={
                 "sequence_mixer": base.sequence_mixer,
+                "attention_chunk_size": base.attention_chunk_size,
+                "use_rope": base.use_rope,
+                "attention_temperature_tuning": base.attention_temperature_tuning,
+                "attention_temperature_scale": base.attention_temperature_scale,
+                "attention_temperature_floor_scale": base.attention_temperature_floor_scale,
                 "attention_heads": base.attention_heads,
                 "kv_heads": base.kv_heads,
                 "attention_head_dim": base.attention_head_dim,
@@ -861,6 +896,11 @@ _LAYER_OVERRIDE_KEYS = frozenset(
         "kv_heads",
         "attention_head_dim",
         "sequence_mixer",
+        "attention_chunk_size",
+        "use_rope",
+        "attention_temperature_tuning",
+        "attention_temperature_scale",
+        "attention_temperature_floor_scale",
         "linear_attention",
         "num_experts",
         "experts_per_token",
@@ -963,6 +1003,11 @@ def _layer_from_model_graph_group(
                 mixer_params.get("sequence_mixer", "full_attention"),
             )
         ),
+        attention_chunk_size=override.get("attention_chunk_size", mixer_params.get("attention_chunk_size", 0)),
+        use_rope=override.get("use_rope", mixer_params.get("use_rope", True)),
+        attention_temperature_tuning=override.get("attention_temperature_tuning", mixer_params.get("attention_temperature_tuning", False)),
+        attention_temperature_scale=override.get("attention_temperature_scale", mixer_params.get("attention_temperature_scale", 0.1)),
+        attention_temperature_floor_scale=override.get("attention_temperature_floor_scale", mixer_params.get("attention_temperature_floor_scale", 8192)),
         linear_attention=linear,
         num_experts=int(
             override.get("num_experts", ff_params.get("num_experts", 1))
@@ -2531,6 +2576,8 @@ class SchedulerSpec:
     preemption_policy: str = "auto"
     slo_ttft_ns: Optional[float] = None
     slo_tbt_ns: Optional[float] = None
+    # Mean interval across the visible output stream, independent of max TBT.
+    slo_tpot_ns: Optional[float] = None
     # Optional backend stops measured backward from the end of a fresh prompt.
     # This partitions work; it does not charge checkpoint time or bytes.
     prefill_stop_offsets: Tuple[int, ...] = ()
@@ -2572,7 +2619,7 @@ class SchedulerSpec:
             "stable_admission",
         }:
             raise ValueError("unsupported scheduler phase_candidate_order")
-        for field_name in ("slo_ttft_ns", "slo_tbt_ns"):
+        for field_name in ("slo_ttft_ns", "slo_tbt_ns", "slo_tpot_ns"):
             value = getattr(self, field_name)
             if value is not None:
                 _require_number(value, field_name)

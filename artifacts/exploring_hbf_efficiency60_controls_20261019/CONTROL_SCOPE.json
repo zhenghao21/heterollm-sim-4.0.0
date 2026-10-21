@@ -1,0 +1,6 @@
+{
+  "status": "valid_research_efficiency_control_not_paper_primary",
+  "reason": "The author SAFARI talk slide 19 explicitly assumes peak HW performance. These six HBM4 runs used matrix/scalar efficiency 0.6 and are retained as a separate research control, not the paper peak baseline. They are unaffected by the HBF staging placement correction.",
+  "source": "https://people.inf.ethz.ch/omutlu/pub/HBF-for-LLM-cal26-talk.pdf",
+  "completed_points": 6
+}

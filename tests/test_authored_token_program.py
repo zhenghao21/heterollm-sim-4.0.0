@@ -1,6 +1,9 @@
 """Resident physical bindings keep the exact authored graph and live payload."""
 
 from dataclasses import replace
+from copy import copy, deepcopy
+import gc
+import weakref
 
 import pytest
 
@@ -9,7 +12,7 @@ from heterollm_sim.contracts import (
     ResourceDemand, TaskCategory, _PreparedExecutionStage, _PreparedExecutionTask,
 )
 from heterollm_sim.planner import (
-    _PreparedExecutionStageRows, _PREPARED_EXECUTION_STAGE_TOKEN,
+    _PreparedExecutionStageRows, _PREPARED_EXECUTION_STAGE_TOKEN, _trusted_execution_stages,
 )
 from heterollm_sim.serving import (
     _ExecutionStageMetadataCache, _OnlineRuntime, _live_task_metadata,
@@ -37,6 +40,29 @@ def stages():
 def metadata(rows):
     return {"execution_stages": _PreparedExecutionStageRows((), rows,
         _token=_PREPARED_EXECUTION_STAGE_TOKEN)}
+
+
+def test_prepared_capsule_is_acyclic_and_copies_cannot_claim_original_ownership():
+    def handoff():
+        rows = stages()
+        reference = weakref.ref(rows[0].execution_tasks[0])
+        wrapper = metadata(rows)["execution_stages"]
+        return wrapper, reference
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        wrapper, reference = handoff()
+        assert _trusted_execution_stages(wrapper)
+        assert _trusted_execution_stages(copy(wrapper)) is None
+        assert _trusted_execution_stages(deepcopy(wrapper)) is None
+        cloned = _PreparedExecutionStageRows(wrapper)
+        cloned._prepared_capsule = wrapper._prepared_capsule
+        assert _trusted_execution_stages(cloned) is None
+        del cloned, wrapper
+        assert reference() is None, "the complete native DAG must retire without cyclic-GC scanning"
+    finally:
+        if enabled:
+            gc.enable()
 
 
 def test_program_binding_preserves_original_names_dependencies_and_metadata():

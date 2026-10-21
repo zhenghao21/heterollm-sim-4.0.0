@@ -1,0 +1,24 @@
+{
+  "state": "paused",
+  "updated_at": "2026-10-20T00:51:13.793748+00:00",
+  "manager_pid": 16184,
+  "current_phase": "dense_native",
+  "total_cases": 30,
+  "total_candidates": 60,
+  "counts": {
+    "paused": 2,
+    "pending": 28
+  },
+  "candidate_counts": {
+    "paused": 2
+  },
+  "running": [],
+  "batch_sizes": [
+    1,
+    8
+  ],
+  "backend": "native_serving_physical",
+  "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+  "stop_requested": true,
+  "error": null
+}

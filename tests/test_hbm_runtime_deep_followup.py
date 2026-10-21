@@ -258,8 +258,8 @@ def test_failed_hbm_execution_restores_control_state_before_retry(details, monke
     task = physical_task(config, [{"operation": "read", "address": 8192, "byte_count": 4096}])
     original = DramCore.submit
 
-    def fail_after_execution(core, request):
-        original(core, request)
+    def fail_after_execution(core, request, **kwargs):
+        original(core, request, **kwargs)
         raise ValueError("injected after HBM controller mutation")
 
     with monkeypatch.context() as patch:

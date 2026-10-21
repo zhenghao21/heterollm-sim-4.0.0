@@ -20,6 +20,10 @@ from ._hbm_pack import (refresh_resource_columns, publish_resource_columns,
 MAX_HBM_NUMERIC_BANKS = 131_072
 
 
+class _BorrowedControllerCheckpoint(tuple):
+    """Controller rows are owned by an enclosing immutable undo image."""
+
+
 @lru_cache(maxsize=512)
 def _request_array_selection(lanes, banks, first_lane, lane_count):
     """Array rows a sparse request may mutate, including channel maintenance.
@@ -125,6 +129,9 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
             return _pack_hbm_numeric(core, request, refresh_requests=refresh_requests)
         if not cached.validate_aliases():
             return None
+        for token in core._hbm_transactions:
+            for item in (refresh_requests or (request,)):
+                token.capture_numeric_request(cached, item)
         if cached.refresh_resources(physical, refresh_requests or (request,)):
             return cached
         return None
@@ -386,7 +393,37 @@ class _HBMNumericState:
     def checkpoint(self, request):
         selection = self.request_selection(request)
         if selection is None:
+            for token in reversed(self.core._hbm_transactions):
+                undo = token.numeric
+                if (undo is not None and undo.packed is self and undo.whole is not None
+                        and undo.commits == self._controller_commits):
+                    # The first dense access has the enclosing transaction's
+                    # exact controller start. Resource rows were refreshed
+                    # from the authoritative public timeline after that undo
+                    # image, so they still need their own current checkpoint.
+                    return None, _BorrowedControllerCheckpoint(
+                        array.copy() if index in (8, 9, 10, 11) else undo.whole[index]
+                        for index, array in enumerate(self.arrays))
             return None, tuple(array.copy() for array in self.arrays)
+        channel_rows = selection[6]
+        if isinstance(channel_rows, slice) and channel_rows.stop - channel_rows.start == 1:
+            channel = channel_rows.start
+            for token in reversed(self.core._hbm_transactions):
+                undo = token.numeric
+                if (undo is None or undo.packed is not self
+                        or undo.commits != self._controller_commits):
+                    continue
+                saved = undo.channels.get(channel)
+                if undo.whole is not None or saved is not None:
+                    # Single-channel maintenance includes both PCs. Its
+                    # immutable outer start image is already the request's
+                    # controller checkpoint; resources alone were refreshed
+                    # from the public timeline after that image was taken.
+                    return selection, _BorrowedControllerCheckpoint(
+                        (array[index].copy() if isinstance(index, slice) else array[index])
+                        if number in (8, 9, 10, 11) else
+                        undo.whole[number][index] if undo.whole is not None else saved[1][number]
+                        for number, (array, index) in enumerate(zip(self.arrays, selection)))
         # Advanced indexing already returns an independent array.  Avoid
         # copying it a second time for the wrapped-channel/resource indices.
         return selection, tuple(array[index].copy() if isinstance(index, slice) else array[index]
@@ -395,7 +432,11 @@ class _HBMNumericState:
     def restore_checkpoint(self, checkpoint):
         selection, saved = checkpoint
         if selection is None:
-            self.arrays = saved
+            # A declined/failed request may continue before the outer caller
+            # rolls back. Never make its live arrays aliases of that caller's
+            # immutable undo point; copies are needed only on this rare path.
+            self.arrays = (tuple(array.copy() for array in saved)
+                           if isinstance(saved, _BorrowedControllerCheckpoint) else saved)
         else:
             for array, index, values in zip(self.arrays, selection, saved):
                 array[index] = values
@@ -413,6 +454,9 @@ class _HBMNumericState:
                 or not math.isfinite(request.arrival_ns)
                 or int(moved.max()) > (1 << 63) - 1 - physical):
             return None
+        if self.core._hbm_numeric_state is self:
+            for token in self.core._hbm_transactions:
+                token.capture_numeric_request(self, request)
         touched.fill(False)
         g, t, run_hbm_numeric = self.g, self.t, self.run_numeric
         read = request.operation is Operation.READ
@@ -538,6 +582,7 @@ class _HBMNumericState:
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
          resources, moved, directions, touched, windows, window_counts) = self.arrays
         indices = np.flatnonzero(touched)
+        timeline._remember_resources(ids[index] for index in indices)
         publish_resource_columns(ids, resources, moved, indices,
             timeline.lane_available, timeline.ready_ns, timeline.busy_ns,
             timeline.last_intervals, timeline.bytes_moved, timeline.directions,
@@ -660,3 +705,56 @@ def execute_hbm_numeric_many(core, requests, *, resource_accumulator=None):
     if core._hbm_numeric_state is not packed:
         packed.commit_controller()
     return tuple(results)
+
+
+# Sparse timeline undo is valid only for this complete owned executor path.
+# A wrapper around any of these hooks can write a different resource before
+# raising, so checking DramCore.submit alone does not establish ownership.
+_OWNED_TIMELINE_HBM_FUNCTIONS = tuple((name, globals()[name]) for name in (
+    "_pack_hbm_numeric", "execute_hbm_numeric", "execute_hbm_numeric_many",
+    "_request_array_selection", "can_capture_resource_columns",
+    "refresh_resource_columns", "publish_resource_columns", "consume_resource_columns"))
+_OWNED_TIMELINE_HBM_METHODS = tuple((name, getattr(_HBMNumericState, name)) for name in (
+    "validate_aliases", "refresh_resources", "request_selection", "checkpoint",
+    "restore_checkpoint", "execute", "commit_controller", "commit_timeline"))
+_OWNED_TIMELINE_HBM_CLASS = _HBMNumericState
+_OWNED_TIMELINE_CAPTURE_METHODS = tuple((name, getattr(_NumericResourceCapture, name))
+    for name in ("__init__", "begin", "finish"))
+_OWNED_TIMELINE_CAPTURE_CLASS = _NumericResourceCapture
+
+from . import _hbm_numeric as _owned_numeric_module
+from . import _hbm_control as _owned_control_module
+
+_OWNED_TIMELINE_NUMERIC_FUNCTIONS = tuple((name, getattr(_owned_numeric_module, name))
+    for name in ("run_hbm_numeric", "_run_hbm_numeric", "_run_hbm_channel_range"))
+_OWNED_TIMELINE_CONTROL_ENTRY = _owned_control_module.execute_hbm
+_OWNED_TIMELINE_CONTROL_CLASS = _owned_control_module._Controller
+_OWNED_TIMELINE_CONTROL_METHODS = tuple((name, getattr(_OWNED_TIMELINE_CONTROL_CLASS, name))
+    for name, value in vars(_OWNED_TIMELINE_CONTROL_CLASS).items() if callable(value))
+
+
+def _has_native_timeline_hooks(packed=None):
+    """Reject replaceable executor callbacks before using sparse rollback."""
+    if (_HBMNumericState is not _OWNED_TIMELINE_HBM_CLASS
+            or (packed is not None and type(packed) is not _HBMNumericState)
+            or _NumericResourceCapture is not _OWNED_TIMELINE_CAPTURE_CLASS
+            or _owned_control_module.execute_hbm is not _OWNED_TIMELINE_CONTROL_ENTRY
+            or _owned_control_module._Controller is not _OWNED_TIMELINE_CONTROL_CLASS):
+        return False
+    for name, original in _OWNED_TIMELINE_HBM_FUNCTIONS:
+        if globals()[name] is not original:
+            return False
+    for name, original in _OWNED_TIMELINE_HBM_METHODS:
+        method = getattr(_HBMNumericState if packed is None else packed, name)
+        if getattr(method, "__func__", method) is not original:
+            return False
+    for name, original in _OWNED_TIMELINE_CAPTURE_METHODS:
+        if getattr(_NumericResourceCapture, name) is not original:
+            return False
+    for name, original in _OWNED_TIMELINE_NUMERIC_FUNCTIONS:
+        if getattr(_owned_numeric_module, name) is not original:
+            return False
+    for name, original in _OWNED_TIMELINE_CONTROL_METHODS:
+        if getattr(_owned_control_module._Controller, name) is not original:
+            return False
+    return packed is None or packed.run_numeric is _OWNED_TIMELINE_NUMERIC_FUNCTIONS[0][1]

@@ -31,7 +31,7 @@ from .mmvq_issue_bound import MMVQIssueContract, derive_issue_bound
 from .mmvf_work import MMVFWork
 from .memory_service import realtime_memory_metrics
 from .data_motion import memory_service as _memory_service
-from .kernel_model import KernelModelProfile, estimate_kernel
+from .kernel_model import KernelModelProfile, estimate_kernel, attention_mma_work
 
 
 MMVQ_HBM_MODE_NOMINAL = "nominal_bandwidth_analytical_fallback"
@@ -569,8 +569,24 @@ class FusedAttentionWorkload:
     # Explicit positions for one sequence only; flattened batches must not
     # infer causal visibility from batch_tokens.
     causal_query_positions: Tuple[int, ...] = ()
+    # Explicit per-query visibility and independent query groups. These are
+    # logical fixed-block masks, not a sliding-window memory approximation.
+    query_context_lengths: Tuple[int, ...] = ()
+    query_group_sizes: Tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.query_context_lengths, tuple) or not isinstance(self.query_group_sizes, tuple):
+            raise ValueError("query visibility fields must be tuples")
+        if self.query_context_lengths:
+            if (len(self.query_context_lengths) != self.batch_tokens
+                    or any(type(n) is not int or not 1 <= n <= self.context_tokens for n in self.query_context_lengths)
+                    or not self.query_group_sizes
+                    or any(type(n) is not int or n < 1 for n in self.query_group_sizes)
+                    or sum(self.query_group_sizes) != self.batch_tokens
+                    or self.causal_query_positions or self.q4_mma_view_tokens_lower_bound):
+                raise ValueError("explicit query visibility requires valid independent groups and no native Q4 view")
+        elif self.query_group_sizes:
+            raise ValueError("query groups require explicit visibility lengths")
         if not isinstance(self.causal_query_positions, tuple):
             raise ValueError("causal_query_positions must be a tuple")
         if self.causal_query_positions and (
@@ -681,11 +697,13 @@ class FusedAttentionWorkload:
 
     @property
     def score_elements(self) -> int:
-        return self.score_heads * self.batch_tokens * self.context_tokens
+        return self.score_heads * (sum(self.query_context_lengths) if self.query_context_lengths
+                                   else self.batch_tokens * self.context_tokens)
 
     @property
     def tensor_operations(self) -> int:
-        return 4 * self.batch_tokens * self.context_tokens * self.hidden_size
+        return 4 * self.hidden_size * (sum(self.query_context_lengths) if self.query_context_lengths
+                                     else self.batch_tokens * self.context_tokens)
 
     @property
     def transcendental_operations(self) -> int:
@@ -3811,6 +3829,9 @@ def _estimate_gpu_fused_attention_analytical(
         * _ceil_div(head_dim, tensor_core.mma_n)
         * _ceil_div(workload.context_tokens, tensor_core.mma_k)
     )
+    if workload.query_context_lengths:
+        issued = attention_mma_work(workload, tensor_core)
+        qk_tiles, pv_tiles = issued["qk_mma_count"], issued["pv_mma_count"]
     issued_tensor_operations = (
         qk_tiles + pv_tiles
     ) * tensor_core.operations_per_mma

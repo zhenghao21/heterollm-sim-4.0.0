@@ -9,6 +9,89 @@ from numba import njit
 
 
 @njit(cache=True, nogil=True, fastmath=False)
+def run_generic_full_pages(first_page, count, read, base, geometry, timing,
+                           array_ids, channel_ids, host_ids, array_ready, buffer_ready,
+                           tags, cache_ready, readers, uses, present, cache_clock,
+                           starts, lane_counts, lanes, lane_directions, state, moved,
+                           directions):
+    """The ordinary generic page machine, with ordered IEEE additions.
+
+    Admission remains one host request in NandCore.submit. Unlike the OCP
+    kernel below, generic NAND has neither implicit page-0 erase nor PROGRAM
+    frontier validation. No page or cache transition is skipped here.
+    """
+    base_units, planes, independent, per_channel, host_channels = geometry
+    page_read, page_program, internal_ns, host_ns, internal_bytes = timing
+    touched = np.zeros(len(state), dtype=np.bool_)
+    arrays_touched = np.zeros(len(array_ready), dtype=np.bool_)
+    banks_touched = np.zeros(len(tags), dtype=np.bool_)
+    hits = misses = 0
+    completion = base
+    for offset in range(count):
+        page_index = first_page + offset
+        base_unit = page_index % base_units
+        plane = (page_index // base_units) % planes
+        bank = base_unit + plane * base_units
+        physical_page = page_index // (base_units * planes)
+        unit = bank if independent else base_unit
+        channel = base_unit // per_channel
+        ar, ch, host = array_ids[unit], channel_ids[channel], host_ids[channel % host_channels]
+        if read:
+            cache_clock += 1
+            slot = -1
+            for candidate in range(2):
+                if tags[bank, candidate] == physical_page:
+                    slot = candidate
+                    break
+            hit = slot >= 0
+            if not hit:
+                slot = 0
+                if ((tags[bank, 1] < 0 and tags[bank, 0] >= 0)
+                        or ((tags[bank, 1] < 0) == (tags[bank, 0] < 0)
+                            and uses[bank, 1] < uses[bank, 0])):
+                    slot = 1
+            uses[bank, slot] = cache_clock
+            present[bank] = True
+            banks_touched[bank] = True
+            if hit:
+                end = _reserve(host, max(base, cache_ready[bank, slot]), host_ns, 4096, 1,
+                    starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
+                readers[bank, slot] = max(readers[bank, slot], end)
+                hits += 1
+            else:
+                read_end = _reserve(ar, max(base, array_ready[unit], buffer_ready[unit]), page_read, -1, 0,
+                    starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
+                internal_end = _reserve(ch, max(read_end, readers[bank, slot]), internal_ns,
+                    int(internal_bytes), 1, starts, lane_counts, lanes, lane_directions,
+                    state, moved, directions, touched)
+                end = _reserve(host, internal_end, host_ns, 4096, 1,
+                    starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
+                tags[bank, slot], cache_ready[bank, slot] = physical_page, internal_end
+                readers[bank, slot] = end
+                array_ready[unit], buffer_ready[unit] = read_end, internal_end
+                arrays_touched[unit] = True
+                misses += 1
+        else:
+            # Invalidating a tag retains its live reader and its LRU age.
+            if present[bank]:
+                for slot in range(2):
+                    if tags[bank, slot] == physical_page:
+                        tags[bank, slot] = -1
+                        banks_touched[bank] = True
+            host_end = _reserve(host, base, host_ns, 4096, 2,
+                starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
+            internal_end = _reserve(ch, max(host_end, buffer_ready[unit]), internal_ns,
+                int(internal_bytes), 2, starts, lane_counts, lanes, lane_directions,
+                state, moved, directions, touched)
+            end = _reserve(ar, max(internal_end, array_ready[unit]), page_program, -1, 0,
+                starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
+            array_ready[unit], buffer_ready[unit] = end, end
+            arrays_touched[unit] = True
+        completion = max(completion, end)
+    return completion, hits, misses, cache_clock, touched, arrays_touched, banks_touched
+
+
+@njit(cache=True, nogil=True, fastmath=False)
 def _reserve(rid, earliest, duration, payload, direction, starts, lane_counts,
              lanes, lane_directions, resource_state, moved, directions, touched):
     first, count = starts[rid], lane_counts[rid]

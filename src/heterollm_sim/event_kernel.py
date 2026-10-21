@@ -1968,6 +1968,8 @@ class UnifiedEventKernel:
         before_step=None,
         index_physical_allocations=False,
         on_submitted=None,
+        seen_namespace=None,
+        owned_physical_frontiers=False,
     ) -> Tuple[KernelEvent, ...]:
         """Execute one internally keyed closed graph with array-local state.
 
@@ -1984,13 +1986,16 @@ class UnifiedEventKernel:
         chunk = tuple(tasks)
         from .data_motion import is_physical_task
         if (self.resource_owners or event_observer is not None or before_step is not None
-                or on_submitted is not None or index_physical_allocations
+                or on_submitted is not None or index_physical_allocations or seen_namespace is not None
+                or owned_physical_frontiers
                 or any("stateful_l2" in task.metadata or is_physical_task(task) for task in chunk)):
             from ._token_program import drain_token_program
             return drain_token_program(self, chunk, layout, validate_tasks=validate_tasks,
                                        event_observer=event_observer, before_step=before_step,
                                        index_physical_allocations=index_physical_allocations,
-                                       on_submitted=on_submitted)
+                                       on_submitted=on_submitted,
+                                       seen_namespace=seen_namespace,
+                                       owned_physical_frontiers=owned_physical_frontiers)
         if len(chunk) != layout.task_count:
             raise ValueError("task graph does not match compiled structure")
         task_ids = tuple(task.task_id for task in chunk)

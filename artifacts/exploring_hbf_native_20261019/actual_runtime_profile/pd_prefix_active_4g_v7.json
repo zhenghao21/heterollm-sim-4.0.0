@@ -1,0 +1,26 @@
+{
+  "scope": "actual unchanged 405B HBF LONG TP8 B1 PD prefix; not a complete candidate",
+  "comparison": "Current native runtime: active resource columns, qualified sparse publication, current owner checks and metric journals; no historical elapsed comparison",
+  "all_other_current_runtime_optimizations": "identical in A and B",
+  "order": "single_current_prefix_non_ABBA",
+  "rows": [
+    {
+      "mode": "B",
+      "setup_seconds": 14.109192899952177,
+      "pd_prefix_seconds": 15.696036800043657,
+      "whole_prefix_seconds": 29.805229699995834,
+      "steady_seconds": 14.131849400000647,
+      "warm_write_bytes": 134294528,
+      "target_write_bytes": 4295456256,
+      "steady_write_bytes": 4161161728,
+      "steady_mib_per_second": 280.8120122201464,
+      "whole_prefix_mib_per_second": 137.44119236210156,
+      "exact_physical_state_equal": null,
+      "complete_imports": 0,
+      "complete_cohorts": 0,
+      "visible_output_tokens": 0,
+      "submitted_source_read_bytes": 4296504832,
+      "phase_count": 16861
+    }
+  ]
+}

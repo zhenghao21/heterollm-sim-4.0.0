@@ -1,0 +1,3224 @@
+{
+  "admission_events": [
+    {
+      "admission_sequence": 0,
+      "request_id": "r0",
+      "slot_id": 0,
+      "timestamp_ns": 7353.697999999999
+    },
+    {
+      "admission_sequence": 1,
+      "request_id": "r1",
+      "slot_id": 1,
+      "timestamp_ns": 7353.697999999999
+    },
+    {
+      "admission_sequence": 2,
+      "request_id": "r2",
+      "slot_id": 0,
+      "timestamp_ns": 170923.125
+    },
+    {
+      "admission_sequence": 3,
+      "request_id": "r3",
+      "slot_id": 1,
+      "timestamp_ns": 170923.125
+    },
+    {
+      "admission_sequence": 4,
+      "request_id": "r4",
+      "slot_id": 0,
+      "timestamp_ns": 333603.125
+    },
+    {
+      "admission_sequence": 5,
+      "request_id": "r5",
+      "slot_id": 1,
+      "timestamp_ns": 333603.125
+    },
+    {
+      "admission_sequence": 6,
+      "request_id": "r6",
+      "slot_id": 0,
+      "timestamp_ns": 496301.875
+    },
+    {
+      "admission_sequence": 7,
+      "request_id": "r7",
+      "slot_id": 1,
+      "timestamp_ns": 496301.875
+    }
+  ],
+  "admitted_after_first_completion": 6,
+  "admitted_requests": 8,
+  "batch_size_distribution": {
+    "2": 16
+  },
+  "batches": [
+    {
+      "batch_size": 2,
+      "end_ns": 50415.0,
+      "id": "cohort-000000",
+      "kind": "prefill",
+      "request_ids": [
+        "r0",
+        "r1"
+      ],
+      "start_ns": 7353.697999999999,
+      "token_count": 64
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 90701.875,
+      "id": "cohort-000001",
+      "kind": "decode",
+      "request_ids": [
+        "r0",
+        "r1"
+      ],
+      "start_ns": 50415.0,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 130803.125,
+      "id": "cohort-000002",
+      "kind": "decode",
+      "request_ids": [
+        "r0",
+        "r1"
+      ],
+      "start_ns": 90701.875,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 170923.125,
+      "id": "cohort-000003",
+      "kind": "decode",
+      "request_ids": [
+        "r0",
+        "r1"
+      ],
+      "start_ns": 130803.125,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 213030.625,
+      "id": "cohort-000004",
+      "kind": "prefill",
+      "request_ids": [
+        "r2",
+        "r3"
+      ],
+      "start_ns": 130815.125,
+      "token_count": 64
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 252823.125,
+      "id": "cohort-000005",
+      "kind": "decode",
+      "request_ids": [
+        "r2",
+        "r3"
+      ],
+      "start_ns": 213030.625,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 293501.875,
+      "id": "cohort-000006",
+      "kind": "decode",
+      "request_ids": [
+        "r2",
+        "r3"
+      ],
+      "start_ns": 252823.125,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 333603.125,
+      "id": "cohort-000007",
+      "kind": "decode",
+      "request_ids": [
+        "r2",
+        "r3"
+      ],
+      "start_ns": 293501.875,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 375612.5,
+      "id": "cohort-000008",
+      "kind": "prefill",
+      "request_ids": [
+        "r4",
+        "r5"
+      ],
+      "start_ns": 293513.875,
+      "token_count": 64
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 415503.125,
+      "id": "cohort-000009",
+      "kind": "decode",
+      "request_ids": [
+        "r4",
+        "r5"
+      ],
+      "start_ns": 375612.5,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 455623.125,
+      "id": "cohort-000010",
+      "kind": "decode",
+      "request_ids": [
+        "r4",
+        "r5"
+      ],
+      "start_ns": 415503.125,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 496301.875,
+      "id": "cohort-000011",
+      "kind": "decode",
+      "request_ids": [
+        "r4",
+        "r5"
+      ],
+      "start_ns": 455623.125,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 539412.5,
+      "id": "cohort-000012",
+      "kind": "prefill",
+      "request_ids": [
+        "r6",
+        "r7"
+      ],
+      "start_ns": 455635.125,
+      "token_count": 64
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 579303.125,
+      "id": "cohort-000013",
+      "kind": "decode",
+      "request_ids": [
+        "r6",
+        "r7"
+      ],
+      "start_ns": 539412.5,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 619423.125,
+      "id": "cohort-000014",
+      "kind": "decode",
+      "request_ids": [
+        "r6",
+        "r7"
+      ],
+      "start_ns": 579303.125,
+      "token_count": 2
+    },
+    {
+      "batch_size": 2,
+      "end_ns": 660101.875,
+      "id": "cohort-000015",
+      "kind": "decode",
+      "request_ids": [
+        "r6",
+        "r7"
+      ],
+      "start_ns": 619423.125,
+      "token_count": 2
+    }
+  ],
+  "case": "hbm_tp1",
+  "completed_requests": 8,
+  "completed_visible_output_tokens": 32,
+  "dram_traffic": {
+    "accounting_semantics": "resolved analytical burst bytes and controller waits; null means not fully recorded; empty organization_profiles is not evidence of complete geometry reporting; no device accuracy claim",
+    "activate_commands": null,
+    "burst_count": 1685976,
+    "column_command_bus_busy_ns": null,
+    "controller_direction_switches": 895,
+    "logical_bytes": 53954224,
+    "logical_read_bytes": 50565328,
+    "logical_write_bytes": 3388896,
+    "metric_availability": {
+      "activate_commands": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "partial"
+      },
+      "column_command_bus_busy_ns": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "partial"
+      },
+      "controller_direction_switches": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 16,
+        "status": "recorded"
+      },
+      "organization_profiles": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "not_recorded"
+      },
+      "precharge_commands": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "partial"
+      },
+      "read_commands": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "partial"
+      },
+      "read_write_switches": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "not_recorded"
+      },
+      "refresh_commands": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "partial"
+      },
+      "refresh_wait_ns": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "not_recorded"
+      },
+      "row_command_bus_busy_ns": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "partial"
+      },
+      "scheduler_batches": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 16,
+        "status": "recorded"
+      },
+      "scheduler_reordered_requests": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 16,
+        "status": "recorded"
+      },
+      "turnaround_wait_ns": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "not_recorded"
+      },
+      "write_commands": {
+        "physical_batch_count": 16,
+        "recorded_batch_count": 0,
+        "status": "partial"
+      }
+    },
+    "organization_profile_limit": 32,
+    "organization_profiles": [],
+    "owner_ids": [
+      "cpu0.memory",
+      "hbm0.hbm_fabric"
+    ],
+    "physical_bytes": 53959040,
+    "physical_read_bytes": 50567168,
+    "physical_write_bytes": 3391872,
+    "precharge_commands": null,
+    "queue_wait_ns": 0.0,
+    "read_commands": null,
+    "read_write_switches": null,
+    "refresh_commands": null,
+    "refresh_wait_ns": null,
+    "resource_totals": {
+      "cpu0.memory:dram:bank:0:0:0:0:0:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:0:0:0:1": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:1:0:0:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:1:0:0:1": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:2:0:0:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:2:0:0:1": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:3:0:0:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:3:0:0:1": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:4:0:0:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:4:0:0:1": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:5:0:0:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:5:0:0:1": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:6:0:0:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:bank:0:0:7:0:0:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 14.0
+      },
+      "cpu0.memory:dram:command:0": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 65.0
+      },
+      "cpu0.memory:dram:command:1": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 45.0
+      },
+      "cpu0.memory:dram:command:2": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 45.0
+      },
+      "cpu0.memory:dram:command:3": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 45.0
+      },
+      "cpu0.memory:dram:command:4": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 30.0
+      },
+      "cpu0.memory:dram:command:5": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 30.0
+      },
+      "cpu0.memory:dram:command:6": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 25.0
+      },
+      "cpu0.memory:dram:command:7": {
+        "bytes_moved": 0,
+        "owner": "cpu0.memory",
+        "service_ns": 20.0
+      },
+      "cpu0.memory:dram:data:0": {
+        "bytes_moved": 3328,
+        "owner": "cpu0.memory",
+        "service_ns": 65.0
+      },
+      "cpu0.memory:dram:data:1": {
+        "bytes_moved": 2304,
+        "owner": "cpu0.memory",
+        "service_ns": 45.0
+      },
+      "cpu0.memory:dram:data:2": {
+        "bytes_moved": 2304,
+        "owner": "cpu0.memory",
+        "service_ns": 45.0
+      },
+      "cpu0.memory:dram:data:3": {
+        "bytes_moved": 2304,
+        "owner": "cpu0.memory",
+        "service_ns": 45.0
+      },
+      "cpu0.memory:dram:data:4": {
+        "bytes_moved": 1536,
+        "owner": "cpu0.memory",
+        "service_ns": 30.0
+      },
+      "cpu0.memory:dram:data:5": {
+        "bytes_moved": 1536,
+        "owner": "cpu0.memory",
+        "service_ns": 30.0
+      },
+      "cpu0.memory:dram:data:6": {
+        "bytes_moved": 1280,
+        "owner": "cpu0.memory",
+        "service_ns": 25.0
+      },
+      "cpu0.memory:dram:data:7": {
+        "bytes_moved": 1024,
+        "owner": "cpu0.memory",
+        "service_ns": 20.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:0:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:1:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:2:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8442.5
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:3:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8415.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:4:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8380.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:5:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:6:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:column_command:7:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:0": {
+        "bytes_moved": 209152,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:data:1": {
+        "bytes_moved": 209152,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:data:10": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:100": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:101": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:102": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:103": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:104": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:105": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:106": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:107": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:108": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:109": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:11": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:110": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:111": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:112": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:113": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:114": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:115": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:116": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:117": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:118": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:119": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:12": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:120": {
+        "bytes_moved": 216320,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:data:121": {
+        "bytes_moved": 216320,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:data:122": {
+        "bytes_moved": 216320,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:data:123": {
+        "bytes_moved": 216320,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:data:124": {
+        "bytes_moved": 216320,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:data:125": {
+        "bytes_moved": 216320,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:data:126": {
+        "bytes_moved": 216320,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8450.0
+      },
+      "hbm0.hbm_fabric:dram:data:127": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:128": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:129": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:13": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:130": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:131": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:132": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:133": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:134": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:135": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:136": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:137": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:138": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:139": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:14": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:140": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:141": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:142": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:143": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:144": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:145": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:146": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:147": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:148": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:149": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:15": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:150": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:151": {
+        "bytes_moved": 216704,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8465.0
+      },
+      "hbm0.hbm_fabric:dram:data:152": {
+        "bytes_moved": 215936,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8435.0
+      },
+      "hbm0.hbm_fabric:dram:data:153": {
+        "bytes_moved": 214912,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:data:154": {
+        "bytes_moved": 214912,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:data:155": {
+        "bytes_moved": 214912,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:data:156": {
+        "bytes_moved": 214912,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:data:157": {
+        "bytes_moved": 214912,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:data:158": {
+        "bytes_moved": 214912,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:data:159": {
+        "bytes_moved": 214912,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:data:16": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:160": {
+        "bytes_moved": 214912,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8395.0
+      },
+      "hbm0.hbm_fabric:dram:data:161": {
+        "bytes_moved": 214144,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:data:162": {
+        "bytes_moved": 214144,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:data:163": {
+        "bytes_moved": 214144,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:data:164": {
+        "bytes_moved": 214144,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:data:165": {
+        "bytes_moved": 214144,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:data:166": {
+        "bytes_moved": 214144,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:data:167": {
+        "bytes_moved": 214144,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8365.0
+      },
+      "hbm0.hbm_fabric:dram:data:168": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:169": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:17": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:170": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:171": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:172": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:173": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:174": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:175": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:176": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:177": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:178": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:179": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:18": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:180": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:181": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:182": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:183": {
+        "bytes_moved": 213376,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8335.0
+      },
+      "hbm0.hbm_fabric:dram:data:184": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:185": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:186": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:187": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:188": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:189": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:19": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:190": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:191": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:192": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:193": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:194": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:195": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:196": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:197": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:198": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:199": {
+        "bytes_moved": 212224,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8290.0
+      },
+      "hbm0.hbm_fabric:dram:data:2": {
+        "bytes_moved": 209152,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:data:20": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:200": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:201": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:202": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:203": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:204": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:205": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:206": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:207": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:208": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:209": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:21": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:210": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:211": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:212": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:213": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:214": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:215": {
+        "bytes_moved": 211712,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8270.0
+      },
+      "hbm0.hbm_fabric:dram:data:216": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:217": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:218": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:219": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:22": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:220": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:221": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:222": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:223": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:224": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:225": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:226": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:227": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:228": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:229": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:23": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:230": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:231": {
+        "bytes_moved": 209408,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8180.0
+      },
+      "hbm0.hbm_fabric:dram:data:232": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:233": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:234": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:235": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:236": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:237": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:238": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:239": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:24": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:240": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:241": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:242": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:243": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:244": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:245": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:246": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:247": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:248": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:249": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:25": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:250": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:251": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:252": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:253": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:254": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:255": {
+        "bytes_moved": 207872,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8120.0
+      },
+      "hbm0.hbm_fabric:dram:data:26": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:27": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:28": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:29": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:3": {
+        "bytes_moved": 209152,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:data:30": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:31": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:32": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:33": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:34": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:35": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:36": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:37": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:38": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:39": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:4": {
+        "bytes_moved": 209024,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:data:40": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:41": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:42": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:43": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:44": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:45": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:46": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:47": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:48": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:49": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:5": {
+        "bytes_moved": 209024,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:data:50": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:51": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:52": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:53": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:54": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:55": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:56": {
+        "bytes_moved": 209152,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:data:57": {
+        "bytes_moved": 209152,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:data:58": {
+        "bytes_moved": 209152,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:data:59": {
+        "bytes_moved": 209152,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8170.0
+      },
+      "hbm0.hbm_fabric:dram:data:6": {
+        "bytes_moved": 209024,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:data:60": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:61": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:62": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:63": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:64": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:65": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:66": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:67": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:68": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:69": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:7": {
+        "bytes_moved": 209024,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:data:70": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:71": {
+        "bytes_moved": 208384,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8140.0
+      },
+      "hbm0.hbm_fabric:dram:data:72": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:73": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:74": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:75": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:76": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:77": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:78": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:79": {
+        "bytes_moved": 208896,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8160.0
+      },
+      "hbm0.hbm_fabric:dram:data:8": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:80": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:81": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:82": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:83": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:84": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:85": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:86": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:87": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:88": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:89": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:9": {
+        "bytes_moved": 208768,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8155.0
+      },
+      "hbm0.hbm_fabric:dram:data:90": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:91": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:92": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:93": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:94": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:95": {
+        "bytes_moved": 208640,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8150.0
+      },
+      "hbm0.hbm_fabric:dram:data:96": {
+        "bytes_moved": 209024,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:data:97": {
+        "bytes_moved": 209024,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:data:98": {
+        "bytes_moved": 209024,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:data:99": {
+        "bytes_moved": 209024,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 8165.0
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10017.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10017.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9973.4375
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9973.4375
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10002.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10002.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10002.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10002.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10017.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10017.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10003.4375
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10003.4375
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10003.4375
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9992.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9973.4375
+      },
+      "hbm0.hbm_fabric:dram:row_command:0:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9973.4375
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9980.9375
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9980.9375
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10002.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10002.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9986.5625
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9986.5625
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9986.5625
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9986.5625
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9980.9375
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9980.9375
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9961.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9961.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9961.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9961.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10002.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:1:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10002.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9972.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9972.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9972.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9972.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9966.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9966.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9966.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9966.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9972.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9972.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9980.0
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9980.0
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9980.0
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9980.0
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9972.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:2:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9972.5
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9968.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9968.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9959.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9959.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10092.8125
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10091.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10091.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10076.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9965.0
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9965.0
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9963.125
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9963.125
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9963.125
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9963.125
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9959.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:3:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9959.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10061.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10061.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10056.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10054.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10054.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10054.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10061.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10061.875
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:4:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10054.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10054.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10037.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10037.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10037.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10037.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10054.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10054.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:5:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10069.375
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10037.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10037.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10036.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10036.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10013.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10013.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10013.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10013.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10037.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10037.1875
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10036.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10036.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10036.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10036.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10036.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:6:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10036.25
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:0": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10013.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:1": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10013.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:10": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:11": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:12": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:13": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:14": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:15": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:2": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10013.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:3": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 10013.75
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:4": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:5": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:6": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:7": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:8": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      },
+      "hbm0.hbm_fabric:dram:row_command:7:9": {
+        "bytes_moved": 0,
+        "owner": "hbm0.hbm_fabric",
+        "service_ns": 9955.625
+      }
+    },
+    "row_command_bus_busy_ns": null,
+    "row_conflicts": 0,
+    "row_hits": 345219,
+    "row_misses": 1340757,
+    "scheduler_batches": 260,
+    "scheduler_reordered_requests": 0,
+    "schema_version": "heterollm.dram-traffic/v1",
+    "service_ns": 82449.02885702993,
+    "service_time_scope": "service_ns sums per-task/owner completion spans, which may overlap; it is neither elapsed wall time nor data-bus busy time. resource_totals contains actual per-resource occupied time and bytes.",
+    "task_count": 480,
+    "turnaround_wait_ns": null,
+    "write_commands": null
+  },
+  "executed_collective_category_service_ns": 0,
+  "executed_peer_link_service_ns": {},
+  "execution_path": "reporting.run_scenario -> serving.simulate_online -> TopologyAwareBatchCostProvider -> UnifiedEventKernel",
+  "limitations": [
+    "Eight finite requests include initial Prefill and final drain.",
+    "No external PD import, constant full-batch steady state, or paper model/hardware accuracy is claimed.",
+    "Original synthetic hardware assumptions are retained; this is not a device performance prediction."
+  ],
+  "live_physical_cores": {
+    "failed_entrypoint_calls": 0,
+    "finished_run_count": 1,
+    "live_runtime_restores": 0,
+    "owners": [
+      {
+        "activate_commands": null,
+        "bank_group_exact_fallback_transactions": 0,
+        "bank_group_timing_transactions": 0,
+        "burst_count": 244,
+        "column_command_bus_busy_ns": null,
+        "compiled_hbm_float64_transactions": 0,
+        "control_metric_recorded_transactions": {
+          "activate_commands": 0,
+          "column_command_bus_busy_ns": 0,
+          "precharge_commands": 0,
+          "read_commands": 0,
+          "refresh_commands": 0,
+          "row_command_bus_busy_ns": 0,
+          "write_commands": 0
+        },
+        "core": "DramCore",
+        "entrypoint_calls": {
+          "submit": 64
+        },
+        "erase_operations": 0,
+        "first_arrival_ns": 8197.364666666666,
+        "jedec_control_transactions": 0,
+        "last_completion_ns": 660101.875,
+        "logical_read_bytes": 8384,
+        "logical_write_bytes": 4320,
+        "memory_kind": "DDR",
+        "pages_programmed": 0,
+        "pages_read": 0,
+        "physical_owner": "cpu0.memory",
+        "physical_read_bytes": 9728,
+        "physical_write_bytes": 5888,
+        "precharge_commands": null,
+        "read_cache_hits": 0,
+        "read_cache_misses": 0,
+        "read_commands": null,
+        "refresh_commands": null,
+        "row_command_bus_busy_ns": null,
+        "transactions": 64,
+        "transfer_bytes": 15616,
+        "write_commands": null
+      },
+      {
+        "activate_commands": 1340743,
+        "bank_group_exact_fallback_transactions": 0,
+        "bank_group_timing_transactions": 1208,
+        "burst_count": 1685732,
+        "column_command_bus_busy_ns": 1053582.5,
+        "compiled_hbm_float64_transactions": 1208,
+        "control_metric_recorded_transactions": {
+          "activate_commands": 1208,
+          "column_command_bus_busy_ns": 1208,
+          "precharge_commands": 1208,
+          "read_commands": 1208,
+          "refresh_commands": 1208,
+          "row_command_bus_busy_ns": 1208,
+          "write_commands": 1208
+        },
+        "core": "DramCore",
+        "entrypoint_calls": {
+          "submit": 588,
+          "submit_many": 260
+        },
+        "erase_operations": 0,
+        "first_arrival_ns": 11342.276776041666,
+        "jedec_control_transactions": 1208,
+        "last_completion_ns": 659970.625,
+        "logical_read_bytes": 50556944,
+        "logical_write_bytes": 3384576,
+        "memory_kind": "HBM",
+        "pages_programmed": 0,
+        "pages_read": 0,
+        "physical_owner": "hbm0.hbm_fabric",
+        "physical_read_bytes": 50557440,
+        "physical_write_bytes": 3385984,
+        "precharge_commands": 34892,
+        "read_cache_hits": 0,
+        "read_cache_misses": 0,
+        "read_commands": 1579920,
+        "refresh_commands": 42524,
+        "row_command_bus_busy_ns": 1281139.0625,
+        "transactions": 1208,
+        "transfer_bytes": 53943424,
+        "write_commands": 105812
+      }
+    ],
+    "run_count": 1,
+    "scope": "successful Core submissions on the persistent online-serving kernel; excludes planner previews, isolated replay and pre-serving initialization",
+    "valid_for_committed_byte_totals": true
+  },
+  "mean_tpot_ns": 40204.947916666664,
+  "mean_ttft_ns": 294617.65625,
+  "nand_traffic": {
+    "schema_version": "heterollm.nand-traffic/v1",
+    "task_count": 0
+  },
+  "native_collective_graph": {
+    "distinct_all_reduce_operations": 0,
+    "scope": "compiled native graphs of realized cohorts, not an additional simulation or retained transaction trace"
+  },
+  "parameters": {
+    "activation_and_intermediate_memory": "HBM",
+    "hbf_protocol": "generic analytical NAND page service, not OCP",
+    "hidden": 256,
+    "intermediate": 512,
+    "kv_heads": 2,
+    "kv_memory": "hbm0",
+    "layers": 2,
+    "max_concurrent_sequences": 2,
+    "model": "native-pilot-2layer-bf16",
+    "output_tokens": 4,
+    "prompt_tokens": 32,
+    "q_heads": 4,
+    "request_count": 8,
+    "tp": 1,
+    "vocabulary": 1024,
+    "weight_memory": "HBM",
+    "weights_and_kv": "BF16"
+  },
+  "resolved_placement": {
+    "kv_owner": "hbm0",
+    "rank_active_memory": [
+      "hbm0"
+    ],
+    "weight_tensor_owners": {
+      "dense0.attention_weights": "hbm0",
+      "dense0.mlp_weights": "hbm0",
+      "dense1.attention_weights": "hbm0",
+      "dense1.mlp_weights": "hbm0",
+      "embedding_weights": "hbm0",
+      "lm_head_weights": "hbm0"
+    }
+  },
+  "scope": "native functional pilot, not paper results or steady-state TPS",
+  "status": "completed",
+  "wall_seconds": 2.4766940000117756
+}

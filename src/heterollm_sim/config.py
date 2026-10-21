@@ -44,7 +44,7 @@ from .ir import (
     normalize_component_kind,
 )
 from .serde import read_json
-from .simulation_options import FastDecodeConfig, SimulationConfig, simulation_from_dict
+from .simulation_options import FastDecodeConfig, NativeWindowFastConfig, SimulationConfig, simulation_from_dict
 from .kernel_model import kernel_model_from_dict
 from .precision import dtype_bits
 from .physical_contract import (
@@ -118,6 +118,8 @@ def normalize_cost_profile_kind(component_kind: str) -> Optional[str]:
         "ddr",
         "ddr_memory",
         "cxl_memory",
+        "sram",
+        "shared_memory",
     }:
         return "host_memory"
     if normalized == "cim" or "compute_in_memory" in normalized or "cim" in normalized:
@@ -692,7 +694,7 @@ class ScenarioConfig:
             # Store the parsed physical config at the service boundary while
             # preserving the authored profile values.
             from dataclasses import asdict
-            from .memory_types import DramConfig
+            from .memory_types import DramConfig, SramConfig
 
             parsed = require_physical_memory_config(component)
             if isinstance(parsed, DramConfig):
@@ -706,6 +708,7 @@ class ScenarioConfig:
                             component.component_id, declared_generation, parsed_generation
                         )
                     )
+            if isinstance(parsed, (DramConfig, SramConfig)):
                 canonical = asdict(parsed)
                 canonical["kind"] = parsed.kind.value
                 metadata["physical_memory_config"] = canonical
@@ -1427,6 +1430,7 @@ def scheduler_from_dict(data: Mapping[str, Any]) -> SchedulerSpec:
             "preemption_policy",
             "slo_ttft_ns",
             "slo_tbt_ns",
+            "slo_tpot_ns",
         ),
     )
     required = (
@@ -1484,6 +1488,11 @@ def scheduler_from_dict(data: Mapping[str, Any]) -> SchedulerSpec:
             None
             if data.get("slo_tbt_ns") is None
             else _number(data.get("slo_tbt_ns"), "scheduler slo_tbt_ns")
+        ),
+        slo_tpot_ns=(
+            None
+            if data.get("slo_tpot_ns") is None
+            else _number(data.get("slo_tpot_ns"), "scheduler slo_tpot_ns")
         ),
     )
 
@@ -2727,6 +2736,7 @@ __all__ = [
     "ScenarioConfig",
     "SimulationConfig",
     "FastDecodeConfig",
+    "NativeWindowFastConfig",
     "hardware_from_dict",
     "load_scenario",
     "model_from_dict",

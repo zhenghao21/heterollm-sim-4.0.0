@@ -287,7 +287,7 @@ def physical_capacity_failure(error):
             detail["allocation"] = {k: declaration[k] for k in
                 ("buffer_id", "size_bytes", "allocation_size_bytes", "generation", "allocation_generation")
                 if k in declaration}
-        if frame.f_code.co_name == "_find_first_fit":
+        if frame.f_code.co_name == "_allocation_exhausted":
             candidates = [a for a in local["failure_allocations"] if a.alias_of is None]
             lower, upper = local["lower"], local["upper"]
             extent = [(max(lower,a.base_address), min(upper,a.base_address+a.size_bytes))
@@ -303,7 +303,7 @@ def physical_capacity_failure(error):
             largest = max(largest,upper-cursor)
             detail.update(occupied_bytes_at_failure=used, free_bytes_at_failure=upper-lower-used,
                 largest_free_extent_bytes=largest, arena_start_bytes=lower, arena_end_bytes=upper,
-                same_layout_minimum_capacity_bytes=int(local["cursor"])+int(local["size"]),
+                    same_layout_minimum_capacity_bytes=int(cursor)+int(local["size"]),
                 compacted_occupancy_plus_request_bytes=used+int(local["size"]),
                 occupancy_observation="non-alias extents in the failed allocator arena, captured before transaction rollback; not a measured hardware peak")
         trace = trace.tb_next

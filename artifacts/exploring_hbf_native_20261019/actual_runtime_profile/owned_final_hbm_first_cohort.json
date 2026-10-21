@@ -1,0 +1,436 @@
+{
+  "status": "bounded_cancelled",
+  "wall_seconds": 327.029663000023,
+  "scope": "same formal 405B TP8 HBM4 SHORT B1 native path, bounded cancellation; not full candidate or old detailed reference",
+  "progress": [
+    {
+      "wall_seconds": 0.1780733999912627,
+      "stage": "control_plane",
+      "completed": 0,
+      "total": 1,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 14.681440900021698,
+      "stage": "control_plane",
+      "completed": 1,
+      "total": 1,
+      "metadata": {
+        "completed_control_tasks": 64,
+        "placement_status": "feasible"
+      }
+    },
+    {
+      "wall_seconds": 14.681493900017813,
+      "stage": "validation",
+      "completed": 0,
+      "total": 1,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 14.739861599984579,
+      "stage": "validation",
+      "completed": 1,
+      "total": 1,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 14.897937499976251,
+      "stage": "serving_cohorts",
+      "completed": 0,
+      "total": null,
+      "metadata": {
+        "request_count": 4,
+        "cumulative_progress": {
+          "cohorts": 0,
+          "prefill_cohorts": 0,
+          "decode_cohorts": 0,
+          "prefill_compute_tokens": 0,
+          "visible_output_tokens": 0,
+          "measurement_visible_output_tokens": 0,
+          "warmup_decode_cohorts": 0,
+          "measurement_decode_cohorts": 0,
+          "target_decode_cohorts": 1116,
+          "finished_requests": 0,
+          "request_count": 4,
+          "external_imported_requests": 0,
+          "external_imported_logical_bytes": 0
+        }
+      }
+    },
+    {
+      "wall_seconds": 24.90568159997929,
+      "stage": "serving_boundary",
+      "completed": 0,
+      "total": null,
+      "metadata": {
+        "cumulative_progress": {
+          "cohorts": 0,
+          "prefill_cohorts": 0,
+          "decode_cohorts": 0,
+          "prefill_compute_tokens": 0,
+          "visible_output_tokens": 0,
+          "measurement_visible_output_tokens": 0,
+          "warmup_decode_cohorts": 0,
+          "measurement_decode_cohorts": 0,
+          "target_decode_cohorts": 1116,
+          "finished_requests": 0,
+          "request_count": 4,
+          "external_imported_requests": 0,
+          "external_imported_logical_bytes": 0
+        }
+      }
+    },
+    {
+      "wall_seconds": 34.911034899996594,
+      "stage": "serving_boundary",
+      "completed": 0,
+      "total": null,
+      "metadata": {
+        "cumulative_progress": {
+          "cohorts": 0,
+          "prefill_cohorts": 0,
+          "decode_cohorts": 0,
+          "prefill_compute_tokens": 0,
+          "visible_output_tokens": 0,
+          "measurement_visible_output_tokens": 0,
+          "warmup_decode_cohorts": 0,
+          "measurement_decode_cohorts": 0,
+          "target_decode_cohorts": 1116,
+          "finished_requests": 0,
+          "request_count": 4,
+          "external_imported_requests": 0,
+          "external_imported_logical_bytes": 0
+        }
+      }
+    },
+    {
+      "wall_seconds": 44.91161020001164,
+      "stage": "serving_boundary",
+      "completed": 0,
+      "total": null,
+      "metadata": {
+        "cumulative_progress": {
+          "cohorts": 0,
+          "prefill_cohorts": 0,
+          "decode_cohorts": 0,
+          "prefill_compute_tokens": 0,
+          "visible_output_tokens": 0,
+          "measurement_visible_output_tokens": 0,
+          "warmup_decode_cohorts": 0,
+          "measurement_decode_cohorts": 0,
+          "target_decode_cohorts": 1116,
+          "finished_requests": 0,
+          "request_count": 4,
+          "external_imported_requests": 0,
+          "external_imported_logical_bytes": 0
+        }
+      }
+    },
+    {
+      "wall_seconds": 60.82085289998213,
+      "stage": "cohort_preparation",
+      "completed": 0,
+      "total": null,
+      "metadata": {
+        "current_cohort": {
+          "cohort_id": "cohort-000000",
+          "index": 1,
+          "kind": "prefill",
+          "request_count": 1,
+          "logical_tokens": 1,
+          "completed_tasks": 0,
+          "total_tasks": null
+        },
+        "cumulative_progress": {
+          "cohorts": 0,
+          "prefill_cohorts": 0,
+          "decode_cohorts": 0,
+          "prefill_compute_tokens": 0,
+          "visible_output_tokens": 0,
+          "measurement_visible_output_tokens": 0,
+          "warmup_decode_cohorts": 0,
+          "measurement_decode_cohorts": 0,
+          "target_decode_cohorts": 1116,
+          "finished_requests": 0,
+          "request_count": 4,
+          "external_imported_requests": 1,
+          "external_imported_logical_bytes": 856203264
+        }
+      }
+    },
+    {
+      "wall_seconds": 69.20132290001493,
+      "stage": "cohort_lowering",
+      "completed": 0,
+      "total": null,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 82.36966129997745,
+      "stage": "cohort_preview_tasks",
+      "completed": 0,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 82.53032090002671,
+      "stage": "cohort_preview_tasks",
+      "completed": 8192,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 82.70398649998242,
+      "stage": "cohort_preview_tasks",
+      "completed": 16384,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 82.93430169997737,
+      "stage": "cohort_preview_tasks",
+      "completed": 24576,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 83.21834880003007,
+      "stage": "cohort_preview_tasks",
+      "completed": 32768,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 83.55196369998157,
+      "stage": "cohort_preview_tasks",
+      "completed": 40960,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 83.96467160002794,
+      "stage": "cohort_preview_tasks",
+      "completed": 49152,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 84.50462110002991,
+      "stage": "cohort_preview_tasks",
+      "completed": 57344,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 85.13633950002259,
+      "stage": "cohort_preview_tasks",
+      "completed": 65536,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 85.87309579999419,
+      "stage": "cohort_preview_tasks",
+      "completed": 73728,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 86.73778750002384,
+      "stage": "cohort_preview_tasks",
+      "completed": 81920,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 87.74445930001093,
+      "stage": "cohort_preview_tasks",
+      "completed": 90112,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 88.88827070000116,
+      "stage": "cohort_preview_tasks",
+      "completed": 98304,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 90.07504349999363,
+      "stage": "cohort_preview_tasks",
+      "completed": 106496,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 91.35806050000247,
+      "stage": "cohort_preview_tasks",
+      "completed": 114688,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 92.73557399999117,
+      "stage": "cohort_preview_tasks",
+      "completed": 122880,
+      "total": 123192,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 102.6414136000094,
+      "stage": "cohort_scheduling",
+      "completed": 0,
+      "total": null,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 102.78898339997977,
+      "stage": "cohort_execution",
+      "completed": 0,
+      "total": null,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 106.99595750001026,
+      "stage": "cohort_tasks",
+      "completed": 0,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 117.22216110001318,
+      "stage": "cohort_tasks",
+      "completed": 2048,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 127.48252359998878,
+      "stage": "cohort_tasks",
+      "completed": 3840,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 138.4426281999913,
+      "stage": "cohort_tasks",
+      "completed": 6144,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 149.51896910002688,
+      "stage": "cohort_tasks",
+      "completed": 8192,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 160.11511910002446,
+      "stage": "cohort_tasks",
+      "completed": 10240,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 171.03892580000684,
+      "stage": "cohort_tasks",
+      "completed": 12544,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 181.66670569998678,
+      "stage": "cohort_tasks",
+      "completed": 14848,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 189.02413410000736,
+      "stage": "cohort_tasks",
+      "completed": 16384,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 199.76954770000884,
+      "stage": "cohort_tasks",
+      "completed": 18688,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 211.81409240001813,
+      "stage": "cohort_tasks",
+      "completed": 21248,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 222.03676480002468,
+      "stage": "cohort_tasks",
+      "completed": 23296,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 227.41473630000837,
+      "stage": "cohort_tasks",
+      "completed": 24576,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 238.03383410000242,
+      "stage": "cohort_tasks",
+      "completed": 26624,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 248.5731535999803,
+      "stage": "cohort_tasks",
+      "completed": 28928,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 261.13548810000066,
+      "stage": "cohort_tasks",
+      "completed": 30976,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 267.9524362999946,
+      "stage": "cohort_tasks",
+      "completed": 32768,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 278.24162669997895,
+      "stage": "cohort_tasks",
+      "completed": 34816,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 289.3322449999978,
+      "stage": "cohort_tasks",
+      "completed": 36864,
+      "total": 123197,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 299.55316090001725,
+      "stage": "cohort_tasks",
+      "completed": 39168,
+      "total": 123197,
+      "metadata": {}
+    }
+  ]
+}

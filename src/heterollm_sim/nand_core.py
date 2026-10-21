@@ -98,19 +98,50 @@ class _NandTransaction:
     """Undo only media indexes changed while this transaction is open."""
 
     def __init__(self, core):
+        # Granted only by PhysicalRuntimeContext after this phase's complete
+        # dynamic native-owner/timeline qualification. It dies with the undo
+        # token; direct/public Core submissions never infer this permission.
+        self.native_timeline_qualified = False
         self.program_frontiers = {}
         self.block_wear = {}
         self.cache_banks = {}
         self.cache_slots = {}
         self.cache_snapshot = None
-        self.array_frontiers = dict(core.__dict__["_array_ready"])
-        self.buffer_frontiers = dict(core.__dict__["_buffer_ready"])
+        lazy_frontiers = (core.config.protocol_mode == "generic_nand"
+                          and not core._nand_state_exposed
+                          and type(core.__dict__["_array_ready"]) is dict
+                          and type(core.__dict__["_buffer_ready"]) is dict
+                          and _native_frontier_writers(core))
+        self.frontier_roots = (core.__dict__["_array_ready"], core.__dict__["_buffer_ready"])
+        self.frontier_undo = ({}, {})
+        self.array_frontiers = None if lazy_frontiers else dict(self.frontier_roots[0])
+        self.buffer_frontiers = None if lazy_frontiers else dict(self.frontier_roots[1])
         self.numeric_at_begin = core._nand_numeric_state
         self.numeric = None
 
     def capture_numeric(self, packed):
         if packed is self.numeric_at_begin and self.numeric is None:
             self.numeric = packed.checkpoint()
+
+    def remember_frontiers(self, key):
+        if self.array_frontiers is not None:
+            return
+        for root, undo in zip(self.frontier_roots, self.frontier_undo):
+            if key not in undo:
+                undo[key] = root.get(key)
+
+    def materialize_frontiers(self):
+        if self.array_frontiers is not None:
+            return
+        saved = tuple(dict(root) for root in self.frontier_roots)
+        for target, undo in zip(saved, self.frontier_undo):
+            for key, previous in undo.items():
+                if previous is None:
+                    target.pop(key, None)
+                else:
+                    target[key] = previous
+        self.array_frontiers, self.buffer_frontiers = saved
+        self.frontier_undo = ({}, {})
 
     def remember_cache(self, core, bank):
         if self.cache_snapshot is not None or bank in self.cache_banks:
@@ -127,6 +158,7 @@ class _NandTransaction:
 
     def materialize_cache(self, core):
         """Detach undo state before an external snapshot replaces live slots."""
+        self.materialize_frontiers()
         if self.cache_snapshot is not None:
             return
         memo = {}
@@ -166,8 +198,18 @@ class _NandTransaction:
             for slot, page_key, ready, readers, use in self.cache_slots.values():
                 slot.page_key, slot.ready_ns = page_key, ready
                 slot.reader_completion_ns, slot.last_use = readers, use
-        core.__dict__["_array_ready"] = dict(self.array_frontiers)
-        core.__dict__["_buffer_ready"] = dict(self.buffer_frontiers)
+        if self.array_frontiers is None:
+            for name, root, undo in zip(("_array_ready", "_buffer_ready"),
+                                        self.frontier_roots, self.frontier_undo):
+                for key, previous in undo.items():
+                    if previous is None:
+                        root.pop(key, None)
+                    else:
+                        root[key] = previous
+                core.__dict__[name] = root
+        else:
+            core.__dict__["_array_ready"] = dict(self.array_frontiers)
+            core.__dict__["_buffer_ready"] = dict(self.buffer_frontiers)
         if self.numeric is not None:
             self.numeric_at_begin.restore(self.numeric)
         core._nand_numeric_state = self.numeric_at_begin
@@ -307,6 +349,10 @@ class NandCore:
     def _touch_cache_bank(self, bank):
         for token in self._nand_transactions:
             token.remember_cache(self, bank)
+
+    def _touch_frontiers(self, key):
+        for token in self._nand_transactions:
+            token.remember_frontiers(key)
 
     def _set_program_frontier(self, key, value):
         if self._nand_transactions:
@@ -816,8 +862,11 @@ class NandCore:
             program = self._media_stage(
                 "PAGE_PROGRAM", m, internal.end_ns, self.config.page_program_ns, eligible_ns=internal.end_ns
             )
+            self._touch_frontiers(array_id)
             self.__dict__["_array_ready"][array_id] = program.end_ns
+            self._touch_frontiers(array_id)
             self.__dict__["_buffer_ready"][array_id] = program.end_ns
+            self.timeline._remember_resource(array_id)
             self.timeline.ready_ns[array_id] = program.end_ns
             start_ns = internal.start_ns if start_ns is None else min(start_ns, internal.start_ns)
             cursor = max(cursor, program.end_ns)
@@ -856,6 +905,13 @@ class NandCore:
         }
 
     def submit(self, request: AccessRequest) -> TransactionResult:
+        depth = len(self.timeline._owned_transactions)
+        try:
+            return self._submit_live(request)
+        finally:
+            self.timeline._finish_core_accounting(depth)
+
+    def _submit_live(self, request: AccessRequest) -> TransactionResult:
         # GC interleaves a scalar read and PROGRAM with bulk page execution.
         # Hand only that bank to the unchanged scalar state machine instead
         # of publishing and repacking all banks for every copied page.
@@ -867,7 +923,11 @@ class NandCore:
             result = self._submit_resident_scalar(request)
             if result is not None:
                 return result
-        self._nand_publish_numeric()
+        if not (self._nand_numeric_state is not None
+                and "_resident_generic_bulk_eligible" not in self.__dict__
+                and type(self)._resident_generic_bulk_eligible is _RESIDENT_SCALAR_METHODS["_resident_generic_bulk_eligible"]
+                and self._resident_generic_bulk_eligible(request)):
+            self._nand_publish_numeric()
         self._validate_request(request)
         if (self.config.protocol_mode == "ocp_hbf_0_7"
                 and request.address // self.config.page_bytes
@@ -882,7 +942,7 @@ class NandCore:
                 return result
         self._observation_events = []
         effective_arrival, admitted, host_channel = self._admit_host_request(request)
-        before_metrics = self.timeline.metrics_snapshot(
+        before_metrics = self.timeline._core_metrics_snapshot(
             max_intervals=(
                 self.config.max_expanded_segments
                 if self.capture_details
@@ -1024,16 +1084,39 @@ class NandCore:
                 or type(self.timeline) is not ResourceTimeline or self.capture_details
                 or self._observe_media or self._nand_state_exposed
                 or self._cache_use >= 2**63 - 1
-                or self.config.protocol_mode != "ocp_hbf_0_7"
-                or request.address // self.config.page_bytes
-                != (request.address + request.byte_count - 1) // self.config.page_bytes):
+                or self.config.protocol_mode not in ("ocp_hbf_0_7", "generic_nand")
+                or self.config.page_bytes != 4096):
             return False
         # An authored replacement can access arbitrary controller banks. Such
         # callbacks continue to receive the fully published controller state.
+        if self.config.protocol_mode == "generic_nand":
+            from ._nand_acceleration import _generic_resident_writers, has_native_timeline_hooks
+            if not has_native_timeline_hooks() or not _generic_resident_writers(self):
+                return False
+            if (request.operation in (Operation.READ, Operation.WRITE)
+                    and not request.address % 4096 and not request.byte_count % 4096
+                    and request.byte_count // 4096 >= 128):
+                return False
+        elif (request.address // self.config.page_bytes
+                != (request.address + request.byte_count - 1) // self.config.page_bytes):
+            return False
         return (all(name not in self.__dict__ and getattr(NandCore, name) is method
                     for name, method in _RESIDENT_SCALAR_METHODS.items())
                 and getattr(self._nand_numeric_state, "scalar_resource_contract", None)
                 == self._resident_resource_contract())
+
+    def _resident_generic_bulk_eligible(self, request):
+        from ._nand_acceleration import _generic_resident_writers, has_native_timeline_hooks
+        config = self.config
+        return (type(self) is NandCore and type(request) is AccessRequest
+                and self._nand_numeric_enabled and not self._nand_state_exposed
+                and config.protocol_mode == "generic_nand" and config.page_bytes == 4096
+                and request.operation in (Operation.READ, Operation.WRITE)
+                and not request.address % 4096 and not request.byte_count % 4096
+                and request.byte_count >= 128 * 4096
+                and has_native_timeline_hooks()
+                and _generic_resident_writers(self)
+                and self._nand_numeric_state.scalar_resource_contract == self._resident_resource_contract())
 
     def _resident_resource_contract(self):
         """Immutable layout values, including mutable routing metadata.
@@ -1065,6 +1148,8 @@ class NandCore:
         """
         packed = self._nand_numeric_state
         config = self.config
+        if config.protocol_mode == "generic_nand":
+            return self._submit_resident_generic(request)
         base_units = (config.channels * config.targets_per_channel
                       * config.dies_per_target * config.luns_per_die)
         bank = request.address // 4096 % (base_units * config.planes_per_lun)
@@ -1078,6 +1163,7 @@ class NandCore:
         for token in self._nand_transactions:
             token.capture_numeric(packed)
         if packed.dirty_units[unit]:
+            self._touch_frontiers(name)
             array_values[name], buffer_values[name] = float(arrays[unit]), float(buffers[unit])
         if packed.dirty_banks[bank]:
             if self._nand_transactions:
@@ -1112,6 +1198,78 @@ class NandCore:
                     tags[bank, index] = -1 if page is None else page[-2] * pages_per_block + page[-1]
                     ready[bank, index], readers[bank, index] = slot.ready_ns, slot.reader_completion_ns
                     uses[bank, index] = slot.last_use
+
+    def _submit_resident_generic(self, request):
+        """Hand only the addressed banks to the original generic request path.
+
+        Short multi-page and unaligned spans have the same admission and
+        exact page machine as before. Other banks remain in private arrays;
+        the temporary handoff does not fabricate future controller state.
+        """
+        packed, config = self._nand_numeric_state, self.config
+        base_units = (config.channels * config.targets_per_channel
+                      * config.dies_per_target * config.luns_per_die)
+        bank_count = base_units * config.planes_per_lun
+        first = request.address // 4096
+        last = (request.address + request.byte_count - 1) // 4096
+        banks = tuple((first + offset) % bank_count
+                      for offset in range(min(last - first + 1, bank_count)))
+        units = tuple(dict.fromkeys(bank if config.planes_independent else bank % base_units
+                                   for bank in banks))
+        arrays, buffers, tags, ready, readers, uses, present = packed.arrays
+        bank_keys, prefixes, array_names, pages_per_block = packed.layout
+        array_values = self.__dict__["_array_ready"]
+        buffer_values = self.__dict__["_buffer_ready"]
+        cache = self.__dict__["_read_cache"]
+        for token in self._nand_transactions:
+            token.capture_numeric(packed)
+        for unit in units:
+            if packed.dirty_units[unit]:
+                name = array_names[unit]
+                self._touch_frontiers(name)
+                array_values[name], buffer_values[name] = float(arrays[unit]), float(buffers[unit])
+        for bank in banks:
+            if not packed.dirty_banks[bank]:
+                continue
+            key = bank_keys[bank]
+            if self._nand_transactions:
+                self._touch_cache_bank(key)
+            slots = cache.get(key)
+            if slots is None:
+                slots = [_ReadCacheSlot(), _ReadCacheSlot()]
+                cache[key] = slots
+            for index, slot in enumerate(slots):
+                page = int(tags[bank, index])
+                slot.page_key = None if page < 0 else (*prefixes[bank], *divmod(page, pages_per_block))
+                slot.ready_ns, slot.reader_completion_ns, slot.last_use = (
+                    float(ready[bank, index]), float(readers[bank, index]), int(uses[bank, index]))
+        enabled = self._nand_numeric_enabled
+        self._nand_numeric_state = None
+        self._nand_numeric_enabled = False
+        try:
+            return self._submit_live(request)
+        finally:
+            self._nand_numeric_state = packed
+            self._nand_numeric_enabled = enabled
+            # Preserve even a failing page machine's exact partial state;
+            # an outer transaction still owns restoration of its preimage.
+            for unit in units:
+                name = array_names[unit]
+                if name in array_values:
+                    arrays[unit] = array_values[name]
+                    buffers[unit] = buffer_values.get(name, 0.)
+                    packed.dirty_units[unit] = True
+            for bank in banks:
+                slots = cache.get(bank_keys[bank])
+                if slots is None:
+                    continue
+                present[bank] = True
+                packed.dirty_banks[bank] = True
+                for index, slot in enumerate(slots):
+                    page = slot.page_key
+                    tags[bank, index] = -1 if page is None else page[-2] * pages_per_block + page[-1]
+                    ready[bank, index], readers[bank, index], uses[bank, index] = (
+                        slot.ready_ns, slot.reader_completion_ns, slot.last_use)
 
     def submit_read_pages(self, addresses, arrival_ns, *, link_program=()):
         """Execute full-page reads interleaved with external links in order.
@@ -1175,6 +1333,7 @@ class NandCore:
         self._observation_events = []
 
         def reserve(resource, earliest, duration, direction=None, payload=None):
+            timeline._remember_resource(resource)
             lanes = timeline.lane_available.get(resource)
             if lanes is None:
                 lanes = [timeline.ready_ns.get(resource, 0.)]
@@ -1221,8 +1380,11 @@ class NandCore:
                     slot.page_key = self._staged_key(mapping)
                     slot.ready_ns = internal_end
                     slot.reader_completion_ns = completion
+                self._touch_frontiers(array_id)
                 self.__dict__["_array_ready"][array_id] = read_end
+                self._touch_frontiers(array_id)
                 self.__dict__["_buffer_ready"][array_id] = internal_end
+                timeline._remember_resource(array_id)
                 timeline.ready_ns[array_id] = read_end
                 pages_read = 1
         else:
@@ -1230,7 +1392,9 @@ class NandCore:
             if mapping.page == 0:
                 self._invalidate_cache(mapping, block=True)
                 erase_end = reserve(array_resource, dependency, config.block_erase_ns)
+                self._touch_frontiers(array_id)
                 self.__dict__["_array_ready"][array_id] = erase_end
+                timeline._remember_resource(array_id)
                 timeline.ready_ns[array_id] = erase_end
                 erases = 1
             host_end = reserve(host_resource, base, host_ns, "write", host_bytes)
@@ -1238,7 +1402,9 @@ class NandCore:
                                    internal_ns, "write", internal_bytes)
             completion = reserve(array_resource, max(internal_end, self.__dict__["_array_ready"].get(array_id, 0.)),
                                  config.page_program_ns)
+            self._touch_frontiers(array_id)
             self.__dict__["_array_ready"][array_id] = self.__dict__["_buffer_ready"][array_id] = completion
+            timeline._remember_resource(array_id)
             timeline.ready_ns[array_id] = completion
             self._set_program_frontier(self._block_key(mapping), mapping.page + 1)
             pages_programmed = 1
@@ -1295,6 +1461,16 @@ class NandCore:
         first_page = request.address // self.config.page_bytes
         last_page = (request.address + request.byte_count - 1) // self.config.page_bytes
         page_count = last_page - first_page + 1
+        if (not self.capture_details and not self._observe_media
+                and self.config.protocol_mode == "generic_nand"
+                and self.config.read_cache_pages_per_bank == 2 and page_count >= 128):
+            from ._nand_acceleration import execute_buffered_full_pages
+            result = execute_buffered_full_pages(self, request, page_count)
+            if result is not None:
+                return result
+            # A declined bulk can still have a live private controller from
+            # an earlier request. The scalar machine must see that state.
+            self._nand_publish_numeric()
         if (
             not self.capture_details
             and not self._observe_media
@@ -1352,7 +1528,9 @@ class NandCore:
                 stage = self._media_stage("BLOCK_ERASE", m, dependency, self.config.block_erase_ns,
                                           eligible_ns=request.arrival_ns+self.config.front_ns)
                 record(stage)
+                self._touch_frontiers(array_id)
                 self.__dict__["_array_ready"][array_id] = stage.end_ns
+                self.timeline._remember_resource(array_id)
                 self.timeline.ready_ns[array_id] = stage.end_ns
                 completion = max(completion, stage.end_ns)
                 erases += 1
@@ -1401,6 +1579,7 @@ class NandCore:
                 record(StageTiming("RMW_INTERNAL_TRANSFER", read_xfer.start_ns, read_xfer.end_ns, read_xfer.resource_id, read_xfer.bytes))
                 internal_bytes += read_xfer.bytes
                 dependency = read_xfer.end_ns
+                self._touch_frontiers(array_id)
                 self.__dict__["_buffer_ready"][array_id] = read_xfer.end_ns
                 pages_read += 1
             if request.operation is Operation.READ:
@@ -1475,8 +1654,11 @@ class NandCore:
                     cache_slot.ready_ns = internal.end_ns
                     cache_slot.reader_completion_ns = host.end_ns
                 completion = max(completion, host.end_ns)
+                self._touch_frontiers(array_id)
                 self.__dict__["_array_ready"][array_id] = read.end_ns
+                self._touch_frontiers(array_id)
                 self.__dict__["_buffer_ready"][array_id] = internal.end_ns
+                self.timeline._remember_resource(array_id)
                 self.timeline.ready_ns[array_id] = read.end_ns
             else:
                 if self.config.protocol_mode == "ocp_hbf_0_7" and m.page == 0:
@@ -1484,7 +1666,9 @@ class NandCore:
                     erase = self._media_stage("BLOCK_ERASE", m, dependency, self.config.block_erase_ns,
                                               eligible_ns=request.arrival_ns + self.config.front_ns)
                     record(erase)
+                    self._touch_frontiers(array_id)
                     self.__dict__["_array_ready"][array_id] = erase.end_ns
+                    self.timeline._remember_resource(array_id)
                     self.timeline.ready_ns[array_id] = erase.end_ns
                     erases += 1
                 host = self.timeline.transfer(
@@ -1508,8 +1692,11 @@ class NandCore:
                 record(program)
                 pages_programmed += 1
                 completion = max(completion, program.end_ns)
+                self._touch_frontiers(array_id)
                 self.__dict__["_array_ready"][array_id] = program.end_ns
+                self._touch_frontiers(array_id)
                 self.__dict__["_buffer_ready"][array_id] = program.end_ns
+                self.timeline._remember_resource(array_id)
                 self.timeline.ready_ns[array_id] = program.end_ns
                 if self.config.protocol_mode == "ocp_hbf_0_7":
                     self._set_program_frontier(self._block_key(m), m.page + 1)
@@ -1636,7 +1823,7 @@ class NandCore:
 
 _RESIDENT_SCALAR_METHODS = {name: getattr(NandCore, name) for name in (
     "_validate_request", "_validate_program_order", "_write_buffer_payload_bytes",
-    "_resident_scalar_eligible", "_submit_resident_scalar", "_submit_ocp_single_page_summary",
+    "_resident_scalar_eligible", "_resident_generic_bulk_eligible", "_submit_resident_scalar", "_submit_resident_generic", "_submit_ocp_single_page_summary",
     "_admit_host_request", "_record_host_admission", "_cache_slot", "_invalidate_cache",
     "_array_id", "_array_resource_id", "_channel_id", "_host_id", "_host_bandwidth",
     "_staged_key", "_bank_key", "_block_key", "_set_program_frontier", "_touch_cache_bank",
@@ -1735,5 +1922,19 @@ def summarize_nand_observations(observations):
         "wear_extra_ns": sum(e.get("wear_extra_ns", 0.) for e in events),
         "scope": "actual executed array stages; explicit erase-count wear feedback when enabled; no FTL or implicit erase inference"}
 
+
+def _native_frontier_writers(core):
+    if type(core) is not NandCore:
+        return False
+    for name, original in _OWNED_OWNER_NAND_METHODS:
+        method = getattr(core, name)
+        if getattr(method, "__func__", method) is not original:
+            return False
+    from ._nand_acceleration import has_native_timeline_hooks
+    return has_native_timeline_hooks()
+
+
+_OWNED_OWNER_NAND_METHODS = tuple((name, getattr(NandCore, name))
+    for name, value in vars(NandCore).items() if callable(value))
 
 __all__ = ["NandCore", "nand_service", "summarize_nand_observations"]

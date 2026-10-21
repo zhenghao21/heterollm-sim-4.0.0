@@ -1,0 +1,3 @@
+case_id,model,hardware,workload,batch_size,status,tokens_per_second_per_gpu,cluster_tokens_per_second,mean_complete_request_tpot_ns,wall_seconds,reason
+native__llama3_405b__HBM4__SHORT__G8,llama3_405b,HBM4,SHORT,1,paused,,,,28122.45703499997,
+native__llama3_405b__HBM4__MID__G8,llama3_405b,HBM4,MID,1,paused,,,,28481.86500609998,

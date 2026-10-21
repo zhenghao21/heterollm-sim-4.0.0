@@ -57,7 +57,7 @@ def _workspace_descriptor_rows(task):
 def physical_workspace_bound(tasks):
     """Return per-owner simultaneous transient bytes across serial DAG cuts."""
     from .data_motion import _descriptor_non_negative_int, _owner_physical_config
-    from .memory_types import DramConfig
+    from .memory_types import DramConfig, SramConfig
     from .physical_contract import parse_execution_physical_config
 
     positions = {task.task_id: index for index, task in enumerate(tasks)}
@@ -156,7 +156,7 @@ def physical_workspace_bound(tasks):
             config = owner_configs[owner]
             # Match PhysicalRuntimeContext's allocator: DRAM uses bursts,
             # NAND uses full pages even for a subpage-sized declaration.
-            alignment = config.burst_bytes if isinstance(config, DramConfig) else config.page_bytes
+            alignment = config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes
             extent = ((extent + alignment - 1) // alignment) * alignment
             arena = arenas.get(key, "resident" if generation == 0 else "workspace")
             registry = residents if arena == "resident" else buffers

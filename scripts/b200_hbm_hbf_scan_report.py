@@ -555,6 +555,9 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
             lines.extend(["", "Prefill 只在整个批次完成后增加已完成块数。当前批次任务数是局部工作进度，"
                           "不代表整点完成百分比；Decode 后续步骤数也不直接等同于已输出 token 数。"
                           "细粒度记录若没有实际执行标记，则显示为准备/估算。", ""])
+    analysis_path = output_dir / "analysis_1k.md"
+    if analysis_path.is_file():
+        lines.extend([analysis_path.read_text(encoding="utf-8").strip(), ""])
     lines.extend([
         "| 参数 | 设置 |", "| --- | --- |",
         f"| 模型 | {_markdown(model_text)} |",
@@ -597,7 +600,9 @@ def _write_markdown(output_dir: Path, manifest: dict[str, Any], rows: list[dict[
         lines.extend(["当前没有已完成的测量点，尚未生成曲线图。", ""])
     successful = [_summary_row(row) for row in rows if row.get("status") in SUCCESS_STATUSES]
     if successful:
-        lines.extend(["## 已成功的配置", "", "| 模型 | 存储 | 输入/输出 | 模式 | TTFT（s） | TPOT（ms/token） | 真实/预测 Decode 步数 | 条件预算 | 完整对照状态 |",
+        lines.extend(["## 已成功的配置", "",
+                      "下表保留原始保守条件界，不是最终接受判据；最终接受使用下一节的 Decode 单点及 HBF/HBM 比值条件界。原始界和最终条件界都不是完整详细对照的实测误差。", "",
+                      "| 模型 | 存储 | 输入/输出 | 模式 | TTFT（s） | TPOT（ms/token） | 真实/预测 Decode 步数 | 原始条件界（非最终判定） | 完整对照状态 |",
                       "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"])
         for row in successful:
             sampled, predicted = row.get("sampled_decode_steps"), row.get("predicted_decode_steps")

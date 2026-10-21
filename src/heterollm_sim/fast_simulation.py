@@ -10,7 +10,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field, replace
 import math
 from statistics import fmean
-from typing import Any, Mapping
+from typing import Any, Mapping, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .native_fast_window import NativeWindowForecast, NativeLayerWindowSample
 
 from .execution_control import ExecutionControl
 from .fast_budget import (PairedTimingReference, minimax_decode_estimate,
@@ -171,11 +174,14 @@ class DecodeForecast:
 
 @dataclass(frozen=True)
 class FastSimulationOutcome:
-    # Exactly one is populated: a completed detailed result or an independent
-    # forecast.  A forecast deliberately has no ServingResult for its suffix.
+    # Completed legacy results and forecasts remain exclusive. Native window
+    # forecasts can retain a separate, explicitly incomplete physical sample.
     detailed: ServingResult | None = None
     forecast: DecodeForecast | None = None
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
+    native_window_forecast: NativeWindowForecast | None = None
+    sampled: ServingResult | None = None
+    layer_window_samples: tuple[NativeLayerWindowSample, ...] = ()
 
 
 def model_envelope(base_ns: float, anchor_context: float,
@@ -809,6 +815,18 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                   runtime_origin_ns=0.0, custom_lowerer=False,
                   paired_reference: PairedTimingReference | None = None) -> FastSimulationOutcome:
     """Execute a real prefix and forecast only inside the declared safe domain."""
+    if scenario.simulation.native_window is not None:
+        if scenario.simulation.native_window.sampling_unit == "layer_windows":
+            from .native_fast_layers import simulate_native_layer_windows
+            return simulate_native_layer_windows(scenario, batch_lowerer=batch_lowerer,
+                execution_control=execution_control, residency_manager=residency_manager,
+                execution_kernel=execution_kernel, runtime_origin_ns=runtime_origin_ns,
+                custom_lowerer=custom_lowerer, paired_reference=paired_reference)
+        from .native_fast_window import simulate_native_window
+        return simulate_native_window(scenario, batch_lowerer=batch_lowerer,
+            execution_control=execution_control, residency_manager=residency_manager,
+            execution_kernel=execution_kernel, runtime_origin_ns=runtime_origin_ns,
+            custom_lowerer=custom_lowerer, paired_reference=paired_reference)
     control = execution_control or ExecutionControl()
     options = scenario.simulation.fast_decode
     if paired_reference is not None and not isinstance(paired_reference, PairedTimingReference):

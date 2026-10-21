@@ -1,0 +1,29 @@
+{
+  "assessed_at": "2026-10-20T07:43:50+08:00",
+  "summary": "整轮剩余时间尚无可靠估计；需要各类配置的完整实测耗时，不能把当前批次的局部进度当作整轮完成比例。",
+  "remaining_min_seconds": null,
+  "remaining_max_seconds": null,
+  "method": "按真实任务计数在短观察段的增量估算当前cohort；整轮需要完整候选和各类配置的代表性耗时，现阶段不足。",
+  "caveats": [
+    "本次评估时为0/30配置、0/60批量候选完成，批量8尚未开始；最新完成数以上方实时统计为准。",
+    "全计划合计118140个Decode cohort，另有PD导入、末Prompt计算和收尾；当前任务数只属于一个cohort。",
+    "SHORT总窗口为1116个Decode cohort，MID为1494个，LONG为3297个；持久记录没有累计cohort数，无法确认当前是首批还是后续批。",
+    "评估时尚无HBF、Maverick及热态cohort的正式完整耗时，不能用局部加速比外推全轮，也不承诺具体完成日期。"
+  ],
+  "current_batch_estimates": [
+    {
+      "case_id": "native__llama3_405b__HBM4__SHORT__G8",
+      "remaining_min_seconds": 1800,
+      "remaining_max_seconds": 5400,
+      "observed_task_rate_per_second": 10.142630744849445,
+      "observed_scope": "仅当前cohort；768任务/75.72秒，不是Token速率。"
+    },
+    {
+      "case_id": "native__llama3_405b__HBM4__MID__G8",
+      "remaining_min_seconds": 900,
+      "remaining_max_seconds": 3600,
+      "observed_task_rate_per_second": 10.681130697819963,
+      "observed_scope": "仅当前cohort；1024任务/95.87秒，不是Token速率。"
+    }
+  ]
+}

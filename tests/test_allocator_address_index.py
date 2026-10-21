@@ -102,3 +102,51 @@ def test_reregistering_alias_arena_does_not_leave_target_pinned_after_release():
     allocator.release("view")
     allocator.release("base")
     assert allocator.allocations() == ()
+
+
+def test_free_extent_first_fit_matches_original_scan_through_fragmentation_and_restore():
+    import random
+    from heterollm_sim.memory_allocator import AllocationError
+    rng = random.Random(9042)
+    fast = PhysicalAddressAllocator(32768, 64, workspace_capacity_bytes=8192)
+    reference = PhysicalAddressAllocator(32768, 64, workspace_capacity_bytes=8192)
+    reference._free_extents = None
+    for step in range(500):
+        if step % 71 == 0:
+            fast = PhysicalAddressAllocator.from_snapshot(fast.snapshot())
+            reference = PhysicalAddressAllocator.from_snapshot(reference.snapshot())
+            reference._free_extents = None
+        saved = dict(fast._allocations)
+        if fast._allocations and rng.random() < .45:
+            key = rng.choice(list(fast._allocations))
+            for allocator in (fast, reference):
+                allocator.release(*key)
+        else:
+            generation = rng.randrange(2)
+            size = rng.randrange(1, 17) * 31
+            answers = []
+            for allocator in (fast, reference):
+                try:
+                    answers.append(allocator.allocate("item" + str(step), size, generation))
+                except AllocationError as error:
+                    answers.append(str(error))
+            assert answers[0] == answers[1]
+        if step % 11 == 0:
+            fast._restore_allocations(saved)
+            reference._restore_allocations(saved)
+            reference._free_extents = None
+        assert fast.snapshot() == reference.snapshot()
+
+
+def test_aliases_never_create_holes_and_growth_consumes_adjacent_free_bytes():
+    allocator = PhysicalAddressAllocator(4096, 64)
+    allocator.allocate("base", 128, inferred=True)
+    allocator.allocate("view", 64, alias_of="base")
+    allocator.release("view")
+    assert allocator.allocate("next", 64).base_address == 128
+    allocator.release("next")
+    allocator.allocate("base", 192, inferred=True)
+    assert allocator.allocate("after-growth", 64).base_address == 192
+    allocator.release("after-growth")
+    allocator.release("base")
+    assert allocator._free_extents == [(0, 4096)]

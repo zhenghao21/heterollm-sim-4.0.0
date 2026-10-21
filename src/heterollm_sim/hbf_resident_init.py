@@ -4,12 +4,34 @@ The ordinary dense planner supplies the storage declarations.  This module
 never executes its inventory DAG, changes a request, or fabricates a timed
 NAND write.  ``weights_resident`` means these complete physical blocks were
 loaded before the request; their padding and GC reserve still consume space.
+
+This block/FTL initialization is specific to strict OCP HBF. Explicit
+``generic_nand`` profiles instead model analytical page service for data that
+is already resident; they retain normal placement/capacity accounting and do
+not acquire a fictitious HOST staging buffer or OCP programming frontier.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
+
+def _requires_resident_preload(component):
+    """Only an explicitly analytical protocol can bypass strict preloading.
+
+    Missing or unknown configuration never opts an HBF owner out of the warm
+    resident checks. Normal physical configuration validation remains in force.
+    """
+    physical = component.metadata.get("physical_memory_config")
+    protocol = (physical.get("protocol_mode") if isinstance(physical, Mapping)
+                else getattr(physical, "protocol_mode", None))
+    return protocol != "generic_nand"
+
+
 def has_warm_active_hbf(scenario):
+    """Whether warm active HBF needs strict block-resident initialization."""
     return scenario.weights_resident and any(
         component.normalized_kind == "hbf" and component.is_active_memory
+        and _requires_resident_preload(component)
         for component in scenario.hardware.components)
 
 
@@ -116,7 +138,8 @@ def _expected_hbf_resident_bytes(scenario):
     from .ir import default_memory_resource_id
     components = {}
     for component in scenario.hardware.components:
-        if component.normalized_kind != "hbf" or not component.is_active_memory:
+        if (component.normalized_kind != "hbf" or not component.is_active_memory
+                or not _requires_resident_preload(component)):
             continue
         owner = str(component.metadata.get("memory_service", {}).get("physical_owner")
                     or default_memory_resource_id(component))

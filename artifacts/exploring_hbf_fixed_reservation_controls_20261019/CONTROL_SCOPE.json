@@ -1,0 +1,4 @@
+{
+  "status": "stopped_control_study",
+  "reason": "Valid fixed full-sequence KV reservation control; primary will use exact staggered paged-KV peak, not these capacity reservations."
+}

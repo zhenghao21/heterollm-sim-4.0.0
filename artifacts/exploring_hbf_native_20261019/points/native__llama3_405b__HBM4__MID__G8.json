@@ -1,0 +1,35 @@
+{
+  "case": {
+    "case_id": "native__llama3_405b__HBM4__MID__G8",
+    "phase": "dense_native",
+    "model": "llama3_405b",
+    "hardware": "HBM4",
+    "workload": "MID",
+    "input_tokens": 5900,
+    "output_tokens": 499,
+    "gpu_count": 8,
+    "tp": 8,
+    "pp": 1,
+    "ep": 1,
+    "weight_dtype": "bf16",
+    "kv_dtype": "bf16"
+  },
+  "case_id": "native__llama3_405b__HBM4__MID__G8",
+  "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+  "backend": "native_serving_physical",
+  "status": "paused",
+  "batch_sizes": [
+    1,
+    8
+  ],
+  "candidate_ids": [
+    "native__llama3_405b__HBM4__MID__G8__B1"
+  ],
+  "candidate_statuses": {
+    "1": "paused"
+  },
+  "selected": null,
+  "error": null,
+  "updated_at": "2026-10-20T00:15:39.855288+00:00",
+  "selection_scope": "highest measured passing throughput among the explicitly executed fixed-TP8 batch candidates; not a global optimum or maximum feasible batch"
+}

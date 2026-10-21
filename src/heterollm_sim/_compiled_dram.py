@@ -530,3 +530,108 @@ def execute_compiled_many(core, requests):
     core._acceptance_ns = float(acceptance)
     core._inflight = [float(value) for value in inflight[:inflight_count]]
     return tuple(results)
+
+
+def owned_resource_footprint(core):
+    """Closed native analytical-DRAM footprint for an outer undo journal.
+
+    Its packed publisher writes dictionaries directly. The outer transaction
+    records this small owner footprint before execution instead of copying
+    every GPU's unrelated resource calendars for each HOST input chunk.
+    """
+    from .dram_core import DramCore, MAX_ACCELERATED_BANKS, _BankState
+    from .memory_types import DramConfig, MemoryKind
+    from ._nand_pack import can_own_timeline
+    if (type(core) is not DramCore or type(core.config) is not DramConfig
+            or DramConfig is not _OWNED_DRAM_CONFIG_TYPE
+            or len(vars(DramConfig)) != len(_OWNED_DRAM_CONFIG_ITEMS)
+            or any(vars(DramConfig).get(name) is not value for name, value in _OWNED_DRAM_CONFIG_ITEMS)):
+        return None
+    bank_class = vars(_BankState)
+    slotnames = bank_class.get("__slotnames__")
+    if (_BankState is not _OWNED_BANK_STATE_TYPE
+            or slotnames is not None and (type(slotnames) is not list or slotnames)
+            or len(bank_class) - ("__slotnames__" in bank_class) != len(_OWNED_BANK_STATE_ITEMS)
+            or any(vars(_BankState).get(name) is not value for name, value in _OWNED_BANK_STATE_ITEMS)):
+        return None
+    banks = vars(core).get("_banks")
+    if type(banks) is not dict:
+        return None
+    if vars(core).get("_analytical_banks_exposed"):
+        # A retained public mapping can bind even an ordinary native bank
+        # object to a sibling Core. Its fields alone cannot prove exclusive
+        # ownership, so public bank state keeps the complete owner undo.
+        return None
+    config = core.config
+    if (any(type(value) not in (int, float, str, bool, type(None), MemoryKind)
+            for key, value in vars(config).items() if key != "metadata")
+            or config.control_mode == "jedec_hbm" or core.capture_details):
+        return None
+    if any(globals().get(name) is not value for name, value in _OWNED_NATIVE_FUNCTIONS):
+        return None
+    if any(getattr(_owned_numeric, name) is not value for name, value in _OWNED_NATIVE_NUMERIC):
+        return None
+    if (type(_NumericWorkspace) is not type or _NumericWorkspace is not _OWNED_WORKSPACE_TYPE
+            or len(vars(_NumericWorkspace)) != len(_OWNED_WORKSPACE_CLASS_ITEMS)
+            or any(vars(_NumericWorkspace).get(name) is not value
+                   for name, value in _OWNED_WORKSPACE_CLASS_ITEMS)
+            or _NumericWorkspace.__bases__ != (object,)
+            or _WORKSPACES is not _OWNED_WORKSPACE_CACHE
+            or type(_WORKSPACES) is not WeakKeyDictionary
+            or any(vars(WeakKeyDictionary).get(name) is not value
+                   for name, value in _OWNED_WORKSPACE_CACHE_METHODS)
+            or vars(DramCore).get("__hash__", object.__hash__) is not object.__hash__
+            or vars(DramCore).get("__eq__", object.__eq__) is not object.__eq__):
+        return None
+    workspace = _WORKSPACES.get(core)
+    if workspace is not None:
+        # Cached scratch is replaceable Python state. A caller's property,
+        # ndarray protocol or object-dtype conversion can touch a foreign
+        # owner, so such execution keeps the original complete journal.
+        if type(workspace) is not _NumericWorkspace:
+            return None
+        values = vars(workspace)
+        if (set(values) != {"shape", "floats", "arrays"}
+                or type(values["shape"]) is not tuple or len(values["shape"]) != 2
+                or any(type(value) is not int for value in values["shape"])
+                or type(values["floats"]) is not np.ndarray
+                or values["floats"].dtype != np.dtype(np.float64)
+                or type(values["arrays"]) is not tuple or len(values["arrays"]) != 11
+                or any(type(array) is not np.ndarray or array.dtype not in (
+                       np.dtype(np.float64), np.dtype(np.int64), np.dtype(np.int8), np.dtype(np.bool_))
+                       for array in values["arrays"])):
+            return None
+    config = core.config
+    if type(config.metadata) is not dict or any(type(key) is not str for key in config.metadata):
+        return None
+    if config.addressable_stack_count*config.addressable_die_count*config.lane_count*config.bank_count > MAX_ACCELERATED_BANKS:
+        return None
+    prefixes = tuple(config.metadata.get(name, default) for name, default in (
+        ("bank_resource_prefix", "dram:bank"), ("command_resource_prefix", "dram:command"),
+        ("data_resource_prefix", "dram:data")))
+    shared = config.metadata.get("shared_command_resource")
+    if any(type(value) is not str for value in prefixes) or shared is not None and type(shared) is not str:
+        return None
+    ids = _resource_ids(config.addressable_stack_count, config.addressable_die_count,
+        config.lane_count, config.bank_count, config.bank_groups_per_rank, config.banks_per_group,
+        *prefixes, shared or None,
+        config.lanes_per_stack if config.stack_interface_mode == "independent" else 0)
+    resources = tuple(dict.fromkeys(core.timeline.canonical_resource_id(rid) for rid in ids))
+    return resources if can_own_timeline(core.timeline, resources) else None
+
+
+from . import _dram_numeric as _owned_numeric
+from .memory_types import DramConfig as _OWNED_DRAM_CONFIG_TYPE
+_OWNED_DRAM_CONFIG_ITEMS = tuple(vars(_OWNED_DRAM_CONFIG_TYPE).items())
+from .dram_core import _BankState as _OWNED_BANK_STATE_TYPE
+_OWNED_BANK_STATE_ITEMS = tuple((name, value) for name, value in vars(_OWNED_BANK_STATE_TYPE).items()
+                              if name != "__slotnames__")
+_OWNED_NATIVE_NUMERIC = tuple((name, value) for name, value in vars(_owned_numeric).items()
+    if callable(value) and getattr(value, "__module__", None) == _owned_numeric.__name__)
+_OWNED_NATIVE_FUNCTIONS = tuple((name, value) for name, value in tuple(globals().items())
+    if callable(value) and getattr(value, "__module__", None) == __name__ and name != "owned_resource_footprint")
+_OWNED_WORKSPACE_TYPE = _NumericWorkspace
+_OWNED_WORKSPACE_CLASS_ITEMS = tuple(vars(_NumericWorkspace).items())
+_OWNED_WORKSPACE_CACHE = _WORKSPACES
+_OWNED_WORKSPACE_CACHE_METHODS = tuple((name, getattr(WeakKeyDictionary, name))
+    for name in ("get", "__setitem__"))

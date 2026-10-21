@@ -69,6 +69,7 @@ from .serving import (
     RequestStatus,
     ServingResult,
     compile_serving_plan,
+    evaluate_tpot_slo,
     simulate_online,
 )
 from .residency import AllocationResidencyManager
@@ -126,6 +127,9 @@ class FastScenarioResult:
     validation_information: Tuple[str, ...] = ()
     forecast: Optional[DecodeForecast] = None
     detailed: Optional[Union[ScenarioResult, OnlineScenarioResult]] = None
+    native_window_forecast: Optional[Any] = None
+    sampled: Optional[OnlineScenarioResult] = None
+    layer_window_samples: Tuple[Any, ...] = ()
 
 
 RunResult = Union[ScenarioResult, OnlineScenarioResult, FastScenarioResult]
@@ -284,7 +288,13 @@ def _run_scenario_in_context(
             **runner_options,
         )
         serving = (simulation.detailed if scenario.simulation.mode == "fast" else simulation)
+        layer_sampling = (scenario.simulation.native_window is not None
+            and scenario.simulation.native_window.sampling_unit == "layer_windows")
         fast_assumptions = ((
+            "Native fast layer-window mode: only explicitly recorded native layer-window tasks physically execute under documented boundary conditions. They are not complete cohorts or observed output Tokens; projected windows have no physical continuation. Conditional error budgets require independent validation.",)
+            if scenario.simulation.mode == "fast" and layer_sampling else (
+            "Native fast mode: complete cohort samples use the original serving and physical kernels; an independent window forecast never advances their cutoff state. Conditional error budgets require independent validation.",)
+            if scenario.simulation.mode == "fast" and scenario.simulation.native_window is not None else (
             "Fast mode: Prefill and the continuous Decode prefix execute in detail; a forecast suffix has no physical transaction trace. Accuracy target requires independent full-request validation.",)
             if scenario.simulation.mode == "fast" else ())
         manifest_assumptions = (
@@ -334,11 +344,35 @@ def _run_scenario_in_context(
             validation_information=validation.information,
         ) if serving is not None else None)
         if scenario.simulation.mode == "fast":
+            native_sampling = scenario.simulation.native_window
             manifest = replace(manifest, metadata={**manifest.metadata,
-                "simulation_mode": "fast", "effective_simulation_mode": simulation.diagnostics["effective_mode"]})
+                "simulation_mode": "fast", "effective_simulation_mode": simulation.diagnostics["effective_mode"],
+                **({"native_sampling": {"unit": native_sampling.sampling_unit,
+                    "target_relative_error": native_sampling.target_relative_error,
+                    "max_wall_seconds": native_sampling.max_wall_seconds,
+                    **({"layer_window_size": native_sampling.layer_window_size,
+                    "calibration_layer_windows_per_class": native_sampling.calibration_layer_windows,
+                    "validation_layer_windows_per_class": native_sampling.validation_layer_windows,
+                    "max_total_layer_windows": native_sampling.max_sample_layer_windows+(
+                        native_sampling.max_seed_anchor_layer_windows
+                        if scenario.workload.scheduler.max_num_seqs > 1 else 0),
+                    "max_full_batch_layer_windows": native_sampling.max_sample_layer_windows,
+                    "max_seed_shape_anchor_layer_windows": native_sampling.max_seed_anchor_layer_windows,
+                    "layer_sample_scope": "boundary_conditioned_physical_tasks_not_complete_cohorts_or_visible_tokens"}
+                    if native_sampling.sampling_unit == "layer_windows" else {
+                    "warmup_cohorts": native_sampling.warmup_cohorts,
+                    "calibration_cohorts": native_sampling.calibration_cohorts,
+                    "validation_cohorts": native_sampling.validation_cohorts,
+                    "max_sample_cohorts": native_sampling.max_sample_cohorts})}}
+                    if native_sampling is not None else {})})
             return FastScenarioResult(scenario, manifest, simulation.diagnostics,
                 validation.warnings, retention_policy.value, validation.information,
-                forecast=simulation.forecast, detailed=detailed)
+                forecast=simulation.forecast, detailed=detailed,
+                native_window_forecast=simulation.native_window_forecast,
+                layer_window_samples=simulation.layer_window_samples,
+                sampled=(OnlineScenarioResult(scenario, simulation.sampled, manifest,
+                    validation.warnings, retention_policy.value, validation.information)
+                    if simulation.sampled is not None else None))
         assert detailed is not None
         return detailed
 
@@ -2073,16 +2107,20 @@ def _slo_semantics(
         policy = scenario.workload.scheduler
     ttft = policy.slo_ttft_ns if policy is not None else None
     tbt = policy.slo_tbt_ns if policy is not None else None
-    configured = ttft is not None or tbt is not None
+    tpot = policy.slo_tpot_ns if policy is not None else None
+    configured = ttft is not None or tbt is not None or tpot is not None
     return {
         "configured": configured,
         "scheduler_target": False,
         "role": "evaluation_filter_only",
         "slo_ttft_ns": float(ttft) if ttft is not None else None,
         "slo_tbt_ns": float(tbt) if tbt is not None else None,
+        "slo_tpot_ns": float(tpot) if tpot is not None else None,
+        "tpot_definition": "(last_visible_token-first_visible_token)/(visible_output_tokens-1)",
+        "tpot_undefined": "fewer than two visible tokens; not qualified when TPOT SLO is configured",
         "applied_to_goodput": bool(online),
         "goodput_filter": (
-            "completed requests satisfying deadline, TTFT, and TBT filters"
+            "completed requests satisfying deadline, TTFT, TBT, and TPOT filters"
             if online
             else "not computed by static report"
         ),
@@ -5466,6 +5504,7 @@ def _online_report_core(
             "rejection_reason": metric.rejection_reason,
             "arrival_ns": metric.arrival_ns,
             "first_token_ns": metric.first_token_ns,
+            "last_token_ns": metric.last_token_ns,
             "done_ns": metric.finish_ns,
             # Keep both boundaries available for diagnostics, but choose one
             # report-wide canonical boundary so a partial engine stream cannot
@@ -5526,6 +5565,9 @@ def _online_report_core(
             "swaps": metric.swaps,
             "recomputes": metric.recomputes,
             "deadline_met": metric.deadline_met,
+            "slo_tpot_met": evaluate_tpot_slo(
+                metric.tpot_ns, metric.visible_output_tokens, scheduler.slo_tpot_ns
+            ),
             "category_time_ns": {},
             "critical_path_category_ns": {},
         }
@@ -5565,6 +5607,8 @@ def _online_report_core(
                 meets = meets and metric.ttft_ns is not None and metric.ttft_ns <= scheduler.slo_ttft_ns
             if scheduler.slo_tbt_ns is not None:
                 meets = meets and (not tbt or max(tbt) <= scheduler.slo_tbt_ns)
+            if scheduler.slo_tpot_ns is not None:
+                meets = meets and row["slo_tpot_met"] is True
             if meets:
                 good_requests += 1
                 good_tokens += metric.visible_output_tokens
@@ -5764,6 +5808,9 @@ def _online_report_core(
     }
     if serving.prompt_cache_save_timing:
         summary["prompt_cache_save_timing"] = dict(serving.prompt_cache_save_timing)
+    if serving.external_kv_ingress_metrics:
+        summary["external_kv_ingress"] = to_primitive(serving.external_kv_ingress_metrics)
+        summary["decode_measurement"] = to_primitive(serving.decode_measurement)
     cuda_lifecycle = serving.runtime_kernel_metrics.get("llama_cuda_graph_lifecycle")
     if cuda_lifecycle is not None:
         summary["llama_cuda_graph_lifecycle"] = to_primitive(cuda_lifecycle)
@@ -6068,7 +6115,95 @@ def _runtime_placement_payload(scenario: ScenarioConfig) -> Dict[str, Any]:
     }
 
 
+def _native_window_report_dict(result: FastScenarioResult, **options) -> Dict[str, Any]:
+    approximation = to_primitive(dict(result.approximation))
+    forecast = result.native_window_forecast
+    projected = forecast.to_metadata() if forecast is not None else None
+    metrics = to_primitive(dict(forecast.metrics)) if forecast is not None else {}
+    layer_sampling = (approximation.get("sampling_unit") == "layer_windows"
+        or result.scenario.simulation.native_window is not None
+        and result.scenario.simulation.native_window.sampling_unit == "layer_windows")
+    layer_samples = [to_primitive(row.to_metadata()) for row in result.layer_window_samples]
+    if layer_sampling and result.sampled is not None:
+        raise ValueError("native layer-window sampling cannot publish a partial cohort as a ServingResult prefix")
+    if layer_sampling and forecast is not None and (
+            forecast.sampled_decode_cohorts or forecast.sampled_visible_output_tokens
+            or forecast.sampling_unit != "layer_windows"):
+        raise ValueError("native layer-window samples cannot count completed cohorts or visible output Tokens")
+    prefix = (_report_dict_in_context(result.sampled, **options)
+              if result.sampled is not None else None)
+    accepted = forecast is not None and approximation.get("effective_mode") == "fast"
+    requests = {}
+    if accepted:
+        for index, row in enumerate(forecast.request_forecasts):
+            tpot = row.get("tpot_ns")
+            ttft = row.get("ingress_ttft_ns", row.get("ttft_ns"))
+            identity = (row.get("request_id") or row.get("logical_fifo_slot_id")
+                        or row.get("logical_forecast_slot_id") or "forecast-slot-{:06d}".format(index))
+            if identity in requests:
+                raise ValueError("native window forecast request or logical slot identities must be distinct")
+            requests[identity] = {**to_primitive(dict(row)),
+                "tpot_interval_ns": to_primitive(tpot) if isinstance(tpot, Mapping) else None,
+                "ingress_ttft_interval_ns": to_primitive(ttft) if isinstance(ttft, Mapping) else None,
+                "tpot_ns": tpot.get("estimate") if isinstance(tpot, Mapping) else tpot,
+                "ttft_ns": ttft.get("estimate") if isinstance(ttft, Mapping) else ttft,
+                "status": "forecast_completed", "metric_semantics": "window_forecast"}
+    unavailable = {"scope": "physical_sample_prefix_only", "full_window_available": False}
+    return {
+        "scenario": result.scenario.name, "manifest": to_primitive(result.manifest),
+        "runtime_placement": _runtime_placement_payload(result.scenario),
+        "execution_mode": "continuous_batching", "simulation_mode": "fast",
+        "retention_policy": result.retention_policy, "trace_fidelity": "approximate",
+        "approximation": approximation,
+        "result_semantics": {
+            "precision": ("boundary_conditioned_physical_layer_windows_and_independent_window_forecast"
+                if layer_sampling else "complete_native_cohort_samples_and_independent_window_forecast"),
+            "sampling_unit": "layer_windows" if layer_sampling else "cohorts",
+            "sampled_requests_may_be_unfinished": True,
+            "controller_state": ("physical_state_discarded_after_boundary_conditioned_layer_samples"
+                if layer_sampling else "physical_prefix_cutoff_not_advanced_by_forecast"),
+            "transactions": ("only_executed_layer_window_tasks_have_physical_records"
+                if layer_sampling else "only_physically_sampled_prefix_has_transactions"),
+            "metrics": "conditional_forecast_bounds_not_full_window_observations",
+            "accuracy_target_is_guarantee": False,
+            "complete_physical_decode_cohorts_observed": 0 if layer_sampling else approximation.get("sampled_decode_cohorts", 0),
+            "visible_output_tokens_observed": 0 if layer_sampling else approximation.get("sampled_visible_output_tokens", 0),
+        },
+        "summary": {
+            "makespan_ns": None, "task_count": None, "batch_count": None,
+            "completed_requests": metrics.get("complete_fresh_requests") if accepted else None,
+            "completed_requests_semantics": "forecast" if accepted else "unavailable",
+            "rejected_requests": None, "resource_accounted_bytes": None,
+            "throughput": {"requests_per_s": None,
+                "visible_output_tokens_per_s": metrics.get("cluster_tokens_per_second")},
+            "ttft_ns": _percentiles(row["ttft_ns"] for row in requests.values()
+                if isinstance(row.get("ttft_ns"), (int, float))),
+            "tpot_ns": _percentiles(row["tpot_ns"] for row in requests.values()
+                if isinstance(row.get("tpot_ns"), (int, float))),
+            "tbt_ns": _percentiles(()), "e2e_ns": _percentiles(()),
+            "bottleneck_resource": None,
+        },
+        "native_window_forecast": to_primitive(projected),
+        "physical_prefix": prefix,
+        "physical_layer_samples": layer_samples,
+        "physical_ingress_accounting": to_primitive(approximation.get("physical_ingress_accounting")),
+        "physical_boundary_accounting": to_primitive(approximation.get("physical_boundary_accounting")),
+        "requests": requests, "resource_utilization": {},
+        "category_time_ns": {}, "critical_path_category_ns": {},
+        "storage_traffic": unavailable, "dram_traffic": unavailable,
+        "scheduler": unavailable, "owner_residency": unavailable,
+        "kv_cache": unavailable, "batch_history": [], "scheduler_events": [],
+        "batch_trace_index": None,
+        "visualization": {"status": "unavailable_for_forecast"},
+        "component_timeseries": {"status": "unavailable_for_forecast"},
+        "validation_warnings": list(result.validation_warnings),
+        "validation_information": list(result.validation_information),
+    }
+
+
 def _fast_report_dict(result: FastScenarioResult, **options) -> Dict[str, Any]:
+    if result.scenario.simulation.native_window is not None:
+        return _native_window_report_dict(result, **options)
     approximation = to_primitive(dict(result.approximation))
     if result.detailed is not None:
         data = _report_dict_in_context(result.detailed, **options)
@@ -6085,6 +6220,10 @@ def _fast_report_dict(result: FastScenarioResult, **options) -> Dict[str, Any]:
         "arrival_ns": forecast.arrival_ns, "first_token_ns": forecast.first_token_ns,
         "finish_ns": forecast.finish_ns, "ttft_ns": forecast.ttft_ns,
         "tpot_ns": forecast.tpot_ns, "e2e_ns": e2e,
+        "slo_tpot_met": evaluate_tpot_slo(
+            forecast.tpot_ns, forecast.output_tokens,
+            result.scenario.workload.scheduler.slo_tpot_ns,
+        ),
         "prompt_tokens": forecast.prompt_tokens,
         "requested_output_tokens": forecast.output_tokens,
         "visible_output_tokens": forecast.output_tokens,
@@ -6107,6 +6246,11 @@ def _fast_report_dict(result: FastScenarioResult, **options) -> Dict[str, Any]:
             "transactions": "only_sampled_prefix_executed; no_full_request_transaction_trace",
             "controller_state": "discarded_at_detailed_prefix_cutoff; not_advanced_to_forecast_end",
             "model_interval": "conditional_context_scaling_envelope; not_a_confidence_interval",
+            "slo": {
+                **_slo_semantics(result.scenario, online=False),
+                "applied_to_goodput": False,
+                "goodput_filter": "not computed for forecast; TPOT decision uses estimated mean only",
+            },
         },
         "summary": {
             "makespan_ns": elapsed, "task_count": None, "batch_count": None,
@@ -6194,7 +6338,13 @@ def _report_dict_in_context(
     for request_id in ordered_request_ids:
         item = result.metrics.request_metrics[request_id]
         if request_id in selected_request_ids:
-            request_rows[request_id] = to_primitive(item)
+            request_rows[request_id] = {
+                **to_primitive(item),
+                "slo_tpot_met": evaluate_tpot_slo(
+                    item.tpot_ns, item.visible_output_tokens,
+                    result.scenario.workload.scheduler.slo_tpot_ns,
+                ),
+            }
         if item.ttft_ns is not None:
             ttft.append(item.ttft_ns)
         if item.e2e_ns is not None:
@@ -6362,6 +6512,29 @@ def format_report(
         data = report_dict(result)
     if isinstance(result, FastScenarioResult):
         approximation = data["approximation"]
+        if result.scenario.simulation.native_window is not None:
+            forecast = result.native_window_forecast
+            metrics = dict(forecast.metrics) if forecast is not None else {}
+            tpot = metrics.get("mean_complete_request_tpot_ns")
+            layer_sampling = data.get("result_semantics", {}).get("sampling_unit") == "layer_windows"
+            return "\n".join([
+                "场景：{}".format(result.scenario.name),
+                ("仿真模式：原生物理层窗口采样与独立窗口预测" if layer_sampling
+                    else "仿真模式：原生批次采样与独立窗口预测"),
+                "预算结果：{}".format("接受" if forecast is not None else "拒绝"),
+                ("真实层窗口 {}；完整Decode批次和可见输出Token实测均为0。".format(
+                    len(result.layer_window_samples)) if layer_sampling else "真实Decode批次 {}；预测批次 {}。".format(
+                    approximation.get("sampled_decode_cohorts", 0),
+                    approximation.get("predicted_decode_cohorts", 0))),
+                "预测TPOT：{}".format("{:.3f} ms".format(tpot / 1e6)
+                    if isinstance(tpot, (int, float)) else "不可用"),
+                "条件误差预算≤{:.0%}，不是完整窗口实测误差保证。".format(
+                    approximation["target_relative_error"]),
+                ("物理层样本依赖显式边界条件，不能当作完整Token或批次；预测不推进其物理状态。"
+                    if layer_sampling else "物理状态停在真实采样截止点；预测部分没有物理事务、计数或资源利用率。"),
+                *("拒绝原因：" + str(reason)
+                  for reason in approximation.get("rejection_reasons", ())),
+            ])
         if result.detailed is not None:
             return ("快速模式请求使用详细执行：{}\n".format(
                 ", ".join(approximation.get("fallback_reasons", ())))

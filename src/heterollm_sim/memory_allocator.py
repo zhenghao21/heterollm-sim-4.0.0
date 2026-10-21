@@ -71,12 +71,48 @@ class PhysicalAddressAllocator:
         self._address_rows = []
         self._largest_allocation = 0
         self._aliases_by_target = {}
+        self._free_extents = [(0, capacity_bytes)]
+
+    def _free_extent(self, base, end):
+        """Merge a retired root; aliases never reserve an extra extent."""
+        gaps = self._free_extents
+        if gaps is None:
+            return
+        position = bisect_left(gaps, (base,))
+        if position and gaps[position - 1][1] >= base:
+            position -= 1
+            base = min(base, gaps[position][0])
+            end = max(end, gaps.pop(position)[1])
+        while position < len(gaps) and gaps[position][0] <= end:
+            end = max(end, gaps.pop(position)[1])
+        gaps.insert(position, (base, end))
+
+    def _occupy_extent(self, allocation):
+        gaps = self._free_extents
+        if gaps is None or allocation.alias_of is not None:
+            return
+        base, size = allocation.base_address, allocation.size_bytes
+        if type(base) is not int or type(size) is not int or size <= 0:
+            self._free_extents = None
+            return
+        end = base + size
+        position = bisect_left(gaps, (base + 1,)) - 1
+        if position < 0 or not gaps[position][0] <= base < end <= gaps[position][1]:
+            # Native snapshots historically permit overlapping or non-total
+            # order dataclass extents. Preserve their original scan semantics.
+            self._free_extents = None
+            return
+        start, stop = gaps[position]
+        gaps[position:position + 1] = ([(start, base)] if start < base else []) + (
+            [(end, stop)] if end < stop else [])
 
     def _store_allocation(self, key, allocation):
         previous = self._allocations.get(key)
         if previous is allocation:
             return
         if previous is not None:
+            if previous.alias_of is None:
+                self._free_extent(previous.base_address, previous.base_address + previous.size_bytes)
             self._remove_alias(key, previous)
             old_key = (previous.base_address, previous.buffer_id, previous.generation)
             position = bisect_left(self._address_keys, old_key)
@@ -88,6 +124,7 @@ class PhysicalAddressAllocator:
         self._address_rows.insert(position, allocation)
         self._largest_allocation = max(self._largest_allocation, allocation.size_bytes)
         self._allocations[key] = allocation
+        self._occupy_extent(allocation)
         if allocation.alias_of is not None:
             target = (allocation.alias_of, allocation.alias_generation)
             self._aliases_by_target.setdefault(target, set()).add(key)
@@ -110,7 +147,9 @@ class PhysicalAddressAllocator:
                               for item in self._address_rows]
         self._largest_allocation = max((item.size_bytes for item in self._address_rows), default=0)
         self._aliases_by_target = {}
+        self._free_extents = [(0, self.capacity_bytes)]
         for key, allocation in allocations.items():
+            self._occupy_extent(allocation)
             if allocation.alias_of is not None:
                 target = (allocation.alias_of, allocation.alias_generation)
                 self._aliases_by_target.setdefault(target, set()).add(key)
@@ -166,6 +205,17 @@ class PhysicalAddressAllocator:
 
     def _find_first_fit(self, size: int, generation: int = 0, allocation_arena: Optional[str] = None) -> int:
         lower, upper = self._arena(generation, allocation_arena)
+        gaps = self._free_extents
+        if gaps is not None:
+            position = max(0, bisect_left(gaps, (lower + 1,)) - 1)
+            for index in range(position, len(gaps)):
+                start, end = gaps[index]
+                if start >= upper:
+                    break
+                cursor = self._align(max(start, lower), self.alignment_bytes)
+                if cursor + size <= min(end, upper):
+                    return cursor
+            return self._allocation_exhausted(size, generation, allocation_arena, lower, upper)
         cursor = lower
         # No allocation starting earlier than this can intersect the arena.
         # The conservative maximum size also covers overlapping extents in
@@ -185,15 +235,18 @@ class PhysicalAddressAllocator:
             cursor = max(cursor, item.base_address + item.size_bytes)
         cursor = self._align(cursor, self.alignment_bytes)
         if cursor + size > upper:
-            # The failure report reads this immutable tuple from the traceback
-            # after rollback may have changed the allocator's live extents.
-            failure_allocations = self.allocations()
-            raise AllocationError(
-                "unable to allocate {} bytes in capacity {}{}".format(size, self.capacity_bytes,
-                    " ({} arena [{}, {}))".format(allocation_arena or ("resident" if generation == 0 else "workspace"), lower, upper)
-                    if self.workspace_capacity_bytes else "")
-            )
+            return self._allocation_exhausted(size, generation, allocation_arena, lower, upper)
         return cursor
+
+    def _allocation_exhausted(self, size, generation, allocation_arena, lower, upper):
+        # The failure report reads this immutable tuple from the traceback
+        # after rollback may have changed the allocator's live extents.
+        failure_allocations = self.allocations()
+        raise AllocationError(
+            "unable to allocate {} bytes in capacity {}{}".format(size, self.capacity_bytes,
+                " ({} arena [{}, {}))".format(allocation_arena or ("resident" if generation == 0 else "workspace"), lower, upper)
+                if self.workspace_capacity_bytes else "")
+        )
 
     def allocate(
         self,
@@ -377,6 +430,8 @@ class PhysicalAddressAllocator:
         if self._aliases_by_target.get(key):
             raise AllocationError("cannot release allocation {} generation {} with live aliases".format(*key))
         previous = self._allocations.pop(key)
+        if previous.alias_of is None:
+            self._free_extent(previous.base_address, previous.base_address + previous.size_bytes)
         self._remove_alias(key, previous)
         position = bisect_left(self._address_keys,
             (previous.base_address, previous.buffer_id, previous.generation))

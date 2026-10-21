@@ -1,0 +1,124 @@
+{
+  "scope": "real unchanged 405B TP8 HBM4 SHORT B1 external PD prefix, cooperative cancellation before cohort; no candidate result or old reference rerun; concurrent diagnostics, not ABBA",
+  "status": "pd_completed",
+  "wall_seconds": 143.15427390002878,
+  "progress": [
+    {
+      "wall_seconds": 0.19249360001413152,
+      "stage": "control_plane",
+      "completed": 0,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 15.953732100024354,
+      "stage": "control_plane",
+      "completed": 1,
+      "metadata": {
+        "completed_control_tasks": 64,
+        "placement_status": "feasible"
+      }
+    },
+    {
+      "wall_seconds": 15.95379400003003,
+      "stage": "validation",
+      "completed": 0,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 16.01726230001077,
+      "stage": "validation",
+      "completed": 1,
+      "metadata": {}
+    },
+    {
+      "wall_seconds": 16.189718500012532,
+      "stage": "serving_cohorts",
+      "completed": 0,
+      "metadata": {
+        "request_count": 4,
+        "cumulative_progress": {
+          "cohorts": 0,
+          "prefill_cohorts": 0,
+          "decode_cohorts": 0,
+          "prefill_compute_tokens": 0,
+          "visible_output_tokens": 0,
+          "measurement_visible_output_tokens": 0,
+          "warmup_decode_cohorts": 0,
+          "measurement_decode_cohorts": 0,
+          "target_decode_cohorts": 1116,
+          "finished_requests": 0,
+          "request_count": 4,
+          "external_imported_requests": 0,
+          "external_imported_logical_bytes": 0
+        }
+      }
+    },
+    {
+      "wall_seconds": 126.58954710001126,
+      "stage": "cohort_preparation",
+      "completed": 0,
+      "metadata": {
+        "current_cohort": {
+          "cohort_id": "cohort-000000",
+          "index": 1,
+          "kind": "prefill",
+          "request_count": 1,
+          "logical_tokens": 1,
+          "completed_tasks": 0,
+          "total_tasks": null
+        },
+        "cumulative_progress": {
+          "cohorts": 0,
+          "prefill_cohorts": 0,
+          "decode_cohorts": 0,
+          "prefill_compute_tokens": 0,
+          "visible_output_tokens": 0,
+          "measurement_visible_output_tokens": 0,
+          "warmup_decode_cohorts": 0,
+          "measurement_decode_cohorts": 0,
+          "target_decode_cohorts": 1116,
+          "finished_requests": 0,
+          "request_count": 4,
+          "external_imported_requests": 1,
+          "external_imported_logical_bytes": 856203264
+        }
+      }
+    }
+  ],
+  "inclusive_function_wall": {
+    "PhysicalRuntimeContext.snapshot": {
+      "calls": 8073,
+      "wall_seconds": 10.884658497641794
+    },
+    "kv_transfer.deepcopy": {
+      "calls": 8100,
+      "wall_seconds": 76.44655149901519
+    },
+    "PhysicalRuntimeContext.begin_transaction": {
+      "calls": 8064,
+      "wall_seconds": 6.233574002922978
+    },
+    "PhysicalService._price": {
+      "calls": 8064,
+      "wall_seconds": 23.744258200051263
+    },
+    "PhysicalKVTransferExecutor._retain_cost_phase": {
+      "calls": 12095,
+      "wall_seconds": 1.8592392962891608
+    },
+    "PhysicalKVTransferExecutor._record_memory_cost": {
+      "calls": 8064,
+      "wall_seconds": 1.9579906989238225
+    },
+    "PhysicalKVTransferExecutor._price_chunks": {
+      "calls": 8064,
+      "wall_seconds": 25.788563100097235
+    },
+    "PhysicalKVTransferExecutor._submit_external_phase": {
+      "calls": 12095,
+      "wall_seconds": 97.01272579765646
+    }
+  },
+  "max_compact_cost_groups": 17,
+  "max_compact_resource_entries": 8226
+}

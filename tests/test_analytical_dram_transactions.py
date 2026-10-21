@@ -9,6 +9,213 @@ from heterollm_sim.memory_types import AccessRequest
 from test_dram_core_semantics import config
 
 
+@pytest.mark.parametrize("size", (65, 4096, 1048576))
+def test_host_owned_timeline_matches_full_undo_with_foreign_gpu_calendars(size):
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+    from test_token_owned_history import bits
+    contexts = [PhysicalRuntimeContext(config(channels=2, rows_per_bank=32768),
+                "host", capture_details=False) for _ in range(2)]
+    for context in contexts:
+        for index in range(1000):
+            context.timeline.reserve(f"foreign-gpu:{index}", index+.125, .375)
+        context.runtimes["host"].core.submit(AccessRequest("warm", "write", 0, 4096))
+    tokens = [context.begin_transaction(owners=("host",), _owned_timeline=index == 0)
+              for index, context in enumerate(contexts)]
+    journal = tokens[0]["timeline"]["_owned_transaction"]
+    assert not any(key.startswith("foreign-gpu:") for key in journal.entries["lane_available"])
+    for address, operation in ((3, "read"), (131075, "write")):
+        values = [context.runtimes["host"].core.submit(AccessRequest("next", operation,
+                  address, size, 100000.)) for context in contexts]
+        assert values[0] == values[1]
+    for context, token in zip(contexts, tokens):
+        context.restore(token)
+    def state(context):
+        snapshot = context.snapshot()
+        return (snapshot["runtime_state"]["host"]["core"], snapshot["timeline"],
+                snapshot["allocator_state"], snapshot["committed_owners"])
+    assert bits(state(contexts[0])) == bits(state(contexts[1]))
+
+
+def test_host_unknown_numeric_callback_protects_foreign_owner_and_timeline(monkeypatch):
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+    from heterollm_sim import _compiled_dram
+    context = PhysicalRuntimeContext(config(rows_per_bank=32768), "host", capture_details=False)
+    context.runtime(config(rows_per_bank=32768), "other")
+    context.timeline.reserve("foreign-gpu", 0., 1.)
+    def callback(*args, **kwargs):
+        context.runtimes["other"].clock_ns = 1234.
+        context.timeline.ready_ns["foreign-gpu"] = 9999.
+        raise ValueError("unknown numeric callback")
+    monkeypatch.setattr(_compiled_dram, "execute_compiled", callback)
+    token = context.begin_transaction(owners=("host",), _owned_timeline=True)
+    assert "_owned_transaction" not in token["timeline"]
+    assert set(token["runtime_state"]) == {"host", "other"}
+    with pytest.raises(ValueError, match="unknown numeric callback"):
+        context.runtimes["host"].core.submit(AccessRequest("x", "read", 0, 4096))
+    context.restore(token)
+    assert context.runtimes["other"].clock_ns == 0.
+    assert context.timeline.ready_ns["foreign-gpu"] == 1.
+
+
+@pytest.mark.parametrize("cached_native_type", (False, True))
+def test_unknown_cached_host_workspace_cannot_escape_foreign_owner_rollback(monkeypatch, cached_native_type):
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+    from heterollm_sim import _compiled_dram
+    import numpy as np
+
+    context = PhysicalRuntimeContext(config(rows_per_bank=32768), "host", capture_details=False)
+    context.runtime(config(rows_per_bank=32768), "other")
+    context.timeline.reserve("foreign-gpu", 0., 1.)
+    core = context.runtimes["host"].core
+    core.submit(AccessRequest("warm", "read", 0, 4096))
+
+    def mutate():
+        context.runtimes["other"].clock_ns = 1234.
+        context.timeline.ready_ns["foreign-gpu"] = 9999.
+        raise ValueError("unknown workspace callback")
+
+    if cached_native_type:
+        class CallbackArray(np.ndarray):
+            def fill(self, value):
+                mutate()
+        workspace = _compiled_dram._WORKSPACES[core]
+        arrays = list(workspace.arrays)
+        arrays[3] = arrays[3].view(CallbackArray)
+        workspace.arrays = tuple(arrays)
+    else:
+        class ForeignWorkspace:
+            @property
+            def shape(self):
+                mutate()
+        monkeypatch.setitem(_compiled_dram._WORKSPACES, core, ForeignWorkspace())
+    token = context.begin_transaction(owners=("host",), _owned_timeline=True)
+    assert "_owned_transaction" not in token["timeline"]
+    assert set(token["runtime_state"]) == {"host", "other"}
+    with pytest.raises(ValueError, match="unknown workspace callback"):
+        core.submit(AccessRequest("next", "read", 0, 4096))
+    context.restore(token)
+    assert context.runtimes["other"].clock_ns == 0.
+    assert context.timeline.ready_ns["foreign-gpu"] == 1.
+
+
+def test_host_metadata_protocol_is_not_invoked_while_qualifying_sparse_undo():
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+
+    context = PhysicalRuntimeContext(config(rows_per_bank=32768), "host", capture_details=False)
+    context.runtime(config(rows_per_bank=32768), "other")
+    context.timeline.reserve("foreign-gpu", 0., 1.)
+    core = context.runtimes["host"].core
+    calls = []
+    class Metadata(dict):
+        def get(self, *args):
+            calls.append(args)
+            context.runtimes["other"].clock_ns = 1234.
+            context.timeline.ready_ns["foreign-gpu"] = 9999.
+            raise ValueError("unknown metadata callback")
+    core.config = replace(core.config, metadata=Metadata(core.config.metadata))
+    token = context.begin_transaction(owners=("host",), _owned_timeline=True)
+    assert not calls and "_owned_transaction" not in token["timeline"]
+    with pytest.raises(ValueError, match="unknown metadata callback"):
+        core.submit(AccessRequest("next", "read", 0, 4096))
+    context.restore(token)
+    assert context.runtimes["other"].clock_ns == 0.
+    assert context.timeline.ready_ns["foreign-gpu"] == 1.
+
+
+@pytest.mark.parametrize("kind", ("config_method", "scalar_protocol"))
+def test_host_authored_config_callback_keeps_complete_foreign_undo(monkeypatch, kind):
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+    from heterollm_sim.memory_types import DramConfig
+
+    context = PhysicalRuntimeContext(config(rows_per_bank=32768), "host", capture_details=False)
+    context.runtime(config(rows_per_bank=32768), "other")
+    context.timeline.reserve("foreign-gpu", 0., 1.)
+    core = context.runtimes["host"].core
+    calls = []
+    def mutate(*args, **kwargs):
+        calls.append(1)
+        context.runtimes["other"].clock_ns = 1234.
+        context.timeline.ready_ns["foreign-gpu"] = 9999.
+        raise ValueError("unknown config callback")
+    if kind == "config_method":
+        monkeypatch.setattr(DramConfig, "directional_lane_bandwidth_gb_s", mutate)
+    else:
+        class Channels(int):
+            __mul__ = mutate
+        object.__setattr__(core.config, "channels", Channels(core.config.channels))
+    token = context.begin_transaction(owners=("host",), _owned_timeline=True)
+    assert not calls and "_owned_transaction" not in token["timeline"]
+    with pytest.raises(ValueError, match="unknown config callback"):
+        core.submit(AccessRequest("next", "read", 0, 4096))
+    context.restore(token)
+    assert context.runtimes["other"].clock_ns == 0.
+    assert context.timeline.ready_ns["foreign-gpu"] == 1.
+
+
+def test_public_host_bank_callback_keeps_foreign_owner_complete_undo():
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+
+    context = PhysicalRuntimeContext(config(rows_per_bank=32768), "host", capture_details=False)
+    context.runtime(config(rows_per_bank=32768), "other")
+    context.timeline.reserve("foreign-gpu", 0., 1.)
+    core = context.runtimes["host"].core
+    core.submit(AccessRequest("warm", "read", 0, 4096))
+    calls = []
+    class Bank:
+        open_row = 0
+        activation_ready_ns = 0.
+        @property
+        def ready_ns(self):
+            calls.append(1)
+            context.runtimes["other"].clock_ns = 1234.
+            context.timeline.ready_ns["foreign-gpu"] = 9999.
+            raise ValueError("unknown bank callback")
+    public = core._banks
+    public[next(iter(public))] = Bank()
+    token = context.begin_transaction(owners=("host",), _owned_timeline=True)
+    assert not calls and "_owned_transaction" not in token["timeline"]
+    with pytest.raises(ValueError, match="unknown bank callback"):
+        core.submit(AccessRequest("next", "read", 0, 4096))
+    context.restore(token)
+    assert context.runtimes["other"].clock_ns == 0.
+    assert context.timeline.ready_ns["foreign-gpu"] == 1.
+
+
+def test_public_native_host_bank_can_alias_a_sibling_owner_and_keeps_complete_undo():
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+
+    context = PhysicalRuntimeContext(config(rows_per_bank=32768), "host", capture_details=False)
+    context.runtime(config(rows_per_bank=32768), "other")
+    host, other = (context.runtimes[name].core for name in ("host", "other"))
+    for core in (host, other):
+        core.submit(AccessRequest("warm", "read", 0, 4096))
+    banks = host._banks
+    identity = next(iter(banks))
+    banks[identity] = next(iter(other._banks.values()))
+    before = deepcopy(other.__dict__["_banks"])
+    token = context.begin_transaction(owners=("host",), _owned_timeline=True)
+    assert "_owned_transaction" not in token["timeline"]
+    assert set(token["runtime_state"]) == {"host", "other"}
+    host.submit(AccessRequest("next", "write", 262144, 4096, arrival_ns=100000.))
+    assert other.__dict__["_banks"] != before
+    context.restore(token)
+    assert other.__dict__["_banks"] == before
+
+
+def test_native_host_bank_deepcopy_slotname_cache_does_not_disable_owned_undo():
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+
+    context = PhysicalRuntimeContext(config(rows_per_bank=32768), "host", capture_details=False)
+    core = context.runtimes["host"].core
+    core.submit(AccessRequest("warm", "read", 0, 4096))
+    # copy._slotnames adds this harmless class cache on the first ordinary
+    # deepcopy, which occurs in native layer-window source copies too.
+    deepcopy(next(iter(core.__dict__["_banks"].values())))
+    token = context.begin_transaction(owners=("host",), _owned_timeline=True)
+    assert "_owned_transaction" in token["timeline"]
+    context.restore(token)
+
+
 def populated():
     core = DramCore(config(channels=2, bank_groups_per_rank=4, banks_per_group=4,
         rows_per_bank=128, row_bytes=8192), capture_details=False)

@@ -1,0 +1,487 @@
+{
+  "schema": "native-pd-interference-pilot/v2",
+  "layers": [
+    "layer-010",
+    "layer-011",
+    "layer-012",
+    "layer-013",
+    "layer-014",
+    "layer-015"
+  ],
+  "layer_count": 6,
+  "pending_imports_at_cutoff": [
+    "native-request-00000001",
+    "native-request-00000002"
+  ],
+  "remaining_bytes_at_cutoff": {
+    "native-request-00000001": 281344,
+    "native-request-00000002": 53415419904
+  },
+  "cases": {
+    "all_in_flight": [
+      "native-request-00000001",
+      "native-request-00000002"
+    ],
+    "single_import": [
+      "native-request-00000002"
+    ]
+  },
+  "boundary_origin_ns": 7501293687.844126,
+  "preroll_ns": 1000000.0,
+  "offsets_ns": [
+    0.0,
+    35900.0,
+    71800.0,
+    107700.0
+  ],
+  "rows": [
+    {
+      "offset_ns": 0.0,
+      "window_start_ns": 7502293687.844126,
+      "quiet": {
+        "start_ns": 7502293687.844126,
+        "end_ns": 7503534416.64,
+        "duration_ns": 1240728.7958745956,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": null,
+        "wall_seconds": 32.81878039997537
+      },
+      "all_in_flight": {
+        "start_ns": 7502293687.844126,
+        "end_ns": 7504303843.2,
+        "duration_ns": 2010155.3558740616,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": {
+          "request_ids": [
+            "native-request-00000001",
+            "native-request-00000002"
+          ],
+          "submitted_phases": 81,
+          "written_bytes_in_window": 13631488,
+          "write_phases_in_window": 13,
+          "final_reached": [
+            "native-request-00000001"
+          ],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "wall_seconds": 38.078304299968295,
+        "imports_alone_same_interval": {
+          "request_ids": [
+            "native-request-00000001",
+            "native-request-00000002"
+          ],
+          "submitted_phases": 84,
+          "written_bytes_in_window": 14680064,
+          "write_phases_in_window": 14,
+          "final_reached": [
+            "native-request-00000001"
+          ],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "interference_ns": 769426.559999466,
+        "interference_relative": 0.6201408096255987,
+        "contended_write_rate_gb_s": 6.781310688333697,
+        "alone_write_rate_gb_s": 7.302949972051674
+      },
+      "single_import": {
+        "start_ns": 7502293687.844126,
+        "end_ns": 7504303843.2,
+        "duration_ns": 2010155.3558740616,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": {
+          "request_ids": [
+            "native-request-00000002"
+          ],
+          "submitted_phases": 81,
+          "written_bytes_in_window": 13631488,
+          "write_phases_in_window": 13,
+          "final_reached": [],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "wall_seconds": 40.598233700031415,
+        "imports_alone_same_interval": {
+          "request_ids": [
+            "native-request-00000002"
+          ],
+          "submitted_phases": 84,
+          "written_bytes_in_window": 14680064,
+          "write_phases_in_window": 14,
+          "final_reached": [],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "interference_ns": 769426.559999466,
+        "interference_relative": 0.6201408096255987,
+        "contended_write_rate_gb_s": 6.781310688333697,
+        "alone_write_rate_gb_s": 7.302949972051674
+      }
+    },
+    {
+      "offset_ns": 35900.0,
+      "window_start_ns": 7502329587.844126,
+      "quiet": {
+        "start_ns": 7502329587.844126,
+        "end_ns": 7503570078.72,
+        "duration_ns": 1240490.8758745193,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": null,
+        "wall_seconds": 33.262019800022244
+      },
+      "all_in_flight": {
+        "start_ns": 7502329587.844126,
+        "end_ns": 7504304382.72,
+        "duration_ns": 1974794.8758745193,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": {
+          "request_ids": [
+            "native-request-00000001",
+            "native-request-00000002"
+          ],
+          "submitted_phases": 81,
+          "written_bytes_in_window": 13631488,
+          "write_phases_in_window": 13,
+          "final_reached": [
+            "native-request-00000001"
+          ],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "wall_seconds": 36.097702799947,
+        "imports_alone_same_interval": {
+          "request_ids": [
+            "native-request-00000001",
+            "native-request-00000002"
+          ],
+          "submitted_phases": 84,
+          "written_bytes_in_window": 14680064,
+          "write_phases_in_window": 14,
+          "final_reached": [
+            "native-request-00000001"
+          ],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "interference_ns": 734304.0,
+        "interference_relative": 0.5919463127710081,
+        "contended_write_rate_gb_s": 6.902736160870087,
+        "alone_write_rate_gb_s": 7.433715865552402
+      },
+      "single_import": {
+        "start_ns": 7502329587.844126,
+        "end_ns": 7504304382.72,
+        "duration_ns": 1974794.8758745193,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": {
+          "request_ids": [
+            "native-request-00000002"
+          ],
+          "submitted_phases": 81,
+          "written_bytes_in_window": 13631488,
+          "write_phases_in_window": 13,
+          "final_reached": [],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "wall_seconds": 35.45705650001764,
+        "imports_alone_same_interval": {
+          "request_ids": [
+            "native-request-00000002"
+          ],
+          "submitted_phases": 84,
+          "written_bytes_in_window": 14680064,
+          "write_phases_in_window": 14,
+          "final_reached": [],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "interference_ns": 734304.0,
+        "interference_relative": 0.5919463127710081,
+        "contended_write_rate_gb_s": 6.902736160870087,
+        "alone_write_rate_gb_s": 7.433715865552402
+      }
+    },
+    {
+      "offset_ns": 71800.0,
+      "window_start_ns": 7502365487.844126,
+      "quiet": {
+        "start_ns": 7502365487.844126,
+        "end_ns": 7503606282.88,
+        "duration_ns": 1240795.0358743668,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": null,
+        "wall_seconds": 33.11374729999807
+      },
+      "all_in_flight": {
+        "start_ns": 7502365487.844126,
+        "end_ns": 7504304382.72,
+        "duration_ns": 1938894.8758745193,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": {
+          "request_ids": [
+            "native-request-00000001",
+            "native-request-00000002"
+          ],
+          "submitted_phases": 81,
+          "written_bytes_in_window": 13631488,
+          "write_phases_in_window": 13,
+          "final_reached": [
+            "native-request-00000001"
+          ],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "wall_seconds": 35.54630109993741,
+        "imports_alone_same_interval": {
+          "request_ids": [
+            "native-request-00000001",
+            "native-request-00000002"
+          ],
+          "submitted_phases": 84,
+          "written_bytes_in_window": 14680064,
+          "write_phases_in_window": 14,
+          "final_reached": [
+            "native-request-00000001"
+          ],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "interference_ns": 698099.8400001526,
+        "interference_relative": 0.5626230117113691,
+        "contended_write_rate_gb_s": 7.03054516756699,
+        "alone_write_rate_gb_s": 7.571356334302912
+      },
+      "single_import": {
+        "start_ns": 7502365487.844126,
+        "end_ns": 7504304382.72,
+        "duration_ns": 1938894.8758745193,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": {
+          "request_ids": [
+            "native-request-00000002"
+          ],
+          "submitted_phases": 81,
+          "written_bytes_in_window": 13631488,
+          "write_phases_in_window": 13,
+          "final_reached": [],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "wall_seconds": 35.50550930004101,
+        "imports_alone_same_interval": {
+          "request_ids": [
+            "native-request-00000002"
+          ],
+          "submitted_phases": 84,
+          "written_bytes_in_window": 14680064,
+          "write_phases_in_window": 14,
+          "final_reached": [],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "interference_ns": 698099.8400001526,
+        "interference_relative": 0.5626230117113691,
+        "contended_write_rate_gb_s": 7.03054516756699,
+        "alone_write_rate_gb_s": 7.571356334302912
+      }
+    },
+    {
+      "offset_ns": 107700.0,
+      "window_start_ns": 7502401387.844126,
+      "quiet": {
+        "start_ns": 7502401387.844126,
+        "end_ns": 7503643616.64,
+        "duration_ns": 1242228.7958745956,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": null,
+        "wall_seconds": 32.6494441999821
+      },
+      "all_in_flight": {
+        "start_ns": 7502401387.844126,
+        "end_ns": 7504304382.72,
+        "duration_ns": 1902994.8758745193,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": {
+          "request_ids": [
+            "native-request-00000001",
+            "native-request-00000002"
+          ],
+          "submitted_phases": 81,
+          "written_bytes_in_window": 13631488,
+          "write_phases_in_window": 13,
+          "final_reached": [
+            "native-request-00000001"
+          ],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "wall_seconds": 35.659353900002316,
+        "imports_alone_same_interval": {
+          "request_ids": [
+            "native-request-00000001",
+            "native-request-00000002"
+          ],
+          "submitted_phases": 84,
+          "written_bytes_in_window": 14680064,
+          "write_phases_in_window": 14,
+          "final_reached": [
+            "native-request-00000001"
+          ],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "interference_ns": 660766.0799999237,
+        "interference_relative": 0.5319197898119155,
+        "contended_write_rate_gb_s": 7.163176408310434,
+        "alone_write_rate_gb_s": 7.7141899781804675
+      },
+      "single_import": {
+        "start_ns": 7502401387.844126,
+        "end_ns": 7504304382.72,
+        "duration_ns": 1902994.8758745193,
+        "boundary_wait_ns": 0.0,
+        "task_count": 5850,
+        "concurrent_imports": {
+          "request_ids": [
+            "native-request-00000002"
+          ],
+          "submitted_phases": 81,
+          "written_bytes_in_window": 13631488,
+          "write_phases_in_window": 13,
+          "final_reached": [],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "wall_seconds": 35.995338700013235,
+        "imports_alone_same_interval": {
+          "request_ids": [
+            "native-request-00000002"
+          ],
+          "submitted_phases": 84,
+          "written_bytes_in_window": 14680064,
+          "write_phases_in_window": 14,
+          "final_reached": [],
+          "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"
+        },
+        "interference_ns": 660766.0799999237,
+        "interference_relative": 0.5319197898119155,
+        "contended_write_rate_gb_s": 7.163176408310434,
+        "alone_write_rate_gb_s": 7.7141899781804675
+      }
+    }
+  ],
+  "quiet_duration_ns": {
+    "mean": 1241060.8758745193,
+    "min": 1240490.8758745193,
+    "max": 1242228.7958745956,
+    "population_stdev": 683.7187211508594,
+    "values": [
+      1240728.7958745956,
+      1240490.8758745193,
+      1240795.0358743668,
+      1242228.7958745956
+    ]
+  },
+  "statistics": {
+    "all_in_flight": {
+      "interference_per_layer_ns": {
+        "mean": 119274.85333331427,
+        "min": 110127.67999998729,
+        "max": 128237.759999911,
+        "population_stdev": 6749.559095103083,
+        "values": [
+          128237.759999911,
+          122384.0,
+          116349.97333335876,
+          110127.67999998729
+        ]
+      },
+      "interference_relative": {
+        "mean": 0.5766574809799728,
+        "min": 0.5319197898119155,
+        "max": 0.6201408096255987,
+        "population_stdev": 0.03287466952814103,
+        "values": [
+          0.6201408096255987,
+          0.5919463127710081,
+          0.5626230117113691,
+          0.5319197898119155
+        ]
+      },
+      "contended_write_rate_gb_s": {
+        "mean": 6.969442106270302,
+        "min": 6.781310688333697,
+        "max": 7.163176408310434,
+        "population_stdev": 0.1423988039393045,
+        "values": [
+          6.781310688333697,
+          6.902736160870087,
+          7.03054516756699,
+          7.163176408310434
+        ]
+      },
+      "alone_write_rate_gb_s": {
+        "mean": 7.505553037521864,
+        "min": 7.302949972051674,
+        "max": 7.7141899781804675,
+        "population_stdev": 0.15335255808848172,
+        "values": [
+          7.302949972051674,
+          7.433715865552402,
+          7.571356334302912,
+          7.7141899781804675
+        ]
+      }
+    },
+    "single_import": {
+      "interference_per_layer_ns": {
+        "mean": 119274.85333331427,
+        "min": 110127.67999998729,
+        "max": 128237.759999911,
+        "population_stdev": 6749.559095103083,
+        "values": [
+          128237.759999911,
+          122384.0,
+          116349.97333335876,
+          110127.67999998729
+        ]
+      },
+      "interference_relative": {
+        "mean": 0.5766574809799728,
+        "min": 0.5319197898119155,
+        "max": 0.6201408096255987,
+        "population_stdev": 0.03287466952814103,
+        "values": [
+          0.6201408096255987,
+          0.5919463127710081,
+          0.5626230117113691,
+          0.5319197898119155
+        ]
+      },
+      "contended_write_rate_gb_s": {
+        "mean": 6.969442106270302,
+        "min": 6.781310688333697,
+        "max": 7.163176408310434,
+        "population_stdev": 0.1423988039393045,
+        "values": [
+          6.781310688333697,
+          6.902736160870087,
+          7.03054516756699,
+          7.163176408310434
+        ]
+      },
+      "alone_write_rate_gb_s": {
+        "mean": 7.505553037521864,
+        "min": 7.302949972051674,
+        "max": 7.7141899781804675,
+        "population_stdev": 0.15335255808848172,
+        "values": [
+          7.302949972051674,
+          7.433715865552402,
+          7.571356334302912,
+          7.7141899781804675
+        ]
+      }
+    }
+  },
+  "pilot_wall_seconds": 428.1715981999878,
+  "scope": "four quarter-chunk phase offsets; paired same-boundary quiet/concurrent copies; real in-flight PD continued; no budget, no forecast, not a candidate"
+}

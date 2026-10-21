@@ -40,8 +40,11 @@ class TokenFrame:
     heap: list
     remaining: cython.Py_ssize_t
     completed: list
+    owned_physical_frontiers: object
+    frontiers_initialized: object
 
-    def __init__(self, kernel, chunk, layout, phases, index_physical_allocations):
+    def __init__(self, kernel, chunk, layout, phases, index_physical_allocations,
+                 prepared_seen=None, owned_physical_frontiers=False):
         self.kernel = kernel
         self.chunk = chunk
         self.layout = layout
@@ -57,6 +60,8 @@ class TokenFrame:
         self.heap = []
         self.remaining = len(chunk)
         self.completed = [False] * len(chunk)
+        self.owned_physical_frontiers = owned_physical_frontiers
+        self.frontiers_initialized = False
 
         # Submission remains atomic: validation has finished before any live
         # state changes. An open dynamic submission owns a different lifetime.
@@ -67,7 +72,10 @@ class TokenFrame:
         kernel._physical_allocation_last_end.clear()
         kernel._pending_physical_releases.clear()
         kernel._tasks.update(zip(self.ids, chunk))
-        kernel._seen_ids.update(self.ids)
+        if prepared_seen is None:
+            kernel._seen_ids.update(self.ids)
+        else:
+            kernel._commit_compact_seen_namespace(prepared_seen)
         initial = set()
         for position in layout.root_positions:
             changed = self.add_ready(position)
@@ -88,6 +96,10 @@ class TokenFrame:
         phase, sequence = self.phases[position]
         return (effective, dependency, task.earliest_start_ns, phase, sequence,
                 task.task_id, position)
+
+    def invalidate_frontiers(self):
+        """An external observer may edit calendars outside the last task."""
+        self.frontiers_initialized = False
 
     def ready_key(self, position):
         from .data_motion import is_physical_task, physical_task_demands
@@ -224,7 +236,8 @@ class TokenFrame:
 @cython.locals(frame=TokenFrame)
 def drain_token_program(kernel, chunk, layout, *, validate_tasks=True,
                         event_observer=None, before_step=None,
-                        index_physical_allocations=False, on_submitted=None):
+                        index_physical_allocations=False, on_submitted=None,
+                        seen_namespace=None, owned_physical_frontiers=False):
     from .event_kernel import (_validated_phase_sequence, _validate_task_time,
                                _validate_aggregate_metadata)
     if len(chunk) != layout.task_count:
@@ -234,9 +247,17 @@ def drain_token_program(kernel, chunk, layout, *, validate_tasks=True,
     ids = tuple(task.task_id for task in chunk)
     if len(set(ids)) != len(ids):
         raise ValueError("task chunk contains duplicate task ids")
-    for key in ids:
-        if kernel._has_seen_task_id(key):
-            raise ValueError("duplicate task_id: {}".format(key))
+    prepared_seen = None
+    if seen_namespace is None:
+        for key in ids:
+            if kernel._has_seen_task_id(key):
+                raise ValueError("duplicate task_id: {}".format(key))
+    else:
+        prefix, suffixes = seen_namespace
+        if len(suffixes) != len(ids) or any(
+                key != prefix + suffix for key, suffix in zip(ids, suffixes)):
+            raise ValueError("compact namespace does not match Token task ids")
+        prepared_seen = kernel._prepare_compact_seen_namespace(prefix, suffixes)
     phases = []
     for task in chunk:
         kernel._validate_owner_demands(task)
@@ -244,7 +265,8 @@ def drain_token_program(kernel, chunk, layout, *, validate_tasks=True,
             _validate_task_time(task)
             _validate_aggregate_metadata(task)
         phases.append(_validated_phase_sequence(task))
-    frame = TokenFrame(kernel, chunk, layout, tuple(phases), index_physical_allocations)
+    frame = TokenFrame(kernel, chunk, layout, tuple(phases), index_physical_allocations,
+                       prepared_seen, owned_physical_frontiers)
     kernel._token_frame = frame
     if not frame.remaining:
         frame.publish_scheduler()
@@ -254,7 +276,10 @@ def drain_token_program(kernel, chunk, layout, *, validate_tasks=True,
     events = []
     while frame.remaining:
         if before_step is not None:
-            before_step(kernel)
+            try:
+                before_step(kernel)
+            finally:
+                frame.invalidate_frontiers()
         # A callback may open the graph through the incremental public API.
         event = frame.step() if kernel._token_frame is frame else kernel.step()
         if event is None:
@@ -272,6 +297,7 @@ def drain_token_program(kernel, chunk, layout, *, validate_tasks=True,
 def resolve_task_execution(self, task, start_ns, sorted_demands=None):
     """Resolve one live transaction; the scheduler owns its ready entry."""
 
+    frame: TokenFrame
     task_id = task.task_id
     self._reclaim_physical_allocations(start_ns)
     from .data_motion import is_physical_task
@@ -283,7 +309,12 @@ def resolve_task_execution(self, task, start_ns, sorted_demands=None):
     physical_snapshot = None
     if is_physical:
         try:
-            physical_snapshot = self.physical_runtime.begin_transaction()
+            from .data_motion import physical_task_transaction_owners
+            frame = getattr(self, "_token_frame", None)
+            owned_physical = frame is not None and frame.owned_physical_frontiers
+            physical_snapshot = self.physical_runtime.begin_transaction(
+                owners=physical_task_transaction_owners(task) if owned_physical else None,
+                _owned_timeline=owned_physical)
             # Local import avoids making the planner/data-motion module
             # part of the kernel import cycle; it also keeps the physical
             # adapter optional for analytical-only users.
@@ -360,8 +391,24 @@ def resolve_task_execution(self, task, start_ns, sorted_demands=None):
         # demand below, but must still be visible to ordinary tasks.
         if is_physical:
             from ._resource_ledger import publish_timeline_frontiers
-            publish_timeline_frontiers(
-                self.physical_runtime.timeline.lane_available, self.resource_available)
+            frame = getattr(self, "_token_frame", None)
+            if (frame is not None and frame.owned_physical_frontiers
+                    and frame.frontiers_initialized
+                    and physical_snapshot.get("_owned_native_writers", False)):
+                # Only the trusted native caller owns all timeline writes in
+                # this closed frame. The merged task bill includes every
+                # Core's touched resources, including zero-busy reservations;
+                # timeline._touched alone contains only the last Core call.
+                timeline_lanes = self.physical_runtime.timeline.lane_available
+                for resource_id in task.metadata["physical_resource_last_intervals"]:
+                    lanes = timeline_lanes.get(resource_id)
+                    if lanes:
+                        self.resource_available[resource_id] = lanes[0] if len(lanes) == 1 else min(lanes)
+            else:
+                publish_timeline_frontiers(
+                    self.physical_runtime.timeline.lane_available, self.resource_available)
+                if frame is not None:
+                    frame.frontiers_initialized = True
     elif "stateful_l2" in task.metadata:
         try:
             l2_owner = str(task.metadata["stateful_l2"]["owner"])

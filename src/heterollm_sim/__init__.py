@@ -5,13 +5,13 @@ __version__ = "4.0.0"
 
 def __getattr__(name):
     if name in {
-        "AccessRequest", "BatchResult", "DramConfig", "MemoryKind", "NandConfig",
+        "AccessRequest", "BatchResult", "DramConfig", "MemoryKind", "NandConfig", "SramConfig",
         "Operation", "TransactionResult", "make_ddr_config", "make_lpddr_config",
         "make_hbm_config", "make_gddr_config", "make_ssd_config", "make_hbf_config",
         "parse_physical_memory_config",
     }:
         from .memory_types import (
-            AccessRequest, BatchResult, DramConfig, MemoryKind, NandConfig,
+            AccessRequest, BatchResult, DramConfig, MemoryKind, NandConfig, SramConfig,
             Operation, TransactionResult, make_ddr_config, make_lpddr_config,
             make_hbm_config, make_gddr_config, make_ssd_config, make_hbf_config,
             parse_physical_memory_config,
@@ -23,6 +23,9 @@ def __getattr__(name):
     if name in {"NandCore", "nand_service"}:
         from .nand_core import NandCore, nand_service
         return {"NandCore": NandCore, "nand_service": nand_service}[name]
+    if name == "SramCore":
+        from .sram_core import SramCore
+        return SramCore
     if name in {
         "AUTHORING_SCHEMA_VERSION",
         "ControllerProfile",
@@ -172,6 +175,7 @@ __all__ = [
     "DramConfig",
     "MemoryKind",
     "NandConfig",
+    "SramConfig",
     "Operation",
     "TransactionResult",
     "make_ddr_config",
@@ -183,6 +187,7 @@ __all__ = [
     "parse_physical_memory_config",
     "DramCore",
     "NandCore",
+    "SramCore",
     "dram_service",
     "nand_service",
     "__version__",

@@ -56,6 +56,7 @@ class MemoryKind(str, Enum):
     GDDR = "GDDR"
     SSD = "SSD"
     HBF = "HBF"
+    SRAM = "SRAM"
 
 
 _GDDR_GENERATIONS = frozenset({"GDDR6", "GDDR6X", "GDDR7"})
@@ -107,7 +108,7 @@ def _coerce_dram_kind(value: Any, generation: Any = "") -> tuple[MemoryKind, str
     return kind, generation_text
 
 
-def parse_physical_memory_config(values: Any) -> "DramConfig | NandConfig":
+def parse_physical_memory_config(values: Any) -> "DramConfig | NandConfig | SramConfig":
     """Parse one physical memory config through a single explicit dispatcher.
 
     Unknown kinds fail before entering the NAND branch. GDDR generations
@@ -129,8 +130,10 @@ def parse_physical_memory_config(values: Any) -> "DramConfig | NandConfig":
         return DramConfig.from_mapping(payload)
     if kind_name in {"SSD", "HBF"}:
         return NandConfig.from_mapping(payload)
+    if kind_name == "SRAM":
+        return SramConfig.from_mapping(payload)
     raise ValueError(
-        "physical_memory_config.kind must be DDR, LPDDR, HBM, GDDR, SSD or HBF; got {}".format(
+        "physical_memory_config.kind must be DDR, LPDDR, HBM, GDDR, SSD, HBF or SRAM; got {}".format(
             kind_value
         )
     )
@@ -163,6 +166,77 @@ class AccessRequest:
             raise ValueError("address must be a non-negative integer")
         _positive_int("byte_count", self.byte_count)
         _nonnegative("arrival_ns", self.arrival_ns)
+
+
+@dataclass(frozen=True)
+class SramConfig:
+    """Ordinary byte-addressable SRAM with explicit shared read/write ports.
+
+    Contiguous bursts are striped over ``ports``. Each port owns an equal
+    share of the aggregate interface and directional byte rates, and a read
+    and write use the same port calendar. Access latency is pipelined before
+    byte service, rather than a DRAM row command or a NAND page operation.
+    A pooled multi-stack instance is a research organization, not a claim
+    that stack-local allocation and routing have been modeled.
+    """
+
+    capacity_bytes: int
+    burst_bytes: int
+    interface_bandwidth_gb_s: float
+    read_bandwidth_gb_s: float
+    write_bandwidth_gb_s: float
+    read_latency_ns: float
+    write_latency_ns: float
+    ports: int
+    max_outstanding_requests: int
+    kind: MemoryKind | str = MemoryKind.SRAM
+    max_expanded_segments: int = 1024
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, Any]) -> "SramConfig":
+        return cls(**dict(values))
+
+    def __post_init__(self) -> None:
+        try:
+            kind = self.kind if isinstance(self.kind, MemoryKind) else MemoryKind(str(self.kind).upper())
+        except ValueError as exc:
+            raise ValueError("SramConfig.kind must be SRAM") from exc
+        if kind is not MemoryKind.SRAM:
+            raise ValueError("SramConfig.kind must be SRAM")
+        object.__setattr__(self, "kind", kind)
+        for name in ("capacity_bytes", "burst_bytes", "ports", "max_outstanding_requests", "max_expanded_segments"):
+            _positive_int(name, getattr(self, name))
+        if self.capacity_bytes % self.burst_bytes:
+            raise ValueError("SRAM capacity_bytes must be a multiple of burst_bytes")
+        for name in ("interface_bandwidth_gb_s", "read_bandwidth_gb_s", "write_bandwidth_gb_s"):
+            if _nonnegative(name, getattr(self, name)) <= 0:
+                raise ValueError(name + " must be positive")
+        for name in ("read_bandwidth_gb_s", "write_bandwidth_gb_s"):
+            if getattr(self, name) > self.interface_bandwidth_gb_s:
+                raise ValueError(name + " cannot exceed SRAM interface_bandwidth_gb_s")
+        for name in ("read_latency_ns", "write_latency_ns"):
+            _nonnegative(name, getattr(self, name))
+        if not isinstance(self.metadata, Mapping):
+            raise ValueError("SRAM metadata must be a mapping")
+
+    @property
+    def effective_capacity_bytes(self) -> int:
+        return self.capacity_bytes
+
+    @property
+    def physical_interface_bandwidth_gb_s(self) -> float:
+        return float(self.interface_bandwidth_gb_s)
+
+    @property
+    def bandwidth_gb_s(self) -> float:
+        return float(self.interface_bandwidth_gb_s)
+
+    def directional_bandwidth_gb_s(self, operation: Operation | str) -> float:
+        operation = operation if isinstance(operation, Operation) else Operation(str(operation).lower())
+        if operation is Operation.ERASE:
+            raise ValueError("SRAM does not support ERASE operations")
+        return float(self.read_bandwidth_gb_s if operation is Operation.READ else self.write_bandwidth_gb_s)
 
 
 @dataclass(frozen=True)
@@ -1053,7 +1127,7 @@ def make_hbf_config(**kwargs: Any) -> NandConfig:
 
 
 __all__ = [
-    "AccessRequest", "AddressMapping", "BatchResult", "DramConfig", "MemoryKind", "NandConfig",
+    "AccessRequest", "AddressMapping", "BatchResult", "DramConfig", "MemoryKind", "NandConfig", "SramConfig",
     "DRAM_BANK_GROUP_TIMING_FIELDS", "DRAM_CONTROLLER_FIELDS",
     "NandWearConfig",
     "Operation", "Segment", "StageTiming", "TransactionResult",

@@ -1,0 +1,15 @@
+{
+  "status": "completed",
+  "scope": "eight_gpu_core",
+  "processed": 30,
+  "total": 30,
+  "successful": 30,
+  "infeasible": 0,
+  "failed": 0,
+  "no_validated_deployment": 0,
+  "deferred_cases": 270,
+  "deferred_extra_results": 4,
+  "deferred_partial_points": 2,
+  "scan_processes_exited": true,
+  "original_scan_restarted": false
+}

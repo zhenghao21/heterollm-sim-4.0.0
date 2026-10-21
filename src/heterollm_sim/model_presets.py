@@ -877,7 +877,7 @@ def _layer_weight_bytes(pattern: LayerPattern) -> int:
         mlp_elements += pattern.hidden_size * pattern.num_experts
         if pattern.shared_expert_intermediate_size:
             mlp_elements += (
-                (3 if pattern.shared_expert_gate else 2)
+                (3 if pattern.gated_mlp else 2)
                 * pattern.hidden_size
                 * pattern.shared_expert_intermediate_size
             )

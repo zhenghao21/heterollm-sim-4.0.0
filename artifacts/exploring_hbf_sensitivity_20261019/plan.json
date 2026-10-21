@@ -1,0 +1,449 @@
+{
+  "status": "planned_not_started",
+  "baseline_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019",
+  "cases": [
+    {
+      "case_id": "fixed_compute_l3_hbm",
+      "priority": "core",
+      "mode": "fixed",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "matrix_efficiency": 0.6
+      },
+      "question": "作者slides规定峰值算力的基线上，若矩阵有效效率只有60%，同部署代价如何变化？",
+      "limit": "只改变matrix_efficiency；scalar效率保留源结果峰值设置，不把未知效率反调到论文吞吐。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBM4__SHORT__G8__S0p1.json",
+      "selected_batch": 1321,
+      "selected_parallelism": {
+        "dp": 1,
+        "pp": 1,
+        "tp": 8,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 3,
+      "baseline_mean_iteration_ms": 73.85072541766431,
+      "baseline_max_iteration_ms": 74.45999712246704
+    },
+    {
+      "case_id": "fixed_compute_l3_hbf_plus",
+      "priority": "core",
+      "mode": "fixed",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "matrix_efficiency": 0.6
+      },
+      "question": "作者slides规定峰值算力的基线上，若矩阵有效效率只有60%，同部署代价如何变化？",
+      "limit": "只改变matrix_efficiency；scalar效率保留源结果峰值设置，不把未知效率反调到论文吞吐。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBF+__SHORT__G8__S0p1.json",
+      "selected_batch": 550,
+      "selected_parallelism": {
+        "dp": 4,
+        "pp": 1,
+        "tp": 2,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 3,
+      "baseline_mean_iteration_ms": 98.1930921751131,
+      "baseline_max_iteration_ms": 101.31771959931183
+    },
+    {
+      "case_id": "fixed_compute_l4_hbm",
+      "priority": "core",
+      "mode": "fixed",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "matrix_efficiency": 0.6
+      },
+      "question": "作者slides规定峰值算力的基线上，若矩阵有效效率只有60%，同部署代价如何变化？",
+      "limit": "只改变matrix_efficiency；scalar效率保留源结果峰值设置，不把未知效率反调到论文吞吐。",
+      "baseline_status": "not_ready",
+      "reason": "主实验不是已验收完整episode：primary__llama4_maverick__HBM4__SHORT__G8__S0p1.json"
+    },
+    {
+      "case_id": "fixed_compute_l4_hbf_plus",
+      "priority": "core",
+      "mode": "fixed",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "matrix_efficiency": 0.6
+      },
+      "question": "作者slides规定峰值算力的基线上，若矩阵有效效率只有60%，同部署代价如何变化？",
+      "limit": "只改变matrix_efficiency；scalar效率保留源结果峰值设置，不把未知效率反调到论文吞吐。",
+      "baseline_status": "not_ready",
+      "reason": "主实验尚无该点：primary__llama4_maverick__HBF+__SHORT__G8__S0p1.json"
+    },
+    {
+      "case_id": "reopt_capacity_gib_l3_hbm",
+      "priority": "core",
+      "mode": "reoptimized",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "capacity_unit_bytes": 1073741824
+      },
+      "question": "论文GB单位歧义能增加多少可达批量和吞吐？",
+      "limit": "作者slides的405B约756GB与官方756GiB、Maverick约746GB与746GiB构成歧义线索，非所有单位的证明。只把设备每GB容量解释为GiB；模型张量数、精度、介质速率、3.13MB读暂存、40MB SRAM与HOST容量均不缩放。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBM4__SHORT__G8__S0p1.json",
+      "selected_batch": 1321,
+      "selected_parallelism": {
+        "dp": 1,
+        "pp": 1,
+        "tp": 8,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 3,
+      "baseline_mean_iteration_ms": 73.85072541766431,
+      "baseline_max_iteration_ms": 74.45999712246704
+    },
+    {
+      "case_id": "reopt_capacity_gib_l3_hbf_plus",
+      "priority": "core",
+      "mode": "reoptimized",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "capacity_unit_bytes": 1073741824
+      },
+      "question": "论文GB单位歧义能增加多少可达批量和吞吐？",
+      "limit": "作者slides的405B约756GB与官方756GiB、Maverick约746GB与746GiB构成歧义线索，非所有单位的证明。只把设备每GB容量解释为GiB；模型张量数、精度、介质速率、3.13MB读暂存、40MB SRAM与HOST容量均不缩放。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBF+__SHORT__G8__S0p1.json",
+      "selected_batch": 550,
+      "selected_parallelism": {
+        "dp": 4,
+        "pp": 1,
+        "tp": 2,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 3,
+      "baseline_mean_iteration_ms": 98.1930921751131,
+      "baseline_max_iteration_ms": 101.31771959931183
+    },
+    {
+      "case_id": "reopt_capacity_gib_l4_hbm",
+      "priority": "core",
+      "mode": "reoptimized",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "capacity_unit_bytes": 1073741824
+      },
+      "question": "论文GB单位歧义能增加多少可达批量和吞吐？",
+      "limit": "作者slides的405B约756GB与官方756GiB、Maverick约746GB与746GiB构成歧义线索，非所有单位的证明。只把设备每GB容量解释为GiB；模型张量数、精度、介质速率、3.13MB读暂存、40MB SRAM与HOST容量均不缩放。",
+      "baseline_status": "not_ready",
+      "reason": "主实验不是已验收完整episode：primary__llama4_maverick__HBM4__SHORT__G8__S0p1.json"
+    },
+    {
+      "case_id": "reopt_capacity_gib_l4_hbf_plus",
+      "priority": "core",
+      "mode": "reoptimized",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "capacity_unit_bytes": 1073741824
+      },
+      "question": "论文GB单位歧义能增加多少可达批量和吞吐？",
+      "limit": "作者slides的405B约756GB与官方756GiB、Maverick约746GB与746GiB构成歧义线索，非所有单位的证明。只把设备每GB容量解释为GiB；模型张量数、精度、介质速率、3.13MB读暂存、40MB SRAM与HOST容量均不缩放。",
+      "baseline_status": "not_ready",
+      "reason": "主实验尚无该点：primary__llama4_maverick__HBF+__SHORT__G8__S0p1.json"
+    },
+    {
+      "case_id": "recheck_slo_l3_hbf_long",
+      "priority": "core",
+      "mode": "postprocess",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {},
+      "question": "同一个真实episode在平均100ms和最大100ms下是否得到不同验收？",
+      "limit": "复用已有完整episode；不重跑、不改变物理时序，不把最大值规则偷偷替换主实验平均规则。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBF+__LONG__G8__S0p1.json",
+      "selected_batch": 130,
+      "selected_parallelism": {
+        "dp": 1,
+        "pp": 1,
+        "tp": 8,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 4,
+      "baseline_mean_iteration_ms": 98.07647611864024,
+      "baseline_max_iteration_ms": 179.9536356034546
+    },
+    {
+      "case_id": "recheck_slo_l4_hbf_long",
+      "priority": "core",
+      "mode": "postprocess",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {},
+      "question": "同一个真实episode在平均100ms和最大100ms下是否得到不同验收？",
+      "limit": "复用已有完整episode；不重跑、不改变物理时序，不把最大值规则偷偷替换主实验平均规则。",
+      "baseline_status": "not_ready",
+      "reason": "主实验尚无该点：primary__llama4_maverick__HBF+__LONG__G8__S0p1.json"
+    },
+    {
+      "case_id": "fixed_node_nic_l3_hbf_short",
+      "priority": "extended",
+      "mode": "fixed",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "nic_scope": "node"
+      },
+      "question": "共置DP副本和EP/TP组共享100GB/s节点NIC时，原部署吞吐损失多大？",
+      "limit": "使用当前固定份额节点策略，不把空闲份额借用或公平调度当成已实现。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBF+__SHORT__G8__S0p1.json",
+      "selected_batch": 550,
+      "selected_parallelism": {
+        "dp": 4,
+        "pp": 1,
+        "tp": 2,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 3,
+      "baseline_mean_iteration_ms": 98.1930921751131,
+      "baseline_max_iteration_ms": 101.31771959931183
+    },
+    {
+      "case_id": "fixed_host50_l4_hbf_long",
+      "priority": "extended",
+      "mode": "fixed",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "pd_host_gb_s": 50.0
+      },
+      "question": "HOST DRAM端口从200降到50GB/s，PD驻留和均值/峰值是否敏感？",
+      "limit": "只改变HOST读写带宽；保留64MiB缓冲和原导入预备窗口，不免费扩大缓冲或自动改batch。",
+      "baseline_status": "not_ready",
+      "reason": "主实验尚无该点：primary__llama4_maverick__HBF+__LONG__G8__S0p1.json"
+    },
+    {
+      "case_id": "fixed_sram2500_l4_hbf_long",
+      "priority": "extended",
+      "mode": "fixed",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "sram_gb_s_per_stack": 2500.0
+      },
+      "question": "每堆SRAM端口从10降到2.5TB/s后，读暂存和中间张量服务是否成为瓶颈？",
+      "limit": "这是未披露片上端口的研究区间，不是对某颗SRAM产品的实测描述；容量不变。",
+      "baseline_status": "not_ready",
+      "reason": "主实验尚无该点：primary__llama4_maverick__HBF+__LONG__G8__S0p1.json"
+    },
+    {
+      "case_id": "fixed_prefetch2x_l4_hbf_long",
+      "priority": "extended",
+      "mode": "fixed",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {},
+      "lookahead_multiplier": 2,
+      "question": "保持FIFO但更早准备PD，减少补位停顿还是加剧未来预约的队头阻塞？",
+      "limit": "预备KV池仍计入私有容量；若原batch因此放不下就真实拒绝，不自动缩批。此项不是FIFO与公平调度的直接对比。",
+      "baseline_status": "not_ready",
+      "reason": "主实验尚无该点：primary__llama4_maverick__HBF+__LONG__G8__S0p1.json"
+    },
+    {
+      "case_id": "reopt_compute_l3_hbm",
+      "priority": "extended",
+      "mode": "reoptimized",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "matrix_efficiency": 0.6
+      },
+      "question": "若矩阵有效效率只有60%，重新优化会否改变并行方案和批量？",
+      "limit": "须与同参数固定回放分开展示；部署切换的收益不能归为纯算力弹性。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBM4__SHORT__G8__S0p1.json",
+      "selected_batch": 1321,
+      "selected_parallelism": {
+        "dp": 1,
+        "pp": 1,
+        "tp": 8,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 3,
+      "baseline_mean_iteration_ms": 73.85072541766431,
+      "baseline_max_iteration_ms": 74.45999712246704
+    },
+    {
+      "case_id": "reopt_compute_l3_hbf_plus",
+      "priority": "extended",
+      "mode": "reoptimized",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {
+        "matrix_efficiency": 0.6
+      },
+      "question": "若矩阵有效效率只有60%，重新优化会否改变并行方案和批量？",
+      "limit": "须与同参数固定回放分开展示；部署切换的收益不能归为纯算力弹性。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBF+__SHORT__G8__S0p1.json",
+      "selected_batch": 550,
+      "selected_parallelism": {
+        "dp": 4,
+        "pp": 1,
+        "tp": 2,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 3,
+      "baseline_mean_iteration_ms": 98.1930921751131,
+      "baseline_max_iteration_ms": 101.31771959931183
+    },
+    {
+      "case_id": "reopt_max_slo_l3_hbf_long",
+      "priority": "extended",
+      "mode": "reoptimized",
+      "baseline": {
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {},
+      "slo_statistic": "max_iteration",
+      "question": "若选择逐步最大100ms门槛，可验证部署会怎样变化？",
+      "limit": "论文未公开TPOT聚合口径；此项是独立目标，不能与平均100ms主曲线合并。",
+      "baseline_status": "ready",
+      "source": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_reproduction_20261019\\points\\primary__llama3_405b__HBF+__LONG__G8__S0p1.json",
+      "selected_batch": 130,
+      "selected_parallelism": {
+        "dp": 1,
+        "pp": 1,
+        "tp": 8,
+        "ep": 1,
+        "microbatches": 1
+      },
+      "selected_lookahead": 4,
+      "baseline_mean_iteration_ms": 98.07647611864024,
+      "baseline_max_iteration_ms": 179.9536356034546
+    },
+    {
+      "case_id": "reopt_max_slo_l4_hbf_long",
+      "priority": "extended",
+      "mode": "reoptimized",
+      "baseline": {
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "gpus": 8,
+        "slo": 0.1
+      },
+      "assumption_overrides": {},
+      "slo_statistic": "max_iteration",
+      "question": "若选择逐步最大100ms门槛，可验证部署会怎样变化？",
+      "limit": "论文未公开TPOT聚合口径；此项是独立目标，不能与平均100ms主曲线合并。",
+      "baseline_status": "not_ready",
+      "reason": "主实验尚无该点：primary__llama4_maverick__HBF+__LONG__G8__S0p1.json"
+    }
+  ],
+  "new_complete_workloads": {
+    "core": 8,
+    "extended": 8
+  },
+  "existing_episode_rechecks": 2,
+  "fifo_boundary": "只有FIFO实现；提前窗口/链路/缓冲敏感性不能证明公平调度的结果。要直接比较须另建保持服务费用与信用一致的ready-chunk调度器。",
+  "staging_unit_prerequisite": "每堆读暂存3.13MiB须先暴露独立的字节输入，单独更改该容量；不得借capacity_unit_bytes连同HBM/HBF、40MB SRAM或HOST容量一起改。修复版结果之前不执行。",
+  "no_fitting": "参数预声明为物理上界、容量单位解释和未披露端口的研究控制；不读取论文吞吐作为求解或调参目标。",
+  "execution": "默认只计划。--execute --case-id仅串行一个独立控制点；主实验运行时拒绝启动。"
+}

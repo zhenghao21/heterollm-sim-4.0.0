@@ -1,3 +1,20 @@
+/* The connection controls share the existing workbench theme and font scale. */
+.backend-connection-dialog { width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 0; border: 1px solid var(--line-strong); border-radius: 12px; color: var(--text); background: var(--panel); box-shadow: 0 24px 80px #0008; }
+.backend-connection-dialog::backdrop { background: #0009; }
+.backend-connection-dialog form { display: grid; gap: 18px; padding: 26px; }
+.backend-connection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.backend-connection-heading h2 { margin: 6px 0 0; font-size: 1.3rem; }
+.backend-connection-intro, .backend-connection-help { margin: 0; color: var(--text-soft); font-size: .85rem; line-height: 1.6; }
+.backend-connection-field { display: grid; gap: 9px; font-size: .9rem; font-weight: 600; }
+.backend-connection-field input { min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-input); color: var(--text); font: inherit; font-weight: 400; }
+.backend-connection-field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.backend-connection-remember { display: flex; gap: 10px; align-items: center; font-size: .8rem; color: var(--text-soft); }
+.backend-connection-remember input { flex: 0 0 auto; }
+.backend-connection-status { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 6px; color: var(--cyan-bright); background: var(--surface-input); font-size: .85rem; line-height: 1.6; overflow-wrap: anywhere; }
+.backend-connection-status.is-error { color: var(--danger); border-color: var(--danger-line); }
+.backend-connection-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.experiment-monitor-link { text-decoration: none; }
+
 :root {
   color-scheme: dark;
   --font-scale: 1.2;

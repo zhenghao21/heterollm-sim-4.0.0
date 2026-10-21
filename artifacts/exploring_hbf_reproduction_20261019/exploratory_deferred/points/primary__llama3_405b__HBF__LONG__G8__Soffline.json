@@ -1,0 +1,45 @@
+{
+  "case_id": "primary__llama3_405b__HBF__LONG__G8__Soffline",
+  "case": {
+    "model": "llama3_405b",
+    "hardware": "HBF",
+    "workload": "LONG",
+    "gpus": 8,
+    "slo": "offline",
+    "assumptions": {
+      "matrix_efficiency": 1.0,
+      "scalar_efficiency": 1.0
+    }
+  },
+  "status": "searching",
+  "assumptions": {
+    "gpu_dense_bf16_flops_s": 4000000000000000.0,
+    "matrix_efficiency": 1.0,
+    "scalar_flops_s": 130000000000000.0,
+    "scalar_efficiency": 1.0,
+    "kernel_launch_ns": 500.0,
+    "nvlink_gb_s": 1800.0,
+    "infiniband_gb_s": 100.0,
+    "network_latency_ns": 500.0,
+    "nic_scope": "gpu",
+    "sram_gb_s_per_stack": 10000.0,
+    "sram_access_ns": 1.0,
+    "capacity_unit_bytes": 1000000000,
+    "prepared_lookahead": 2,
+    "pd_host_buffer_bytes": 67108864,
+    "pd_host_gb_s": 200.0,
+    "use_period_compression": true,
+    "use_decode_transition_cache": true,
+    "basis": "Paper Table I bandwidth/capacity and 1800/100 GB/s fabrics; current NVIDIA HGX Rubin dense BF16 4 PFLOPS and FP32 130 TFLOPS supplement undisclosed paper compute. Author SAFARI talk slide 19 explicitly assumes specified peak performance for GPU cores, memory and interconnects; matrix/scalar efficiencies are therefore 100%. 500 ns launch/link startup, 10 TB/s SRAM per stack, 1 ns SRAM, dedicated per-GPU NICs, uniform expert routing and balanced striped buffers are research assumptions, not paper measurements. No paper throughput is fitted."
+  },
+  "search_policy": "exact_prepared_capacity_v1",
+  "precision": {
+    "weight_dtype": "BF16",
+    "kv_dtype": "BF16",
+    "activation_dtype": "BF16",
+    "accumulator_dtype": "FP32",
+    "basis": "Explicit BF16 research choice; not a dtype reported by the paper."
+  },
+  "paper_slo_seconds": 78.54545454545455,
+  "selection_scope": "all discrete layouts screened; best of bounded closed-loop validations, not a proved global optimum"
+}

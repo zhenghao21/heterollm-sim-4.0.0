@@ -711,16 +711,17 @@ def estimate_kernel(gpu, hbm, workload, *, attention=False):
         tiled_workload = replace(workload, query_tile_tokens=kernel.attention_query_tile,
                                  key_tile_tokens=kernel.attention_kv_tile)
         attention_work = attention_tile_work(tiled_workload)
-        if stream_k is not None and not workload.causal_query_positions:
+        if stream_k is not None and not workload.causal_query_positions and not workload.query_context_lengths:
             attention_work = {**attention_work, 'executed_pairs':
                 math.ceil(m / kernel.attention_query_tile) * kernel.attention_query_tile
                 * math.ceil(n / kernel.attention_kv_tile) * kernel.attention_kv_tile}
         attention_work.update(query_tile_tokens=kernel.attention_query_tile,
                               key_tile_tokens=kernel.attention_kv_tile,
                               tile_source='kernel_descriptor')
-        if kernel.samples and workload.causal_query_positions:
+        if kernel.samples and (workload.causal_query_positions or workload.query_context_lengths):
             raise ValueError('rectangular attention sample does not cover causal visibility')
-        ratio = attention_work['executed_pairs'] / (workload.batch_tokens * workload.context_tokens)
+        ratio = attention_work['executed_pairs'] / (sum(workload.query_context_lengths)
+            if workload.query_context_lengths else workload.batch_tokens * workload.context_tokens)
         read, write = workload.read_bytes, workload.write_bytes
         operations = workload.tensor_operations * ratio
         scalar_ops = workload.softmax_scalar_operations * ratio + workload.qk_scale_operations * ratio + workload.kv_dequant_operations
@@ -1412,6 +1413,17 @@ def llama_blackwell_analytical_profile(hardware_id, runtime_id, *, calibrated=Fa
 def attention_tile_work(workload):
     """Executed tiled scores vs useful causal scores, for explicit Q positions."""
     positions = workload.causal_query_positions
+    if workload.query_context_lengths:
+        qtile, ktile = workload.query_tile_tokens, workload.key_tile_tokens
+        executed = offset = 0
+        for size in workload.query_group_sizes:
+            rows = workload.query_context_lengths[offset:offset + size]
+            executed += sum(qtile * ((max(rows[first:first + qtile]) + ktile - 1) // ktile) * ktile
+                            for first in range(0, size, qtile))
+            offset += size
+        return {'useful_pairs': sum(workload.query_context_lengths), 'executed_pairs': executed,
+                'causal_tiles_skipped': 0, 'causal_positions_bound': True,
+                'independent_query_groups': len(workload.query_group_sizes)}
     if not positions:
         return {'useful_pairs': workload.batch_tokens * workload.context_tokens,
                 'executed_pairs': workload.batch_tokens * workload.context_tokens,
@@ -1440,7 +1452,16 @@ def attention_mma_work(workload, tensor_core, *, round_attention_tiles=False):
     head_dim = workload.hidden_size // workload.score_heads
     positions = workload.causal_query_positions
     qk = pv = 0
-    if positions or round_attention_tiles:
+    if workload.query_context_lengths:
+        qtile, ktile = workload.query_tile_tokens, workload.key_tile_tokens
+        steps = offset = 0
+        for size in workload.query_group_sizes:
+            rows = workload.query_context_lengths[offset:offset + size]
+            steps += sum(ceil_div(max(rows[first:first + qtile]), ktile) for first in range(0, size, qtile))
+            offset += size
+        qk = ceil_div(qtile, tensor_core.mma_m) * steps * ceil_div(ktile, tensor_core.mma_n) * ceil_div(head_dim, tensor_core.mma_k)
+        pv = ceil_div(qtile, tensor_core.mma_m) * ceil_div(head_dim, tensor_core.mma_n) * steps * ceil_div(ktile, tensor_core.mma_k)
+    elif positions or round_attention_tiles:
         qtile, ktile = workload.query_tile_tokens, workload.key_tile_tokens
         key_tile_steps = (sum(ceil_div(positions[min(first + qtile, len(positions)) - 1] + 1, ktile)
                               for first in range(0, workload.batch_tokens, qtile))

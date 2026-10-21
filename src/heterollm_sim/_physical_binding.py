@@ -102,7 +102,7 @@ class StaticPhysicalBinding:
             return None
         if metadata.get("physical_allocations"):
             return None
-        from .memory_types import DramConfig
+        from .memory_types import DramConfig, SramConfig
         from .physical_contract import parse_execution_physical_config
         configurations = dict(metadata.get("physical_memory_configs", {}))
         owner = str(metadata.get("physical_owner", ""))
@@ -112,7 +112,7 @@ class StaticPhysicalBinding:
             configured = parse_execution_physical_config(raw)
             geometries[current_owner] = (
                 configured.effective_capacity_bytes,
-                configured.burst_bytes if isinstance(configured, DramConfig) else configured.page_bytes,
+                configured.burst_bytes if isinstance(configured, (DramConfig, SramConfig)) else configured.page_bytes,
             )
         generation = int.from_bytes(b"\x01" + original.request_id.encode("utf-8"), "big")
         generation_slots, address_groups, namespace_slots = [], {}, []

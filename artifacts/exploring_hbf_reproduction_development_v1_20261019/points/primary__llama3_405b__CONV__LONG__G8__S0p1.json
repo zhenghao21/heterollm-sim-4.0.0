@@ -1,0 +1,37 @@
+{
+  "case_id": "primary__llama3_405b__CONV__LONG__G8__S0p1",
+  "case": {
+    "model": "llama3_405b",
+    "hardware": "CONV",
+    "workload": "LONG",
+    "gpus": 8,
+    "slo": 0.1
+  },
+  "status": "searching",
+  "assumptions": {
+    "gpu_dense_bf16_flops_s": 4000000000000000.0,
+    "matrix_efficiency": 0.6,
+    "scalar_flops_s": 130000000000000.0,
+    "scalar_efficiency": 0.6,
+    "kernel_launch_ns": 500.0,
+    "nvlink_gb_s": 1800.0,
+    "infiniband_gb_s": 100.0,
+    "network_latency_ns": 500.0,
+    "nic_scope": "gpu",
+    "sram_gb_s_per_stack": 10000.0,
+    "sram_access_ns": 1.0,
+    "capacity_unit_bytes": 1000000000,
+    "prepared_lookahead": 2,
+    "use_period_compression": true,
+    "basis": "Paper Table I bandwidth/capacity and 1800/100 GB/s fabrics; current NVIDIA HGX Rubin dense BF16 4 PFLOPS and FP32 130 TFLOPS supplement undisclosed paper compute. 60% compute efficiencies, 500 ns launch/link startup, 10 TB/s SRAM per stack, 1 ns SRAM, dedicated per-GPU NICs, uniform expert routing and balanced striped buffers are research assumptions, not paper measurements. No paper throughput is fitted."
+  },
+  "precision": {
+    "weight_dtype": "BF16",
+    "kv_dtype": "BF16",
+    "activation_dtype": "BF16",
+    "accumulator_dtype": "FP32",
+    "basis": "Explicit BF16 research choice; not a dtype reported by the paper."
+  },
+  "paper_slo_seconds": 0.1,
+  "selection_scope": "all discrete layouts screened; best of bounded closed-loop validations, not a proved global optimum"
+}

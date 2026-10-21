@@ -233,6 +233,21 @@ class DramCore:
         for token in self._hbm_transactions:
             token.materialize(self)
 
+    def _hbm_before_owned_snapshot(self):
+        """Materialize an independent rollback copy without exposing aliases.
+
+        Public bank/controller getters disable residency because callers can
+        retain live objects. A runtime snapshot instead copies those objects;
+        its preparation must not permanently turn all later I/O into cold
+        pack/publish cycles. Preserve an already disabled flag, since it may
+        represent a live alias previously returned by the public getters.
+        """
+        numeric_enabled = self._hbm_numeric_enabled
+        try:
+            self._hbm_before_reference()
+        finally:
+            self._hbm_numeric_enabled = numeric_enabled
+
     def _hbm_remember_bank(self, key):
         for token in self._hbm_transactions:
             token.remember_bank(self.__dict__["_banks"], key)
@@ -345,6 +360,13 @@ class DramCore:
         return earliest
 
     def submit(self, request: AccessRequest, *, _resource_accumulator=None) -> TransactionResult:
+        depth = len(self.timeline._owned_transactions)
+        try:
+            return self._submit_live(request, _resource_accumulator=_resource_accumulator)
+        finally:
+            self.timeline._finish_core_accounting(depth)
+
+    def _submit_live(self, request: AccessRequest, *, _resource_accumulator=None) -> TransactionResult:
         validate_dram_request(request, self.config)
         if self._finite_guard_required(request):
             # Ordinary requests need no extra state copies. At extreme
@@ -401,9 +423,21 @@ class DramCore:
                           _resource_accumulator=None, _metrics_capture=None) -> TransactionResult:
         effective_arrival = self._admission_time(request)
         inflight = [end for end in self._inflight if end > effective_arrival]
-        before_metrics = (self.timeline.metrics_snapshot(
-            max_intervals=self.config.max_expanded_segments if self.capture_details else 0)
-            if _metrics_capture is None else _metrics_capture.begin())
+        footprint = None
+        if (_metrics_capture is None and self.timeline._owned_transactions
+                and self.config.control_mode != "jedec_hbm"):
+            from ._compiled_dram import owned_resource_footprint
+            footprint = owned_resource_footprint(self)
+        if footprint is not None:
+            before_metrics = self.timeline._core_metrics_snapshot(max_intervals=0)
+            # Both compiled and closed-form analytical publishers directly
+            # update this owner's dictionaries. Record their full small
+            # footprint in the new accounting token before the first write.
+            self.timeline._remember_resources(footprint)
+        else:
+            before_metrics = (self.timeline.metrics_snapshot(
+                max_intervals=self.config.max_expanded_segments if self.capture_details else 0)
+                if _metrics_capture is None else _metrics_capture.begin())
         result = (self._execute_accepted if execute is None else execute)(
             request if effective_arrival == request.arrival_ns
             else replace(request, arrival_ns=effective_arrival)
@@ -890,6 +924,12 @@ class DramCore:
 def dram_service(config: DramConfig, request: AccessRequest, *, timeline: Optional[ResourceTimeline] = None) -> TransactionResult:
     """Functional convenience wrapper around :class:`DramCore`."""
     return DramCore(config, timeline).submit(request)
+
+
+# The owned timeline fast path cannot assume an overridden Python submission
+# callback writes only through the native calendar interfaces.
+_OWNED_TIMELINE_DRAM_METHODS = tuple((name, getattr(DramCore, name)) for name, value in vars(DramCore).items()
+                                    if callable(value))
 
 
 __all__ = ["DramCore", "dram_service"]

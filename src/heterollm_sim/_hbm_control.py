@@ -525,10 +525,12 @@ def execute_hbm(core, request):
     count = (request.address + request.byte_count - 1) // c.burst_bytes - request.address // c.burst_bytes + 1
     # Single-request numeric packing scans every physical bank. For a few
     # bursts on a large device, the same reference controller costs less.
-    # Bound Python work to 16 bursts and require 256 packed banks per burst;
-    # batches still pack once and large requests still use the numeric loop.
+    # At 32K banks the cold packing cost exceeds a 4-KiB/128-burst reference
+    # request, while 8 KiB is already near the crossover. Bound reference
+    # work to 128 bursts and require 128 packed banks per burst. Transactions,
+    # resident arrays and batches keep the numeric path that amortizes packing.
     tiny_request = (not core._hbm_transactions and not core._hbm_numeric_enabled
-                    and count <= min(16, c.lane_count * c.bank_count // 256))
+                    and count <= min(128, c.lane_count * c.bank_count // 128))
     if not core.capture_details and not tiny_request:
         try:
             from ._compiled_hbm import execute_hbm_numeric

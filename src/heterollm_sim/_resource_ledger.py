@@ -7,6 +7,16 @@ Python arithmetic.  Custom mappings retain their mapping protocol; helpers requi
 built-in dictionaries explicitly validate that narrower contract.
 """
 from __future__ import annotations
+import math
+
+from heterollm_sim.contracts import ResourceDemand as _NATIVE_RESOURCE_DEMAND
+
+_NATIVE_DEMAND_INIT = _NATIVE_RESOURCE_DEMAND.__init__
+_NATIVE_DEMAND_POST_INIT = _NATIVE_RESOURCE_DEMAND.__post_init__
+_NATIVE_DEMAND_NEW = _NATIVE_RESOURCE_DEMAND.__new__
+_NATIVE_DEMAND_SETATTR = _NATIVE_RESOURCE_DEMAND.__setattr__
+_NATIVE_DEMAND_GETATTRIBUTE = _NATIVE_RESOURCE_DEMAND.__getattribute__
+_NATIVE_FINITE = math.isfinite
 
 # These are compile-time annotations, not a runtime dependency.  The small
 # shadow below lets the same source run when Cython is not installed.
@@ -86,6 +96,64 @@ def _setdefault(mapping: object, key: object, value: object) -> object:
     return mapping.setdefault(key, value)
 
 
+@cython.cfunc
+def _remember_owned_resource(token: object, resource_id: object, missing: object):
+    timeline: object = token.timeline
+    roots: dict = token.roots
+    entries: dict = token.entries
+    objects: dict = token.objects
+    deleted_orders: dict = token.deleted_orders
+    name: object
+    root: object
+    saved: object
+    previous: object
+    identity: object
+    for name, root in roots.items():
+        saved = entries[name]
+        # A request may replace its recorder dictionaries. Preserve their
+        # original roots rather than copying newly installed transient maps.
+        if getattr(timeline, name) is not root or resource_id in saved:
+            continue
+        previous = _get(root, resource_id, missing)
+        _put(saved, resource_id, previous)
+        if type(previous) is list:
+            identity = id(previous)
+            if identity not in objects:
+                objects[identity] = (previous, list(previous))
+        if (name == "lane_directions" and previous is not missing
+                and name not in deleted_orders):
+            deleted_orders[name] = tuple(root)
+    if not token.accounting and timeline._touched is token.touched and resource_id not in token.touched:
+        token.added_touches.add(resource_id)
+
+
+def remember_owned_timeline_resources(timeline, resource_ids, missing,
+                                     token_type, native_remember, native_resource_remember):
+    """Batch the existing sparse undo loop in original resource/token order.
+
+    Callback lookup remains at each original boundary. Unknown transaction
+    writers or timeline overrides still execute their authored method, and a
+    resource generator may alter those bindings between yielded resources.
+    """
+    resource_id: object
+    token: object
+    callback: object
+    for resource_id in resource_ids:
+        callback = timeline._remember_resource
+        if getattr(callback, "__func__", callback) is not native_resource_remember:
+            callback(resource_id)
+            continue
+        for token in timeline._owned_transactions:
+            callback = token.remember
+            if (type(token) is not token_type
+                    or getattr(callback, "__func__", callback) is not native_remember
+                    or type(token.roots) is not dict or type(token.entries) is not dict
+                    or type(token.objects) is not dict or type(token.deleted_orders) is not dict):
+                callback(resource_id)
+            else:
+                _remember_owned_resource(token, resource_id, missing)
+
+
 def timeline_metrics_delta(timeline, before):
     """Full public reducer, including externally edited resource dictionaries."""
     busy: dict = {}
@@ -151,6 +219,15 @@ def publish_timeline_frontiers(lane_available, resource_available):
     for resource_id, lanes in lane_available.items():
         if lanes:
             _put(resource_available, resource_id, lanes[0] if len(lanes) == 1 else min(lanes))
+
+
+def publish_owner_frontiers(resource_owners, resource_available: dict):
+    """Retain native alias insertion order while mirroring owner readiness."""
+    resource_id: object
+    owner: object
+    for resource_id, owner in resource_owners.items():
+        if owner in resource_available:
+            _put(resource_available, resource_id, resource_available[owner])
 
 
 @cython.cfunc
@@ -574,7 +651,25 @@ def physical_demands(resource_busy: dict, resource_bytes: dict, cache: dict, dem
         key = (str(resource_id), float(duration), int(resource_bytes.get(resource_id, 0)))
         demand = cache.get(key)
         if demand is None:
-            demand = demand_type(key[0], key[1], bytes_moved=key[2])
+            if (demand_type is _NATIVE_RESOURCE_DEMAND
+                    and demand_type.__init__ is _NATIVE_DEMAND_INIT
+                    and demand_type.__post_init__ is _NATIVE_DEMAND_POST_INIT
+                    and demand_type.__new__ is _NATIVE_DEMAND_NEW
+                    and demand_type.__setattr__ is _NATIVE_DEMAND_SETATTR
+                    and demand_type.__getattribute__ is _NATIVE_DEMAND_GETATTRIBUTE
+                    and type(key[0]) is str and key[0]
+                    and math.isfinite is _NATIVE_FINITE
+                    and type(key[1]) is float and _NATIVE_FINITE(key[1]) and key[1] > 0.
+                    and type(key[2]) is int and key[2] >= 0):
+                # The conversions above produced exactly the four validated
+                # built-in fields. Preserve the immutable dataclass and its
+                # field insertion order without invoking Python validation
+                # for every controller resource in every native task.
+                demand = object.__new__(demand_type)
+                demand.__dict__.update(resource_id=key[0], service_ns=key[1],
+                                       bytes_moved=key[2], work_units=0.0)
+            else:
+                demand = demand_type(key[0], key[1], bytes_moved=key[2])
             if len(cache) >= 16384:
                 cache.clear()
             cache[key] = demand

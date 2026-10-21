@@ -1,0 +1,45 @@
+{
+  "scope": "real formal 405B 126-layer TP8 HBM4 SHORT B1 native Decode DAG, analytical deferred preview only; no live physical execution or detailed reference rerun",
+  "tasks": 119144,
+  "observations": [
+    {
+      "strategy": "reference",
+      "wall_seconds": 20.521769299986772
+    },
+    {
+      "strategy": "numeric",
+      "wall_seconds": 18.84798649995355
+    },
+    {
+      "strategy": "numeric",
+      "wall_seconds": 19.864377600024454
+    },
+    {
+      "strategy": "reference",
+      "wall_seconds": 20.8420763000031
+    }
+  ],
+  "mean_seconds": {
+    "reference": 20.681922799994936,
+    "numeric": 19.356182049989002
+  },
+  "speedup": 1.0684918516772623,
+  "all_summary_and_record_fields_exact": true,
+  "all_compacted_stage_fields_exact": true,
+  "stage_count": 11,
+  "full_candidate_speedup": null,
+  "retained_in_product": false,
+  "decision": "Removed the numeric dispatch prototype and its default integration: only 6.85% preview-only speedup does not justify a second ready-queue implementation; no 600-second candidate claim.",
+  "validation": {
+    "targeted_cases_passed": 43,
+    "event_fields": "every event dispatch order/start/end/dependency_ready/effective_ready/demands/lanes/predecessors and resource metrics exact on randomized multi-lane alias graphs and dynamic costs",
+    "cancellation": "prefix 0/1/32/64 exact ready frontier and resumable remaining native events",
+    "actual_405b": "all 119144 execution records and full cost summary, critical path and 11 compacted stages exact"
+  },
+  "limitations": [
+    "Analytical deferred preview only; not a complete candidate or a physical device benchmark.",
+    "The real root native physical probe ran concurrently on this host during this same-DAG ABBA comparison; this is not an exclusive-CPU steady-state benchmark.",
+    "No old detailed reference or formal scan was run."
+  ],
+  "runtime_reduction_fraction": 0.0641014262951537
+}

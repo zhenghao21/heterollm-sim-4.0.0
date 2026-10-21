@@ -14,7 +14,12 @@ def runtime_pair():
 
 
 def visible(snapshot):
-    return (snapshot["runtime_state"]["hbm"]["core"], snapshot["timeline"],
+    # Residency is an executor choice, not a physical controller field. An
+    # owned snapshot now preserves that choice instead of disabling the fast
+    # core to match the explicitly nonresident oracle.
+    core = {key: value for key, value in snapshot["runtime_state"]["hbm"]["core"].items()
+            if key != "_hbm_numeric_enabled"}
+    return (core, snapshot["timeline"],
             snapshot["allocator_state"], snapshot["committed_owners"])
 
 
