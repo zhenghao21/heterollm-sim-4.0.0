@@ -11386,7 +11386,7 @@ def _compute_local_runtime_memory_component_id(
             "{} component {} has no reachable {} runtime-memory target".format(
                 target_kind.upper(),
                 target_component_id,
-                ("local-dram" if target_kind == "gpu" else memory_kind.replace("_", "-")),
+                ("local-dram" if target_kind == "gpu" else "host-memory"),
             )
         )
     return memory_component_id
@@ -17068,7 +17068,7 @@ def _task_segment_dynamic_task_overrides(
                         cpu_profile, host_memory_profile = _cpu_profiles(
                             scenario,
                             payload.target_component_id,
-                            graph_rows=getattr(builder, "_cpu_graph_rows", None),
+                            graph_rows=getattr(replay.builder, "_cpu_graph_rows", None),
                         )
                         estimate = _memoized_cost_estimate(
                             scenario,
@@ -17112,7 +17112,7 @@ def _task_segment_dynamic_task_overrides(
                         memory_component_id=(
                             payload.rank.memory_component_id
                         ),
-                        graph_rows=getattr(builder, "_cpu_graph_rows", None),
+                        graph_rows=getattr(replay.builder, "_cpu_graph_rows", None),
                     )
                 estimates[estimate_key] = estimate
             if (

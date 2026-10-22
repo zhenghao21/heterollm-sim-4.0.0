@@ -35,9 +35,7 @@ _FILE_TYPE_NAMES = {
     21: "MOSTLY_Q2_K_S", 22: "MOSTLY_IQ3_XS", 23: "MOSTLY_IQ3_XXS",
     24: "MOSTLY_IQ1_S", 25: "MOSTLY_IQ4_NL", 26: "MOSTLY_IQ3_S",
     27: "MOSTLY_IQ3_M", 28: "MOSTLY_IQ2_S", 29: "MOSTLY_IQ2_M",
-    30: "MOSTLY_IQ3_M", 31: "MOSTLY_IQ1_M", 32: "MOSTLY_BF16",
-    # Newer llama.cpp uses 30 for the mixed IQ3_M file type.
-    30: "MOSTLY_IQ3_M",
+    30: "MOSTLY_IQ4_XS", 31: "MOSTLY_IQ1_M", 32: "MOSTLY_BF16",
 }
 _TENSOR_TYPES = {
     0: ("F32", 1, 4), 1: ("F16", 1, 2), 2: ("Q4_0", 32, 18), 3: ("Q4_1", 32, 20),
