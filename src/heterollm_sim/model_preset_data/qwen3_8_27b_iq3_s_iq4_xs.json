@@ -35856,7 +35856,7 @@
       "max_sequence_length": 262144,
       "metadata": {
         "gguf_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
-        "gguf_file_quantization": "MOSTLY_IQ3_M",
+        "gguf_file_quantization": "MOSTLY_IQ4_XS",
         "gguf_tensor_count": 866,
         "gguf_architecture_adapter": "qwen35_hybrid_decoder",
         "gguf_architecture_id": "qwen35",
@@ -35937,7 +35937,7 @@
     "max_sequence_length": 262144,
     "metadata": {
       "gguf_sha256": "157479b0083662c7c9cfd8754cae24ab9cc1abbd4def91d49758512c90f1e406",
-      "gguf_file_quantization": "MOSTLY_IQ3_M",
+      "gguf_file_quantization": "MOSTLY_IQ4_XS",
       "gguf_tensor_count": 866,
       "gguf_architecture_adapter": "qwen35_hybrid_decoder",
       "gguf_architecture_id": "qwen35",

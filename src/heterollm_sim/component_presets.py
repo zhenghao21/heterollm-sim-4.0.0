@@ -1506,8 +1506,6 @@ def _desktop_cpu_preset(
                     "thread_count": {"value": thread_count, "unit": "thread", "source_field": "Threads"},
                     "base_clock_ghz": {"value": base_clock_ghz, "unit": "GHz", "source_field": "Base Clock"},
                     "boost_clock_ghz": {"value": boost_clock_ghz, "unit": "GHz", "source_field": "Max. Boost Clock"},
-                    "l2_capacity_bytes": {"value": l2_capacity_bytes, "unit": "B", "source_field": "L2 Cache"},
-                    "l3_capacity_bytes": {"value": l3_capacity_bytes, "unit": "B", "source_field": "L3 Cache"},
                     "l2_capacity_bytes": {"value": l2_capacity_bytes, "unit": "B", "source_field": "L2 Cache; converted from 16 MB using 1 MiB = 1024² B"},
                     "l3_capacity_bytes": {"value": l3_capacity_bytes, "unit": "B", "source_field": "L3 Cache; converted from 128 MB using 1 MiB = 1024² B"},
                     "memory": {"value": memory_data_rate_mt_s, "unit": "MT/s", "source_field": "System Memory Specification"},

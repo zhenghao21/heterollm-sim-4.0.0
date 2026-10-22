@@ -11,3 +11,9 @@ __pycache__/
 
 # Temporary source backups and rendered reference pages.
 tmp/
+
+# Experiment outputs live outside version control.
+artifacts/
+
+# Renamed copies of loaded Windows extension modules.
+*.pyd.*
