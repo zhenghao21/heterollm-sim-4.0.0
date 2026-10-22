@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import fields
 import math
 
+from ._hbm_control import row_lookahead_depth
 from .memory_types import AccessRequest, DramConfig
 
 
@@ -67,16 +68,17 @@ def _clock_limit(config, prepared, operation, *, extra_timing=()):
         return None
     limit = float(profile[1])*config.command_clock_ns
     quantum = config.command_clock_ns/2
-    # Outside the column recurrence, a new row has one analog tRCD or
-    # recovery before the next CA-grid alignment. Exact-grid delays use the
-    # existing integer clock_after rule. An analog delay must remain strictly
-    # inside the same half-CK bin throughout the declared absolute horizon;
-    # 64 ULPs covers its bounded add/subtract/compare chain.
+    # Outside the column recurrence, a new row has one analog tRCD, ACT
+    # spacing or recovery before the next CA-grid alignment. Exact-grid
+    # delays use the existing integer clock_after rule. An analog delay must
+    # remain strictly inside the same half-CK bin throughout the declared
+    # absolute horizon; 64 ULPs covers its bounded add/subtract/compare chain.
     for value in (config.activate_to_read_ns, config.activate_to_write_ns,
                   config.precharge_to_activate_ns, config.minimum_active_ns,
                   config.activate_cycle_ns, config.read_to_precharge_ns,
                   config.write_to_precharge_ns, config.precharge_to_precharge_ns,
-                  *extra_timing):
+                  config.activate_same_group_ns, config.activate_different_group_ns,
+                  config.four_activate_window_ns, *extra_timing):
         ticks = round(value/quantum)
         if value == ticks*quantum:
             continue
@@ -93,12 +95,19 @@ def native_hbm_no_refresh_upper(config, byte_count, operation, *, independent_ch
 
     For the supported homogeneous FCFS mapping, pad an arbitrary contiguous
     interval to complete global bank-row cycles. A padded cold execution
-    contains its burst sequence in the native channel order. Removing its
-    prefix/suffix removes resource constraints; its possible first-row hit
-    advantage over another initial row is covered by clearing every bank.
-    With REF and new tRASmax expiry absent, all remaining CA/DQ dependencies
-    are FIFO max-plus constraints. Clearing the initial row/history state in
-    serial therefore gives the additive initial-state upper below.
+    contains its burst sequence in the native channel order. Row lookahead
+    keeps that containment: one-burst bank interleaving gives every physical
+    bank one burst per two channel bank sweeps, longer than the lookahead
+    window, so no early PRE is ever deferred, and each burst's PRE is placed
+    a fixed number of channel bursts before its ACT. The retained bursts'
+    commands therefore keep their standalone row-bus order once the
+    prefix/suffix commands are removed. Removing those removes resource
+    constraints; its possible first-row hit advantage over another initial
+    row is covered by clearing every bank. With REF and new tRASmax expiry
+    absent, all remaining CA/DQ dependencies, including tRRD/tFAW, are FIFO
+    max-plus constraints. A different initial row only adds or removes a
+    first-visit PRE/ACT at its fixed position, so clearing the initial
+    row/history state in serial gives the additive initial-state upper below.
 
     New rows cannot introduce tRASmax branches if every row's residence is
     bounded by two complete cold cycles plus the initial-state allowance.
@@ -114,9 +123,7 @@ def native_hbm_no_refresh_upper(config, byte_count, operation, *, independent_ch
             or config.scheduler != "fcfs" or config.address_mapping != "bank_interleaved"
             or (config.interleave_bytes or config.burst_bytes) != config.burst_bytes
             or config.bank_count != 64 or config.row_bytes != 1024 or config.banks_per_group != 8
-            or config.activate_command_cycles != 1.5
-            or config.four_activate_window_ns != 0 or config.activate_same_group_ns != 0
-            or config.activate_different_group_ns != 0):
+            or config.activate_command_cycles != 1.5):
         return {**rejected, "reason": "native_cold_geometry_or_private_channel_contract_unsupported"}
     key = (_key(config), byte_count, operation)
     if key in _CACHE:
@@ -144,19 +151,22 @@ def native_hbm_no_refresh_upper(config, byte_count, operation, *, independent_ch
         config.read_to_write_ns, config.write_to_read_ns, config.read_to_write_command_ns,
         config.write_to_read_same_group_ns, config.write_to_read_different_group_ns,
         config.column_same_group_ns, config.column_different_group_ns,
-        config.column_different_sid_ns, 2*clock)
+        config.column_different_sid_ns, config.four_activate_window_ns,
+        config.activate_same_group_ns, config.activate_different_group_ns, 2*clock)
     # A padded prefix may already have opened the first row needed by the
     # retained interval. Charge the complete per-bank startup chain, not
     # just PRE issue occupancy: a wrong initial row pays PRE/tRP/ACT/tRCD.
     # If the first retained row is only a short tail, the inserted ACT can
-    # additionally constrain its following PRE/ACT through tRAS/tRC. Those
-    # successors share the same ACT anchor, so their maximum is sufficient
-    # after the initial PRE+tRP, and all banks are serialized conservatively.
+    # additionally constrain its following PRE/ACT through tRAS/tRC and the
+    # following ACTs through tRRD/tFAW. Those successors share the same ACT
+    # anchor, so their maximum is sufficient after the initial PRE+tRP, and
+    # all banks are serialized conservatively.
     pre = max(config.precharge_command_cycles*clock, config.precharge_to_precharge_ns)
     after_act = max(config.activate_to_read_ns, config.activate_to_write_ns,
         config.minimum_active_ns+config.precharge_command_cycles*clock
             +config.precharge_to_activate_ns,
-        config.activate_cycle_ns)
+        config.activate_cycle_ns, config.four_activate_window_ns,
+        config.activate_same_group_ns, config.activate_different_group_ns)
     per_bank = (pre+config.precharge_to_activate_ns
         +config.activate_command_cycles*clock+after_act+2*clock)
     initial = history+config.pseudo_channels_per_channel*config.bank_count*per_bank+2*clock
@@ -205,7 +215,9 @@ def _native_refresh_history_upper(config):
         config.column_different_sid_ns, config.write_to_read_same_group_ns,
         config.write_to_read_different_group_ns, config.read_to_write_command_ns,
         config.precharge_to_precharge_ns, config.read_to_write_ns,
-        config.write_to_read_ns, 2*config.command_clock_ns, max(0., pacing-dq))
+        config.write_to_read_ns, config.four_activate_window_ns,
+        config.activate_same_group_ns, config.activate_different_group_ns,
+        2*config.command_clock_ns, max(0., pacing-dq))
 
 
 def _native_refresh_source_limits(config):
@@ -254,8 +266,7 @@ def native_hbm_initial_row_upper(config, byte_count, operation, *,
             "initial_state_upper_ns": 0., "initial_bank_upper": 0,
             "old_row_expiry_horizon_upper_ns": 0.}
     clock = config.command_clock_ns
-    history = max(_native_refresh_history_upper(config), config.four_activate_window_ns,
-        config.activate_same_group_ns, config.activate_different_group_ns,
+    history = max(_native_refresh_history_upper(config),
         config.write_latency_ns+config.burst_bytes/config.effective_lane_bandwidth_gb_s
             +config.write_to_precharge_ns)
     pre = max(config.precharge_command_cycles*clock, config.precharge_to_precharge_ns)
@@ -288,14 +299,21 @@ def native_hbm_initial_row_upper(config, byte_count, operation, *,
         "reason": "single_contiguous_unique_bank_REF_source_contract_unavailable"}
     if source_proven and bursts <= config.lane_count*config.bank_count:
         # The qualified native REF helper already proves one-burst
-        # bank-interleaving and zero RRD/FAW. A consecutive sequence no
-        # longer than one global bank sweep touches each physical bank at
-        # most once, even across its address-period boundary. Its new ACT
-        # therefore has no subsequent same-bank PRE/tRAS/tRC successor.
+        # bank-interleaving. A consecutive sequence no longer than one
+        # global bank sweep touches each physical bank at most once, even
+        # across its address-period boundary. Its new ACT therefore has no
+        # subsequent same-bank PRE/tRAS/tRC successor.
         #
         # Between REF epochs the original row-CA chain contains only old
-        # history plus PRE/tRP/ACT. No new column or DQ event feeds back
-        # into it when banks are unique. Its original column/DQ max-plus
+        # history plus PRE/tRP/ACT and ACT spacing. No new column or DQ
+        # event feeds back into it when banks are unique. Bank j's ACT ends
+        # within one row_chain of bank j-1's: row lookahead issued its own
+        # PRE no later than an earlier ACT, at most one later early PRE
+        # precedes it on the row bus, and tRRD follows the previous ACT.
+        # tFAW follows the ACT four banks earlier, so a quarter of it per
+        # bank suffices; older ACTs are settled by the history bridge. The
+        # request's first burst precharges its whole lookahead window ahead
+        # of its own ACT, one PRE slot each. Its original column/DQ max-plus
         # graph receives at most one row-to-column bridge per REF-free
         # segment, rather than one full tRCD/latency per bank. A REF can
         # feed a previous column's recovery back into row CA; charge a
@@ -305,24 +323,27 @@ def native_hbm_initial_row_upper(config, byte_count, operation, *,
         blocked = refresh_proof["refresh_epoch_upper_ns"]
         epochs = 1+math.floor(refresh_proof["active_service_upper_ns"]
             /(config.refresh_interval_ns-blocked))
-        row_chain = (max(config.precharge_command_cycles*clock,
-                         config.precharge_to_precharge_ns)
-            +config.precharge_to_activate_ns+config.activate_command_cycles*clock
-            +3*clock)
+        act = config.activate_command_cycles*clock+3*clock
+        row_chain = max(pre+max(config.precharge_to_activate_ns,
+                                config.precharge_command_cycles*clock)+act,
+            max(config.activate_same_group_ns, config.activate_different_group_ns)+act,
+            (config.four_activate_window_ns+act)/4)
+        first_step = row_lookahead_depth(config)*(pre+clock)
         latency = config.read_latency_ns if operation == "read" else config.write_latency_ns
         rcd = config.activate_to_read_ns if operation == "read" else config.activate_to_write_ns
         dq = config.burst_bytes/config.effective_lane_bandwidth_gb_s
         bridge = history+rcd+latency+dq+2*clock
-        unique_upper = math.nextafter(initial_banks*row_chain+(epochs+1)*bridge+2*clock,
-                                     math.inf)
+        unique_upper = math.nextafter(first_step+initial_banks*row_chain
+                                      +(epochs+1)*bridge+2*clock, math.inf)
         applied = unique_upper < upper
         unique = {"qualified": True, "applied": applied,
-            "basis": "one_contiguous_native_bank_sweep; independent_row_CA_column_CA_DQ; no_new_same_bank_successor; full_history_RCD_latency_DQ_bridge_per_REF_free_segment",
+            "basis": "one_contiguous_native_bank_sweep; independent_row_CA_column_CA_DQ; no_new_same_bank_successor; lookahead_PRE_and_ACT_spacing_in_row_chain; full_history_RCD_latency_DQ_bridge_per_REF_free_segment",
             "scope": "initial_state_perturbation_of_common_native_column_DQ_graph; not_a_total_service_upper",
             "single_request_operation": operation,
             "maximum_global_burst_count": bursts,
             "maximum_unique_physical_bank_count": config.lane_count*config.bank_count,
             "serialized_initial_row_CA_upper_per_bank_ns": row_chain,
+            "lookahead_first_burst_PRE_upper_ns": first_step,
             "row_CA_clock_alignment_and_anchor_margin_ns": 3*clock,
             "independently_proven_maximum_REF_epochs": epochs,
             "REF_free_segment_upper": epochs+1,
@@ -373,8 +394,12 @@ def native_hbm_refresh_service_upper(config, byte_count, operation, *,
 
     Once source carry is paid, H settles old command histories. Serialize
     every burst of the busiest actual channel, including the whole
-    PRE/recovery/tRP/ACT/tRC/tRCD/COL/latency/DQ path. Alternative gates
-    take a maximum, not their sum. All nominal REF stays charged separately
+    PRE/recovery/tRP/ACT/tRC/tRRD/tFAW/tRCD/COL/latency/DQ path. Row
+    lookahead only moves a burst's PRE earlier in the fixed row-bus order;
+    the extra PREs of a request's first burst are charged once. Early PREs
+    pass the same maintenance check as burst commands and open no row, so
+    the invariant below is unchanged. Alternative gates take a maximum,
+    not their sum. All nominal REF stays charged separately
     by the caller's residual-plus-feedback envelope. Stale epochs complete
     before the origin except at most its final residual: source stamps
     and tails limit the first stale epoch to R<I, and subsequent closed
@@ -390,9 +415,7 @@ def native_hbm_refresh_service_upper(config, byte_count, operation, *,
             or (config.interleave_bytes or config.burst_bytes) != config.burst_bytes
             or config.bank_count != 64 or config.row_bytes != 1024
             or config.banks_per_group != 8 or config.pseudo_channels_per_channel != 2
-            or config.activate_command_cycles != 1.5
-            or config.four_activate_window_ns != 0 or config.activate_same_group_ns != 0
-            or config.activate_different_group_ns != 0):
+            or config.activate_command_cycles != 1.5):
         return {**rejected, "reason": "native_REF_reachable_source_or_geometry_not_proven"}
     key = ("reachable_REF", _key(config), byte_count, operation)
     if key in _CACHE:
@@ -430,9 +453,14 @@ def native_hbm_refresh_service_upper(config, byte_count, operation, *,
     pre_align = clock if config.generation == "HBM4" else clock/2
     pre_history = max(config.minimum_active_ns, config.read_to_precharge_ns,
         config.write_to_precharge_ns, config.precharge_to_precharge_ns, 2*clock)
+    # tRC, tRRD and tFAW count from earlier ACTs, all inside earlier
+    # serialized bursts. The one later early PRE that row lookahead may
+    # place before this ACT is gated only by earlier bursts' stamps, so it
+    # ends inside the same PRE/tRP slot.
     pre_to_act = max(pre_history+pre_align
         +max(config.precharge_to_activate_ns, config.precharge_command_cycles*clock),
-        config.activate_cycle_ns)
+        config.activate_cycle_ns, config.activate_same_group_ns,
+        config.activate_different_group_ns, config.four_activate_window_ns)
     latency = config.read_latency_ns if operation == "read" else config.write_latency_ns
     rcd = config.activate_to_read_ns if operation == "read" else config.activate_to_write_ns
     row_to_column = pre_to_act+clock+max(config.activate_command_cycles*clock, clock+rcd)
@@ -444,7 +472,10 @@ def native_hbm_refresh_service_upper(config, byte_count, operation, *,
     # check. A full clock also covers the specified command occupancy.
     per_burst = max(row_to_column, column_history)+2*clock+max(
         config.column_command_cycles*clock, latency+dq)
-    active = math.nextafter(initial+channel_bursts*per_burst, math.inf)
+    # The first burst precharges its whole lookahead window before its ACT.
+    first_step = row_lookahead_depth(config)*(max(config.precharge_command_cycles*clock,
+        config.precharge_to_precharge_ns)+pre_align)
+    active = math.nextafter(initial+first_step+channel_bursts*per_burst, math.inf)
     # The eight-clock gap is much larger than the bounded add/compare ULP
     # chain. It is kept explicit instead of treating real-number equality
     # ACT >= next_due-I as exact for an analog tREFI.
@@ -463,6 +494,7 @@ def native_hbm_refresh_service_upper(config, byte_count, operation, *,
         # not a physical no-REF counterfactual from arbitrary bank state.
         "conditional_no_refresh_serial_upper_ns": active,
         **source_limits, "per_burst_serial_upper_ns": per_burst,
+        "lookahead_first_burst_PRE_upper_ns": first_step,
         "channel_burst_upper": channel_bursts, "refresh_epoch_upper_ns": blocked,
         "row_lifetime_margin_ns": expiry_margin,
         "required_native_hbm_clock_limit_ns": limit,

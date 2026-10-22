@@ -381,7 +381,7 @@ def _reopen_terms(config):
     from .native_hbm_cold_bound import native_hbm_initial_row_upper
 
     if (type(config) is not DramConfig or config.control_mode != "jedec_hbm"
-            or config.refresh_policy != "all_bank" or config.four_activate_window_ns != 0):
+            or config.refresh_policy != "all_bank"):
         raise ValueError("collective_row_reuse_REF_geometry_unsupported")
     clock = config.command_clock_ns
     dq = config.burst_bytes/config.effective_lane_bandwidth_gb_s
@@ -392,8 +392,12 @@ def _reopen_terms(config):
     # after it. Every ACT/PRE/column/turnaround/DQ history is then settled.
     if not config.refresh_cycle_ns > history+max(config.read_latency_ns, config.write_latency_ns)+max(dq, pacing):
         raise ValueError("collective_row_reuse_REF_does_not_expire_history")
-    act = max(config.activate_command_cycles*clock, config.activate_same_group_ns,
-              config.activate_different_group_ns)+3*clock
+    # A single row per bank leaves no conflict, so row lookahead issues no
+    # PRE. Each ACT follows the previous one by tRRD and the one four ACTs
+    # earlier by tFAW, so a quarter of tFAW per bank suffices.
+    act = max(max(config.activate_command_cycles*clock, config.activate_same_group_ns,
+                  config.activate_different_group_ns)+3*clock,
+              (config.four_activate_window_ns+3*clock)/4)
     column = max(config.column_same_group_ns, config.column_different_group_ns,
         config.column_different_sid_ns, config.read_to_write_ns, config.write_to_read_ns,
         config.read_to_write_command_ns, config.write_to_read_same_group_ns,

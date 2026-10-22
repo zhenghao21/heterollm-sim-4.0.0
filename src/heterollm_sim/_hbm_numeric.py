@@ -13,7 +13,7 @@ from threading import Condition, local
 import numpy as np
 from numba import njit
 from ._hbm_clock import align_clock, clock_after
-from ._dram_numeric import _repeat_add
+from ._dram_numeric import _repeat_add, rotated_bank
 
 _CHANNEL_WORKERS = min(8, os.cpu_count() or 1)
 _CHANNEL_EXECUTOR = ThreadPoolExecutor(max_workers=_CHANNEL_WORKERS,
@@ -213,15 +213,33 @@ def _column_start(lane, bank, group, bank_ready, earliest, read, g, t, pc, histo
 
 
 @njit(cache=True, nogil=True, fastmath=False)
+def _precharge_start(lane, bank, earliest, g, t, bf, pc, channel, channel_int, resources):
+    """_Controller.precharge_start: the in-order PRE edge of one bank."""
+    ready = _pre_ready(lane, max(earliest, bf[bank, 2], pc[lane, 1]), pc, t)
+    if channel_int[lane // 2, 0] == bank:
+        ready = max(ready, _after(channel[lane // 2, 0], 2 * t[0], t[0] / 2))
+    return _align(max(ready, resources[lane // 2, 0]), t[0] if g[7] else t[0] / 2)
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _precharge(lane, bank, earliest, g, t, rows, bf, pc, channel, channel_int,
+               resources, touched, counts):
+    start = _precharge_start(lane, bank, earliest, g, t, bf, pc, channel, channel_int, resources)
+    start, _ = _command(lane // 2, 0, start, t[2], False, g, t, resources, touched, counts)
+    counts[1] += 1
+    pc[lane, 0] = start
+    rows[bank] = -1
+    bf[bank, 1] = _after(start, t[6], t[0] / 2)
+    bf[bank, 5] = bf[bank, 1]
+
+
+@njit(cache=True, nogil=True, fastmath=False)
 def _estimate(lane, bank, group, row, arrival, activate_not_before, read, g, t, rows, bf, pc, history,
               channel, channel_int, resources, directions, windows, window_counts):
     earliest = arrival
     if rows[bank] != row:
         if rows[bank] >= 0:
-            pre = _align(max(_pre_ready(lane, max(earliest, bf[bank, 2]), pc, t),
-                             resources[lane // 2, 0]), t[0] if g[7] else t[0] / 2)
-            if channel_int[lane // 2, 0] == bank:
-                pre = max(pre, _after(channel[lane // 2, 0], 2 * t[0], t[0] / 2))
+            pre = _precharge_start(lane, bank, earliest, g, t, bf, pc, channel, channel_int, resources)
             earliest = _after(pre, max(t[6], t[2] * t[0]), t[0] / 2)
         anchor = _after(_activate_start(lane, bank, group, max(earliest, activate_not_before), arrival,
             g, t, bf, pc, history, resources, windows, window_counts), t[0], t[0] / 2)
@@ -508,6 +526,11 @@ def _tick_history_record(lane, entry, tick, stride, group_tops, sid_tops):
 
 
 @njit(cache=True, nogil=True, fastmath=False, inline="always")
+def _rotated_bank(step, g):
+    return rotated_bank(step, g[1], g[4])
+
+
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
 def _binary_shift(value):
     if value <= 0 or value & (value - 1):
         return -1
@@ -516,6 +539,96 @@ def _binary_shift(value):
         value >>= 1
         shift += 1
     return shift
+
+
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
+def _burst_location(cursor, g, binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift):
+    """Lane, bank within the lane, activated row and inner burst of a cursor."""
+    inner = 0
+    if binary_mapping:
+        if g[11]:
+            stripe = cursor >> row_shift
+            bank_within = stripe & (g[1] - 1)
+            lane = (stripe >> bank_shift) & (g[0] - 1)
+            row = stripe >> (bank_shift + lane_shift)
+        else:
+            block, inner = cursor >> interleave_shift, cursor & (g[2] - 1)
+            lane = block & (g[0] - 1)
+            bank_linear = block >> lane_shift
+            bank_within = _rotated_bank(bank_linear & (g[1] - 1), g)
+            row = (((bank_linear >> bank_shift) << interleave_shift) + inner) >> row_shift
+    elif g[11]:  # row_local: complete rows, then banks, then lanes.
+        stripe = cursor // g[3]
+        bank_within = stripe % g[1]
+        lane = (stripe // g[1]) % g[0]
+        row = stripe // (g[1] * g[0])
+    else:
+        block, inner = cursor // g[2], cursor % g[2]
+        lane = block % g[0]
+        bank_linear = block // g[0]
+        bank_within = _rotated_bank(bank_linear % g[1], g)
+        row = ((bank_linear // g[1]) * g[2] + inner) // g[3]
+    if g[6] >= 0:
+        row &= ~(1 << g[6])
+    return lane, bank_within, row, inner
+
+
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
+def _lookahead_depth(g, t):
+    """row_lookahead_depth in _hbm_control."""
+    depth = math.ceil(max(t[6], t[2] * t[0]) / ((t[1] + t[2]) * t[0])) + 1
+    return min(depth, 2 * g[1] - 1)
+
+
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
+def _channel_index(cursor, lane_span, period):
+    """Position of a cursor among its physical channel's bursts."""
+    return (cursor // period) * 2 * lane_span + (cursor % period) % (2 * lane_span)
+
+
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
+def _channel_cursor(index, ch, lane_span, period):
+    return (index // (2 * lane_span)) * period + ch * 2 * lane_span + index % (2 * lane_span)
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _precharge_ahead(target, served, ch, arrival, g, t, binary_mapping, lane_shift, bank_shift,
+                     interleave_shift, row_shift, lane_span, period, rows, bf, addresses, pc,
+                     pc_seen, channel, channel_int, resources, touched, counts, active_deadlines):
+    """_Controller.precharge_ahead; returns the precharged bank or -1."""
+    lane, bank_within, row, _ = _burst_location(_channel_cursor(target, ch, lane_span, period), g,
+        binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift)
+    bank = lane * g[1] + bank_within
+    if rows[bank] < 0 or rows[bank] == row:
+        return -1
+    for index in range(served, target):
+        other_lane, other_bank, _, _ = _burst_location(_channel_cursor(index, ch, lane_span, period), g,
+            binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift)
+        if other_lane * g[1] + other_bank == bank:
+            return -1
+    for iteration in range(2 * g[1] + 16):
+        start = _precharge_start(lane, bank, arrival, g, t, bf, pc, channel, channel_int, resources)
+        if active_deadlines[ch] <= start:
+            if g[8] and channel[ch, 1] < 0:
+                channel[ch, 1] = max(t[20], math.floor(arrival / t[20]) * t[20])
+            if g[8] and channel[ch, 1] <= active_deadlines[ch]:
+                _refresh_until(lane, channel[ch, 1], arrival, g, t, rows, bf, addresses,
+                               pc, pc_seen, channel, channel_int, resources, touched, counts)
+            else:
+                _close_expiring(ch, start, g, t, rows, bf, addresses, pc, channel,
+                                channel_int, resources, touched, counts)
+        elif not _refresh_until(lane, start, arrival, g, t, rows, bf, addresses,
+                                pc, pc_seen, channel, channel_int, resources, touched, counts):
+            break
+        active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+        if rows[bank] < 0 or rows[bank] == row:
+            return -1
+    else:
+        raise ValueError("HBM timing inputs leave no row-command window between maintenance commands")
+    _precharge(lane, bank, arrival, g, t, rows, bf, pc, channel, channel_int,
+               resources, touched, counts)
+    active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+    return bank
 
 
 @njit(cache=True, nogil=True, fastmath=False)
@@ -570,7 +683,8 @@ def _fold_column_cycles(cycles, channel_first, channel_stop, read, recovery, g, 
     # can vary with the edge. Replay only those subtractions/additions in the
     # original bank/channel/PC/burst order; no controller work is repeated.
     for repeat in range(1, cycles + 1):
-        for bank_within in range(g[1]):
+        for step in range(g[1]):
+            bank_within = _rotated_bank(step, g)
             for ch in range(channel_first, channel_stop):
                 shift = repeat * deltas[ch]
                 for lane in range(2 * ch, 2 * ch + 2):
@@ -611,7 +725,7 @@ def _fold_column_cycles(cycles, channel_first, channel_stop, read, recovery, g, 
                 bf[bank, 5] = bf[bank, 2]
                 for inner in range(g[2]):
                     cycle_starts[bank, inner] += shift
-            last = cycle_starts[(lane + 1) * g[1] - 1, g[2] - 1]
+            last = cycle_starts[lane * g[1] + _rotated_bank(g[1] - 1, g), g[2] - 1]
             data_start = (last + profile[2]) * t[0]
             data_end = (last + profile[2] + profile[3]) * t[0]
             rid = 2 * channels + lane
@@ -673,6 +787,13 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
     position += lanes
     previous_history = integers[position:position + history_size].reshape((lanes, entries))
     position += history_size
+    look = integers[position:position + channels]
+    position += channels
+    early_banks = integers[position:position + bank_count]
+    position += bank_count
+    look[channel_first:channel_stop] = -1
+    early_banks[2 * channel_first * g[1]:2 * channel_stop * g[1]] = 0
+    depth = _lookahead_depth(g, t)
     for ch in range(channel_first, channel_stop):
         active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
     tick_candidate = g[12] and stop - first >= 64
@@ -733,7 +854,9 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 cycle_index = (stripe_start - offset) // cycle_span
                 row_phase = cycle_index % (g[3] // g[2])
                 if previous_valid and cycle_fast and row_phase:
-                    cycles = min(g[3] // g[2] - row_phase,
+                    # The row's last cycle runs burst by burst: lookahead
+                    # within it reaches the next row's bursts.
+                    cycles = min(g[3] // g[2] - row_phase - 1,
                                  (stop - (stripe_start - offset)) // cycle_span)
                     if cycles > 0:
                         folded, folded_completion = _fold_column_cycles(cycles, channel_first, channel_stop,
@@ -745,6 +868,11 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                             hits += folded * 2 * (channel_stop - channel_first) * g[1] * g[2]
                             completion = max(completion, folded_completion)
                             stripe_start += folded * cycle_span
+                            # Every lookahead target inside the folded cycles
+                            # and one cycle beyond is a hit of this open row.
+                            following = ((stripe_start - offset) // period) * 2 * lane_span + depth
+                            for ch in range(channel_first, channel_stop):
+                                look[ch] = max(look[ch], following)
                             previous_valid = False
                             cycle_fast = False
                             if stripe_start >= stop:
@@ -758,37 +886,29 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 previous_valid = True
                 cycle_fast = first <= stripe_start
         for cursor in range(max(first, stripe_start), min(stop, stripe_start + width)):
+            lane, bank_within, row, inner = _burst_location(cursor, g, binary_mapping, lane_shift,
+                                                            bank_shift, interleave_shift, row_shift)
             if binary_mapping:
-                if g[11]:
-                    stripe = cursor >> row_shift
-                    bank_within = stripe & (g[1] - 1)
-                    lane = (stripe >> bank_shift) & (g[0] - 1)
-                    row = stripe >> (bank_shift + lane_shift)
-                else:
-                    block, inner = cursor >> interleave_shift, cursor & (g[2] - 1)
-                    lane = block & (g[0] - 1)
-                    bank_linear = block >> lane_shift
-                    bank_within = bank_linear & (g[1] - 1)
-                    row = (((bank_linear >> bank_shift) << interleave_shift) + inner) >> row_shift
-                group = bank_within >> group_shift
-                history_entry = bank_within >> history_shift
-            elif g[11]:  # row_local: complete rows, then banks, then lanes.
-                stripe = cursor // g[3]
-                bank_within = stripe % g[1]
-                lane = (stripe // g[1]) % g[0]
-                row = stripe // (g[1] * g[0])
-                group, history_entry = bank_within // g[4], bank_within // g[10]
+                group, history_entry = bank_within >> group_shift, bank_within >> history_shift
             else:
-                block, inner = cursor // g[2], cursor % g[2]
-                lane = block % g[0]
-                bank_linear = block // g[0]
-                bank_within = bank_linear % g[1]
-                row = ((bank_linear // g[1]) * g[2] + inner) // g[3]
                 group, history_entry = bank_within // g[4], bank_within // g[10]
             bank = lane * g[1] + bank_within
             ch = lane // 2
-            if g[6] >= 0:
-                row &= ~(1 << g[6])
+            served = _channel_index(cursor, lane_span, period)
+            if look[ch] < 0:
+                look[ch] = served
+            while (look[ch] <= served + depth
+                   and _channel_cursor(look[ch], ch, lane_span, period) < stop):
+                early = _precharge_ahead(look[ch], served, ch, arrival, g, t, binary_mapping,
+                    lane_shift, bank_shift, interleave_shift, row_shift, lane_span, period,
+                    rows, bf, addresses, pc, pc_seen, channel, channel_int, resources, touched,
+                    counts, active_deadlines)
+                if early >= 0:
+                    early_banks[early] = 1
+                    cycle_fast = False
+                    if tick_mode:
+                        tick_banks[early] = -2
+                look[ch] += 1
             if addresses[bank] < 0:
                 addresses[bank] = cursor * g[9]
             pc_seen[lane] = True
@@ -900,19 +1020,16 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 start = command_start
             else:
                 if rows[bank] < 0:
-                    misses += 1
+                    # A row precharged ahead for this burst was a conflict.
+                    if early_banks[bank]:
+                        conflicts += 1
+                        early_banks[bank] = 0
+                    else:
+                        misses += 1
                 else:
                     conflicts += 1
-                    earliest = _pre_ready(lane, max(arrival, bf[bank, 2], pc[lane, 1]), pc, t)
-                    if channel_int[lane // 2, 0] == bank:
-                        earliest = max(earliest, _after(channel[lane // 2, 0], 2 * t[0], t[0] / 2))
-                    start, _ = _command(lane // 2, 0, earliest, t[2], False, g, t,
-                                         resources, touched, counts)
-                    counts[1] += 1
-                    pc[lane, 0] = start
-                    rows[bank] = -1
-                    bf[bank, 1] = _after(start, t[6], t[0] / 2)
-                    bf[bank, 5] = bf[bank, 1]
+                    _precharge(lane, bank, arrival, g, t, rows, bf, pc, channel, channel_int,
+                               resources, touched, counts)
                 start = _activate_start(lane, bank, group, activate_not_before, arrival,
                     g, t, bf, pc, history, resources, windows, window_counts)
                 start, _ = _command(lane // 2, 0, start, t[1], True, g, t,
@@ -987,7 +1104,7 @@ def _new_channel_scratch(g, arrays):
             and bank_count * int(g[2]) <= 1048576)
     integers = (2 * lanes * history_entries + bank_count + 4 * lanes + lanes
                 + lanes * ((banks + 15) // 16) * 4 + lanes * 4
-                + (bank_count * int(g[2]) if fold else 0))
+                + (bank_count * int(g[2]) if fold else 0) + lanes // 2 + bank_count)
     # Two flat buffers avoid boxing thirteen separate NumPy descriptors at
     # every compiled worker entry. All views are made inside the controller.
     return np.empty(lanes // 2, dtype=np.float64), np.empty(integers, dtype=np.int64)

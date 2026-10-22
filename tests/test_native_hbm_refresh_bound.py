@@ -13,6 +13,7 @@ from heterollm_sim.memory_mapping import map_dram_address
 from heterollm_sim.memory_transfer import ResourceTimeline
 from heterollm_sim.native_window_producer import (_channel_burst_upper,
     _hbm_channels_independent, _refresh_serial_bound)
+from heterollm_sim._hbm_control import row_lookahead_depth
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.memory_types import AccessRequest
 from test_hbm_compiled_control import configuration
@@ -175,19 +176,23 @@ def test_reachable_REF_bound_retains_feedback_and_does_not_require_a_fake_no_REF
 @pytest.mark.parametrize("operation", ("read", "write"))
 @pytest.mark.parametrize("warm_operation", ("read", "write"))
 @pytest.mark.parametrize("absolute", (0., 1e9+.17, 1e11+.31))
+@pytest.mark.parametrize("warm_row", (0, 3))
 def test_reachable_service_covers_real_native_warm_rows_stale_REF_and_unaligned_bursts(
-        operation, warm_operation, absolute):
+        operation, warm_operation, absolute, warm_row):
     from heterollm_sim._compiled_hbm import _pack_hbm_numeric
     from heterollm_sim._hbm_numeric import _new_channel_scratch, _run_hbm_channel_range
     from heterollm_sim.native_hbm_cold_bound import native_hbm_refresh_service_upper
     config = _formal_staging_hbm4()
+    # Warm rows 3 conflict with every measured burst, so row lookahead
+    # precharges the measured request's first window ahead.
+    first = warm_row*config.lane_count*config.bank_count*config.row_bytes//32
     for count, address in ((1, 31), (32768, 1), (32768, 131071), (65536, 8177)):
         core = DramCore(config, capture_details=False)
         packed = _pack_hbm_numeric(core, AccessRequest("native-source", "read", 0, 32))
         assert packed.g[8]  # The actual original controller has REF enabled.
         arrays = packed.arrays
         scratch = _new_channel_scratch(packed.g, arrays)
-        warm = _run_hbm_channel_range(0, 8*1024**2//32, absolute,
+        warm = _run_hbm_channel_range(first, first+8*1024**2//32, absolute,
             warm_operation == "read", packed.g, packed.t, *arrays, scratch, 0, 1)
         due = arrays[6][0, 1]
         opened = (arrays[0][:128] >= 0) & (arrays[2][:128] >= 0)
@@ -214,7 +219,7 @@ def test_reachable_tightening_requires_both_source_and_bus_proofs_and_row_margin
         independent_channels=True)["qualified"]
     assert not native_hbm_refresh_service_upper(config, 32768, "read",
         native_refresh_reachable=True)["qualified"]
-    unknown = replace(config, four_activate_window_ns=16.)
+    unknown = replace(config, address_mapping="row_local", interleave_bytes=None)
     assert not native_hbm_refresh_service_upper(unknown, 32768, "read",
         independent_channels=True, native_refresh_reachable=True)["qualified"]
     short = replace(config, maximum_active_ns=5000.)
@@ -297,13 +302,11 @@ def test_initial_row_guard_covers_actual_REF_on_wrong_rows_and_fresh_same_arriva
     assert proof["untouched_old_row_expiry_excluded"]
     assert difference <= proof["initial_state_upper_ns"]
     if operation == warm_operation == "read":
-        assert actual.completion_ns-warm.completion_ns == pytest.approx(567.68)
-        assert fresh.completion_ns-warm.completion_ns == pytest.approx(76.16)
-        assert difference == pytest.approx(491.52)
-        # The former guard paid just one shared-array latency plus CA
-        # occupancy. Even charging it on both sides missed this real case.
-        old_row_guard = config.activate_cycle_ns+16*config.command_clock_ns*2
-        assert difference > 2*old_row_guard
+        # Row lookahead precharges each channel's conflicting rows while
+        # tRRD/tFAW pace the ACT stream, so wrong rows expose one tRP.
+        assert actual.completion_ns-warm.completion_ns == pytest.approx(128.)
+        assert fresh.completion_ns-warm.completion_ns == pytest.approx(112.64)
+        assert difference == pytest.approx(config.precharge_to_activate_ns)
 
 
 def test_initial_row_touched_reduction_requires_source_and_real_bus_independence():
@@ -324,7 +327,6 @@ def test_initial_row_touched_reduction_requires_source_and_real_bus_independence
 
 
 @pytest.mark.parametrize("changes", ({"maximum_active_ns": 5000.},
-    {"four_activate_window_ns": 16.},
     {"address_mapping": "row_local", "interleave_bytes": None}))
 def test_row_touched_reduction_also_requires_this_IO_REF_lifetime_and_clock_proof(changes):
     from heterollm_sim.native_hbm_cold_bound import native_hbm_initial_row_upper
@@ -338,8 +340,8 @@ def test_row_touched_reduction_also_requires_this_IO_REF_lifetime_and_clock_proo
     assert "hbm_clock_domain_limit_ns" not in proof
 
 
-@pytest.mark.parametrize("count,epochs,expected", ((32768, 1, 816.8),
-    (65536, 2, 1527.12)))
+@pytest.mark.parametrize("count,epochs,expected", ((32768, 1, 841.76),
+    (65536, 2, 1552.08)))
 def test_unique_bank_row_graph_pays_a_complete_bridge_for_every_REF_free_segment(
         count, epochs, expected):
     from heterollm_sim.native_hbm_cold_bound import (native_hbm_initial_row_upper,
@@ -360,6 +362,14 @@ def test_unique_bank_row_graph_pays_a_complete_bridge_for_every_REF_free_segment
         config.read_latency_ns+config.burst_bytes/config.effective_lane_bandwidth_gb_s)
     assert proof["initial_state_upper_ns"] == pytest.approx(expected)
     assert proof["initial_state_upper_ns"] < unique["original_complete_serial_initial_state_upper_ns"]
+    # PRE/tRP dominates tRRD and a quarter of tFAW in this profile. The
+    # first burst's lookahead window pays one PRE slot per later burst.
+    clock = config.command_clock_ns
+    pre = max(config.precharge_command_cycles*clock, config.precharge_to_precharge_ns)
+    assert unique["serialized_initial_row_CA_upper_per_bank_ns"] == pytest.approx(
+        pre+config.precharge_to_activate_ns+(config.activate_command_cycles+3)*clock)
+    assert unique["lookahead_first_burst_PRE_upper_ns"] == pytest.approx(
+        row_lookahead_depth(config)*(pre+clock))
 
 
 def test_unique_bank_bound_uses_the_global_mapping_period_and_worst_unaligned_burst():

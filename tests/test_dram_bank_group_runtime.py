@@ -30,7 +30,9 @@ def endpoint(config):
         metadata={"physical_memory_config": config, "memory_service_owner": "hbm"}))
 
 
-def task(config, addresses=(0, 64, 128, 0), *, ident="read", operation="read", size=64):
+# The rotated mapping alternates groups: address 128 reaches bank 1 (group 0)
+# and address 64 reaches bank 2 (group 1).
+def task(config, addresses=(0, 128, 64, 0), *, ident="read", operation="read", size=64):
     return TaskSpec(ident, "request", ident, TaskCategory.MEMORY,
         metadata={"physical_memory_config": config, "physical_owner": "hbm",
             "memory_accesses": tuple({"operation": operation, "address": address,
@@ -44,7 +46,7 @@ def test_kernel_group_wait_changes_completion_without_duplicate_cost(details):
 
     def run(current):
         tasks = tuple(task(current, (address,), ident=str(i))
-                      for i, address in enumerate((0, 64, 128, 0)))
+                      for i, address in enumerate((0, 128, 64, 0)))
         kernel = UnifiedEventKernel.from_closed_graph(tasks, capture_physical_details=details)
         events = [kernel.step() for _ in tasks]
         return kernel, events
@@ -67,7 +69,7 @@ def test_physical_service_and_resolver_observe_identical_group_history(details):
     service = endpoint(config)
     runtime = PhysicalRuntimeContext(capture_details=details)
     bills = [service.price(AccessKind.READ, 64, page_offset_bytes=address,
-                           runtime=runtime, arrival_ns=0.) for address in (0, 64, 128, 0)]
+                           runtime=runtime, arrival_ns=0.) for address in (0, 128, 64, 0)]
     assert [bill["completion_ns"] for bill in bills] == [4., 14., 18., 24.]
     assert sum(bill["physical_bytes"] for bill in bills) == 256
     combined = resolve_physical_task(task(config), PhysicalRuntimeContext(capture_details=details), 0.)
@@ -139,7 +141,7 @@ def test_post_core_failure_restores_group_history_before_retry(entry):
 
 def test_kernel_failed_completion_rolls_back_group_history_and_keeps_ready_task():
     config = configuration()
-    kernel = UnifiedEventKernel.from_closed_graph((task(config, (64,)),))
+    kernel = UnifiedEventKernel.from_closed_graph((task(config, (128,)),))
     service = endpoint(config)
     service.price(AccessKind.READ, 64, page_offset_bytes=0,
                   runtime=kernel.physical_runtime, arrival_ns=0.)

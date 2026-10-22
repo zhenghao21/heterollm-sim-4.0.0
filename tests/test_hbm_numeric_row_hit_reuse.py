@@ -12,9 +12,12 @@ from test_hbm_compiled_control import assert_same, configuration
 @pytest.mark.parametrize("mapping", ["bank_interleaved", "row_local"])
 @pytest.mark.parametrize("refresh", [False, True])
 def test_row_hit_estimate_rechecks_maintenance_and_preserves_following_state(clock, mapping, refresh):
+    # tRASmax is far below tREFI here. With some values a REF epoch serving
+    # both PCs cannot meet clustered row deadlines and both controllers
+    # raise; 160 ns keeps every parametrized schedule feasible.
     config = configuration(command_clock_ns=clock, data_rate_mt_s=4000. / clock,
         read_latency_ns=8. * clock, write_latency_ns=4. * clock,
-        address_mapping=mapping, maximum_active_ns=180., four_activate_window_ns=20.,
+        address_mapping=mapping, maximum_active_ns=160., four_activate_window_ns=20.,
         refresh_policy="all_bank" if refresh else "disabled",
         refresh_interval_ns=400. if refresh else 0., refresh_cycle_ns=40. if refresh else 0.)
     reference = DramCore(config, capture_details=False)

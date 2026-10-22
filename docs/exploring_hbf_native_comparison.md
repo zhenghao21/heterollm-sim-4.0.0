@@ -35,6 +35,112 @@ Table I的每GPU容量和接口预算保留原文，计算峰值使用公开Rubi
 
 HBF双缓冲为每堆3,276,800B=3.125MiB，CONV为2MiB；论文3.13MB的单位未明确，不能声称恰好等于3,130,000B。它与每堆40MB中间数据SRAM分开。
 
+## 对照口径：正确构造与论文峰值简化（2026-10-21）
+
+用户明确：对照不追求复现论文的性能数值。需要区分两类内容：一类是应与论文一致的构造（输入与方法），一类是论文为得到峰值性能所做的简化。原生实验保证前者正确，不采用后者；由此产生的差异在最终对照中逐项说明。论文方法依据其第2页和作者报告第19～20页（见[旁路模型结果](exploring_hbf_reproduction.md)的来源一节）。
+
+### 应与论文一致的构造
+
+|项目|论文|原生现状|结论|
+|---|---|---|---|
+|模型|Llama3 405B、Llama4 Maverick|405B按3.1官方几何；Maverick文本骨干；RMSNorm仿射向量未声明（见上）|一致，版本差和小容量差已列明|
+|硬件输入|Table I每GPU容量与接口带宽；HBF堆/die/plane/页/读写时延；HBF+每堆40MB SRAM|同上节|一致|
+|负载|1660/373、5900/499、103500/1100，权重与KV为BF16|同|一致|
+|系统范围|PD分离下的Decode节点，8 GPU|同|一致|
+|批处理|连续批处理，请求完成即补位，批量保持满|`require_full_batch=True`满槽门控，`mixed_phase_batching=False`，导入并发上限固定为2；新请求要等整波补满才继续，大批量下GPU会空等|**不一致，需改为连续补位**；原生调度器已有混合批开关|
+|部署与批量|在容量、片上SRAM和TPOT≤100ms约束下搜索DP/TP/PP/EP与批量，最大化吞吐|固定TP8，只试B=1/8|**不一致，需改为同样的搜索**；原生构造器已支持tp/ep，DP只需一个副本|
+|SLO|TPOT≤0.1秒（统计量未公开）|完整新请求TPOT的等权平均|一致，统计口径已注明|
+|PD导入|假设Prefill节点性能足够|真实支付HOST读、链路和目标写|物理付费是正确构造；导入并发上限是我们的软件设定，应按补位速率确定，不能固定为2|
+
+### 论文的峰值简化（不采用，在对照中说明）
+
+|论文简化|原生正确构造|已测影响|
+|---|---|---|
+|全部硬件按标称峰值运行（效率1），HBM4按12.8TB/s计|JEDEC HBM4控制器：tCCD_L、tRCD/tRP、全bank刷新、行命中/未命中、FCFS发射|见下表|
+|零停顿批处理|PD导入真实付费，可能出现准入等待|改为连续补位后再测|
+|存储按常数带宽计|NAND页服务：4KiB页、plane并行、读写时延、双缓存|待按论文批量实测|
+
+405B HBM4 SHORT B=64第63层rank0的真实地址，在冷HBM4 Core上一次提交（`scratchpad/probe_kv_read_efficiency.py`）：
+
+|配置|KV读（128条，60MB）|权重读（77.6MB）|同字节连续读|
+|---|---:|---:|---:|
+|修改前：JEDEC，32B bank交织|658 GB/s|3,765 GB/s|4,735 GB/s|
+|修改前：analytical，关刷新|6,052 GB/s|6,808 GB/s|6,799 GB/s|
+|修改前：analytical，关刷新，tCCD_L=tCCD_S|8,745 GB/s|12,728 GB/s|12,705 GB/s|
+|**修改后**：JEDEC，group轮换+PRE前瞻+tRRD/tFAW（下节）|2,484 GB/s|8,675 GB/s|9,621 GB/s|
+|修改后：analytical，关刷新（tCCD_L=tCCD_S结果相同）|3,173 GB/s|11,085 GB/s|11,646 GB/s|
+
+JEDEC配置校验拒绝tCCD_L小于2.56ns，即标准AC最小值；因此“tCCD_L=tCCD_S”只是用来分解差距，不能作为原生配置。修改前，连续读从论文峰值到原生的差距依次来自：同bank group列间隔（12.7→6.8TB/s），以及行时序与FCFS发射（→4.7TB/s）。修改后，group轮换消除了同组列间隔损失，连续读达到9.6TB/s。剩下的差距来自行切换和全bank刷新。KV读的主要约束变成tRRD/tFAW限定的ACT速率（见下节）；analytical模式同样受这组新参数限制。修改前，B=512时405B HBM4 SHORT的稳态层为1.27ms（B=1为0.211ms），每请求每层约增加2µs，B=512的TPOT约160ms；修改后为每层0.437ms、约55ms（见下节）。这些都是原生构造下的结果，不为接近论文而改动。
+
+### 原生自身构造的复核结论（与论文无关，2026-10-21）
+
+两项均确认是我们自己的控制器构造问题，而不是JEDEC约束或论文简化。它们会改变物理语义，须经用户确认后才修改。
+
+**1. bank编号让连续突发落在同一bank group。** `map_dram_address`与数值路径`_run_hbm_channel_range`都按`bank_group = bank // banks_per_group`编号；`bank_interleaved`每扫过一次全部lane，bank号加1，所以同一lane上连续8次突发落在同组。HBM4配置的突发占1.28ns，同组列间隔tCCD_L为2.56ns（JEDEC校验不允许更小），异组tCCD_S为1.28ns；同一lane的流式读因此被限在一半速率。依据：
+
+- 标准时序本身就区分同组与异组。Synopsys的DDR4 bank group技术文章指出，tCCD_L达到8个时钟时，停在同组相当于放弃一半带宽，应避免同组连续列命令（[Synopsys DDR4 Bank Groups](https://www.synopsys.com/articles/ddr4-bank-groups.html)）。
+- 原生实测：连续读4.7TB/s（标称12.8TB/s的37%）；analytical模式下仅取消同组惩罚，带宽就从6.8提高到12.7TB/s。
+- 对照：DRAMsim3的HBM2配置为`rorabgbachco`，但其tCCD_L=2、tCCD_S=1，同组间隔不超过突发占用，不存在这一损失（[配置](https://github.com/umd-memsys/DRAMsim3/blob/master/configs/HBM2_8Gb_x128.ini)）。
+
+**2. 行命令日历不能回填，行冲突在通道内串行。** 每个物理通道的行命令总线（两个PC共用）是单调前沿：PRE之后，ACT被预约在PRE+tRP处，前沿随即跳到该ACT之后；下一个突发即使属于另一个已就绪的bank，其PRE也不能插进这段tRP空档。JEDEC只要求跨bank的PRE间隔tPPD（本配置1.28ns）和命令槽，tRP是单bank约束。DRAMsim3按bank分队列轮询，某bank队首在等tRP/tRCD时会发其他bank已就绪的命令（[command_queue.cc](https://github.com/umd-memsys/DRAMsim3/blob/master/src/command_queue.cc)）。合成实测（`scratchpad/probe_hbm_kv_pattern.py`、`probe_hbm_serial_cause*.py`）：
+
+- 128条470,016B读，地址连续时为4.73TB/s；地址分散时为0.66TB/s，每条读比上一条晚约781ns完成；fcfs、row_hit_first、read_write_batch三种调度器以及在途额度4096，结果都相同。
+- 32条分散读共470,016个突发，行命中0、未命中188,320、冲突281,696。
+- tRP加倍后总时长增加43%；tRCD、tRAS、tRC或tRRD加倍基本不变。
+- 本仓库此前把“PC0预约PRE→tRP→REF后，PC1的PRE不能回插”记为原生行为，HBM4刷新相关的快速模式证明也依赖这一点。
+
+**3. 修第2项后会暴露的依赖。** 论文HBM4配置的tRRD、tFAW为0，即“未建模”，而不是标准允许零间隔。允许回填之后，行未命中密集的KV读将只受命令槽约束，可能过于乐观。需要决定采用哪组ACT速率约束，例如HBM3E参考工程包的tRRD_S/L=4/6ns、tFAW=20ns；它们属于研究假设，并不是HBM4实测值。
+
+修改方案（2026-10-21提出；第2项最终改为固定顺序PRE前瞻，见下节）：
+
+|项|改动|预计影响|代价|
+|---|---|---|---|
+|1|`bank_interleaved`内的bank步进改为在同一SID内先轮换bank group，再换bank，再换SID；`map_dram_address`、数值路径、打包和全部依赖bank/group/SID推导的证明同步修改|流式读最多约2倍（按analytical参照估计，尚未在JEDEC下实测），B=1权重层同量级缩短|所有HBM时序结果改变；硬编码时序的测试需重算；行0复用等几何证明须按新映射重验|
+|2|行命令改为区间日历，命令放在其就绪后最早的空闲槽，保留tPPD、tRRD、tFAW、命令占用和REF全bank预充电约束；Python细粒度控制器与numba数值路径同时修改并保持逐位等价|分散KV读的上限从约781ns/条降到行命令槽约66ns/条，即最多约12倍；实际受第3项约束|改动最大：刷新epoch、初始错行等快速模式证明及`native_issue_order`的单调性前提都要重做|
+|3|为HBM4选定tRRD/tFAW，作为明确的研究假设|决定第2项之后KV读的实际速率|需要选定来源并标注|
+
+### 已实施的修改（2026-10-22，未提交）
+
+1. **bank group轮换。** `memory_mapping.rotated_bank`在每个16-bank的SID内交替bank group（步进顺序0、8、1、9……），`rotated_bank_step`为其逆映射。`map_dram_address`、`_dram_numeric`、`_compiled_dram`、`dram_core._mapping_cycle`和`_hbm_numeric`同步修改；测试与脚本都通过`rotated_bank_step`构造地址。
+2. **行命令：固定顺序的PRE前瞻，不采用区间日历回填。** 先实现的first-fit回填不满足max-plus单调性。有效反例：关刷新、冲突密集，仅把一个请求的到达时间提前，另一个请求反而晚完成1.28ns。早先“删去一个请求”的反例方法有误，因为删请求会改变后续请求的行命中/冲突，但用正确方法仍能复现非单调。快速模式的冷启动上界、初始行扰动、REF反馈以及`native_issue_order`的单侧合成，都以单调为前提，所以改用前瞻：
+   - 同一请求内，每个物理通道在服务每个突发前，按通道内顺序为其后`row_lookahead_depth`个突发中行冲突的bank提前发PRE，再处理本突发自身的维护、ACT和列命令。
+   - 深度为`ceil(max(tRP, PRE占用)/(ACT+PRE占用)) + 1`，上限为`2·bank_count−1`；HBM4为13。
+   - 若更早的待服务突发仍需同一bank，该PRE留到它自己的轮次。在HBM4的32B bank交织下，同一bank每128个通道突发才出现一次，这种情况不会发生。
+   - 提前的PRE与普通命令走同一套维护检查：到期刷新先做REF，tRASmax到期的行先关闭。提前关闭后再打开的访问，计数为行冲突。
+   - 行命令总线仍是FIFO，命令顺序只由突发顺序和初始行状态决定，与时序无关，所有间隔约束仍是单向的。Python细粒度控制器与numba路径同步修改，HBM/DRAM全套测试逐位一致。随机到达提前测试中，前瞻和原FIFO都没有出现非单调。
+3. **tRRD/tFAW研究假设。** `build_paper_hbm_config`采用HBM3E参考工程包的tRRD_S=4ns、tRRD_L=6ns、tFAW=20ns（JESD238 Table 93与6.3.2.2.1节），并标注为研究假设；HBM4的对应数值未公开。
+
+冷HBM4 Core实测（`scratchpad/probe_after_fix.py`；128条470,016B读，或一次64MB读）：
+
+|访问|修改前|first-fit回填（已弃用）|前瞻，tRRD/tFAW取HBM3E参考|前瞻，tRRD/tFAW=0|
+|---|---:|---:|---:|---:|
+|128条地址连续|4,735 GB/s|9,616 GB/s|9,575 GB/s|10,356 GB/s|
+|128条4KiB对齐分散|658 GB/s|2,771 GB/s|2,494 GB/s|4,461 GB/s|
+|64MB连续|—|—|9,822 GB/s|10,561 GB/s|
+
+前瞻只在单个请求内进行，所以分散读在请求边界处比first-fit略慢；剩余差距主要来自ACT速率约束（tRRD/tFAW）。
+
+真实负载：
+
+- 405B HBM4 SHORT B=64第63层rank0的128条KV读：658→2,484 GB/s。权重读：3,765→8,675 GB/s（见上节表）。
+- B=512稳态层（`scratchpad/probe_large_batch_layers.py`，3层与2层两段连续运行）：每层由1.275ms降到0.437ms，126层合计约55ms，修改前约160ms。
+- 物理执行墙钟为63.2s/层，测量时机器上有并行测试负载，不能与修改前的56.5s/层直接比较。
+
+快速模式证明随之重做（`native_hbm_cold_bound.py`、`native_collective_row_reuse.py`）：
+
+- 冷启动上界、REF可达服务上界和集合通信行复用不再拒绝非零tRRD/tFAW。
+- ACT间隔计入历史项和每bank后继链。初始行唯一bank链取max(PRE+tRP, tRRD)+ACT，并且不小于tFAW/4。
+- 每个请求首个突发要提前发出整个前瞻窗口的PRE，这部分一次性计入。
+- 集合通信行复用中，每bank的ACT链由2.88ns增至7.92ns，主要来自tRRD_L。快速模式的层保护会相应变大，这是采用tRRD/tFAW假设的直接后果。
+- 冷启动填充论证补充了一条：前瞻下，保留区间的行总线顺序与它单独执行时相同。
+- 相应测试改为以冲突行起步的真实执行，以此覆盖前瞻路径。
+
+受影响的真实样例（正式中间存储几何，REF开启）：
+
+- 初始错行的32KiB读由567.68ns降到128.00ns。
+- 冷态由76.16ns升到112.64ns，因为ACT流受tRRD/tFAW限制。
+- 两者只差一个tRP。
+
 ## 30点执行安排
 
 |顺序|模型与硬件|点数|

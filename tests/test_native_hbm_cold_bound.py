@@ -29,17 +29,21 @@ def test_full_cycle_native_bound_has_explicit_absolute_clock_and_row_lifetime_gu
 
 
 @pytest.mark.parametrize("operation", ("read", "write"))
-def test_native_bound_covers_warm_opposite_direction_rows_and_unaligned_address_tails(operation):
+@pytest.mark.parametrize("warm_row", (0, 7))
+def test_native_bound_covers_warm_opposite_direction_rows_and_unaligned_address_tails(operation, warm_row):
     from heterollm_sim.native_hbm_cold_bound import _prepare
     from heterollm_sim._hbm_numeric import _run_hbm_channel_range
     config = build_paper_hbm_config("HBM4")
     proof = native_hbm_no_refresh_upper(config, 128*1024**2, operation, independent_channels=True)
     other = "write" if operation == "read" else "read"
+    # Row 7 is never the request's row there, so every bank starts in a
+    # conflict and row lookahead precharges from the first burst.
+    warm = warm_row*config.lane_count*config.bank_count*config.row_bytes//32
     for address, offset in ((1, .001), (31, .17), (8177, .32), (33554431, 1.07)):
         packed, scratch = _prepare(config)
         assert not packed.g[8] and config.refresh_policy == "all_bank"
         arrays = packed.arrays
-        _run_hbm_channel_range(0, 32*1024**2//32, 0., other == "read",
+        _run_hbm_channel_range(warm, warm+32*1024**2//32, 0., other == "read",
             packed.g, packed.t, *arrays, scratch, 0, packed.g[0]//2)
         arrival = float(max(arrays[8][:, 0]))+offset
         first, stop = address//32, (address+128*1024**2-1)//32+1
@@ -90,7 +94,9 @@ def test_initial_state_allowance_pays_the_actual_per_bank_tRP_ACT_startup_chain(
     wrong_rows = _run_hbm_channel_range(period//32, (period+sweep)//32, arrival, True,
         packed.g, packed.t, *packed.arrays, scratch, 0, 1)
     excess = wrong_rows[0]-arrival-first_cold_sweep
-    assert excess > 1000.  # The old 311ns PRE-only allowance was insufficient.
+    # Row lookahead overlaps every later bank's PRE/tRP with the ACTs
+    # before it; only the first bank's tRP stays exposed.
+    assert config.precharge_to_activate_ns <= excess < 2*config.precharge_to_activate_ns
     assert excess <= proof["initial_state_upper_ns"]
 
 
@@ -145,12 +151,23 @@ def test_summary_reserves_the_padded_comparison_before_the_raw_clock_limit():
     assert bounded["ordered_resource_phase_per_cohort_ns"] < coarse["ordered_resource_phase_per_cohort_ns"]
 
 
-@pytest.mark.parametrize("changes", ({"address_mapping": "row_local", "interleave_bytes": None},
-    {"four_activate_window_ns": 16.}, {"activate_same_group_ns": 1.28}))
-def test_unknown_native_dependency_profiles_do_not_get_a_cold_upper(changes):
-    config = replace(build_paper_hbm_config("HBM4"), **changes)
+def test_unknown_native_dependency_profiles_do_not_get_a_cold_upper():
+    config = replace(build_paper_hbm_config("HBM4"), address_mapping="row_local", interleave_bytes=None)
     proof = native_hbm_no_refresh_upper(config, 128*1024**2, "read", independent_channels=True)
     assert not proof["qualified"]
+
+
+def test_ACT_spacing_is_charged_in_the_initial_state_upper():
+    config = build_paper_hbm_config("HBM4")
+    assert config.four_activate_window_ns > 0 and config.activate_same_group_ns > 0
+    base = native_hbm_no_refresh_upper(config, 128*1024**2, "read", independent_channels=True)
+    # A tFAW above every other ACT successor becomes the per-bank tail.
+    wide = replace(config, four_activate_window_ns=80.)
+    slow = native_hbm_no_refresh_upper(wide, 128*1024**2, "read", independent_channels=True)
+    assert base["qualified"] and slow["qualified"]
+    banks = config.pseudo_channels_per_channel*config.bank_count
+    assert slow["initial_state_upper_ns"]-base["initial_state_upper_ns"] >= banks*(80.-49.)
+    assert slow["native_cold_duration_ns"] >= base["native_cold_duration_ns"]
 
 
 def test_shared_channels_and_capacity_padding_refuse_the_tight_upper():

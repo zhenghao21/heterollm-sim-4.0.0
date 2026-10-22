@@ -6,6 +6,7 @@ import json
 import pytest
 
 from heterollm_sim.dram_core import DramCore
+from heterollm_sim.memory_mapping import rotated_bank_step
 from heterollm_sim.hbm_geometry import make_hbm_geometry_config
 from heterollm_sim.hbm_timing_profiles import apply_hbm_timing_profile, timing_profile_catalog
 from heterollm_sim.memory_types import AccessRequest, DramConfig
@@ -38,7 +39,8 @@ def update(config, changes, path):
 
 
 def request(config, op="read", *, bank=0, row=0, time=0.):
-    address = ((row * (config.row_bytes // 32)) * config.bank_count + bank) * config.lane_count * 32
+    step = rotated_bank_step(bank, config.bank_count, config.banks_per_group)
+    address = ((row * (config.row_bytes // 32)) * config.bank_count + step) * config.lane_count * 32
     return AccessRequest(str((op, bank, row, time)), op, address, 32, time)
 
 

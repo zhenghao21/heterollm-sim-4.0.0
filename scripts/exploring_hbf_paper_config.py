@@ -240,6 +240,11 @@ def build_paper_hbm_config(configuration_id: str) -> DramConfig | None:
         "interface_bandwidth_gb_s": hardware.hbm_read_gb_s,
         "read_bandwidth_gb_s": hardware.hbm_read_gb_s,
         "write_bandwidth_gb_s": hardware.hbm_write_gb_s,
+        # The HBM4 reference leaves ACT-rate limits unmodeled. Borrow the
+        # HBM3E reference package (JESD238 Table 93 tRRD_S/L, section
+        # 6.3.2.2.1 tFAW) so ACT issue rate is bounded.
+        "activate_different_group_ns": 4., "activate_same_group_ns": 6.,
+        "four_activate_window_ns": 20.,
         "metadata": {
             "paper_id": PAPER_ID, "paper_configuration_id": configuration_id,
             "source_url": PAPER_URL, "source_device_geometry_known": False,
@@ -248,7 +253,9 @@ def build_paper_hbm_config(configuration_id: str) -> DramConfig | None:
             "research_assumptions": [
                 "16H x 32 Gbit covering standard reference organization; not the undisclosed Rubin vendor part",
                 "Table I aggregate bandwidth selected as a reference interface budget; vendor pin rate not disclosed",
-                "HBM4 catalog reference normal-operation timing; not a calibrated Rubin speed bin"],
+                "HBM4 catalog reference normal-operation timing; not a calibrated Rubin speed bin",
+                "tRRD_S 4 ns, tRRD_L 6 ns and tFAW 20 ns taken from the HBM3E reference package "
+                "(JESD238 Table 93 / section 6.3.2.2.1); HBM4 values are not published"],
             "paper_workload_reproduced": False, "target_hardware_calibrated": False}})
     return parse_execution_physical_config(asdict(config))
 

@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from heterollm_sim.dram_core import DramCore
+from heterollm_sim.memory_mapping import rotated_bank_step
 from heterollm_sim.memory_transfer import ResourceTimeline
 from heterollm_sim.memory_types import AccessRequest, DramConfig
 
@@ -32,7 +33,8 @@ def config(**overrides):
 
 def address(c, *, stack=0, channel=0, pc=0, bank=0, row=0, column=0):
     lane = (stack * c.channels + channel) * 2 + pc
-    return (((row * (c.row_bytes // c.burst_bytes) + column) * c.bank_count + bank)
+    step = rotated_bank_step(bank, c.bank_count, c.banks_per_group)
+    return (((row * (c.row_bytes // c.burst_bytes) + column) * c.bank_count + step)
             * c.lane_count + lane) * c.burst_bytes
 
 

@@ -7,7 +7,8 @@ from functools import lru_cache
 import math
 from typing import Dict, Iterable, Optional
 
-from .memory_mapping import map_dram_address, split_dram_request, validate_dram_request, dram_request_channels
+from .memory_mapping import (map_dram_address, rotated_bank, split_dram_request, validate_dram_request,
+                             dram_request_channels)
 from .memory_transfer import ResourceTimeline
 from .memory_types import AccessRequest, DramConfig, Operation, StageTiming, TransactionResult
 
@@ -72,8 +73,8 @@ def _mapping_cycle(lanes, banks, groups, banks_per_group,
     owned by the live core's _banks dictionary.
     """
     entries = []
-    for bank in range(banks):
-        rank, bank_in_rank = divmod(bank, groups * banks_per_group)
+    for step in range(banks):
+        rank, bank_in_rank = divmod(rotated_bank(step, banks, banks_per_group), groups * banks_per_group)
         group, bank_index = divmod(bank_in_rank, banks_per_group)
         for lane in range(lanes):
             physical_stack = lane // independent_stack_lanes if independent_stack_lanes else stack

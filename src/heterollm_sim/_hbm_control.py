@@ -2,6 +2,11 @@
 
 The supported subset is ACT/PREpb/PREab/RD/WR/REFab in pseudo-channel mode.
 Command occupancy, array eligibility and DQ transfer are separate quantities.
+Every command bus keeps one FIFO order fixed by the request's burst order.
+Within one request the controller looks ``row_lookahead_depth`` bursts of a
+channel ahead and precharges their conflicting rows in channel order, so a
+later bank's PRE/tRP overlaps the tRP of the burst being served while the
+row bus still issues commands in a timing-independent order.
 Configured maximum row-active deadlines also apply with refresh disabled.
 Training, auto-precharge and refresh postponement are not
 implemented. Timing values are supplied by DramConfig, with their provenance
@@ -15,6 +20,18 @@ from bisect import insort
 from .memory_mapping import split_dram_request
 from .memory_types import Operation, StageTiming, TransactionResult
 from ._hbm_clock import align_clock, clock_after
+
+
+def row_lookahead_depth(c):
+    """Later channel bursts whose conflicting rows are precharged early.
+
+    While PRE+ACT pairs fill the row bus, this many PREs cover one bank's
+    tRP. A depth below two bank sweeps of the channel never asks one bank
+    to serve two pending bursts of a contiguous request.
+    """
+    pair = (c.activate_command_cycles + c.precharge_command_cycles) * c.command_clock_ns
+    depth = math.ceil(max(c.precharge_to_activate_ns, c.precharge_command_cycles * c.command_clock_ns) / pair) + 1
+    return min(depth, 2 * c.bank_count - 1)
 
 
 class _Controller:
@@ -117,13 +134,18 @@ class _Controller:
         previous = self.pc(key)["last_precharge"]
         return max(earliest, self.after(previous, self.config.precharge_to_precharge_ns)) if previous is not None else earliest
 
-    def precharge(self, mapping, old, bank, earliest):
+    def precharge_start(self, mapping, bank, earliest):
         key = self._pc_key(mapping)
         ready = self.precharge_ready(key, max(earliest, bank["precharge_ready"], self.pc(key)["blocked_until"]))
         channel = self.channels.get(key[:2], {})
         if channel.get("last_activate_bank") == self.core._bank_id(mapping):
             ready = max(ready, self.after(channel["last_activate_start"], 2 * self.clock))
-        command = self.command(key, "row", ready, self.config.precharge_command_cycles, "PRECHARGE")
+        return self.align(max(ready, self.timeline.available_ns(self.bus_id(key, "row"))), self.row_step)
+
+    def precharge(self, mapping, old, bank, earliest):
+        key = self._pc_key(mapping)
+        command = self.command(key, "row", self.precharge_start(mapping, bank, earliest),
+                               self.config.precharge_command_cycles, "PRECHARGE")
         self.counts["precharge_commands"] += 1
         self.pc(key)["last_precharge"] = command.start_ns
         old.open_row = None
@@ -223,12 +245,7 @@ class _Controller:
         earliest = self.request.arrival_ns
         if old.open_row != row:
             if old.open_row is not None:
-                key = self._pc_key(mapping)
-                pre = self.align(max(self.precharge_ready(key, max(earliest, bank["precharge_ready"])),
-                                     self.timeline.available_ns(self.bus_id(key, "row"))), self.row_step)
-                channel = self.channels.get(key[:2], {})
-                if channel.get("last_activate_bank") == self.core._bank_id(mapping):
-                    pre = max(pre, self.after(channel["last_activate_start"], 2 * self.clock))
+                pre = self.precharge_start(mapping, bank, earliest)
                 earliest = self.after(pre, max(self.config.precharge_to_activate_ns,
                                      self.config.precharge_command_cycles * self.clock))
             anchor = self.after(self.activate_start(mapping, bank, max(earliest, activate_not_before)), self.clock)
@@ -427,19 +444,77 @@ class _Controller:
             self.stages.clear(); self.mappings.clear(); self.truncated = True
         return True
 
+    def maintain_before(self, mapping, horizon):
+        """Issue maintenance due before a command whose horizon is given."""
+        pending = self.maximum_active_pending(mapping, horizon)
+        if pending:
+            if self.config.refresh_policy == "all_bank" and self.next_refresh_due(mapping) <= pending[0][0]:
+                self.refresh_until(mapping, self.next_refresh_due(mapping))
+            else:
+                self.close_expiring_rows(pending)
+            return True
+        return False
+
+    def precharge_ahead(self, segments, order, position, target):
+        """Close a later burst's conflicting row before the served burst's ACT.
+
+        A bank that an earlier pending burst still needs keeps its PRE for
+        its own turn. Maintenance due before the PRE is issued first, just as
+        for an ordinary burst command.
+        """
+        mapping = segments[order[target]].mapping
+        rid = self.core._bank_id(mapping)
+        row = self.active_row(mapping)
+        old = self.core._banks.get(rid)
+        if old is None or old.open_row is None or old.open_row == row:
+            return False
+        if any(self.core._bank_id(segments[order[index]].mapping) == rid for index in range(position, target)):
+            return False
+        old, bank = self.bank(mapping)
+        for _ in range(2 * self.config.bank_count + 16):
+            start = self.precharge_start(mapping, bank, self.request.arrival_ns)
+            if self.maintain_before(mapping, start) or self.refresh_until(mapping, start):
+                if old.open_row is None or old.open_row == row:
+                    return False
+                continue
+            break
+        else:
+            raise ValueError("HBM timing inputs leave no row-command window between maintenance commands")
+        self.precharge(mapping, old, bank, self.request.arrival_ns)
+        return True
+
+    def active_row(self, mapping):
+        msb = self.config.activated_row_msb
+        return mapping.row if msb is None else mapping.row & ~(1 << msb)
+
     def execute(self):
         config, request = self.config, self.request
         completion = request.arrival_ns
         logical = physical = hits = misses = conflicts = count = 0
-        for segment in split_dram_request(request, config):
+        segments = list(split_dram_request(request, config))
+        orders, positions = {}, []
+        for index, segment in enumerate(segments):
+            order = orders.setdefault(self._pc_key(segment.mapping)[:2], [])
+            positions.append(len(order))
+            order.append(index)
+        decided, early = dict.fromkeys(orders, 0), set()
+        depth = row_lookahead_depth(config)
+        for index, segment in enumerate(segments):
             count += 1
             if count > config.max_expanded_segments and not self.truncated:
                 self.stages.clear(); self.mappings.clear(); self.truncated = True
             mapping = segment.mapping
+            channel_key = self._pc_key(mapping)[:2]
+            order, position = orders[channel_key], positions[index]
+            while decided[channel_key] < len(order) and decided[channel_key] <= position + depth:
+                target = decided[channel_key]
+                if self.precharge_ahead(segments, order, position, target):
+                    early.add(self.core._bank_id(segments[order[target]].mapping))
+                decided[channel_key] += 1
             if self.core.capture_details and not self.truncated:
                 self.mappings.append(mapping)
             old, bank = self.bank(mapping)
-            row = mapping.row if config.activated_row_msb is None else mapping.row & ~(1 << config.activated_row_msb)
+            row = self.active_row(mapping)
             activate_not_before = request.arrival_ns
             # Check the command's recovery horizon before issue, including
             # every open bank sharing this physical channel's row CA bus.
@@ -450,12 +525,7 @@ class _Controller:
                                 segment.transfer_bytes / config.effective_lane_bandwidth_gb_s),
                                 config.write_to_precharge_ns))
                 horizon = self.after(command_start, recovery)
-                pending = self.maximum_active_pending(mapping, horizon)
-                if pending:
-                    if config.refresh_policy == "all_bank" and self.next_refresh_due(mapping) <= pending[0][0]:
-                        self.refresh_until(mapping, self.next_refresh_due(mapping))
-                    else:
-                        self.close_expiring_rows(pending)
+                if self.maintain_before(mapping, horizon):
                     continue
                 if self.refresh_until(mapping, command_start):
                     continue
@@ -473,15 +543,21 @@ class _Controller:
                 break
             else:
                 raise ValueError("HBM timing inputs leave no column-command window between maintenance commands")
+            rid = self.core._bank_id(mapping)
             if old.open_row == row:
                 hits += 1
             else:
                 if old.open_row is None:
-                    misses += 1
+                    # A row precharged ahead for this burst was a conflict.
+                    if rid in early:
+                        conflicts += 1
+                    else:
+                        misses += 1
                 else:
                     conflicts += 1
                     self.precharge(mapping, old, bank, request.arrival_ns)
                 self.activate(mapping, old, bank, row, activate_not_before)
+            early.discard(rid)
             read = request.operation is Operation.READ
             command_start = self.column_start(mapping, bank["read_ready" if read else "write_ready"], request.arrival_ns)
             key = self._pc_key(mapping)

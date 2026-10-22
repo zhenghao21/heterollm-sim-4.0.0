@@ -22,6 +22,11 @@ def config(**changes):
     ), **changes)
 
 
+# The rotated mapping alternates groups: in the default 2x2 geometry address
+# 64 reaches bank 2 (group 1) and address 128 reaches bank 1 (group 0).
+SAME_GROUP, OTHER_GROUP = 128, 64
+
+
 def request(name, address, operation="read", *, arrival=0, byte_count=64):
     return AccessRequest(name, operation, address, byte_count, arrival_ns=arrival)
 
@@ -34,7 +39,7 @@ def stage_start(result, name="COMMAND_RESERVATION"):
 def test_column_spacing_retains_same_group_across_another_group(operation):
     core = DramCore(config(column_same_group_ns=10, column_different_group_ns=2))
     rows = core.submit_many(tuple(request(str(i), address, operation)
-                                  for i, address in enumerate((0, 128, 64))))
+                                  for i, address in enumerate((0, OTHER_GROUP, SAME_GROUP))))
     assert [stage_start(row) for row in rows] == [0, 2, 10]
     assert [row.completion_ns for row in rows] == [1, 3, 11]
     assert sum(core.timeline.busy_ns.values()) == 6  # 3 command + 3 data
@@ -43,8 +48,8 @@ def test_column_spacing_retains_same_group_across_another_group(operation):
 
 def test_column_histories_are_per_direction_and_survive_opposite_commands():
     core = DramCore(config(column_same_group_ns=50, column_different_group_ns=20))
-    rows = core.submit_many((request("readA", 0), request("writeB", 128, "write"),
-                             request("readA-again", 64)))
+    rows = core.submit_many((request("readA", 0), request("writeB", OTHER_GROUP, "write"),
+                             request("readA-again", SAME_GROUP)))
     assert [stage_start(row) for row in rows] == [0, 1, 50]
 
 
@@ -52,7 +57,7 @@ def test_regrouping_fixed_bank_count_changes_timing_only_when_constraints_enable
     def run(groups, banks, same_gap, different_gap):
         core = DramCore(config(bank_groups_per_rank=groups, banks_per_group=banks,
                                column_same_group_ns=same_gap, column_different_group_ns=different_gap))
-        rows = core.submit_many((request("bank0", 0), request("bank2", 128)))
+        rows = core.submit_many((request("bank0", 0), request("second-bank", 64)))
         return core, rows[-1].completion_ns
     disabled = [run(groups, banks, 0, 0) for groups, banks in ((1, 4), (2, 2))]
     enabled = [run(groups, banks, 10, 2) for groups, banks in ((1, 4), (2, 2))]
@@ -68,7 +73,7 @@ def test_regrouping_fixed_bank_count_changes_timing_only_when_constraints_enable
 def test_activation_spacing_retains_group_history_and_allows_act_overlap():
     core = DramCore(config(open_ns=3, activate_same_group_ns=10, activate_different_group_ns=2))
     rows = core.submit_many(tuple(request(str(i), address)
-                                  for i, address in enumerate((0, 128, 64))))
+                                  for i, address in enumerate((0, OTHER_GROUP, SAME_GROUP))))
     assert [stage_start(row, "ACTIVATE") for row in rows] == [0, 2, 10]
     assert [stage_start(row) for row in rows] == [3, 5, 13]
     assert sum(core.timeline.busy_ns.values()) == 15  # 9 ACT + 3 command + 3 data
@@ -83,7 +88,7 @@ def test_fifth_activation_obeys_sliding_four_activation_window():
     assert sum(core.timeline.busy_ns.values()) == 27
 
 
-@pytest.mark.parametrize("address,expected", [(0, 11), (64, 11), (128, 6)])
+@pytest.mark.parametrize("address,expected", [(0, 11), (SAME_GROUP, 11), (OTHER_GROUP, 6)])
 def test_write_to_read_gates_read_command_from_write_data_end(address, expected):
     core = DramCore(config(write_latency_ns=3, read_latency_ns=1,
                            write_to_read_same_group_ns=7, write_to_read_different_group_ns=2))
@@ -97,8 +102,8 @@ def test_write_to_read_gates_read_command_from_write_data_end(address, expected)
 def test_write_to_read_keeps_older_group_write_instead_of_only_latest_write():
     core = DramCore(config(write_latency_ns=5,
                            write_to_read_same_group_ns=20, write_to_read_different_group_ns=2))
-    rows = core.submit_many((request("writeA", 0, "write"), request("writeB", 128, "write"),
-                             request("readA", 64)))
+    rows = core.submit_many((request("writeA", 0, "write"), request("writeB", OTHER_GROUP, "write"),
+                             request("readA", SAME_GROUP)))
     assert [row.completion_ns for row in rows[:2]] == [6, 7]
     assert stage_start(rows[2]) == 26  # max(A-end 6 + 20, B-end 7 + 2)
 
@@ -107,7 +112,7 @@ def test_group_wait_and_data_bus_turnaround_take_max_without_double_billing():
     core = DramCore(config(write_latency_ns=3, read_latency_ns=1, write_to_read_ns=100,
                            write_to_read_same_group_ns=7))
     first = core.submit(request("writeA", 0, "write"))
-    second = core.submit(request("readA", 64))
+    second = core.submit(request("readA", SAME_GROUP))
     assert first.completion_ns == 4
     assert stage_start(second) == 11
     assert stage_start(second, "BURST_TRANSFER") == 104
@@ -129,7 +134,7 @@ def test_enabling_activation_gate_does_not_enable_zero_write_to_read_gate(gate):
 def test_zero_cross_group_wtr_is_disabled_even_when_same_group_wtr_is_active():
     core = DramCore(config(write_latency_ns=100, write_to_read_same_group_ns=20))
     core.submit(request("writeA", 0, "write"))
-    row = core.submit(request("readB", 128))
+    row = core.submit(request("readB", OTHER_GROUP))
     assert stage_start(row) == 1
     assert row.completion_ns == 102
 
@@ -159,8 +164,8 @@ def test_future_bank_reservation_and_reversed_arrivals_preserve_act_history():
     )
     core = DramCore(config(column_same_group_ns=10, column_different_group_ns=2,
                            four_activate_window_ns=25), timeline)
-    rows = core.submit_many((request("A", 0, arrival=1), request("B", 128, arrival=0),
-                             request("A2", 64, arrival=0)))
+    rows = core.submit_many((request("A", 0, arrival=1), request("B", OTHER_GROUP, arrival=0),
+                             request("A2", SAME_GROUP, arrival=0)))
     assert [stage_start(row, "ACTIVATE") for row in rows] == [100, 1, 1]
     assert [stage_start(row) for row in rows] == [100, 102, 110]
     assert rows[1].counters["queue_wait_ns"] == 1
@@ -173,7 +178,7 @@ def test_future_read_does_not_gate_independent_write_command():
     core = DramCore(config(write_latency_ns=100, write_to_read_same_group_ns=7),
                     ResourceTimeline(lane_available={"dram:command:0": [0., 0.]}))
     rows = core.submit_many((request("writeA", 0, "write"), request("readA", 0),
-                             request("writeB", 128, "write")))
+                             request("writeB", OTHER_GROUP, "write")))
     assert [stage_start(row) for row in rows] == [0, 108, 1]
     assert core._bank_group_state[(0, 0, 0, 0)]["column"] == {
         "read": {0: 108}, "write": {0: 0, 1: 1},
@@ -197,8 +202,8 @@ def test_write_history_retains_latest_data_end_when_actual_time_runs_backwards()
                     ResourceTimeline(lane_available={"dram:command:0": [0., 0., 0.],
                                                       "dram:data:0": [0., 0., 0.]}))
     core.timeline.reserve("dram:bank:0:0:0:0:0:0", 0, 100)
-    rows = core.submit_many((request("future-write", 0, "write"), request("earlier-write", 64, "write"),
-                             request("read", 64)))
+    rows = core.submit_many((request("future-write", 0, "write"),
+                             request("earlier-write", SAME_GROUP, "write"), request("read", SAME_GROUP)))
     assert [row.completion_ns for row in rows[:2]] == [101, 1]
     assert stage_start(rows[2]) == 108
     assert core._bank_group_state[(0, 0, 0, 0)]["write_end"][0] == 101
@@ -240,7 +245,8 @@ def test_group_histories_do_not_forget_future_starts_after_earlier_other_group()
                     ResourceTimeline(lane_available={"dram:command:0": [0., 0., 0.],
                                                       "dram:data:0": [0., 0., 0.]}))
     core.timeline.reserve("dram:bank:0:0:0:0:0:0", 0, 100)
-    rows = core.submit_many((request("A-future", 0), request("B-earlier", 128), request("A-again", 64)))
+    rows = core.submit_many((request("A-future", 0), request("B-earlier", OTHER_GROUP),
+                             request("A-again", SAME_GROUP)))
     assert [stage_start(row, "ACTIVATE") for row in rows] == [100, 0, 110]
     assert [stage_start(row) for row in rows] == [100, 0, 110]
 
@@ -293,5 +299,5 @@ def test_new_large_timing_is_included_in_atomic_overflow_guard():
     # The second bank's ACT is scheduled before its overflowing CAS gate.
     # Shadow prevalidation must keep both bank and group state unchanged.
     with pytest.raises(ValueError):
-        core.submit(request("overflow", 64))
+        core.submit(request("overflow", SAME_GROUP))
     assert core.__dict__ == before

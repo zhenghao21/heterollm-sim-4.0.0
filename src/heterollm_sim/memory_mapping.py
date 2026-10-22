@@ -15,6 +15,35 @@ def _check_address(address: int, capacity: int) -> None:
         raise ValueError(f"address {address} is outside modeled capacity {capacity}")
 
 
+def rotated_bank(step: int, bank_count: int, banks_per_group: int) -> int:
+    """Physical bank of the ``step``-th bank visited by an interleaved stream.
+
+    Consecutive steps alternate bank groups inside one 16-bank SID unit, so
+    back-to-back column commands of a stream are spaced by tCCD_S instead of
+    tCCD_L. A sweep of ``bank_count`` steps still visits every bank once.
+    Geometries without a 16-bank unit rotate across all groups.
+    """
+    unit = (16 if bank_count % 16 == 0 and banks_per_group < 16 and 16 % banks_per_group == 0
+            else bank_count)
+    groups = unit // banks_per_group if unit % banks_per_group == 0 else 1
+    if groups <= 1:
+        return step
+    base, offset = divmod(step, unit)
+    return base * unit + (offset % groups) * banks_per_group + offset // groups
+
+
+def rotated_bank_step(bank: int, bank_count: int, banks_per_group: int) -> int:
+    """Inverse of :func:`rotated_bank`: the stream step that visits ``bank``."""
+    unit = (16 if bank_count % 16 == 0 and banks_per_group < 16 and 16 % banks_per_group == 0
+            else bank_count)
+    groups = unit // banks_per_group if unit % banks_per_group == 0 else 1
+    if groups <= 1:
+        return bank
+    base, offset = divmod(bank, unit)
+    group, index = divmod(offset, banks_per_group)
+    return base * unit + index * groups + group
+
+
 def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
     """Map a byte address to a DRAM lane, bank, row and column."""
     if not isinstance(config, DramConfig):
@@ -40,7 +69,7 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
         )
         lane = interleave_block % config.lane_count
         bank_linear = interleave_block // config.lane_count
-        bank = bank_linear % config.bank_count
+        bank = rotated_bank(bank_linear % config.bank_count, config.bank_count, config.banks_per_group)
         bank_local = bank_linear // config.bank_count
         row_column = bank_local * interleave_bursts + inner_burst
         column = row_column % bursts_per_row

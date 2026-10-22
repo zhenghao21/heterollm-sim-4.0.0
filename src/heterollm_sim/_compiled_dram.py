@@ -7,6 +7,7 @@ from weakref import WeakKeyDictionary
 
 import numpy as np
 
+from .memory_mapping import rotated_bank
 from .memory_types import Operation, TransactionResult
 
 _INT64_MAX = (1 << 63) - 1
@@ -42,14 +43,14 @@ def _numeric_inputs(geometry, durations):
 
 
 @lru_cache(maxsize=4096)
-def _short_resource_indexes(first, stop, lanes, banks, inner, row_bursts, rows_per_bank,
-                            total_banks, shared):
+def _short_resource_indexes(first, stop, lanes, banks, banks_per_group, inner, row_bursts,
+                            rows_per_bank, total_banks, shared):
     selected = set()
     row_span = lanes * banks * row_bursts
     for stripe in range(first // inner, (stop - 1) // inner + 1):
         cursor = max(first, stripe * inner)
         slot = stripe % (lanes * banks)
-        lane, bank = slot % lanes, slot // lanes
+        lane, bank = slot % lanes, rotated_bank(slot // lanes, banks, banks_per_group)
         unit = cursor // row_span // rows_per_bank
         selected.add(unit * lanes * banks + lane * banks + bank)
         selected.add(total_banks + (0 if shared else lane))
@@ -149,7 +150,8 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
     read = request.operation is Operation.READ
     geometry, durations, finite_durations = _numeric_inputs(
         (lanes, banks, (config.interleave_bytes or burst) // burst,
-         config.row_bytes // burst, config.rows_per_bank, config.addressable_die_count), (
+         config.row_bytes // burst, config.rows_per_bank, config.addressable_die_count,
+         config.banks_per_group), (
         burst, config.burst_interval_ns, burst / config.directional_lane_bandwidth_gb_s(request.operation),
         config.read_latency_ns if read else config.write_latency_ns,
         config.read_recovery_ns if read else config.write_recovery_ns,
@@ -168,7 +170,7 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
         # A Decode HOST append often touches four bursts out of dozens of
         # banks. Pack only its actual banks and shared command/data lanes;
         # the unchanged kernel never reads or commits the other entries.
-        indexes = _short_resource_indexes(first, stop, lanes, banks,
+        indexes = _short_resource_indexes(first, stop, lanes, banks, config.banks_per_group,
             (config.interleave_bytes or burst) // burst, config.row_bytes // burst,
             config.rows_per_bank, total_banks, bool(shared))
     live_slots = set()
@@ -388,7 +390,8 @@ def execute_compiled_many(core, requests):
         return None
     read = request.operation is Operation.READ
     geometry = np.array([lanes, banks, (config.interleave_bytes or burst) // burst,
-                         config.row_bytes // burst, config.rows_per_bank, config.addressable_die_count], dtype=np.int64)
+                         config.row_bytes // burst, config.rows_per_bank, config.addressable_die_count,
+                         config.banks_per_group], dtype=np.int64)
     durations = np.array([
         burst, config.burst_interval_ns, burst / config.directional_lane_bandwidth_gb_s(request.operation),
         config.read_latency_ns if read else config.write_latency_ns,

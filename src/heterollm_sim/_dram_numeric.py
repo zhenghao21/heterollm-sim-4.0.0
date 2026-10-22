@@ -124,6 +124,17 @@ def _repeat_add(value, increment, count):
     return value
 
 
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
+def rotated_bank(step, banks, per_group):
+    """memory_mapping.rotated_bank: alternate groups inside a 16-bank SID."""
+    unit = 16 if banks % 16 == 0 and per_group < 16 and 16 % per_group == 0 else banks
+    groups = unit // per_group if unit % per_group == 0 else 1
+    if groups <= 1:
+        return step
+    offset = step % unit
+    return step - offset + (offset % groups) * per_group + offset // groups
+
+
 @njit(cache=True, nogil=True, fastmath=False)
 def _reserve(rid, earliest, duration, byte_count, direction, rtw, wtr,
              calendar, busy, moved, directions, last_start, last_end, touched):
@@ -157,7 +168,7 @@ def _burst_range(cursor, target, row, unit, arrival, read, geometry, durations,
     hits = misses = conflicts = 0
     while cursor < target:
         slot = (cursor % period) // inner
-        lane, bank = slot % lanes, slot // lanes
+        lane, bank = slot % lanes, rotated_bank(slot // lanes, banks, geometry[6])
         bank_id = (unit * lanes + lane) * banks + bank
         banktouched[bank_id] = True
         dependency = max(arrival, bankactivation[bank_id])
@@ -196,7 +207,7 @@ def run_numeric(first, stop, arrival, read, geometry, durations, shared,
                 directions, last_start, last_end, touched):
     # Independent stack interfaces are already flattened into ``lanes``;
     # ``unit`` below spans only the remaining addressable array dimensions.
-    lanes, banks, inner, bursts_per_row, rows_per_bank, addressable_dies = geometry
+    lanes, banks, inner, bursts_per_row, rows_per_bank = geometry[0], geometry[1], geometry[2], geometry[3], geometry[4]
     period = lanes * banks * inner
     row_span = lanes * banks * bursts_per_row
     total_banks = len(bankrows)

@@ -18,9 +18,9 @@ def _seed_open_row_without_control_mapping(core):
 
 
 @pytest.mark.parametrize("deadline,completion,activates,precharges,hits,misses", [
-    (40., 10605., 2047, 2044, 1, 2047),
-    (100., 9925., 2047, 2038, 1, 2047),
-    (200., 5557., 1023, 990, 1025, 1023),
+    (40., 8907., 2047, 2040, 1, 2047),
+    (100., 8407., 2047, 2021, 1, 2047),
+    (200., 5125., 1023, 960, 1025, 1023),
 ])
 def test_open_row_mapping_is_included_at_original_next_activate_scan(
     deadline, completion, activates, precharges, hits, misses,
@@ -64,7 +64,7 @@ def test_restoring_mapping_gap_repeats_the_same_deadline_behavior():
     request = AccessRequest("read", "read", 0, 2048 * 32)
     expected = execute_hbm_numeric(core, request)
     assert expected is not None
-    assert expected.completion_ns == 10605.
+    assert expected.completion_ns == 8907.
     expected_core = copy.deepcopy(core)
     for _ in range(2):
         runtime.restore(saved)
