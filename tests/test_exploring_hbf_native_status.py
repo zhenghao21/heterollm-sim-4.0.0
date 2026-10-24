@@ -195,7 +195,8 @@ def test_online_layer_result_keeps_bounds_without_repeating_physical_ledgers(tmp
     selected["native_window_forecast"] = {"sampling_unit": "layer_windows",
         "metric_bounds": {"mean_complete_request_tpot_ns": {"lower": 10., "upper": 11.}},
         "error_budget": {"large_ledger": ["resource"] * 10000}}
-    selected["physical_layer_samples"] = [{"executed_task_count": 99}]
+    selected["physical_layer_summary"] = {"completed_windows": 1, "executed_tasks": 99,
+        "complete_cohorts": 0, "visible_output_tokens": 0}
     selected["approximation"] = {"physical_ingress_accounting": {"large_ledger": ["resource"] * 10000}}
     write(tmp_path / "results.json", {"cases": [row]})
     snapshot = report.build_snapshot(tmp_path)

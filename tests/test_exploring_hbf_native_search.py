@@ -14,9 +14,10 @@ TP8 = {"dp": 1, "tp": 8, "pp": 1, "ep": 1}
 DP2_TP4 = {"dp": 2, "tp": 4, "pp": 1, "ep": 1}
 
 
-def entry(layout=TP8, candidate=1555, line=(11.4e6, .0448e6)):
+def entry(layout=TP8, candidate=1555, line=(11.4e6, .0448e6), capacity=None):
     return {"layout": layout, "quantum": layout["ep"], "bypass": {"candidate_batch": candidate,
-            "capacity_max_batch": candidate, "tpot_ns": 81e6, "per_gpu_tokens_s": 2399., "tpot_line_ns": line}}
+            "capacity_max_batch": capacity or candidate, "tpot_ns": 81e6, "per_gpu_tokens_s": 2399.,
+            "tpot_line_ns": line}}
 
 
 def linear(batch):
@@ -24,31 +25,37 @@ def linear(batch):
     return (7.1 + .1017 * batch) * 1e6
 
 
-def fake_row(batch, tpot, wall, gpus=8):
+def fake_row(batch, tpot, wall, gpus=8, factor=1, peak=None):
     estimate = tpot(batch)
     upper = estimate * 1.002
-    return {"status": "completed" if upper <= SLO else "slo_rejected", "wall_seconds": wall(batch),
+    return {"status": "completed" if upper <= SLO else "slo_rejected", "wall_seconds": wall(batch) * factor,
+            "wall_factor": factor, "peak_memory_bytes": peak and peak(batch),
             "diagnostics": {"metric_bounds": {"mean_complete_request_tpot_ns": {
                 "lower": estimate * .998, "estimate": estimate, "upper": upper}}},
             "metrics": {"tokens_per_second_per_gpu": batch * 1e9 / (estimate * gpus)} if upper <= SLO else None}
 
 
-def native(tpot, wall, too_big=lambda batch: None, gpus=8):
-    """A fake native layout whose saved rows appear as the search runs them."""
+def native(tpot, wall, too_big=lambda batch: None, gpus=8, factor=1, peak=None, capacity=None):
+    """A fake native layout whose saved rows appear as the search runs them.
+
+    A rejected row reports ``capacity`` as its native capacity batch.
+    """
     rows = {}
 
     def execute(batch):
         rejected = too_big(batch)
-        rows[batch] = ({"status": rejected[0], "rejection_reason": rejected[1], "wall_seconds": 1.} if rejected
-                       else fake_row(batch, tpot, wall, gpus))
+        rows[batch] = ({"status": rejected[0], "rejection_reason": rejected[1], "wall_seconds": 1.,
+                        "native_capacity_max_batch": capacity} if rejected
+                       else fake_row(batch, tpot, wall, gpus, factor, peak))
     return rows, execute
 
 
-def drive(entries, layouts, cap=1800.):
+def drive(entries, layouts, cap=1800., memory=None):
     runs = []
     while True:
         plan = search.plan_case(entries, [rows.get for rows, _ in layouts], SLO, cap,
-                                [entry["layout"]["tp"] * entry["layout"]["ep"] for entry in entries])
+                                [entry["layout"]["tp"] * entry["layout"]["ep"] for entry in entries],
+                                memory_budget_bytes=memory)
         if not plan["next"]:
             return plan, runs
         for layout, batch in plan["next"]:
@@ -64,7 +71,7 @@ def selected(plan, layouts):
 
 
 def test_two_points_bracket_the_slo_and_one_acceptance_settles_the_best_layout():
-    entries = [entry(), entry(DP2_TP4, candidate=353, line=(19.2e6, .0592e6))]
+    entries = [entry(), entry(DP2_TP4, candidate=353, line=(19.2e6, .0592e6), capacity=700)]
     layouts = [native(linear, lambda b: 1.5 * b), native(lambda b: (12 + .2 * b) * 1e6, lambda b: 2. * b, gpus=4)]
     plan, runs = drive(entries, layouts)
     first = plan["layouts"][0]
@@ -115,6 +122,48 @@ def test_capacity_rejection_bisects_below_the_rejected_batch():
     batches = [batch for _index, batch in runs]
     assert batches[0] == 512 and batches[1] > 900 and 512 < batches[2] < batches[1]
     assert plan["layouts"][0]["outcome"]["kind"] == "limited"
+
+
+def test_bypass_capacity_bounds_points_until_a_native_point_reaches_it():
+    full = ("forecast_rejected", "native_stationary_first_cohort_not_a_full_batch")
+    layouts = [native(lambda b: (12 + .2 * b) * 1e6, lambda b: 2. * b, too_big=lambda b: full if b > 353 else None,
+                      gpus=4)]
+    plan, runs = drive([entry(DP2_TP4, candidate=353, line=(19.2e6, .0592e6))], layouts)
+    # 100 ms lies near B=440: the second point stops at the bypass capacity;
+    # past it rejections without a reported native capacity bisect below themselves.
+    assert [batch for _index, batch in runs] == [176, 353, 439, 396]
+    assert plan["layouts"][0]["outcome"] == {"kind": "limited", "reason": "native_capacity_limited", "batch": 353}
+    assert search.search_result(plan, 353, DP2_TP4) == "native_capacity_limited"
+
+
+def test_a_kv_capacity_rejection_sends_the_next_point_to_the_native_capacity():
+    full = ("forecast_rejected", "native_stationary_first_cohort_not_a_full_batch")
+    layouts = [native(lambda b: (12 + .2 * b) * 1e6, lambda b: 2. * b, too_big=lambda b: full if b > 330 else None,
+                      gpus=4, capacity=330)]
+    plan, runs = drive([entry(DP2_TP4, candidate=353, line=(19.2e6, .0592e6))], layouts)
+    # No bisection: the rejection at the bypass capacity names the native one.
+    assert [batch for _index, batch in runs] == [176, 353, 330]
+    assert plan["layouts"][0]["outcome"] == {"kind": "limited", "reason": "native_capacity_limited", "batch": 330}
+    # A too-big first point jumps there too instead of halving.
+    layouts = [native(linear, lambda b: 1.5 * b, too_big=lambda b: full if b > 300 else None, capacity=300)]
+    plan, runs = drive([entry()], layouts)
+    assert [batch for _index, batch in runs] == [512, 300]
+    assert plan["layouts"][0]["outcome"] == {"kind": "limited", "reason": "native_capacity_limited", "batch": 300}
+
+
+def test_measured_wall_projects_as_measured_and_memory_bounds_the_batch():
+    # A point slowed by concurrent workers projects its wall as measured: the
+    # k-fold cap it ran under does not stretch the projection.
+    shared = native(linear, lambda b: 1.5 * b, factor=2)
+    plan, runs = drive([entry()], [shared])
+    assert [batch for _index, batch in runs] == [512]
+    assert plan["layouts"][0]["outcome"] == {"kind": "limited", "reason": "native_wall_limited", "batch": 512}
+    assert [batch for _index, batch in drive([entry()], [native(linear, lambda b: 1.5 * b)])[1]] == [512, 1038, 911]
+    # A peak of 100 MiB per request in a 64 GiB budget stops near B=655.
+    layouts = [native(linear, lambda b: .5 * b, peak=lambda b: b * 100 * 2**20)]
+    plan, runs = drive([entry()], layouts, memory=64 * 2**30)
+    assert all(batch <= 655 for _index, batch in runs)
+    assert plan["layouts"][0]["outcome"]["reason"] == "native_memory_limited"
 
 
 def test_a_failed_acceptance_falls_back_to_the_best_measured_passing_point():

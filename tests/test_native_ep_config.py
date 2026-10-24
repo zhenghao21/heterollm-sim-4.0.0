@@ -7,7 +7,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts"), str(ROOT / "tests")]
 from exploring_hbf_native_config import (
-    build_native_comparison_scenario, native_import_pool, validate_native_layout,
+    build_native_comparison_scenario, native_capacity_batch, native_import_pool, validate_native_layout,
 )
 from exploring_hbf_native_models import build_native_paper_model
 from exploring_hbf_paper_config import hardware_by_id
@@ -109,6 +109,15 @@ def test_import_pool_is_per_ep_group_and_uses_the_group_batch_for_the_slot_count
         assert call(8 * ep, 2, 1, ep) % ep == 0
     with pytest.raises(ValueError, match="divisible by ep"):
         call(6, 8, 1, 4)
+
+
+def test_capacity_batch_fits_seeds_and_the_pool_in_the_requests_a_group_held():
+    layers, hbf = layers_of("llama4_maverick"), hardware_by_id("HBF")
+    pool = lambda batch: native_import_pool(layers, 103500, 1100, batch, 8, 1, 2, hbf)
+    batch = native_capacity_batch(1000, 2400, pool(2400), 1100, 2)
+    # Each group holds its B/ep seeds plus its pool share, and one more pair would not fit.
+    assert batch == 1996 and batch // 2 + pool(batch) // 2 <= 1000 < (batch + 2) // 2 + pool(batch + 2) // 2
+    assert native_capacity_batch(2, 2400, pool(2400), 1100, 2) == 0
 
 
 def test_built_pool_matches_the_helper_for_the_scenario_it_describes():

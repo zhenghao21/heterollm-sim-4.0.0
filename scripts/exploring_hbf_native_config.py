@@ -70,6 +70,23 @@ def native_import_pool(layers, prompt, output, batch_size, tp, pp, ep, published
     return ep * math.ceil(batch_size // ep / output) * (1 + math.ceil(4 * seconds / slo_tpot_s))
 
 
+def native_capacity_batch(requests_per_group, batch_size, pool, output, ep):
+    """Largest per-replica batch whose seeds and import pool fit the KV a group held.
+
+    Every seed and every prepared import reserves the same max-live KV
+    (prompt + output - 1 tokens), so a group that held ``requests_per_group``
+    when KV refused one more fits B/ep seeds plus its pool share. The pool's
+    depth per freed slot is read off ``pool``, sized by ``native_import_pool``
+    for ``batch_size``; it does not depend on the batch. Returns 0 if not
+    even one request per group fits.
+    """
+    depth = pool // (ep * math.ceil(batch_size // ep / output))
+    group = requests_per_group
+    while group > 0 and group + math.ceil(group / output) * depth > requests_per_group:
+        group -= 1
+    return group * ep
+
+
 def validate_native_layout(layers, batch_size, ep):
     """Reject an EP degree the model or batch cannot be split by.
 

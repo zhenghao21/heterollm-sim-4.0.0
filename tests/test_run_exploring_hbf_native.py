@@ -202,7 +202,7 @@ def test_fast_runner_contract_keeps_the_budget_and_sample_scope():
     params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
     assert params["runner_contract"] == run.FAST_CONTRACT != run.CONTRACT
     assert params["target_relative_error"] == .1
-    assert params["candidate_wall_budget_seconds"] == 1800.
+    assert params["candidate_wall_budget_seconds_per_worker"] == 1800.
     value = replace(_fast_result(), layer_window_samples=(layer_sample(),))
     row = run.native_fast_result(value, params)
     assert row["status"] == "completed" and row["sampled_tokens"] == 0
@@ -658,13 +658,13 @@ def test_placement_capacity_diagnostics_are_capacity_rejections_but_other_placem
 def test_each_candidate_gets_its_own_worker_command_that_main_parses_back(tmp_path, monkeypatch):
     case = run.case_matrix()[-1]
     layout = run.make_layout(2, 2, 1, 2)
-    command = run.candidate_command(case, layout, 4, tmp_path, "fast")
+    command = run.candidate_command(case, layout, 4, tmp_path, "fast", 3)
     assert Path(command[1]).name == "run_exploring_hbf_native.py"
     assert command[command.index("--layout") + 1:command.index("--layout") + 5] == ["2", "2", "1", "2"]
     seen = []
     monkeypatch.setattr(run, "worker_candidate", lambda *args: seen.append(args) or 0)
     assert run.main(command[2:]) == 0
-    assert seen == [(case, layout, 4, tmp_path, "fast")]
+    assert seen == [(case, layout, 4, tmp_path, "fast", 3)]
 
 
 def test_manager_spawns_one_process_per_candidate_and_writes_the_per_gpu_selection(tmp_path, monkeypatch):
@@ -726,3 +726,93 @@ def test_fast_forecast_is_scaled_from_one_replica_to_the_cluster():
     assert scaled["mean_complete_request_tpot_ns"] == bounds["mean_complete_request_tpot_ns"]
     assert row["replica_scaling"]["dp"] == 2 and row["replica_scaling"]["gpus_per_replica"] == 4
     assert row["native_window_forecast"]["metrics"]["cluster_tokens_per_second"] == 80.
+
+
+def test_fast_wall_caps_scale_with_the_concurrency_a_candidate_starts_under(tmp_path, monkeypatch):
+    import heterollm_sim.execution_control as execution_control
+    clock = [0.]
+    monkeypatch.setattr(run.time, "perf_counter", lambda: clock[0])
+    monkeypatch.setattr(execution_control, "perf_counter", lambda: clock[0])
+    value = _fast_result()
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
+    seen = []
+    def runner(scenario, **options):
+        seen.append((options["control"].deadline_monotonic, scenario.simulation.native_window.max_wall_seconds))
+        clock[0] = 1801.
+        return value
+    row = run.execute_candidate(params, tmp_path, NS(report=lambda p: None), builder=lambda *a, **kw: value.scenario,
+                                runner=runner, prefill=lambda *a: REJECTED_PREFILL, wall_factor=3)
+    # Past one worker's 1800 s, inside three workers' 5400 s.
+    assert seen == [(5400., 5400.)]
+    assert row["status"] == "completed" and row["wall_factor"] == 3 and row["candidate_wall_budget_seconds"] == 5400.
+
+
+def _job(directory, identity, *, factor, peak, working_set=None):
+    if working_set is not None:
+        run.write_json(directory / "progress" / (identity + ".json"),
+                       {"candidate_id": identity, "working_set_bytes": working_set})
+    return {"process": NS(pid=1), "factor": factor, "peak": peak}
+
+
+def test_admission_fills_predicted_memory_and_never_raises_concurrency_above_a_running_cap(tmp_path, monkeypatch):
+    GiB = 2**30
+    case = run.case_matrix()[0]
+    queue = [(case, LAYOUT, batch) for batch in (100, 101, 102, 103)]
+    monkeypatch.setattr(run, "available_memory_bytes", lambda: 8 * GiB + 40 * GiB)
+    # Without measured peaks each candidate counts DEFAULT_CANDIDATE_PEAK_BYTES (16 GiB).
+    chosen, factor = run.admit(queue, {}, [], 32, tmp_path)
+    assert [item for item, _peak in chosen] == queue[:2] and factor == 2
+    # Nothing running: one candidate always starts, however large.
+    monkeypatch.setattr(run, "available_memory_bytes", lambda: 0)
+    assert run.admit(queue, {}, [], 32, tmp_path) == ([(queue[0], 16 * GiB)], 1)
+    # A running candidate's remaining predicted growth is reserved; what it
+    # already uses is already missing from the available memory.
+    monkeypatch.setattr(run, "available_memory_bytes", lambda: 8 * GiB + 20 * GiB)
+    known = [(run.parameters(case, LAYOUT, 100, "fast"), 4 * GiB)]
+    active = {"a": _job(tmp_path, "a", factor=4, peak=10 * GiB, working_set=8 * GiB)}
+    chosen, factor = run.admit(queue, active, known, 32, tmp_path)
+    assert len(chosen) == 3 and factor == 4
+    active["b"] = _job(tmp_path, "b", factor=2, peak=1)
+    assert run.admit(queue, active, known, 32, tmp_path) == ([], 2)
+    assert run.admit(queue, {"a": active["a"]}, known, 1, tmp_path) == ([], 1)
+
+
+def test_peak_prediction_prefers_the_same_layout_and_is_linear_in_the_batch():
+    GiB = 2**30
+    case, other = run.case_matrix()[0], run.make_layout(2, 4, 1, 1)
+    known = [(run.parameters(case, LAYOUT, 100, "fast"), 6 * GiB), (run.parameters(case, LAYOUT, 300, "fast"), 8 * GiB),
+             (run.parameters(case, other, 100, "fast"), 3 * GiB)]
+    assert run.predicted_peak_bytes(known, case, LAYOUT, 500) == pytest.approx(10 * GiB)
+    assert run.predicted_peak_bytes(known, case, LAYOUT, 1) == 6 * GiB - .99 * GiB
+    assert run.predicted_peak_bytes(known[2:], case, other, 200) == 6 * GiB
+    foreign = run.case_matrix()[-1]
+    assert run.predicted_peak_bytes(known, foreign, LAYOUT, 1) == run.DEFAULT_CANDIDATE_PEAK_BYTES
+
+
+def test_summary_rows_drop_the_physical_ledgers_and_follow_newer_full_rows(tmp_path):
+    import os
+    row = {**candidate(run.case_matrix()[0]), "physical_layer_samples": [{"executed_task_count": 7}] * 2,
+           "physical_boundary_accounting": {"ledger": [1] * 100},
+           "approximation": {"metric_bounds": {"x": 1}, "physical_boundary_accounting": {"ledger": [1]}}}
+    run.save_candidate(tmp_path, row)
+    summary = run.read_candidate(tmp_path, row["candidate_id"])
+    assert "physical_layer_samples" not in summary and "physical_boundary_accounting" not in summary
+    assert summary["approximation"] == {"metric_bounds": {"x": 1}}
+    assert summary["physical_layer_summary"] == {"completed_windows": 2, "executed_tasks": 14,
+                                                 "complete_cohorts": 0, "visible_output_tokens": 0}
+    full = tmp_path / "candidates" / (row["candidate_id"] + ".json")
+    run.write_json(full, {**row, "status": "failed"})
+    stamp = (tmp_path / "summaries" / full.name).stat().st_mtime_ns
+    os.utime(full, ns=(stamp + 10**9, stamp + 10**9))
+    assert run.read_candidate(tmp_path, row["candidate_id"])["status"] == "failed"
+    assert run.read_candidate(tmp_path, "missing") is None
+
+
+def test_capacity_rejection_records_the_largest_batch_the_native_kv_holds():
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 353, "fast")
+    scenario = NS(workload=NS(metadata={"external_kv_ingress": {"max_inflight_requests": 2}}))
+    held = lambda counts: {"approximation": {"kv_requests_held_by_group": counts}}
+    # 405B SHORT: 373 outputs, two pool requests per freed slot: 338 seeds + 2 imports fill 340.
+    assert run.native_capacity_max_batch(held([340]), params, scenario) == 338
+    assert run.native_capacity_max_batch({"approximation": {}}, params, scenario) is None
+    assert run.native_capacity_max_batch(held([400]), params, scenario) is None

@@ -143,6 +143,15 @@ def test_each_group_needs_its_own_prepared_imports(monkeypatch):
     assert sum(prepared["import_pool_occupancy_by_group"]) >= 4
 
 
+def test_kv_requests_held_count_first_cohort_seeds_and_prepared_imports_per_group(monkeypatch):
+    runtime, prepared, _options, _ages = _evaluate_fixture(monkeypatch, degree=2)
+    runtime.states = {f"seed{index}": SimpleNamespace(ep_group=index % 2) for index in range(8)}
+    del prepared["context"]["seed3"]
+    prepared["import_pool_occupancy_by_group"] = [2, 0]
+    assert stationary.kv_requests_held(runtime, prepared) == [6, 3]
+    assert stationary.admission_reasons(runtime, prepared) == ["native_stationary_first_cohort_not_a_full_batch"]
+
+
 def test_a_seed_outside_the_first_cohort_groups_is_rejected(monkeypatch):
     runtime, prepared, options, _ages = _evaluate_fixture(monkeypatch, degree=2)
     del prepared["ep_groups"]["group_of"]["seed3"]

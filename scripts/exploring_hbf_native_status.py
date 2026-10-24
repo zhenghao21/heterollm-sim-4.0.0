@@ -111,16 +111,13 @@ def _dashboard_case(point: dict[str, Any]) -> dict[str, Any]:
         return point
     forecast = selected["native_window_forecast"]
     keep = ("status", "backend", "runner_contract", "parameters", "candidate_id", "metrics",
-            "started_at", "finished_at", "wall_seconds", "forecast_tokens", "sampled_tokens", "fidelity")
+            "started_at", "finished_at", "wall_seconds", "forecast_tokens", "sampled_tokens", "fidelity",
+            "physical_layer_summary")
     brief = {key: selected[key] for key in keep if key in selected}
     brief["native_window_forecast"] = {key: forecast[key] for key in (
         "schema", "sampling_unit", "cutoff_ns", "sampled_decode_cohorts", "predicted_decode_cohorts",
         "sampled_visible_output_tokens", "predicted_visible_output_tokens", "original_window", "measurement_window", "metrics",
         "metric_bounds") if key in forecast}
-    samples = selected.get("physical_layer_samples", ())
-    brief["physical_layer_summary"] = {"completed_windows": len(samples),
-        "executed_tasks": sum(row.get("executed_task_count", 0) for row in samples),
-        "complete_cohorts": 0, "visible_output_tokens": 0}
     return {**point, "selected": brief}
 
 
@@ -277,12 +274,12 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         if point.get("status"):
             point_states[point["status"]] += 1
     candidate_states = Counter()
-    for path in (directory / "candidates").glob("*.json"):
+    for path in (directory / "summaries").glob("*.json"):
         candidate = _read(path, warnings)
         if candidate.get("status"):
             candidate_states[candidate["status"]] += 1
     fast = manifest.get("simulation_mode") == "fast"
-    notes = ["本轮仅使用原生后端，按9＋6＋15顺序执行；每个候选（布局＋批量）在独立子进程中运行，最多两个并行。",
+    notes = ["本轮仅使用原生后端，按9＋6＋15顺序执行；每个候选（布局＋批量）在独立子进程中运行，按预测峰值内存自动增开并行，k个并行时单候选壁钟上限放宽为k倍。",
         "每组在有限的(DP, TP, PP, EP)布局和每副本批量候选中，选择通过约束者里单GPU吞吐最高的一项，不代表全局最优。DP副本互相独立，只仿真一个副本，集群吞吐为单GPU吞吐乘GPU总数。快速预测与完整物理结果分别标记。",
         "比值方向固定为当前存储/HBM4；只比较同模型、同负载、同GPU数、精度及采样合同的已完成结果，各存储取各自选中的布局与批量。",
         "当前cohort的completed/total是任务数，不是Token数、请求数或整轮完成百分比。累计Token与批次数独立记录，仅在原生提交完成后增加。",

@@ -50,15 +50,19 @@ PHASES = ("dense_native", "dense_plus", "maverick_native")
 TERMINAL = {"completed", "capacity_rejected", "slo_rejected", "all_candidates_rejected", "failed"}
 CANDIDATE_TERMINAL = {"completed", "capacity_rejected", "slo_rejected", "forecast_rejected", "failed"}
 SLO_NS = 100_000_000.
+# Wall caps per concurrent worker: a candidate started while k workers run
+# (itself included) gets k times them, as concurrent workers share the machine.
 FAST_CANDIDATE_WALL_TARGET_SECONDS = 600.
 FAST_CANDIDATE_WALL_BUDGET_SECONDS = 1800.
-# Wall cap of one sampled Prefill pass per model, prompt and layout, outside
-# every candidate cap; the detailed full pass has none.
+# One sampled Prefill pass per model, prompt and layout, outside every
+# candidate cap; the detailed full pass has none.
 PREFILL_WALL_BUDGET_SECONDS = 1800.
 MAX_WORKERS = os.cpu_count() or 1
-# A further worker starts only while this much physical memory is free; a
-# 405B candidate peaks near 7 GiB while it copies native kernels.
-WORKER_MEMORY_RESERVE_BYTES = 24*1024**3
+# Physical memory kept free beside the predicted peaks of the running and the
+# next candidate; a candidate without a measured peak of its model is
+# predicted at DEFAULT_CANDIDATE_PEAK_BYTES.
+WORKER_MEMORY_RESERVE_BYTES = 8*1024**3
+DEFAULT_CANDIDATE_PEAK_BYTES = 16*1024**3
 STATUS_LABELS = {"pending": "等待", "running": "运行中", "completed": "完成",
     "completed_with_rejections": "结束（含拒绝）", "all_candidates_rejected": "候选均被拒绝",
     "capacity_rejected": "容量拒绝", "slo_rejected": "TPOT约束拒绝", "forecast_rejected": "预测预算拒绝", "paused": "暂停", "failed": "失败"}
@@ -74,6 +78,7 @@ import exploring_hbf_native_search as search_plan
 SEARCH_TOP_LAYOUTS = search_plan.TOP_LAYOUTS
 SEARCH_LABELS = {"slo_accepted": "插值到100ms并通过验收", "acceptance_failed_fallback": "验收未过，退回已测通过点",
     "native_wall_limited": "受仿真开销限制，未到100ms", "native_capacity_limited": "受原生容量限制，未到100ms",
+    "native_memory_limited": "受仿真内存限制，未到100ms",
     "points_exhausted": "批量点用尽，未到100ms", "best_measured_point": "已测最佳通过点"}
 
 
@@ -235,8 +240,9 @@ def runner_contract(mode):
 def parameters(case, layout, batch, mode="detailed"):
     check_layout(case, layout)
     return {**case, **layout, "batch_size": batch, "runner_contract": runner_contract(mode),
-            **({"simulation_mode": "fast", "candidate_wall_budget_seconds": FAST_CANDIDATE_WALL_BUDGET_SECONDS,
-                "candidate_wall_target_seconds": FAST_CANDIDATE_WALL_TARGET_SECONDS,
+            **({"simulation_mode": "fast",
+                "candidate_wall_budget_seconds_per_worker": FAST_CANDIDATE_WALL_BUDGET_SECONDS,
+                "candidate_wall_target_seconds_per_worker": FAST_CANDIDATE_WALL_TARGET_SECONDS,
                 "target_relative_error": .10} if mode == "fast" else {}),
             "warmup_decode_cohorts": case["output_tokens"] - 1,
             "measurement_decode_cohorts": 2 * (case["output_tokens"] - 1),
@@ -343,7 +349,8 @@ class ProgressWriter:
         phases = dict(self.phase_seconds)
         phase = self.state.get("stage", "starting")
         phases[phase] = phases.get(phase, 0.) + now - self.phase_started
-        return {**self.state, "updated_at": utc_now(),
+        usage = process_memory_bytes()
+        return {**self.state, "updated_at": utc_now(), "working_set_bytes": usage[0] if usage else None,
             "wall_seconds": now - self.started,
             "candidate_wall_seconds": now - self.candidate_started,
             "wall_breakdown_seconds": phases,
@@ -433,6 +440,46 @@ class ProgressWriter:
 
 def _numeric(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def summary_row(row):
+    """The candidate row without its physical layer records and boundary ledgers.
+
+    Managers, the search replay, reports and points read only this; the full
+    row stays in candidates/.
+    """
+    summary = {key: value for key, value in row.items()
+               if key not in {"physical_layer_samples", "physical_boundary_accounting"}}
+    samples = row.get("physical_layer_samples")
+    if samples is not None:
+        summary["physical_layer_summary"] = {"completed_windows": len(samples),
+            "executed_tasks": sum(sample.get("executed_task_count", 0) for sample in samples),
+            "complete_cohorts": 0, "visible_output_tokens": 0}
+    if isinstance(row.get("approximation"), dict):
+        summary["approximation"] = {key: value for key, value in row["approximation"].items()
+                                    if key not in {"physical_boundary_accounting", "physical_ingress_accounting"}}
+    return summary
+
+
+def save_candidate(directory, row):
+    directory = Path(directory)
+    write_json(directory / "candidates" / (row["candidate_id"] + ".json"), row)
+    write_json(directory / "summaries" / (row["candidate_id"] + ".json"), summary_row(row))
+
+
+def read_candidate(directory, identity):
+    """A candidate's summary row, remade from its full row when that is newer."""
+    directory = Path(directory)
+    full, summary = directory / "candidates" / (identity + ".json"), directory / "summaries" / (identity + ".json")
+    try:
+        stale = full.stat().st_mtime_ns > summary.stat().st_mtime_ns
+    except FileNotFoundError:
+        stale = full.exists()
+    if stale:
+        row = summary_row(read_json(full))
+        write_json(summary, row)
+        return row
+    return read_json(summary)
 
 
 def replica_scaling(replica_tps, params):
@@ -634,6 +681,18 @@ def native_fast_result(result, params):
             if upper > SLO_NS else {})}
 
 
+def native_capacity_max_batch(row, params, scenario):
+    """Largest batch the native KV holds, from the reservations it held when it refused one; None if unknown."""
+    from exploring_hbf_native_config import native_capacity_batch
+    held = row["approximation"].get("kv_requests_held_by_group")
+    if not held:
+        return None
+    batch = native_capacity_batch(min(held), params["batch_size"],
+        scenario.workload.metadata["external_kv_ingress"]["max_inflight_requests"],
+        params["output_tokens"], params["ep"])
+    return batch if batch < params["batch_size"] else None
+
+
 def prefill_parameters(params):
     """The Prefill replica's identity: model, prompt and layout, not the memory or the batch."""
     fast = params.get("simulation_mode") == "fast"
@@ -669,14 +728,15 @@ def waiting_lock(path, control):
         handle.close()
 
 
-def prefill_pass(params, directory, *, builder=None, runner=None):
+def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1):
     """The candidate's native Prefill pass, run once per run directory.
 
     Every memory configuration and batch of one model, prompt and layout
     shares it: the Prefill replica is HBM4 with the Decode replica's layout.
     Fast candidates take the layer-sampled pass under the same independent
-    budget and its own wall cap, outside the candidate's; detailed ones one
-    native run of every layer, without a wall cap like the detailed run.
+    budget and its own wall cap (per concurrent worker, like the candidate's,
+    but outside it); detailed ones one native run of every layer, without a
+    wall cap like the detailed run.
     """
     from heterollm_sim.execution_control import ExecutionControl
     from exploring_hbf_native_config import build_native_prefill_scenario
@@ -687,9 +747,10 @@ def prefill_pass(params, directory, *, builder=None, runner=None):
     identity = prefill_id(expected)
     path = directory / "prefill" / (identity + ".json")
     full = expected["pass"] == "full"
+    cap = PREFILL_WALL_BUDGET_SECONDS * wall_factor
     started = time.perf_counter()
     control = ExecutionControl(stop_request_path=directory / "stop.request",
-                               deadline_monotonic=None if full else started + PREFILL_WALL_BUDGET_SECONDS)
+                               deadline_monotonic=None if full else started + cap)
     with waiting_lock(path.with_suffix(".lock"), control):
         saved = read_json(path)
         if saved is not None and saved.get("parameters") == expected and saved.get("backend") == BACKEND:
@@ -697,7 +758,7 @@ def prefill_pass(params, directory, *, builder=None, runner=None):
         scenario = (builder or build_native_prefill_scenario)(params["model"], params["workload"],
             tp=params["tp"], pp=params["pp"], ep=params["ep"], full_pass=full)
         scenario = replace(scenario, simulation=SimulationConfig(mode="fast", native_prefill=NativePrefillPassConfig(
-            full_pass=full, max_wall_seconds=None if full else PREFILL_WALL_BUDGET_SECONDS,
+            full_pass=full, max_wall_seconds=None if full else cap,
             **({} if full else {"target_relative_error": expected["target_relative_error"]}))))
         result = (runner or run_scenario)(scenario, retention_policy="aggregate", control=control)
         approximation = result.approximation
@@ -742,16 +803,19 @@ def with_prefill_ttft(row, params, prefill):
                        mean_complete_request_ttft_ns=value + metrics["mean_complete_request_ingress_ttft_ns"])
 
 
-def execute_candidate(params, directory, progress, *, builder=None, runner=None, prefill=None):
+def execute_candidate(params, directory, progress, *, builder=None, runner=None, prefill=None, wall_factor=1):
+    """Run one candidate; a fast one within its per-worker caps times ``wall_factor``."""
     from heterollm_sim.execution_control import ExecutionControl, ExecutionCancelledError
     from exploring_hbf_native_config import build_native_comparison_scenario
     from heterollm_sim.reporting import run_scenario
     directory = Path(directory)
     started = time.perf_counter()
     fast = params.get("simulation_mode") == "fast"
+    budget = params["candidate_wall_budget_seconds_per_worker"] * wall_factor if fast else None
     row = {"runner_contract": params["runner_contract"], "backend": BACKEND, "parameters": params,
            "candidate_id": params_candidate_id(params), "status": "running",
-           "metrics": None, "started_at": utc_now(), "forecast_tokens": 0,
+           "metrics": None, "started_at": utc_now(), "forecast_tokens": 0, "wall_factor": wall_factor,
+           **({"candidate_wall_budget_seconds": budget} if fast else {}),
            "fidelity": ("native_stationary_layer_samples_and_separate_conditional_forecast"
                 if fast else "complete_bounded_native_physical_window_no_forecast_no_old_reference")}
     try:
@@ -760,13 +824,13 @@ def execute_candidate(params, directory, progress, *, builder=None, runner=None,
             progress_queue=progress.queue if native_progress else None,
             progress_callback=None if native_progress else progress.report,
             stop_request_path=directory / "stop.request",
-            deadline_monotonic=started + params["candidate_wall_budget_seconds"] if fast else None)
+            deadline_monotonic=started + budget if fast else None)
         control.raise_if_cancelled()
         scenario = (builder or build_native_comparison_scenario)(params["model"], params["hardware"], params["workload"],
             batch_size=params["batch_size"], tp=params["tp"], pp=params["pp"], ep=params["ep"])
         if fast:
             from heterollm_sim.simulation_options import SimulationConfig, NativeWindowFastConfig
-            remaining = params["candidate_wall_budget_seconds"] - (time.perf_counter() - started)
+            remaining = budget - (time.perf_counter() - started)
             if remaining <= 0:
                 raise NativeFastWallBudgetError("native candidate construction exhausted the wall budget")
             scenario = replace(scenario, simulation=SimulationConfig(mode="fast",
@@ -786,7 +850,9 @@ def execute_candidate(params, directory, progress, *, builder=None, runner=None,
             raise
         if fast:
             row.update(native_fast_result(result, params))
-            if time.perf_counter() - started >= params["candidate_wall_budget_seconds"]:
+            if any(marker in row.get("rejection_reason", "") for marker in search_plan.CAPACITY_REJECTIONS):
+                row["native_capacity_max_batch"] = native_capacity_max_batch(row, params, scenario)
+            if time.perf_counter() - started >= budget:
                 row.update(status="forecast_rejected", metrics=None,
                     rejection_reason="native_total_candidate_wall_budget_exhausted")
         else:
@@ -799,7 +865,8 @@ def execute_candidate(params, directory, progress, *, builder=None, runner=None,
                 row.update(status="slo_rejected", rejection_reason="mean_complete_fresh_request_tpot_exceeds_100ms")
         if row["status"] == "completed":
             prefill_started = time.perf_counter()
-            with_prefill_ttft(row, params, (prefill or prefill_pass)(params, directory))
+            with_prefill_ttft(row, params, (prefill or functools.partial(prefill_pass, wall_factor=wall_factor))(
+                params, directory))
             # The search projects a point's Decode wall without the shared Prefill pass.
             row["prefill_wall_seconds"] = time.perf_counter() - prefill_started
     except NativeFastWallBudgetError as error:
@@ -836,14 +903,13 @@ def select_case(case, planned, rows, mode="detailed"):
             if mode == "fast" else "highest measured passing per-GPU throughput among the explicitly executed (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch")}
 
 
-def worker_candidate(case, layout, batch, directory, mode="detailed"):
+def worker_candidate(case, layout, batch, directory, mode="detailed", wall_factor=1):
     """Run or reuse exactly one candidate in this process; the manager owns the case point."""
     directory = Path(directory)
     params = parameters(case, layout, batch, mode)
     identity = params_candidate_id(params)
-    path = directory / "candidates" / (identity + ".json")
     with ProgressWriter(directory, identity) as progress:
-        row = read_json(path)
+        row = read_candidate(directory, identity)
         if row is not None:
             if row.get("parameters") != params or row.get("backend") != BACKEND:
                 raise RuntimeError("saved candidate parameters/backend differ; historical results cannot be relabeled")
@@ -852,8 +918,11 @@ def worker_candidate(case, layout, batch, directory, mode="detailed"):
         if row is None:
             progress.begin_candidate(params)
             progress.publish()
-            row = execute_candidate(params, directory, progress)
-            write_json(path, row)
+            row = execute_candidate(params, directory, progress, wall_factor=wall_factor)
+            usage = process_memory_bytes()
+            # The search predicts later candidates' memory from this peak.
+            row["peak_memory_bytes"] = usage[1] if usage else None
+            save_candidate(directory, row)
         print(json.dumps({"candidate_id": identity, "status": row["status"],
                           "wall_seconds": row.get("wall_seconds")}), flush=True)
         with progress.lock:
@@ -882,7 +951,7 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
             "status": "running" if case["case_id"] in active_ids else "pending", "selected": None})
         for layout, batch in grid:
             expected = parameters(case, layout, batch, mode)
-            row = read_json(directory / "candidates" / (candidate_id(case, layout, batch) + ".json"))
+            row = read_candidate(directory, candidate_id(case, layout, batch))
             if row is not None:
                 if row.get("parameters") != expected or row.get("backend") != BACKEND:
                     row = {"parameters": expected, "candidate_id": candidate_id(case, layout, batch),
@@ -1011,15 +1080,17 @@ def write_case_point(directory, case, layout, batches, mode="detailed"):
     """Select the case's point from whatever planned candidate rows are saved."""
     directory = Path(directory)
     planned = [candidate_id(case, layout, batch) for batch in batches]
-    saved = (read_json(directory / "candidates" / (identity + ".json")) for identity in planned)
+    saved = (read_candidate(directory, identity) for identity in planned)
     point = select_case(case, planned, [row for row in saved if row is not None], mode)
     write_json(directory / "points" / (case["case_id"] + ".json"), point)
     return point
 
 
-def available_memory_bytes():
+def _memory_status():
+    """(total, available) physical memory in bytes."""
     if os.name != "nt":
-        return os.sysconf("SC_AVPHYS_PAGES")*os.sysconf("SC_PAGE_SIZE")
+        return (os.sysconf("SC_PHYS_PAGES")*os.sysconf("SC_PAGE_SIZE"),
+                os.sysconf("SC_AVPHYS_PAGES")*os.sysconf("SC_PAGE_SIZE"))
     import ctypes
     class Status(ctypes.Structure):
         _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong),
@@ -1029,7 +1100,126 @@ def available_memory_bytes():
     status = Status(length=ctypes.sizeof(Status))
     if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
         raise OSError("GlobalMemoryStatusEx failed")
-    return status.available_physical
+    return status.total_physical, status.available_physical
+
+
+def available_memory_bytes():
+    return _memory_status()[1]
+
+
+def total_memory_bytes():
+    return _memory_status()[0]
+
+
+def process_memory_bytes():
+    """(working set, peak working set) of this process in bytes, None if unreadable.
+
+    A worker reports its own: on Windows the manager's child is the venv
+    launcher, not the interpreter that runs the candidate.
+    """
+    if os.name != "nt":
+        try:
+            fields = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines()
+                          if ":" in line)
+            return int(fields["VmRSS"].split()[0]) * 1024, int(fields["VmHWM"].split()[0]) * 1024
+        except (OSError, KeyError, ValueError):
+            return None
+    import ctypes
+    from ctypes import wintypes
+    class Counters(ctypes.Structure):
+        _fields_ = [("cb", wintypes.DWORD), ("page_faults", wintypes.DWORD),
+                    *((name, ctypes.c_size_t) for name in ("peak_working_set", "working_set",
+                        "peak_paged_pool", "paged_pool", "peak_nonpaged_pool", "nonpaged_pool",
+                        "pagefile", "peak_pagefile"))]
+    kernel = ctypes.WinDLL("kernel32")
+    kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel.K32GetProcessMemoryInfo.argtypes = (wintypes.HANDLE, ctypes.POINTER(Counters), wintypes.DWORD)
+    counters = Counters(cb=ctypes.sizeof(Counters))
+    if not kernel.K32GetProcessMemoryInfo(kernel.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+        return None
+    return counters.working_set, counters.peak_working_set
+
+
+def known_peaks(directory):
+    """(parameters, peak memory) of every saved candidate that measured its peak."""
+    rows = (read_json(path) for path in sorted((Path(directory) / "summaries").glob("*.json")))
+    return [(row["parameters"], row["peak_memory_bytes"]) for row in rows
+            if row and _numeric(row.get("peak_memory_bytes"))]
+
+
+def predicted_peak_bytes(known, case, layout, batch):
+    """A candidate's peak memory from measured peaks, linear in the batch.
+
+    Same model, hardware, workload and layout first, then model and
+    workload, then model; DEFAULT_CANDIDATE_PEAK_BYTES without any.
+    """
+    params = {**case, **layout}
+    for keys in (("model", "hardware", "workload", *LAYOUT_KEYS), ("model", "workload"), ("model",)):
+        points = [(row["batch_size"], peak) for row, peak in known if all(row[key] == params[key] for key in keys)]
+        if not points:
+            continue
+        if len({b for b, _ in points}) == 1:
+            return max(peak for _b, peak in points) * max(1., batch / points[0][0])
+        intercept, slope = search_plan.fit_line(points)
+        floor = max((peak for b, peak in points if b <= batch), default=0.)
+        return max(intercept + max(0., slope) * batch, floor)
+    return DEFAULT_CANDIDATE_PEAK_BYTES
+
+
+def worker_ceiling(workers):
+    """Most concurrent workers: an integer in [1, MAX_WORKERS], or "auto" for MAX_WORKERS."""
+    if workers == "auto":
+        return MAX_WORKERS
+    if type(workers) is not int or not 1 <= workers <= MAX_WORKERS:
+        raise ValueError(f"workers must be an integer in [1, {MAX_WORKERS}] or auto")
+    return workers
+
+
+def _working_set(directory, identity):
+    """A running worker's last reported working set in bytes, 0 before its first report."""
+    progress = read_json(Path(directory) / "progress" / (identity + ".json")) or {}
+    usage = progress.get("working_set_bytes") if progress.get("candidate_id") == identity else None
+    return usage if _numeric(usage) else 0
+
+
+def admit(queue, active, known, ceiling, directory):
+    """The head of ``queue`` to start now, with predicted peaks, and the wall factor they share.
+
+    A candidate started while k workers run (itself included) gets k times the
+    per-worker wall caps, so concurrency never rises above the smallest k of a
+    running candidate. Candidates start in queue order while their predicted
+    peaks fit in the free memory left by the reserve and by the running
+    candidates' predicted remaining growth; with nothing running one always
+    starts.
+    """
+    limit = min([ceiling, *(job["factor"] for job in active.values())])
+    if len(active) >= limit:
+        return [], len(active)
+    free = available_memory_bytes() - WORKER_MEMORY_RESERVE_BYTES
+    for identity, job in active.items():
+        free -= max(0, job["peak"] - _working_set(directory, identity))
+    chosen = []
+    for item in queue:
+        if len(active) + len(chosen) >= limit:
+            break
+        peak = predicted_peak_bytes(known, *item)
+        if (active or chosen) and peak > free:
+            break
+        chosen.append((item, peak))
+        free -= peak
+    return chosen, len(active) + len(chosen)
+
+
+def _start(queue, active, known, ceiling, directory, mode, spawn):
+    """Start the admitted head of ``queue`` of (case, layout, batch) items."""
+    chosen, factor = admit(queue, active, known, ceiling, directory)
+    for item, peak in chosen:
+        queue.remove(item)
+        case, layout, batch = item
+        process = (spawn(case, layout, batch, directory) if spawn
+                   else _spawn(case, layout, batch, directory, mode, factor))
+        active[candidate_id(case, layout, batch)] = {"process": process, "case": case, "layout": layout,
+                                                     "batch": batch, "factor": factor, "peak": peak}
 
 
 def checked_directory(directory):
@@ -1040,21 +1230,21 @@ def checked_directory(directory):
     return directory
 
 
-def candidate_command(case, layout, batch, directory, mode="detailed"):
+def candidate_command(case, layout, batch, directory, mode="detailed", wall_factor=1):
     return [sys.executable, str(Path(__file__).resolve()), "--worker-case-id", case["case_id"],
             "--layout", *(str(layout[key]) for key in LAYOUT_KEYS), "--batch-size", str(batch),
-            "--mode", mode, "--directory", str(directory)]
+            "--mode", mode, "--directory", str(directory), "--wall-factor", str(wall_factor)]
 
 
-def _spawn(case, layout, batch, directory, mode="detailed", workers=1):
+def _spawn(case, layout, batch, directory, mode="detailed", wall_factor=1):
     """One fresh subprocess per candidate: a candidate's heap never fragments the next one's."""
     directory = checked_directory(directory)
     log = directory / "logs" / (params_candidate_id(parameters(case, layout, batch, mode)) + ".log")
     log.parent.mkdir(parents=True, exist_ok=True)
     # Concurrent workers share the cores: each gets its slice of HBM channel threads.
-    env = {**os.environ, "HETEROLLM_HBM_CHANNEL_THREADS": str(max(1, MAX_WORKERS//workers))}
+    env = {**os.environ, "HETEROLLM_HBM_CHANNEL_THREADS": str(max(1, MAX_WORKERS//wall_factor))}
     with log.open("a", encoding="utf-8") as stdout, log.with_suffix(".err.log").open("a", encoding="utf-8") as stderr:
-        return subprocess.Popen(candidate_command(case, layout, batch, directory, mode), cwd=ROOT,
+        return subprocess.Popen(candidate_command(case, layout, batch, directory, mode, wall_factor), cwd=ROOT,
             stdout=stdout, stderr=stderr, env=env,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
 
@@ -1063,22 +1253,26 @@ def _settle_candidate(directory, case, layout, batch, code, mode):
     """The saved row of an exited worker; a worker that left none has failed."""
     params = parameters(case, layout, batch, mode)
     identity = params_candidate_id(params)
-    path = Path(directory) / "candidates" / (identity + ".json")
-    row = read_json(path)
+    row = read_candidate(directory, identity)
     if row is not None and row.get("parameters") != params:
         raise RuntimeError("saved candidate parameters differ; historical results cannot be relabeled")
     if row is None or row.get("status") not in CANDIDATE_TERMINAL | {"paused"}:
         row = {"runner_contract": params["runner_contract"], "backend": BACKEND, "parameters": params,
                "candidate_id": identity, "status": "failed", "metrics": None, "forecast_tokens": 0,
                "error": {"type": "WorkerExit", "message": f"worker exited {code} without a terminal candidate result"}}
-        write_json(path, row)
+        save_candidate(directory, row)
     return row
 
 
 def _saved_terminal(directory, case, layout, batch, mode):
-    row = read_json(Path(directory) / "candidates" / (candidate_id(case, layout, batch) + ".json"))
+    row = read_candidate(directory, candidate_id(case, layout, batch))
     return (row is not None and row.get("parameters") == parameters(case, layout, batch, mode)
             and row.get("backend") == BACKEND and row.get("status") in CANDIDATE_TERMINAL)
+
+
+def _jobs(active):
+    return [{"case_id": job["case"]["case_id"], "candidate_id": key, "launcher_pid": job["process"].pid,
+             "wall_factor": job["factor"], "predicted_peak_bytes": job["peak"]} for key, job in active.items()]
 
 
 def _refuse_live_workers(directory):
@@ -1088,12 +1282,11 @@ def _refuse_live_workers(directory):
             raise ManagerConflict("a native worker is still alive; refusing duplicate manager or automatic worker restart")
 
 
-def run_manager(directory=DEFAULT_DIRECTORY, *, layout=CONTROL_LAYOUT, batches=(1, 8), workers=2,
+def run_manager(directory=DEFAULT_DIRECTORY, *, layout=CONTROL_LAYOUT, batches=(1, 8), workers="auto",
                 spawn=None, poll_seconds=1., mode="detailed", case_ids=None):
     """Every case runs its candidates at one fixed layout; each candidate is its own subprocess."""
     directory, batches = checked_directory(directory), positive_batches(list(batches))
-    if type(workers) is not int or not 1 <= workers <= MAX_WORKERS:
-        raise ValueError(f"workers must be an integer in [1, {MAX_WORKERS}]")
+    ceiling = worker_ceiling(workers)
     layout = make_layout(*(layout[key] for key in LAYOUT_KEYS))
     cases = selected_cases(case_ids)
     check_grid(cases, layout, batches)
@@ -1109,6 +1302,7 @@ def run_manager(directory=DEFAULT_DIRECTORY, *, layout=CONTROL_LAYOUT, batches=(
             raise RuntimeError("existing native manifest differs or requested batch set shrinks; refusing silent parameter changes")
         write_json(directory / "run_manifest.json", {"runner_contract": runner_contract(mode), "backend": BACKEND,
             "cases": cases, "layout": layout, "batch_sizes": batches, "max_parallel_configurations": workers,
+            "worker_memory_reserve_bytes": WORKER_MEMORY_RESERVE_BYTES,
             "phases": list(PHASES), "simulation_mode": mode,
             "selection_scope": "finite actually executed (layout, batch) candidates by per-GPU throughput, not optimum or maximum capacity"})
         active, last_report = {}, 0.
@@ -1122,39 +1316,35 @@ def run_manager(directory=DEFAULT_DIRECTORY, *, layout=CONTROL_LAYOUT, batches=(
                 break
             if previous is None:
                 pending = [batch for batch in batches if not _saved_terminal(directory, case, layout, batch, mode)]
-                queue.extend((case, batch) for batch in pending)
+                queue.extend((case, layout, batch) for batch in pending)
                 if not pending:
                     write_case_point(directory, case, layout, batches, mode)
+        known = known_peaks(directory)
 
         while queue or active:
             stop = (directory / "stop.request").exists()
-            while queue and len(active) < workers and not stop and not error:
-                # With nothing running a candidate always starts; memory only
-                # limits additional concurrent workers.
-                if active and available_memory_bytes() < WORKER_MEMORY_RESERVE_BYTES:
-                    break
-                case, batch = queue.pop(0)
-                process = (spawn(case, layout, batch, directory) if spawn
-                           else _spawn(case, layout, batch, directory, mode, workers))
-                active[candidate_id(case, layout, batch)] = (process, case, batch)
+            if queue and not stop and not error:
+                _start(queue, active, known, ceiling, directory, mode, spawn)
             changed = False
-            for identity, (process, case, batch) in list(active.items()):
-                code = process.poll()
+            for identity, job in list(active.items()):
+                code = job["process"].poll()
                 if code is None:
                     continue
                 del active[identity]
                 changed = True
+                case, batch = job["case"], job["batch"]
                 row = _settle_candidate(directory, case, layout, batch, code, mode)
+                if _numeric(row.get("peak_memory_bytes")):
+                    known.append((row["parameters"], row["peak_memory_bytes"]))
                 write_case_point(directory, case, layout, batches, mode)
                 if row["status"] == "failed" or code not in (0,):
                     error = row.get("error") or f"worker exit {code}"
                     if not (directory / "stop.request").exists():
                         write_json(directory / "stop.request", {"reason": "native_case_failed", "candidate_id": identity, "error": error})
-            live = {case["case_id"] for _process, case, _batch in active.values()}
+            live = {job["case"]["case_id"] for job in active.values()}
             phase = next((case["phase"] for case in cases if case["case_id"] in live
                           or any(item[0] is case for item in queue)), None)
-            jobs = [{"case_id": case["case_id"], "candidate_id": key, "launcher_pid": process.pid}
-                    for key, (process, case, _batch) in active.items()]
+            jobs = _jobs(active)
             if changed or time.monotonic() - last_report >= 60 or not active:
                 refresh(directory, cases, planned, jobs, phase=phase, error=error, mode=mode)
                 last_report = time.monotonic()
@@ -1198,7 +1388,7 @@ def case_screen(directory, case, screen=None):
 
 def _search_lookup(directory, case, layout):
     def lookup(batch):
-        row = read_json(Path(directory) / "candidates" / (candidate_id(case, layout, batch) + ".json"))
+        row = read_candidate(directory, candidate_id(case, layout, batch))
         if row is None:
             return None
         if row.get("parameters") != parameters(case, layout, batch, "fast") or row.get("backend") != BACKEND:
@@ -1212,7 +1402,8 @@ def search_case(directory, case, screen):
     directory = Path(directory)
     entries = screen["layouts"]
     plan = search_plan.plan_case(entries, [_search_lookup(directory, case, entry["layout"]) for entry in entries],
-        SLO_NS, FAST_CANDIDATE_WALL_BUDGET_SECONDS, [replica_gpus(entry["layout"]) for entry in entries])
+        SLO_NS, FAST_CANDIDATE_WALL_BUDGET_SECONDS, [replica_gpus(entry["layout"]) for entry in entries],
+        memory_budget_bytes=total_memory_bytes() - WORKER_MEMORY_RESERVE_BYTES)
     planned = []
     for layout_plan in plan["layouts"]:
         planned += [(layout_plan["layout"], run["batch"]) for run in layout_plan["runs"]]
@@ -1221,7 +1412,7 @@ def search_case(directory, case, screen):
     acceptance = plan["acceptance"]
     if acceptance and acceptance["kind"] == "interpolated" and (acceptance["layout"], acceptance["batch"]) not in planned:
         planned.append((acceptance["layout"], acceptance["batch"]))
-    rows = [row for row in (read_json(directory / "candidates" / (candidate_id(case, layout, batch) + ".json"))
+    rows = [row for row in (read_candidate(directory, candidate_id(case, layout, batch))
                             for layout, batch in planned) if row is not None]
     point = select_case(case, [candidate_id(case, layout, batch) for layout, batch in planned], rows, "fast")
     selected = point["selected"]
@@ -1234,19 +1425,19 @@ def search_case(directory, case, screen):
     return plan, planned, point
 
 
-def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers=2, spawn=None, poll_seconds=1., screen=None,
+def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=None, poll_seconds=1., screen=None,
                        case_ids=None):
     """Paper-style deployment search over every case; each native point is its own fast subprocess."""
     mode = "fast"
     directory = checked_directory(directory)
-    if type(workers) is not int or not 1 <= workers <= MAX_WORKERS:
-        raise ValueError(f"workers must be an integer in [1, {MAX_WORKERS}]")
+    ceiling = worker_ceiling(workers)
     cases = selected_cases(case_ids)
     directory.mkdir(parents=True, exist_ok=True)
     with ManagerLock(directory, mode):
         _refuse_live_workers(directory)
         manifest = {"runner_contract": runner_contract(mode), "backend": BACKEND, "cases": cases,
             "deployment_search": search_plan.SETTINGS, "slo_tpot_ns": SLO_NS, "max_parallel_configurations": workers,
+            "worker_memory_reserve_bytes": WORKER_MEMORY_RESERVE_BYTES,
             "phases": list(PHASES), "simulation_mode": mode,
             "selection_scope": "highest conditionally accepted per-GPU throughput among the native points the deployment search ran; not a global optimum"}
         previous = read_json(directory / "run_manifest.json")
@@ -1258,7 +1449,7 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers=2, spawn=None, po
         def replay():
             return {case["case_id"]: search_case(directory, case, screens[case["case_id"]]) for case in cases}
 
-        plans, active, error, last_report = replay(), {}, None, 0.
+        plans, active, error, last_report, known = replay(), {}, None, 0., known_peaks(directory)
         failed = next((point for _plan, _planned, point in plans.values() if point["status"] == "failed"), None)
         if failed:
             error = failed.get("error") or "existing failed case requires diagnosis"
@@ -1266,21 +1457,18 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers=2, spawn=None, po
             stop = (directory / "stop.request").exists()
             queue = [(case, layout, batch) for case in cases for layout, batch in plans[case["case_id"]][0]["next"]
                      if candidate_id(case, layout, batch) not in active]
-            while queue and len(active) < workers and not stop and not error:
-                if active and available_memory_bytes() < WORKER_MEMORY_RESERVE_BYTES:
-                    break
-                case, layout, batch = queue.pop(0)
-                process = (spawn(case, layout, batch, directory) if spawn
-                           else _spawn(case, layout, batch, directory, mode, workers))
-                active[candidate_id(case, layout, batch)] = (process, case, layout, batch)
+            if queue and not stop and not error:
+                _start(queue, active, known, ceiling, directory, mode, spawn)
             changed = False
-            for identity, (process, case, layout, batch) in list(active.items()):
-                code = process.poll()
+            for identity, job in list(active.items()):
+                code = job["process"].poll()
                 if code is None:
                     continue
                 del active[identity]
                 changed = True
-                row = _settle_candidate(directory, case, layout, batch, code, mode)
+                row = _settle_candidate(directory, job["case"], job["layout"], job["batch"], code, mode)
+                if _numeric(row.get("peak_memory_bytes")):
+                    known.append((row["parameters"], row["peak_memory_bytes"]))
                 if row["status"] == "failed" or code not in (0,):
                     error = row.get("error") or f"worker exit {code}"
                     if not (directory / "stop.request").exists():
@@ -1288,11 +1476,10 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers=2, spawn=None, po
             if changed:
                 plans = replay()
             planned = {key: value[1] for key, value in plans.items()}
-            live = {case["case_id"] for _process, case, _layout, _batch in active.values()}
+            live = {job["case"]["case_id"] for job in active.values()}
             phase = next((case["phase"] for case in cases if case["case_id"] in live
                           or plans[case["case_id"]][0]["next"]), None)
-            jobs = [{"case_id": case["case_id"], "candidate_id": key, "launcher_pid": process.pid}
-                    for key, (process, case, _layout, _batch) in active.items()]
+            jobs = _jobs(active)
             if changed or time.monotonic() - last_report >= 60 or not active:
                 refresh(directory, cases, planned, jobs, phase=phase, error=error, mode=mode, search=True)
                 last_report = time.monotonic()
@@ -1318,8 +1505,9 @@ def main(argv=None):
     parser.add_argument("--layout", nargs=4, type=int, default=[CONTROL_LAYOUT[key] for key in LAYOUT_KEYS],
         metavar=("DP", "TP", "PP", "EP"), help="data-parallel replicas and one replica's TP/PP/EP degrees")
     parser.add_argument("--batch-sizes", nargs="+", type=int, default=[1, 8], help="per-replica batch candidates")
-    parser.add_argument("--workers", type=int, default=2,
-        help=f"并行候选数，1～{MAX_WORKERS}；可用物理内存低于{WORKER_MEMORY_RESERVE_BYTES//1024**3}GiB时不再增开")
+    parser.add_argument("--workers", default="auto",
+        help=f"并行候选数上限，1～{MAX_WORKERS}，或auto（默认，上限为核数）；按预测峰值内存逐个增开，"
+             f"保留{WORKER_MEMORY_RESERVE_BYTES//1024**3}GiB余量；k个并行时候选壁钟上限放宽为k倍")
     parser.add_argument("--mode", choices=("detailed", "fast"), default="detailed",
         help="fast候选总墙钟上限1800秒，优化目标600秒；上限覆盖配置、初始化、物理样本和预算")
     parser.add_argument("--search", action="store_true",
@@ -1328,10 +1516,15 @@ def main(argv=None):
         help="只运行这些配置（按矩阵顺序）；所选集合写入运行清单，同一目录之后不能改变")
     parser.add_argument("--worker-case-id", help=argparse.SUPPRESS)
     parser.add_argument("--batch-size", type=int, help=argparse.SUPPRESS)
+    parser.add_argument("--wall-factor", type=int, default=1, help=argparse.SUPPRESS)
     parser.add_argument("--background", action="store_true")
     args = parser.parse_args(argv)
-    if not 1 <= args.workers <= MAX_WORKERS:
-        parser.error(f"--workers must be in [1, {MAX_WORKERS}]")
+    if args.workers != "auto":
+        try:
+            args.workers = int(args.workers)
+            worker_ceiling(args.workers)
+        except ValueError:
+            parser.error(f"--workers must be an integer in [1, {MAX_WORKERS}] or auto")
     if args.search:
         args.mode = "fast"
     try:
@@ -1348,7 +1541,7 @@ def main(argv=None):
         if case is None or args.batch_size is None:
             parser.error("a worker needs a known native case and --batch-size")
         try:
-            return worker_candidate(case, layout, args.batch_size, directory, args.mode)
+            return worker_candidate(case, layout, args.batch_size, directory, args.mode, args.wall_factor)
         except Exception:
             print(traceback.format_exc(), file=sys.stderr, flush=True)
             return 1

@@ -682,6 +682,36 @@ def _group_refill_schedule(ages_by_group, output, pool, warmup, measured):
             "rho": peak / total if total else 1., "peak_group_landings": peak, "total_landings": total}
 
 
+def kv_requests_held(runtime, prepared):
+    """KV reservations each EP group holds at the cutoff: first-cohort seeds plus prepared imports.
+
+    Every seed and import reserves the same max-live KV, so when KV refused
+    one more these are the groups' capacities in requests.
+    """
+    held = list(prepared["import_pool_occupancy_by_group"])
+    for request_id in prepared["context"]:
+        held[0 if len(held) == 1 else runtime.states[request_id].ep_group] += 1
+    return held
+
+
+def admission_reasons(runtime, prepared):
+    """Why the prepared boundary is not one full stationary batch; checked before any sample runs."""
+    batch = runtime.plan.scheduler.max_num_seqs
+    group_pool = runtime._external_ingress.get("max_inflight_requests", 2) // prepared["ep_groups"]["degree"]
+    seeds = sum(1 for state in runtime._state_values if state.spec.metadata.get("warmup_seed", False))
+    outputs = {state.spec.output_tokens for state in runtime._state_values
+               if not state.spec.metadata.get("warmup_seed", False)}
+    if len(outputs) != 1 or seeds != batch:
+        return ["native_stationary_requires_one_fresh_output_length_and_a_seed_per_slot"]
+    if len(prepared["context"]) != batch:
+        # KV capacity did not admit a full batch of seeds.
+        return ["native_stationary_first_cohort_not_a_full_batch"]
+    if min(prepared["import_pool_occupancy_by_group"]) < group_pool:
+        # KV capacity holds fewer prepared imports than the pool.
+        return ["native_stationary_import_pool_not_full_at_cutoff"]
+    return []
+
+
 def evaluate_stationary(runtime, prepared, samples, options):
     """Compose the stationary window metrics and their error budget."""
     plan = runtime.plan
@@ -695,20 +725,12 @@ def evaluate_stationary(runtime, prepared, samples, options):
     seeds = [state.spec for state in runtime._state_values if state.spec.metadata.get("warmup_seed", False)]
     outputs = {state.spec.output_tokens for state in runtime._state_values
                if not state.spec.metadata.get("warmup_seed", False)}
-    result = {"accepted": False, "reasons": [], "metrics": {}, "metric_bounds": {},
-              "error_budget": {"target_relative_error": target, "effective_independent_target": limit,
-                               "conditional_only": True}}
+    result = {"accepted": False, "reasons": admission_reasons(runtime, prepared), "metrics": {},
+              "metric_bounds": {}, "error_budget": {"target_relative_error": target,
+                                                    "effective_independent_target": limit,
+                                                    "conditional_only": True}}
     reasons = result["reasons"]
-    if len(outputs) != 1 or len(seeds) != batch:
-        reasons.append("native_stationary_requires_one_fresh_output_length_and_a_seed_per_slot")
-        return result
-    if len(prepared["context"]) != batch:
-        # KV capacity did not admit a full batch of seeds.
-        reasons.append("native_stationary_first_cohort_not_a_full_batch")
-        return result
-    if min(prepared["import_pool_occupancy_by_group"]) < group_pool:
-        # KV capacity holds fewer prepared imports than the pool.
-        reasons.append("native_stationary_import_pool_not_full_at_cutoff")
+    if reasons:
         return result
     output = outputs.pop()
     try:
@@ -856,8 +878,13 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
             else:
                 raise RuntimeError("native stationary sampling unexpectedly committed an ordinary cohort")
             diagnostics["physical_admission_cutoff_ns"] = runtime.now
-            samples = sample_stationary(runtime, prepared, sample_control, layers, records)
-            budget = _checked_budget(evaluate_stationary(runtime, prepared, samples, options))
+            diagnostics["kv_requests_held_by_group"] = kv_requests_held(runtime, prepared)
+            admission = admission_reasons(runtime, prepared)
+            if admission:
+                budget = {"accepted": False, "reasons": admission}
+            else:
+                samples = sample_stationary(runtime, prepared, sample_control, layers, records)
+                budget = _checked_budget(evaluate_stationary(runtime, prepared, samples, options))
         except NativeFastWallBudgetError:
             budget = {"accepted": False, "reasons": ["native_stationary_sample_wall_budget_exhausted"]}
         except NativeLayerSamplingGuardError as error:

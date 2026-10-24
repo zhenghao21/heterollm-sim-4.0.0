@@ -143,7 +143,7 @@ def test_physical_layer_sample_requires_real_complete_window_observations(field,
 
 
 @pytest.mark.parametrize("options", ({"calibration_layers": 1}, {"holdout_layers": 1},
-    {"max_wall_seconds": 1801.}, {"target_relative_error": .2}))
+    {"max_wall_seconds": 0.}, {"max_wall_seconds": float("inf")}, {"target_relative_error": .2}))
 def test_stationary_options_keep_the_sampling_and_budget_limits(options):
     with pytest.raises(ValueError):
         NativeWindowFastConfig(**options)

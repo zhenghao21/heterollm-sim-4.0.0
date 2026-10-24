@@ -72,8 +72,8 @@ class NativeWindowFastConfig:
         if (isinstance(self.max_wall_seconds, bool)
                 or not isinstance(self.max_wall_seconds, (int, float))
                 or not math.isfinite(self.max_wall_seconds)
-                or not 0 < self.max_wall_seconds <= 1800.):
-            raise ValueError("simulation.native_window.max_wall_seconds must be finite and in (0, 1800]")
+                or not self.max_wall_seconds > 0):
+            raise ValueError("simulation.native_window.max_wall_seconds must be finite and positive")
         _bounded_fraction(self.target_relative_error, "simulation.native_window.target_relative_error", .10)
         _integer(self.calibration_layers, "simulation.native_window.calibration_layers", 2)
         _integer(self.holdout_layers, "simulation.native_window.holdout_layers", 2)
@@ -90,7 +90,7 @@ class NativePrefillPassConfig:
     and the pass is composed within ``target_relative_error``. Only
     a full pass may run without a wall limit (``max_wall_seconds`` None),
     like a detailed run. Two layers each way keep a 100K-token 405B pass
-    (about 230 s of wall per layer) inside the 1800 s limit.
+    (about 230 s of wall per layer) inside the default 1800 s.
     """
 
     max_wall_seconds: float | None = 1800.
@@ -108,8 +108,8 @@ class NativePrefillPassConfig:
         elif (isinstance(self.max_wall_seconds, bool)
                 or not isinstance(self.max_wall_seconds, (int, float))
                 or not math.isfinite(self.max_wall_seconds)
-                or not 0 < self.max_wall_seconds <= 1800.):
-            raise ValueError("simulation.native_prefill.max_wall_seconds must be null or finite and in (0, 1800]")
+                or not self.max_wall_seconds > 0):
+            raise ValueError("simulation.native_prefill.max_wall_seconds must be null or finite and positive")
         _bounded_fraction(self.target_relative_error, "simulation.native_prefill.target_relative_error", .10)
         _integer(self.calibration_layers, "simulation.native_prefill.calibration_layers", 2)
         _integer(self.holdout_layers, "simulation.native_prefill.holdout_layers", 2)
