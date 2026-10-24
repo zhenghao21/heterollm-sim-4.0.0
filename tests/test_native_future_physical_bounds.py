@@ -1,5 +1,4 @@
 """Native cache traffic is not a nonnegative affine context coordinate."""
-from dataclasses import replace
 
 import pytest
 
@@ -49,37 +48,3 @@ def test_native_streaming_reads_retain_the_context_affine_bulk_coordinate():
     assert b["physical_read_bytes"] == 2*a["physical_read_bytes"]
     assert a["physical_write_bytes"] == b["physical_write_bytes"] == 4
     assert b["backing_service_ns"] <= 2*a["backing_service_ns"]
-
-
-def test_native_future_cached_bulk_rejects_before_claiming_a_context_bound():
-    from heterollm_sim.memory_types import DramConfig
-    from heterollm_sim.native_layer_budget import _query_decode_contract
-    from heterollm_sim.physical_contract import parse_execution_physical_config
-    from test_native_window_lifecycle import capture_first_native_query, lifecycle_scenario
-
-    scenario = lifecycle_scenario(1)
-    components = []
-    for component in scenario.hardware.components:
-        raw = component.metadata.get("physical_memory_config")
-        if raw:
-            config = parse_execution_physical_config(raw)
-            if isinstance(config, DramConfig):
-                # Keep the real cache workload while isolating its bulk
-                # proof from the independently tested REF source guard.
-                config = replace(config, control_mode="analytical", refresh_policy="disabled",
-                    metadata={**config.metadata, "control_status": "synthetic_analytical",
-                              "geometry_status": "explicit_assumption"})
-                component = replace(component,
-                    metadata={**component.metadata, "physical_memory_config": config})
-        components.append(component)
-    scenario = replace(scenario,
-        hardware=replace(scenario.hardware, components=tuple(components)),
-        fusion_policy=replace(scenario.fusion_policy, flash_attention=False))
-    runtime, prepared = capture_first_native_query(scenario)
-    assert any(task.metadata.get("event_kind") == "softmax_reduce"
-               for stage in prepared["stages"] for task in stage.execution_tasks)
-    before = (runtime.now, runtime._completed_decode_steps, tuple(runtime.events), tuple(runtime.batches))
-    with pytest.raises(ValueError, match="future_physical_cache_bulk_not_affine"):
-        _query_decode_contract(runtime, prepared["cohort"], prepared["stages"],
-                               query_cost=prepared["cost"])
-    assert before == (runtime.now, runtime._completed_decode_steps, tuple(runtime.events), tuple(runtime.batches))

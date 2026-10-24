@@ -99,8 +99,9 @@ def _process_info(pid: Any) -> dict[str, Any]:
 
 
 def _baseline_key(case: dict[str, Any]) -> tuple[Any, ...]:
+    """The comparison point; each store's best layout and batch is compared, not a fixed layout."""
     return tuple(case.get(key) for key in ("model", "workload", "input_tokens", "output_tokens",
-        "gpu_count", "weight_dtype", "kv_dtype", "tp", "pp", "ep"))
+        "gpu_count", "weight_dtype", "kv_dtype"))
 
 
 def _dashboard_case(point: dict[str, Any]) -> dict[str, Any]:
@@ -132,6 +133,7 @@ def _completed_results(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if selected.get("backend") != "native_serving_physical":
             continue
         case, metrics = point.get("case", {}), selected.get("metrics") or {}
+        parameters = selected.get("parameters", {})
         tps = _number(metrics.get("tokens_per_second_per_gpu"))
         cluster = _number(metrics.get("cluster_tokens_per_second"))
         tpot = _number(metrics.get("mean_complete_request_tpot_ns"))
@@ -141,12 +143,14 @@ def _completed_results(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "model": case.get("model"), "hardware": case.get("hardware"),
             "workload": case.get("workload"), "input_tokens": case.get("input_tokens"),
             "output_tokens": case.get("output_tokens"), "gpu_count": case.get("gpu_count"),
-            "batch_size": selected.get("parameters", {}).get("batch_size"),
+            **{key: parameters.get(key) for key in ("dp", "tp", "pp", "ep")},
+            "batch_size": parameters.get("batch_size"),
             "tokens_per_second_per_gpu": tps, "cluster_tps": cluster,
             "tpot_ms": tpot / 1e6, "throughput_ratio_vs_hbm4": None,
             "tpot_ratio_vs_hbm4": None, "baseline_batch_size": None,
             "measurement_kind": ("conditional_forecast" if selected.get("native_window_forecast") else "physical_window"),
             "metric_bounds": (selected.get("native_window_forecast") or {}).get("metric_bounds"),
+            "metric_bounds_scope": "single_simulated_replica" if selected.get("native_window_forecast") else None,
             "sampled_tokens": selected.get("sampled_tokens"), "forecast_tokens": selected.get("forecast_tokens", 0),
             "_baseline_key": (_baseline_key(case), selected.get("runner_contract"))})
     baselines = {row["_baseline_key"]: row for row in rows if row["hardware"] == "HBM4"
@@ -166,7 +170,7 @@ def _eta(directory: Path, warnings: list[str], override: dict[str, Any] | None) 
     defaults = {"summary": "尚无完整候选，无法可靠估算整轮剩余时间。",
         "remaining_min_seconds": None, "remaining_max_seconds": None,
         "method": "仅采用完整候选的实际壁钟耗时；当前cohort任务计数不换算为整轮进度。",
-        "caveats": ["30组配置共60个批量候选，运行中的任务计数只属于当前cohort。",
+        "caveats": ["30组配置各含多个（布局，批量）候选，运行中的任务计数只属于当前cohort。",
                     "不使用微基准、报告更新时间或已模拟纳秒数外推全轮耗时。"]}
     for key in defaults:
         if key in assessment:
@@ -235,7 +239,7 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         for hardware, description in inputs.get("hardware", {}).items() if isinstance(description, dict)}
     configuration["run"] = {key: manifest.get(key) for key in ("runner_contract", "backend",
         "batch_sizes", "max_parallel_configurations", "phases", "forecast_tokens", "simulation_mode", "sampling_unit",
-        "fixed_deployment", "selection_scope")}
+        "layout", "deployment_search", "slo_tpot_ns", "selection_scope")}
     cases = results.get("cases", [])
     if not isinstance(cases, list):
         cases = []
@@ -253,19 +257,20 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
             "process": _process_info(progress.get("pid"))}
     running = []
     for active in status.get("running", []):
-        case_id = active.get("case_id")
-        if not isinstance(case_id, str) or Path(case_id).name != case_id:
+        case_id, identity = active.get("case_id"), active.get("candidate_id")
+        if (not isinstance(case_id, str) or Path(case_id).name != case_id
+                or not isinstance(identity, str) or Path(identity).name != identity):
             continue
-        progress = _read(directory / "progress" / (case_id + ".json"), warnings)
-        running.append(observed_progress(progress, case_id, active.get("launcher_pid")))
-    active_ids = {row["case_id"] for row in running}
+        progress = _read(directory / "progress" / (identity + ".json"), warnings)
+        running.append({**observed_progress(progress, case_id, active.get("launcher_pid")), "candidate_id": identity})
+    active_ids = {row["candidate_id"] for row in running}
     paused = []
     for path in sorted((directory / "progress").glob("*.json")):
         if path.stem in active_ids:
             continue
         progress = _read(path, warnings)
         if progress.get("state") == "paused":
-            paused.append(observed_progress(progress, path.stem))
+            paused.append({**observed_progress(progress, progress.get("case_id", path.stem)), "candidate_id": path.stem})
     point_states = Counter()
     for path in (directory / "points").glob("*.json"):
         point = _read(path, warnings)
@@ -277,9 +282,9 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         if candidate.get("status"):
             candidate_states[candidate["status"]] += 1
     fast = manifest.get("simulation_mode") == "fast"
-    notes = ["本轮仅使用原生后端，按9＋6＋15顺序执行，最多两个配置并行。",
-        "每组只比较批量1和8，选择通过约束者中吞吐最高的一项，不代表全局最优。快速预测与完整物理结果分别标记。",
-        "比值方向固定为当前存储/HBM4；只比较同模型、同负载、同GPU数、精度及采样合同的已完成结果。",
+    notes = ["本轮仅使用原生后端，按9＋6＋15顺序执行；每个候选（布局＋批量）在独立子进程中运行，最多两个并行。",
+        "每组在有限的(DP, TP, PP, EP)布局和每副本批量候选中，选择通过约束者里单GPU吞吐最高的一项，不代表全局最优。DP副本互相独立，只仿真一个副本，集群吞吐为单GPU吞吐乘GPU总数。快速预测与完整物理结果分别标记。",
+        "比值方向固定为当前存储/HBM4；只比较同模型、同负载、同GPU数、精度及采样合同的已完成结果，各存储取各自选中的布局与批量。",
         "当前cohort的completed/total是任务数，不是Token数、请求数或整轮完成百分比。累计Token与批次数独立记录，仅在原生提交完成后增加。",
         "累计Prefill Token只计实际执行的查询Token；PD导入历史KV不冒充Prefill计算。累计输出Token来自真实可见Token提交事件，包含真实首Token。",
         "壁钟分项按原生阶段切换时刻独占累计，包含该阶段未完成的当前区间；它是仿真器运行耗时，不是硬件延迟。旧尝试未记录的累计Token和分项保持未知。",
@@ -318,13 +323,13 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
         f"已验收完成配置：{counts.get('completed', 0)}/{status.get('total_cases', 30)}；"
         f"已验收完成候选：{snapshot['saved_candidate_counts'].get('completed', 0)}/{status.get('total_candidates', 60)}。",
         "", "## 正在运行", "",
-        "|配置|批量|实际worker PID|壁钟小时|当前阶段|当前cohort任务|累计CPU小时|RSS GiB|",
+        "|候选|批量/副本|实际worker PID|壁钟小时|当前阶段|当前cohort任务|累计CPU小时|RSS GiB|",
         "|---|---:|---:|---:|---|---:|---:|---:|"]
     for row in snapshot["running"]:
         process = row.get("process", {})
         wall, cpu, rss = (_number(row.get("wall_seconds")), _number(process.get("cpu_seconds")),
                           _number(process.get("rss_bytes")))
-        lines.append(f"|{row.get('case_id')}|{row.get('batch_size', '—')}|{row.get('pid', '—')}|"
+        lines.append(f"|{row.get('candidate_id', row.get('case_id'))}|{row.get('batch_size', '—')}|{row.get('pid', '—')}|"
             f"{_fmt(wall / 3600 if wall is not None else None, 2)}|{STAGE_LABELS.get(row.get('stage'), '原生阶段')}|"
             f"{row.get('completed', '—')}/{row.get('total', '—')}|"
             f"{_fmt(cpu / 3600 if cpu is not None else None, 2)}|"
@@ -334,32 +339,33 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
         lines += ["", "## 已暂停尝试", ""]
         for row in snapshot["paused"]:
             wall = _number(row.get("wall_seconds"))
-            lines.append(f"- {row['case_id']}：批量{row.get('batch_size', '—')}，已暂停；"
+            lines.append(f"- {row['candidate_id']}：批量{row.get('batch_size', '—')}，已暂停；"
                 f"运行{_fmt(wall / 3600 if wall is not None else None, 2)}小时，保留该次实际进度，不计为完成候选。")
     lines += ["", "## 累计Token与批次", "",
-        "|配置|已完成批次|实际Prefill Token|实际可见输出Token|已完成Decode批次/窗口目标|预热/测量Decode批次|",
+        "|候选|已完成批次|实际Prefill Token|实际可见输出Token|已完成Decode批次/窗口目标|预热/测量Decode批次|",
         "|---|---:|---:|---:|---:|---:|"]
     for row in observed:
         counter = row.get("cumulative_progress") or {}
-        lines.append(f"|{row['case_id']}|{counter.get('cohorts', '未知')}|"
+        lines.append(f"|{row['candidate_id']}|{counter.get('cohorts', '未知')}|"
             f"{counter.get('prefill_compute_tokens', '未知')}|{counter.get('visible_output_tokens', '未知')}|"
             f"{counter.get('decode_cohorts', '未知')}/{counter.get('target_decode_cohorts', '未知')}|"
             f"{counter.get('warmup_decode_cohorts', '未知')}/{counter.get('measurement_decode_cohorts', '未知')}|")
     lines += ["", "## 真实壁钟耗时分项", "",
-        "|配置|原生阶段|累计秒数|", "|---|---|---:|"]
+        "|候选|原生阶段|累计秒数|", "|---|---|---:|"]
     for row in observed:
         phases = row.get("wall_breakdown_seconds") or {}
         if not phases:
-            lines.append(f"|{row['case_id']}|旧尝试没有记录，保持未知|—|")
+            lines.append(f"|{row['candidate_id']}|旧尝试没有记录，保持未知|—|")
         for phase, seconds in phases.items():
-            lines.append(f"|{row['case_id']}|{STAGE_LABELS.get(phase, '原生内部阶段')}|{_fmt(seconds)}|")
+            lines.append(f"|{row['candidate_id']}|{STAGE_LABELS.get(phase, '原生内部阶段')}|{_fmt(seconds)}|")
     lines += ["", "上述任务计数仅属于当前cohort，不代表整个候选的完成比例。累计Token和已完成批次不随下一批任务归零。", "",
         "## 已完成配置", "",
-        "|模型|存储|负载|输入/输出Token|选定批量|tokens/s/GPU|集群tokens/s|TPOT ms|吞吐/HBM4|TPOT/HBM4|",
-        "|---|---|---|---:|---:|---:|---:|---:|---:|---:|"]
+        "|模型|存储|负载|输入/输出Token|选定布局DP/TP/PP/EP|选定批量/副本|tokens/s/GPU|集群tokens/s|TPOT ms|吞吐/HBM4|TPOT/HBM4|",
+        "|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|"]
     for row in snapshot["completed_results"]:
         lines.append(f"|{row['model']}|{row['hardware']}|{row['workload']}|"
-            f"{row['input_tokens']}/{row['output_tokens']}|{row['batch_size']}|"
+            f"{row['input_tokens']}/{row['output_tokens']}|"
+            f"{'/'.join(str(row[key]) if row[key] is not None else '—' for key in ('dp', 'tp', 'pp', 'ep'))}|{row['batch_size']}|"
             f"{_fmt(row['tokens_per_second_per_gpu'])}|{_fmt(row['cluster_tps'])}|"
             f"{_fmt(row['tpot_ms'])}|{_fmt(row['throughput_ratio_vs_hbm4'])}|{_fmt(row['tpot_ratio_vs_hbm4'])}|")
     if not snapshot["completed_results"]:

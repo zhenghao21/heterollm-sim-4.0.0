@@ -910,6 +910,9 @@ class UnifiedEventKernel:
         self._physical_allocation_last_end: Dict[Tuple[str, str, int], float] = {}
         self._pending_physical_releases: Dict[Tuple[str, str, int], float] = {}
         self._request_physical_buffers: Dict[str, Set[Tuple[str, str, int]]] = {}
+        # Number of requests holding each persistent buffer, so releasing one
+        # request never rescans every other request's buffers.
+        self._request_buffer_holders: Dict[Tuple[str, str, int], int] = {}
 
     @classmethod
     def from_closed_graph(
@@ -1030,6 +1033,51 @@ class UnifiedEventKernel:
             rows.extend(item for item in raw if isinstance(item, Mapping))
         return tuple(rows)
 
+    def _place_shared_resident_allocations(self, tasks: Sequence[TaskSpec]) -> None:
+        """Place a closed cohort's missing shared resident buffers first.
+
+        Weights are resident before serving. Placing them at first touch
+        would interleave them with the first cohort's activation buffers,
+        an address layout no later step has. Missing generation-zero shared
+        buffers are placed in task order, at the largest extent the cohort
+        declares, before any of its tasks runs; request KV, workspace and
+        external page-pool buffers keep their own lifetimes.
+        """
+        from .data_motion import lower_physical_allocations, register_physical_allocations
+
+        allocators = self.physical_runtime.allocators
+        placements, extents = [], {}
+        for task in tasks:
+            metadata = task.metadata
+            if metadata.get("physical_memory_config") is None or (
+                    not task.request_id.startswith(("cohort-", "online-cohort", "serving-"))
+                    and metadata.get("physical_allocation_scope") != "closed_cohort"):
+                continue
+            task = lower_physical_allocations(task)
+            metadata = task.metadata
+            excluded = {tuple(key) for key in metadata.get("physical_external_allocations", ())}
+            request_buffers = {buffer for buffers in metadata.get("persistent_request_buffers", {}).values()
+                               for buffer in buffers}
+            rows = []
+            for row in metadata.get("physical_allocations", ()):
+                owner = str(row.get("physical_owner") or metadata.get("physical_owner") or "")
+                key = (owner, str(row["buffer_id"]), row.get("generation", 0))
+                allocator = allocators.get(owner)
+                if (key[2] or row.get("allocation_arena") == "workspace" or key in excluded
+                        or key[1] in request_buffers or key[1].startswith("@tasklocal")
+                        or allocator is not None and allocator.get_allocation(key[1], key[2]) is not None):
+                    continue
+                size, inferred = extents.get(key, (0, True))
+                extents[key] = max(size, row["size_bytes"]), inferred and bool(row.get("inferred"))
+                rows.append((key, row))
+            if rows:
+                placements.append((task, rows))
+        for task, rows in placements:
+            declarations = tuple({**row, "size_bytes": extents[key][0], "inferred": extents[key][1]}
+                                 for key, row in rows)
+            register_physical_allocations(replace(task, metadata={
+                **task.metadata, "physical_allocations": declarations}), self.physical_runtime)
+
     def _index_physical_allocation_uses(
         self, tasks: Sequence[TaskSpec]
     ) -> None:
@@ -1053,6 +1101,7 @@ class UnifiedEventKernel:
                     raise ValueError("physical_external_allocations requires owner, buffer id, and non-negative integer generation")
                 external_keys.add(tuple(key))
         self._external_physical_allocation_keys.update(external_keys)
+        self._place_shared_resident_allocations(tasks)
 
         for task in tasks:
             declared = task.metadata.get("persistent_request_buffers", {})
@@ -1071,6 +1120,7 @@ class UnifiedEventKernel:
                         or any(not isinstance(value, str) or not value for value in buffers)):
                     raise ValueError("persistent_request_buffers requires explicit request and buffer ids")
                 identities = set(buffers)
+                keys = []
                 for row in rows:
                     buffer_id = row.get("buffer_id")
                     owner = row.get("physical_owner") or default_owner
@@ -1078,7 +1128,9 @@ class UnifiedEventKernel:
                         generation = int(row.get("allocation_generation", 0))
                         key = (str(owner), str(buffer_id), generation)
                         if key not in self._external_physical_allocation_keys:
-                            self._request_physical_buffers.setdefault(request, set()).add(key)
+                            keys.append(key)
+                if keys:
+                    self.register_request_physical_buffers(request, keys)
 
         alias_targets = {}
         for task in tasks:
@@ -1187,6 +1239,36 @@ class UnifiedEventKernel:
             self._external_physical_allocation_keys.discard(key)
             self._physical_allocation_arenas.pop(key, None)
 
+    def register_request_physical_buffers(
+        self, request_id: str, keys: Iterable[Tuple[str, str, int]]
+    ) -> None:
+        """Record persistent buffers owned by ``request_id``; idempotent per key."""
+
+        owned = self._request_physical_buffers.setdefault(request_id, set())
+        holders = self._request_buffer_holders
+        for key in keys:
+            if key not in owned:
+                owned.add(key)
+                holders[key] = holders.get(key, 0) + 1
+
+    def _drop_request_buffer_holds(self, request_id: str) -> Set[Tuple[str, str, int]]:
+        """Forget a request's buffer ownership; return keys no request holds now."""
+
+        orphaned: Set[Tuple[str, str, int]] = set()
+        for key in self._request_physical_buffers.pop(request_id, ()):
+            holders = self._request_buffer_holders[key] - 1
+            if holders > 0:
+                self._request_buffer_holders[key] = holders
+            else:
+                del self._request_buffer_holders[key]
+                orphaned.add(key)
+        return orphaned
+
+    def forget_request_physical_buffers(self, request_id: str) -> None:
+        """Drop ownership bookkeeping without releasing (failed registration)."""
+
+        self._drop_request_buffer_holds(request_id)
+
     def release_request_physical_allocations(self, request_id: str) -> None:
         """Release explicitly request-owned buffers after their last use.
 
@@ -1197,12 +1279,11 @@ class UnifiedEventKernel:
         keys = self._request_physical_buffers.get(request_id)
         if not keys:
             return
-        shared = set().union(*(value for request, value in self._request_physical_buffers.items()
-                               if request != request_id))
-        releasable = keys - shared
+        holders = self._request_buffer_holders
+        releasable = {key for key in keys if holders[key] <= 1}
         if any(self._physical_allocation_uses.get(key, 0) for key in releasable):
             raise ValueError("cannot release request physical buffers before their tasks complete")
-        self._request_physical_buffers.pop(request_id)
+        self._drop_request_buffer_holds(request_id)
         for key in releasable:
             self._pending_physical_releases[key] = self.makespan_ns
         self._reclaim_physical_allocations(self.makespan_ns)

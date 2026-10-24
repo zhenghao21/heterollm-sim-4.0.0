@@ -1214,7 +1214,7 @@ class PhysicalKVTransferExecutor:
                 "events": copy.deepcopy(self.events), "counters": copy.deepcopy(self.counters),
                 "cost_phases": tuple(self._cost_phases),
                 "cost_groups": copy.deepcopy(self._cost_groups), "cost_phase_total": self._cost_phase_total,
-                "async_plan_states": copy.deepcopy(self._async_plan_states)}
+                "async_plan_states": _copy_plan_states(self._async_plan_states)}
 
     def restore(self, snapshot: Mapping[str, Any]) -> None:
         self.runtime.restore(snapshot["runtime"])
@@ -1225,7 +1225,7 @@ class PhysicalKVTransferExecutor:
         self._cost_phases = list(snapshot["cost_phases"])
         self._cost_groups = copy.deepcopy(snapshot["cost_groups"])
         self._cost_phase_total = snapshot["cost_phase_total"]
-        self._async_plan_states = copy.deepcopy(snapshot["async_plan_states"])
+        self._async_plan_states = _copy_plan_states(snapshot["async_plan_states"])
         # An absent plan cannot inherit terminal authority from a discarded
         # future. Active phase tokens explicitly contained in the snapshot
         # remain valid, including when the same snapshot is restored again.
@@ -1233,6 +1233,19 @@ class PhysicalKVTransferExecutor:
 
     def stats(self) -> Mapping[str, Any]:
         return {**self.counters, "events": len(self.events)}
+
+
+def _copy_plan_states(states):
+    """Copy in-flight plan states, sharing their rollback snapshots.
+
+    A rollback snapshot is a value that restore() only reads. Deep-copying it
+    copied the whole runtime once per just-prepared import, nested through
+    every later snapshot, so each import cost grew with the batch.
+    """
+    memo = {}
+    return {plan_id: {key: value if key == "rollback_snapshot" else copy.deepcopy(value, memo)
+                      for key, value in state.items()}
+            for plan_id, state in states.items()}
 
 
 _NATIVE_COMPACT_COST_WRITERS = tuple((name, getattr(PhysicalKVTransferExecutor, name))

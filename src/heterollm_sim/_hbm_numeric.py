@@ -15,7 +15,9 @@ from numba import njit
 from ._hbm_clock import align_clock, clock_after
 from ._dram_numeric import _repeat_add, rotated_bank
 
-_CHANNEL_WORKERS = min(8, os.cpu_count() or 1)
+# A manager running several simulator processes caps each process's channel
+# threads so that together they do not oversubscribe the host cores.
+_CHANNEL_WORKERS = max(1, min(8, int(os.environ.get("HETEROLLM_HBM_CHANNEL_THREADS") or os.cpu_count() or 1)))
 _CHANNEL_EXECUTOR = ThreadPoolExecutor(max_workers=_CHANNEL_WORKERS,
                                        thread_name_prefix="hbm-channel")
 _CHANNEL_SCRATCH = local()
@@ -132,11 +134,19 @@ def _activate_start(lane, bank, group, earliest, arrival, g, t, bf, pc, history,
     if bf[bank, 0] >= 0:
         ready = max(ready, _after(_after(bf[bank, 0], t[8], t[0] / 2), -t[0], t[0] / 2))
     anchor = _after(_align(ready, t[0]), t[0], t[0] / 2)
+    # Grid stamps reduce per gap before the clock math, as in _column_start.
+    grid_limit = t[0] * 2. ** 48
+    other = -1.
     for previous_group in range(g[5]):
         stamp = history[lane, previous_group, 0]
         gap = t[14] if previous_group == group else t[15]
         if stamp >= 0 and gap > 0:
-            anchor = max(anchor, _after(stamp, gap, t[0] / 2))
+            if g[12] and stamp < grid_limit and previous_group != group:
+                other = max(other, stamp)
+            else:
+                anchor = max(anchor, _after(stamp, gap, t[0] / 2))
+    if other >= 0:
+        anchor = max(anchor, _after(other, t[15], t[0] / 2))
     frontier = max(arrival, resources[lane // 2, 0])
     while True:
         anchor = _faw_ready(lane, anchor, frontier, t, windows, window_counts)
@@ -237,18 +247,20 @@ def _precharge(lane, bank, earliest, g, t, rows, bf, pc, channel, channel_int,
 def _estimate(lane, bank, group, row, arrival, activate_not_before, read, g, t, rows, bf, pc, history,
               channel, channel_int, resources, directions, windows, window_counts):
     earliest = arrival
+    activate = -1.
     if rows[bank] != row:
         if rows[bank] >= 0:
             pre = _precharge_start(lane, bank, earliest, g, t, bf, pc, channel, channel_int, resources)
             earliest = _after(pre, max(t[6], t[2] * t[0]), t[0] / 2)
-        anchor = _after(_activate_start(lane, bank, group, max(earliest, activate_not_before), arrival,
-            g, t, bf, pc, history, resources, windows, window_counts), t[0], t[0] / 2)
+        activate = _activate_start(lane, bank, group, max(earliest, activate_not_before), arrival,
+            g, t, bf, pc, history, resources, windows, window_counts)
+        anchor = _after(activate, t[0], t[0] / 2)
         bank_ready = _after(anchor, t[4 if read else 5], t[0] / 2)
     else:
         anchor = bf[bank, 0]
         bank_ready = bf[bank, 3 if read else 4]
     return (_column_start(lane, bank, group, bank_ready, earliest, read, g, t, pc, history,
-                          resources, directions), anchor)
+                          resources, directions), anchor, activate)
 
 
 @njit(cache=True, nogil=True, fastmath=False)
@@ -594,17 +606,28 @@ def _channel_cursor(index, ch, lane_span, period):
 @njit(cache=True, nogil=True, fastmath=False)
 def _precharge_ahead(target, served, ch, arrival, g, t, binary_mapping, lane_shift, bank_shift,
                      interleave_shift, row_shift, lane_span, period, rows, bf, addresses, pc,
-                     pc_seen, channel, channel_int, resources, touched, counts, active_deadlines):
-    """_Controller.precharge_ahead; returns the precharged bank or -1."""
+                     pc_seen, channel, channel_int, resources, touched, counts, active_deadlines,
+                     ring_tags, ring_banks, stale):
+    """_Controller.precharge_ahead; returns the precharged bank or -1.
+
+    ``ring_tags``/``ring_banks`` cache the bank of each channel position.
+    The bank is a pure function of the position, so a matching tag is exact.
+    """
+    ring = ring_tags.shape[1]
     lane, bank_within, row, _ = _burst_location(_channel_cursor(target, ch, lane_span, period), g,
         binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift)
     bank = lane * g[1] + bank_within
+    slot = target % ring
+    ring_tags[ch, slot], ring_banks[ch, slot] = target, bank
     if rows[bank] < 0 or rows[bank] == row:
         return -1
     for index in range(served, target):
-        other_lane, other_bank, _, _ = _burst_location(_channel_cursor(index, ch, lane_span, period), g,
-            binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift)
-        if other_lane * g[1] + other_bank == bank:
+        slot = index % ring
+        if ring_tags[ch, slot] != index:
+            other_lane, other_bank, _, _ = _burst_location(_channel_cursor(index, ch, lane_span, period), g,
+                binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift)
+            ring_tags[ch, slot], ring_banks[ch, slot] = index, other_lane * g[1] + other_bank
+        if ring_banks[ch, slot] == bank:
             return -1
     for iteration in range(2 * g[1] + 16):
         start = _precharge_start(lane, bank, arrival, g, t, bf, pc, channel, channel_int, resources)
@@ -627,8 +650,22 @@ def _precharge_ahead(target, served, ch, arrival, g, t, binary_mapping, lane_shi
         raise ValueError("HBM timing inputs leave no row-command window between maintenance commands")
     _precharge(lane, bank, arrival, g, t, rows, bf, pc, channel, channel_int,
                resources, touched, counts)
-    active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+    _close_deadline(ch, bank, g, t, rows, bf, addresses, active_deadlines, stale)
     return bank
+
+
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
+def _close_deadline(ch, bank, g, t, rows, bf, addresses, active_deadlines, stale):
+    """The channel deadline a full rescan would give after ``bank`` closed.
+
+    The deadline is the minimum over mapped open banks of a monotone function
+    of their ACT anchor. Closing a bank whose own deadline lies above that
+    minimum leaves it unchanged; otherwise the channel is rescanned. An open
+    bank mapped since the last scan (``stale``) always forces the rescan.
+    """
+    if stale[ch] or (t[29] > 0 and _after(bf[bank, 0], t[29], t[0] / 2) <= active_deadlines[ch]):
+        active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+        stale[ch] = 0
 
 
 @njit(cache=True, nogil=True, fastmath=False)
@@ -791,8 +828,16 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
     position += channels
     early_banks = integers[position:position + bank_count]
     position += bank_count
+    ring_tags = integers[position:position + bank_count].reshape((channels, 2 * g[1]))
+    position += bank_count
+    ring_banks = integers[position:position + bank_count].reshape((channels, 2 * g[1]))
+    position += bank_count
+    stale = integers[position:position + channels]
+    position += channels
     look[channel_first:channel_stop] = -1
     early_banks[2 * channel_first * g[1]:2 * channel_stop * g[1]] = 0
+    ring_tags[channel_first:channel_stop] = -1
+    stale[channel_first:channel_stop] = 0
     depth = _lookahead_depth(g, t)
     for ch in range(channel_first, channel_stop):
         active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
@@ -902,7 +947,7 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 early = _precharge_ahead(look[ch], served, ch, arrival, g, t, binary_mapping,
                     lane_shift, bank_shift, interleave_shift, row_shift, lane_span, period,
                     rows, bf, addresses, pc, pc_seen, channel, channel_int, resources, touched,
-                    counts, active_deadlines)
+                    counts, active_deadlines, ring_tags, ring_banks, stale)
                 if early >= 0:
                     early_banks[early] = 1
                     cycle_fast = False
@@ -911,6 +956,10 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 look[ch] += 1
             if addresses[bank] < 0:
                 addresses[bank] = cursor * g[9]
+                # A restored open row without a mapping joins the deadline
+                # set only at the next full scan, as before.
+                if rows[bank] >= 0:
+                    stale[ch] = 1
             pc_seen[lane] = True
             if (tick_mode and tick_valid[lane] and rows[bank] == row
                     and tick_data[lane] >= 0 and tick_columns[ch] >= 0):
@@ -983,9 +1032,9 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
             cycle_fast = False
             activate_not_before = arrival
             for iteration in range(2 * g[1] + 16):
-                command_start, anchor = _estimate(lane, bank, group, row, arrival, activate_not_before, read, g, t, rows,
-                                                 bf, pc, history, channel, channel_int, resources, directions,
-                                                 windows, window_counts)
+                command_start, anchor, activate = _estimate(lane, bank, group, row, arrival,
+                    activate_not_before, read, g, t, rows, bf, pc, history, channel, channel_int,
+                    resources, directions, windows, window_counts)
                 horizon = _after(command_start, recovery, t[0] / 2)
                 if active_deadlines[ch] <= horizon:
                     if g[8] and channel[ch, 1] < 0:
@@ -1019,21 +1068,30 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 # state as a second _column_start call here would use.
                 start = command_start
             else:
-                if rows[bank] < 0:
+                # A closed bank changes no state between the final estimate
+                # and its ACT: a False _refresh_until only seeds the refresh
+                # phase, which neither ACT nor column timing reads, and the
+                # ACT command writes only the row bus. Both estimated edges
+                # are therefore exactly the ones a recomputation would give.
+                closed = rows[bank] < 0
+                if closed:
                     # A row precharged ahead for this burst was a conflict.
                     if early_banks[bank]:
                         conflicts += 1
                         early_banks[bank] = 0
                     else:
                         misses += 1
+                    start = activate
                 else:
                     conflicts += 1
                     _precharge(lane, bank, arrival, g, t, rows, bf, pc, channel, channel_int,
                                resources, touched, counts)
-                start = _activate_start(lane, bank, group, activate_not_before, arrival,
-                    g, t, bf, pc, history, resources, windows, window_counts)
+                    _close_deadline(ch, bank, g, t, rows, bf, addresses, active_deadlines, stale)
+                    start = _activate_start(lane, bank, group, activate_not_before, arrival,
+                        g, t, bf, pc, history, resources, windows, window_counts)
                 start, _ = _command(lane // 2, 0, start, t[1], True, g, t,
                                      resources, touched, counts)
+                closed = closed and start == activate
                 anchor = _after(start, t[0], t[0] / 2)
                 history[lane, group, 0] = anchor
                 if t[30] > 0:
@@ -1047,9 +1105,14 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 bf[bank, 6] = min(bf[bank, 3], bf[bank, 4])
                 bf[bank, 5] = bf[bank, 2]
                 counts[0] += 1
-                active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
-                start = _column_start(lane, bank, group, bf[bank, 3 if read else 4], arrival,
-                                      read, g, t, pc, history, resources, directions)
+                if stale[ch]:
+                    active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+                    stale[ch] = 0
+                elif t[29] > 0:
+                    # The opened bank joins the channel minimum; see _close_deadline.
+                    active_deadlines[ch] = min(active_deadlines[ch], _after(anchor, t[29], t[0] / 2))
+                start = command_start if closed else _column_start(lane, bank, group,
+                    bf[bank, 3 if read else 4], arrival, read, g, t, pc, history, resources, directions)
             start, _ = _command(lane // 2, 1, start, t[3], True, g, t, resources, touched, counts)
             counts[2 if read else 3] += 1
             entry = history_entry
@@ -1104,7 +1167,7 @@ def _new_channel_scratch(g, arrays):
             and bank_count * int(g[2]) <= 1048576)
     integers = (2 * lanes * history_entries + bank_count + 4 * lanes + lanes
                 + lanes * ((banks + 15) // 16) * 4 + lanes * 4
-                + (bank_count * int(g[2]) if fold else 0) + lanes // 2 + bank_count)
+                + (bank_count * int(g[2]) if fold else 0) + 2 * (lanes // 2) + 3 * bank_count)
     # Two flat buffers avoid boxing thirteen separate NumPy descriptors at
     # every compiled worker entry. All views are made inside the controller.
     return np.empty(lanes // 2, dtype=np.float64), np.empty(integers, dtype=np.int64)

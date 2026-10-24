@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import replace
+from dataclasses import asdict, replace
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
@@ -288,13 +288,11 @@ def _run_scenario_in_context(
             **runner_options,
         )
         serving = (simulation.detailed if scenario.simulation.mode == "fast" else simulation)
-        layer_sampling = (scenario.simulation.native_window is not None
-            and scenario.simulation.native_window.sampling_unit == "layer_windows")
         fast_assumptions = ((
-            "Native fast layer-window mode: only explicitly recorded native layer-window tasks physically execute under documented boundary conditions. They are not complete cohorts or observed output Tokens; projected windows have no physical continuation. Conditional error budgets require independent validation.",)
-            if scenario.simulation.mode == "fast" and layer_sampling else (
-            "Native fast mode: complete cohort samples use the original serving and physical kernels; an independent window forecast never advances their cutoff state. Conditional error budgets require independent validation.",)
+            "Native stationary fast mode: only explicitly recorded native layer runs physically execute on independent copies of the first continuous-refill cohort boundary. They are not complete cohorts or observed output Tokens; the forecast window has no physical continuation. Conditional error budgets require independent validation.",)
             if scenario.simulation.mode == "fast" and scenario.simulation.native_window is not None else (
+            "Native Prefill pass: only explicitly recorded native layer runs of the request's whole-prompt forward pass physically execute on independent copies of its cohort boundary; the pass interval is composed from them (or read from one run of every layer) and no cohort, KV export or output Token is committed.",)
+            if scenario.simulation.mode == "fast" and scenario.simulation.native_prefill is not None else (
             "Fast mode: Prefill and the continuous Decode prefix execute in detail; a forecast suffix has no physical transaction trace. Accuracy target requires independent full-request validation.",)
             if scenario.simulation.mode == "fast" else ())
         manifest_assumptions = (
@@ -347,24 +345,17 @@ def _run_scenario_in_context(
             native_sampling = scenario.simulation.native_window
             manifest = replace(manifest, metadata={**manifest.metadata,
                 "simulation_mode": "fast", "effective_simulation_mode": simulation.diagnostics["effective_mode"],
-                **({"native_sampling": {"unit": native_sampling.sampling_unit,
+                **({"native_sampling": {"model": "stationary_continuous_refill",
                     "target_relative_error": native_sampling.target_relative_error,
                     "max_wall_seconds": native_sampling.max_wall_seconds,
-                    **({"layer_window_size": native_sampling.layer_window_size,
-                    "calibration_layer_windows_per_class": native_sampling.calibration_layer_windows,
-                    "validation_layer_windows_per_class": native_sampling.validation_layer_windows,
-                    "max_total_layer_windows": native_sampling.max_sample_layer_windows+(
-                        native_sampling.max_seed_anchor_layer_windows
-                        if scenario.workload.scheduler.max_num_seqs > 1 else 0),
-                    "max_full_batch_layer_windows": native_sampling.max_sample_layer_windows,
-                    "max_seed_shape_anchor_layer_windows": native_sampling.max_seed_anchor_layer_windows,
-                    "layer_sample_scope": "boundary_conditioned_physical_tasks_not_complete_cohorts_or_visible_tokens"}
-                    if native_sampling.sampling_unit == "layer_windows" else {
-                    "warmup_cohorts": native_sampling.warmup_cohorts,
-                    "calibration_cohorts": native_sampling.calibration_cohorts,
-                    "validation_cohorts": native_sampling.validation_cohorts,
-                    "max_sample_cohorts": native_sampling.max_sample_cohorts})}}
-                    if native_sampling is not None else {})})
+                    "calibration_layers": native_sampling.calibration_layers,
+                    "holdout_layers": native_sampling.holdout_layers,
+                    "layer_sample_scope": "boundary_conditioned_physical_tasks_not_complete_cohorts_or_visible_tokens"}}
+                    if native_sampling is not None else {}),
+                **({"native_sampling": {"model": "native_prefill_pass",
+                    **asdict(scenario.simulation.native_prefill),
+                    "layer_sample_scope": "boundary_conditioned_physical_tasks_not_complete_cohorts_or_visible_tokens"}}
+                    if scenario.simulation.native_prefill is not None else {})})
             return FastScenarioResult(scenario, manifest, simulation.diagnostics,
                 validation.warnings, retention_policy.value, validation.information,
                 forecast=simulation.forecast, detailed=detailed,
@@ -6120,18 +6111,9 @@ def _native_window_report_dict(result: FastScenarioResult, **options) -> Dict[st
     forecast = result.native_window_forecast
     projected = forecast.to_metadata() if forecast is not None else None
     metrics = to_primitive(dict(forecast.metrics)) if forecast is not None else {}
-    layer_sampling = (approximation.get("sampling_unit") == "layer_windows"
-        or result.scenario.simulation.native_window is not None
-        and result.scenario.simulation.native_window.sampling_unit == "layer_windows")
     layer_samples = [to_primitive(row.to_metadata()) for row in result.layer_window_samples]
-    if layer_sampling and result.sampled is not None:
-        raise ValueError("native layer-window sampling cannot publish a partial cohort as a ServingResult prefix")
-    if layer_sampling and forecast is not None and (
-            forecast.sampled_decode_cohorts or forecast.sampled_visible_output_tokens
-            or forecast.sampling_unit != "layer_windows"):
-        raise ValueError("native layer-window samples cannot count completed cohorts or visible output Tokens")
-    prefix = (_report_dict_in_context(result.sampled, **options)
-              if result.sampled is not None else None)
+    if result.sampled is not None:
+        raise ValueError("native stationary sampling cannot publish a partial cohort as a ServingResult prefix")
     accepted = forecast is not None and approximation.get("effective_mode") == "fast"
     requests = {}
     if accepted:
@@ -6156,18 +6138,14 @@ def _native_window_report_dict(result: FastScenarioResult, **options) -> Dict[st
         "retention_policy": result.retention_policy, "trace_fidelity": "approximate",
         "approximation": approximation,
         "result_semantics": {
-            "precision": ("boundary_conditioned_physical_layer_windows_and_independent_window_forecast"
-                if layer_sampling else "complete_native_cohort_samples_and_independent_window_forecast"),
-            "sampling_unit": "layer_windows" if layer_sampling else "cohorts",
+            "precision": "boundary_conditioned_physical_layer_runs_and_stationary_window_forecast",
             "sampled_requests_may_be_unfinished": True,
-            "controller_state": ("physical_state_discarded_after_boundary_conditioned_layer_samples"
-                if layer_sampling else "physical_prefix_cutoff_not_advanced_by_forecast"),
-            "transactions": ("only_executed_layer_window_tasks_have_physical_records"
-                if layer_sampling else "only_physically_sampled_prefix_has_transactions"),
+            "controller_state": "physical_state_discarded_after_boundary_conditioned_layer_samples",
+            "transactions": "only_executed_layer_run_tasks_have_physical_records",
             "metrics": "conditional_forecast_bounds_not_full_window_observations",
             "accuracy_target_is_guarantee": False,
-            "complete_physical_decode_cohorts_observed": 0 if layer_sampling else approximation.get("sampled_decode_cohorts", 0),
-            "visible_output_tokens_observed": 0 if layer_sampling else approximation.get("sampled_visible_output_tokens", 0),
+            "complete_physical_decode_cohorts_observed": 0,
+            "visible_output_tokens_observed": 0,
         },
         "summary": {
             "makespan_ns": None, "task_count": None, "batch_count": None,
@@ -6184,7 +6162,6 @@ def _native_window_report_dict(result: FastScenarioResult, **options) -> Dict[st
             "bottleneck_resource": None,
         },
         "native_window_forecast": to_primitive(projected),
-        "physical_prefix": prefix,
         "physical_layer_samples": layer_samples,
         "physical_ingress_accounting": to_primitive(approximation.get("physical_ingress_accounting")),
         "physical_boundary_accounting": to_primitive(approximation.get("physical_boundary_accounting")),
@@ -6201,9 +6178,32 @@ def _native_window_report_dict(result: FastScenarioResult, **options) -> Dict[st
     }
 
 
+def _native_prefill_report_dict(result: FastScenarioResult, **options) -> Dict[str, Any]:
+    approximation = to_primitive(dict(result.approximation))
+    return {
+        "scenario": result.scenario.name, "manifest": to_primitive(result.manifest),
+        "runtime_placement": _runtime_placement_payload(result.scenario),
+        "execution_mode": "continuous_batching", "simulation_mode": "fast",
+        "retention_policy": result.retention_policy, "trace_fidelity": "approximate",
+        "approximation": approximation,
+        "result_semantics": {
+            "precision": "boundary_conditioned_physical_layer_runs_and_prefill_pass_interval",
+            "transactions": "only_executed_layer_run_tasks_have_physical_records",
+            "metrics": "prefill_pass_interval_not_a_committed_cohort",
+            "accuracy_target_is_guarantee": False,
+        },
+        "prefill_pass": approximation.get("prefill_pass"),
+        "physical_layer_samples": [to_primitive(row.to_metadata()) for row in result.layer_window_samples],
+        "validation_warnings": list(result.validation_warnings),
+        "validation_information": list(result.validation_information),
+    }
+
+
 def _fast_report_dict(result: FastScenarioResult, **options) -> Dict[str, Any]:
     if result.scenario.simulation.native_window is not None:
         return _native_window_report_dict(result, **options)
+    if result.scenario.simulation.native_prefill is not None:
+        return _native_prefill_report_dict(result, **options)
     approximation = to_primitive(dict(result.approximation))
     if result.detailed is not None:
         data = _report_dict_in_context(result.detailed, **options)
@@ -6512,26 +6512,33 @@ def format_report(
         data = report_dict(result)
     if isinstance(result, FastScenarioResult):
         approximation = data["approximation"]
+        if result.scenario.simulation.native_prefill is not None:
+            row = (approximation.get("prefill_pass") or {}).get("metric_bounds", {}).get("prefill_pass_ns")
+            return "\n".join([
+                "场景：{}".format(result.scenario.name),
+                "仿真模式：原生Prefill单次前向（{}）".format(
+                    "完整单窗" if result.scenario.simulation.native_prefill.full_pass else "分层采样"),
+                "预算结果：{}".format("接受" if approximation.get("effective_mode") == "fast" else "拒绝"),
+                "Prefill时长区间：{}".format("{:.3f}–{:.3f} ms".format(row["lower"] / 1e6, row["upper"] / 1e6)
+                    if row else "不可用"),
+                "真实层样本 {}；未提交批次、KV导出或输出Token。".format(len(result.layer_window_samples)),
+                *("拒绝原因：" + str(reason) for reason in approximation.get("rejection_reasons", ())),
+            ])
         if result.scenario.simulation.native_window is not None:
             forecast = result.native_window_forecast
             metrics = dict(forecast.metrics) if forecast is not None else {}
             tpot = metrics.get("mean_complete_request_tpot_ns")
-            layer_sampling = data.get("result_semantics", {}).get("sampling_unit") == "layer_windows"
             return "\n".join([
                 "场景：{}".format(result.scenario.name),
-                ("仿真模式：原生物理层窗口采样与独立窗口预测" if layer_sampling
-                    else "仿真模式：原生批次采样与独立窗口预测"),
+                "仿真模式：原生稳态层样本与独立窗口预测",
                 "预算结果：{}".format("接受" if forecast is not None else "拒绝"),
-                ("真实层窗口 {}；完整Decode批次和可见输出Token实测均为0。".format(
-                    len(result.layer_window_samples)) if layer_sampling else "真实Decode批次 {}；预测批次 {}。".format(
-                    approximation.get("sampled_decode_cohorts", 0),
-                    approximation.get("predicted_decode_cohorts", 0))),
+                "真实层样本 {}；完整Decode批次和可见输出Token实测均为0。".format(
+                    len(result.layer_window_samples)),
                 "预测TPOT：{}".format("{:.3f} ms".format(tpot / 1e6)
                     if isinstance(tpot, (int, float)) else "不可用"),
                 "条件误差预算≤{:.0%}，不是完整窗口实测误差保证。".format(
                     approximation["target_relative_error"]),
-                ("物理层样本依赖显式边界条件，不能当作完整Token或批次；预测不推进其物理状态。"
-                    if layer_sampling else "物理状态停在真实采样截止点；预测部分没有物理事务、计数或资源利用率。"),
+                "物理层样本依赖显式边界条件，不能当作完整Token或批次；预测不推进其物理状态。",
                 *("拒绝原因：" + str(reason)
                   for reason in approximation.get("rejection_reasons", ())),
             ])

@@ -516,8 +516,10 @@ class PhysicalRuntimeContext:
                 "hbm_transaction": hbm_transaction,
                 "nand_transaction": nand_transaction,
             }
+        # A transaction copies an allocation map only if it mutates it; a
+        # public snapshot may outlive transactions and keeps its own copy.
         allocator_state = {
-            owner: dict(allocator._allocations)
+            owner: (allocator.begin_transaction() if transactional else dict(allocator._allocations))
             for owner, allocator in self.allocators.items()
             if selected_owners is None or owner in selected_owners
         }
@@ -708,6 +710,9 @@ class PhysicalRuntimeContext:
             if nand_token is not None:
                 state["active"].core.commit_transaction(nand_token)
         commit(snapshot["hbf_staging"])
+        for owner, save in snapshot["allocator_state"].items():
+            if type(save) is not dict:
+                snapshot["allocators"][owner].commit_transaction(save)
         timeline_token = snapshot["timeline"].get("_owned_transaction")
         if timeline_token is not None:
             timeline_token.finish()
@@ -748,7 +753,10 @@ class PhysicalRuntimeContext:
             active.core.timeline = self.timeline
         for owner, allocations in snapshot["allocator_state"].items():
             allocator = self.allocators[owner]
-            allocator._restore_allocations(allocations)
+            if type(allocations) is dict:
+                allocator._restore_allocations(allocations)
+            else:
+                allocator.rollback_transaction(allocations)
         timeline_state = snapshot["timeline"]
         timeline = self.timeline
         timeline_token = timeline_state.get("_owned_transaction")
@@ -996,6 +1004,8 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
         declarations,
         key=lambda item: 1 if isinstance(item, Mapping) and item.get("alias_of") else 0,
     )
+    # One parsed geometry per owner for this unchanged task metadata.
+    owner_configs = {}
     while pending:
         deferred = []
         progress = 0
@@ -1020,10 +1030,11 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
                 if existing_allocator is not None and existing_allocator.get_allocation(str(alias_of), alias_generation) is None:
                     deferred.append(declaration)
                     continue
+            if owner not in owner_configs:
+                owner_configs[owner] = _owner_physical_config(metadata, owner, raw_config, runtime)
             try:
                 _register_physical_allocation(
-                    declaration, metadata, runtime,
-                    _owner_physical_config(metadata, owner, raw_config, runtime),
+                    declaration, metadata, runtime, owner_configs[owner],
                 )
                 progress += 1
             except ValueError:

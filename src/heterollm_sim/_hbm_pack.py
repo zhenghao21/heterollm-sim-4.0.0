@@ -188,9 +188,11 @@ def consume_resource_columns(accumulator, lookup: dict, resources, moved,
                              timeline):
     """Fuse exact public deltas with the task bill without temporary maps.
 
-    Numeric checkpoint rows are immutable for this call.  Iteration follows
-    each public dictionary, while last intervals follow its actual touched
-    set, exactly as ResourceTimeline's per-request accounting does.
+    Numeric checkpoint rows are immutable for this call.  Last intervals
+    follow the actual touched set, exactly as ResourceTimeline's per-request
+    accounting does. Byte and busy deltas visit only touched resources:
+    updating a key already in the bill keeps its place, so only keys new to
+    the bill need the public dictionary's order, taken in a second pass.
     """
     current: cython.double[:, ::1] = resources
     previous_rows: cython.double[:, ::1] = before_resources
@@ -217,23 +219,47 @@ def consume_resource_columns(accumulator, lookup: dict, resources, moved,
         prior_interval = last.get(rid)
         if prior_interval is None or (interval[1], interval[0]) > (prior_interval[1], prior_interval[0]):
             last[rid] = interval
-    for rid in public_bytes:
-        if rid not in touched:
-            continue
-        index = lookup[rid]
-        before_index = index if positions is None else positions[index]
-        if moved_view[index] != previous_bytes[before_index]:
-            byte_delta = int(moved_view[index]) - int(previous_bytes[before_index])
-            byte_count[rid] = byte_count.get(rid, 0) + byte_delta
-    for rid in public_busy:
-        if rid not in touched:
-            continue
-        index = lookup[rid]
-        before_index = index if positions is None else positions[index]
-        value = current[index, 1]
-        before_value = previous_rows[before_index, 1]
-        if value != before_value:
-            # Keep subtraction followed by exactly one addition per request;
-            # never replace this sequence with a batch subtotal.
-            total = busy.get(rid, 0.0)
-            busy[rid] = total + (value - before_value)
+    fresh_bytes: list = []
+    fresh_busy: list = []
+    pending: set
+    for rid in touched:
+        if rid in public_bytes:
+            index = lookup[rid]
+            before_index = index if positions is None else positions[index]
+            if moved_view[index] != previous_bytes[before_index]:
+                if rid in byte_count:
+                    byte_delta = int(moved_view[index]) - int(previous_bytes[before_index])
+                    byte_count[rid] = byte_count[rid] + byte_delta
+                else:
+                    fresh_bytes.append(rid)
+        if rid in public_busy:
+            index = lookup[rid]
+            before_index = index if positions is None else positions[index]
+            value = current[index, 1]
+            before_value = previous_rows[before_index, 1]
+            if value != before_value:
+                if rid in busy:
+                    # Keep subtraction followed by exactly one addition per
+                    # request; never replace this sequence with a batch subtotal.
+                    total = busy[rid]
+                    busy[rid] = total + (value - before_value)
+                else:
+                    fresh_busy.append(rid)
+    if fresh_bytes:
+        pending = set(fresh_bytes)
+        for rid in public_bytes:
+            if rid in pending:
+                index = lookup[rid]
+                before_index = index if positions is None else positions[index]
+                byte_delta = int(moved_view[index]) - int(previous_bytes[before_index])
+                byte_count[rid] = byte_count.get(rid, 0) + byte_delta
+    if fresh_busy:
+        pending = set(fresh_busy)
+        for rid in public_busy:
+            if rid in pending:
+                index = lookup[rid]
+                before_index = index if positions is None else positions[index]
+                value = current[index, 1]
+                before_value = previous_rows[before_index, 1]
+                total = busy.get(rid, 0.0)
+                busy[rid] = total + (value - before_value)

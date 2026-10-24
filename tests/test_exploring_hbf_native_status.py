@@ -14,13 +14,15 @@ def write(path, value):
     path.write_text(json.dumps(value), encoding="utf-8")
 
 
-def point(hw, *, model="405b", workload="SHORT", state="completed", tps=100., tpot=10e6, dtype="bf16"):
+def point(hw, *, model="405b", workload="SHORT", state="completed", tps=100., tpot=10e6, dtype="bf16",
+          layout=(1, 8, 1, 1), batch=8):
     case = {"case_id": f"{model}-{hw}-{workload}", "model": model, "hardware": hw,
         "workload": workload, "input_tokens": 1660, "output_tokens": 373, "gpu_count": 8,
-        "weight_dtype": dtype, "kv_dtype": dtype, "tp": 8, "pp": 1, "ep": 1}
+        "weight_dtype": dtype, "kv_dtype": dtype}
     return {"case_id": case["case_id"], "case": case, "status": state,
         "selected": {"status": state, "backend": "native_serving_physical",
-            "parameters": {"batch_size": 8}, "metrics": {"tokens_per_second_per_gpu": tps,
+            "parameters": {**dict(zip(("dp", "tp", "pp", "ep"), layout)), "batch_size": batch},
+            "metrics": {"tokens_per_second_per_gpu": tps,
                 "cluster_tokens_per_second": 8*tps, "mean_complete_request_tpot_ns": tpot}}}
 
 
@@ -34,15 +36,17 @@ def test_empty_run_does_not_invent_metrics_or_whole_run_progress(tmp_path):
     progress = {"case_id": "a", "pid": 123, "stage": "cohort_tasks", "completed": 98560,
         "total": 123197, "wall_seconds": 26000., "updated_at": "2026-10-20T07:00:00+08:00"}
     write(tmp_path / "status.json", {"state": "running", "counts": {"running": 1, "pending": 29},
-        "running": [{"case_id": "a", "launcher_pid": 456}], "total_cases": 30, "total_candidates": 60})
+        "running": [{"case_id": "a", "candidate_id": "a__DP1_TP8_PP1_EP1__B1", "launcher_pid": 456}],
+        "total_cases": 30, "total_candidates": 60})
     write(tmp_path / "results.json", {"cases": []})
-    write(tmp_path / "progress/a.json", progress)
+    write(tmp_path / "progress/a__DP1_TP8_PP1_EP1__B1.json", progress)
     snapshot = report.build_snapshot(tmp_path)
     assert snapshot["completed_results"] == []
     assert snapshot["eta"]["remaining_min_seconds"] is None
     assert snapshot["eta"]["remaining_max_seconds"] is None
     assert snapshot["running"][0]["completed"] == 98560
     assert snapshot["running"][0]["pid"] == 123
+    assert snapshot["running"][0]["candidate_id"] == "a__DP1_TP8_PP1_EP1__B1"
     assert "percentage" not in snapshot["running"][0]
     assert snapshot["observed_at"].endswith("+08:00")
     markdown = report.render_markdown(snapshot)
@@ -116,11 +120,12 @@ def test_configuration_omits_native_model_graphs_and_keeps_real_hardware(tmp_pat
     write(tmp_path / "native_inputs.json", {"models": {"huge_graph": ["DO NOT PUBLISH"]},
         "hardware": {"HBM4": {"per_gpu_table": {"capacity": 288},
             "native_hbm_config": {"bandwidth": 12800}, "other_unneeded": "omit"}}})
-    write(tmp_path / "run_manifest.json", {"batch_sizes": [1, 8], "fixed_deployment": {"tp": 8}})
+    write(tmp_path / "run_manifest.json", {"batch_sizes": [1, 8], "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}})
     configuration = report.build_snapshot(tmp_path)["configuration"]
     assert configuration["models"] == {"405b": {"layers": 126}}
     assert configuration["hardware"]["HBM4"]["native_hbm_config"]["bandwidth"] == 12800
     assert configuration["run"]["batch_sizes"] == [1, 8]
+    assert configuration["run"]["layout"] == {"dp": 1, "tp": 8, "pp": 1, "ep": 1}
     assert "DO NOT PUBLISH" not in json.dumps(configuration)
 
 
@@ -233,3 +238,34 @@ def test_live_diagnostic_reads_real_progress_and_terminal_without_changing_scan(
         "wall_seconds": 700., "metrics": None, "rejection_reason": "budget_exceeded"})
     row, = report.build_snapshot(tmp_path)["optimization"]["rows"]
     assert row["status"] == "forecast_rejected" and row["wall_seconds"] == 700.
+
+
+def test_completed_rows_carry_the_selected_layout_and_baseline_ignores_it(tmp_path):
+    """Each store is compared at its own best layout and batch, not at a fixed one."""
+    baseline = point("HBM4", layout=(1, 8, 1, 1), batch=8)
+    other = point("HBF", tps=200., tpot=15e6, layout=(2, 2, 1, 2), batch=16)
+    write(tmp_path / "results.json", {"cases": [baseline, other]})
+    a, b = report.build_snapshot(tmp_path)["completed_results"]
+    assert [(a[key], b[key]) for key in ("dp", "tp", "pp", "ep", "batch_size")] == [
+        (1, 2), (8, 2), (1, 1), (1, 2), (8, 16)]
+    assert (b["throughput_ratio_vs_hbm4"], b["tpot_ratio_vs_hbm4"], b["baseline_batch_size"]) == (2., 1.5, 8)
+    assert a["throughput_ratio_vs_hbm4"] == 1.
+    markdown = report.render_markdown(report.build_snapshot(tmp_path))
+    assert "选定布局DP/TP/PP/EP" in markdown and "|2/2/1/2|16|" in markdown and "|1/8/1/1|8|" in markdown
+
+
+def test_running_candidates_are_read_by_candidate_id_so_same_case_candidates_do_not_collide(tmp_path):
+    ids = ["c__DP1_TP8_PP1_EP1__B1", "c__DP2_TP4_PP1_EP1__B8"]
+    write(tmp_path / "status.json", {"state": "running", "running": [
+        {"case_id": "c", "candidate_id": identity, "launcher_pid": 1 + index} for index, identity in enumerate(ids)]})
+    for index, identity in enumerate(ids):
+        write(tmp_path / "progress" / (identity + ".json"), {"case_id": "c", "candidate_id": identity,
+            "pid": 10 + index, "batch_size": 1 + 7 * index, "stage": "cohort_tasks", "completed": index, "total": 5})
+    write(tmp_path / "progress" / "d__DP1_TP8_PP1_EP1__B1.json", {"case_id": "d", "state": "paused", "batch_size": 1})
+    snapshot = report.build_snapshot(tmp_path)
+    assert [(row["case_id"], row["candidate_id"], row["pid"]) for row in snapshot["running"]] == [
+        ("c", ids[0], 10), ("c", ids[1], 11)]
+    paused, = snapshot["paused"]
+    assert (paused["case_id"], paused["candidate_id"]) == ("d", "d__DP1_TP8_PP1_EP1__B1")
+    markdown = report.render_markdown(snapshot)
+    assert ids[0] in markdown and ids[1] in markdown and "d__DP1_TP8_PP1_EP1__B1" in markdown

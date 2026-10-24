@@ -913,8 +913,14 @@ def _collective_plan(
     *,
     algorithm: str,
     routing_policy: str,
+    pair_bytes: Optional[Sequence[Sequence[int]]] = None,
 ) -> object:
     ordered = tuple(participants)
+    pairs = (
+        None
+        if pair_bytes is None
+        else tuple(tuple(row) for row in pair_bytes)
+    )
     context = _active_compilation_context(scenario)
     factory = lambda: plan_collective(
         router,
@@ -923,6 +929,7 @@ def _collective_plan(
         tensor_bytes,
         algorithm=algorithm,
         routing_policy=routing_policy,
+        pair_bytes=pairs,
     )
     if context is None or router is not context.router():
         return factory()
@@ -934,6 +941,7 @@ def _collective_plan(
             tensor_bytes,
             algorithm,
             routing_policy,
+            pairs,
         ),
         factory,
     )
@@ -2839,28 +2847,48 @@ def _validate_scenario_uncached(
                                 rank.rank, exc
                             )
                         )
-        for stage in range(parallel_plan.pp_degree):
-            for group in (
-                parallel_plan.tp_group(stage, 0),
-                parallel_plan.ep_group(stage, 0),
-            ):
-                component_ids = tuple(dict.fromkeys(rank.component_id for rank in group))
-                if len(component_ids) > 1:
-                    _collective_plan(
-                        scenario,
-                        router,
-                        "all_reduce",
-                        component_ids,
-                        1,
-                        algorithm=parallel_plan.collective_algorithm,
-                        routing_policy=parallel_plan.routing_policy,
-                    )
+        # Attention data parallelism runs a TP collective inside every EP
+        # group and the expert exchange over every TP rank's EP ring, so each
+        # group of each kind must be routable, not just group 0.
+        collective_groups = tuple(
+            (parallel_plan.tp_group(stage, ep_rank), "all_reduce")
+            for stage in range(parallel_plan.pp_degree)
+            for ep_rank in range(parallel_plan.ep_degree)
+        ) + tuple(
+            (parallel_plan.ep_group(stage, tp_rank), "all_to_all")
+            for stage in range(parallel_plan.pp_degree)
+            for tp_rank in range(parallel_plan.tp_degree)
+        )
+        for group, collective_kind in collective_groups:
+            component_ids = tuple(dict.fromkeys(rank.component_id for rank in group))
+            if len(component_ids) > 1:
+                _collective_plan(
+                    scenario,
+                    router,
+                    collective_kind,
+                    component_ids,
+                    1,
+                    algorithm=parallel_plan.collective_algorithm,
+                    routing_policy=parallel_plan.routing_policy,
+                )
         for stage in range(parallel_plan.pp_degree - 1):
-            for tp_rank in range(parallel_plan.tp_degree):
-                source = parallel_plan.rank_at(tp_rank, stage, 0).component_id
-                target = parallel_plan.rank_at(tp_rank, stage + 1, 0).component_id
-                router.route(
-                    source, target, 1, policy=parallel_plan.routing_policy
+            for ep_rank in range(parallel_plan.ep_degree):
+                for tp_rank in range(parallel_plan.tp_degree):
+                    source = parallel_plan.rank_at(tp_rank, stage, ep_rank).component_id
+                    target = parallel_plan.rank_at(tp_rank, stage + 1, ep_rank).component_id
+                    router.route(
+                        source, target, 1, policy=parallel_plan.routing_policy
+                    )
+        if parallel_plan.ep_degree > 1:
+            if scenario.llama_cpp_config is not None:
+                errors.append(
+                    "llama.cpp runtime lowering is single-rank and has no "
+                    "attention data-parallel (ep_degree > 1) semantics"
+                )
+            if scenario.workload.mtp is not None:
+                errors.append(
+                    "MTP lowering is single-rank and has no attention "
+                    "data-parallel (ep_degree > 1) semantics"
                 )
         for rank in parallel_plan.ranks:
             for endpoint, label in (
@@ -7969,6 +7997,22 @@ def _weight_source_for_tensor(
                 ),
                 None,
             )
+    if selected_shard is None and rank is not None and rank.ep_rank > 0:
+        # Attention data parallelism replicates dense weights into every EP
+        # group.  A tensor that the control plane sharded but never placed on
+        # this group's rank must fail loudly, not fall back to group 0's or the
+        # aggregate backing and price the wrong source.
+        placed = decision.get("rank_weight_shards", {})
+        placed = placed.get(placement_tensor) if isinstance(placed, Mapping) else None
+        if placed and not any(
+            isinstance(shard, Mapping) and str(shard.get("rank_id")) == str(rank.rank)
+            for shard in placed
+        ):
+            raise ValueError(
+                "weight tensor {} has no physical shard for EP-group rank {}; "
+                "replicated dense weights must be placed in every EP group".format(
+                    placement_tensor, rank.rank)
+            )
     if selected_shard is not None and residency != "cold_cim_transient":
         storage = selected_shard["storage_component_id"]
         if storage:
@@ -8826,8 +8870,10 @@ def _weight_execution_targets(
     """Return every physical compute target that consumes a weight tensor."""
 
     canonical = _canonical_weight_tensor_id(scenario, tensor_id)
+    # Dense weights are replicated into every EP group (attention data
+    # parallelism), so each group's ranks consume them.
     if canonical in {"embedding_weights", "lm_head_weights"}:
-        ranks = plan.tp_group(plan.pp_degree - 1, 0)
+        ranks = plan.ranks_for_stage(plan.pp_degree - 1)
         targets = (
             _parallel_named_target(scenario, "lm_head", rank)
             for rank in ranks
@@ -8835,7 +8881,7 @@ def _weight_execution_targets(
     else:
         mtp_descriptor = _mtp_descriptor_for_weight(scenario, canonical)
         if mtp_descriptor is not None:
-            ranks = plan.tp_group(plan.pp_degree - 1, 0)
+            ranks = plan.ranks_for_stage(plan.pp_degree - 1)
             consumer_ids = []
             if _canonical_weight_tensor_id(
                 scenario, "lm_head_weights"
@@ -8854,43 +8900,27 @@ def _weight_execution_targets(
         layer = None
         for candidate in _execution_layers(scenario):
             specifications = {
-                "{}.attention_weights".format(candidate.layer_id): (
-                    "attention",
-                    "tp",
-                ),
+                "{}.attention_weights".format(candidate.layer_id): "attention",
                 "{}.linear_attention_weights".format(candidate.layer_id): (
-                    "linear_attention",
-                    "tp",
+                    "linear_attention"
                 ),
-                "{}.mlp_weights".format(candidate.layer_id): ("mlp", "tp"),
-                "{}.expert_weights".format(candidate.layer_id): (
-                    "experts",
-                    "all",
-                ),
+                "{}.mlp_weights".format(candidate.layer_id): "mlp",
+                "{}.expert_weights".format(candidate.layer_id): "experts",
                 "{}.shared_expert_weights".format(candidate.layer_id): (
-                    "shared_expert",
-                    "tp",
+                    "shared_expert"
                 ),
-                "{}.router_weights".format(candidate.layer_id): (None, "tp"),
-                "{}.shared_expert_gate_weights".format(candidate.layer_id): (
-                    None,
-                    "tp",
-                ),
+                "{}.router_weights".format(candidate.layer_id): None,
+                "{}.shared_expert_gate_weights".format(candidate.layer_id): None,
             }
             if canonical in specifications:
                 layer = candidate
-                target_spec = specifications[canonical]
+                target_spec = (specifications[canonical],)
                 break
         if layer is None or target_spec is None:
             targets = (rank.component_id for rank in plan.ranks)
         else:
-            group, rank_mode = target_spec
-            stage = plan.stage_for_layer(layer)
-            ranks = (
-                plan.ranks_for_stage(stage)
-                if rank_mode == "all"
-                else plan.tp_group(stage, 0)
-            )
+            group, = target_spec
+            ranks = plan.ranks_for_layer(layer)
             targets = (
                 rank.component_id
                 if group is None
@@ -10714,6 +10744,7 @@ def _add_collective_tasks(
     element_bits: int = 8,
     physical_shard_bytes: Optional[int] = None,
     metadata: Optional[Mapping[str, object]] = None,
+    pair_bytes: Optional[Sequence[Sequence[int]]] = None,
 ) -> str:
     if (
         isinstance(tensor_bytes, bool)
@@ -10760,6 +10791,28 @@ def _add_collective_tasks(
     rank_input_bytes = tensor_bytes
     transport_tensor_bytes = tensor_bytes
     normalized_kind = kind.strip().lower().replace("-", "_")
+    # Pairwise all-to-all (expert dispatch/combine across EP groups): the
+    # matrix replaces the uniform chunk, ``tensor_bytes`` stays the largest
+    # per-participant send buffer for reporting.
+    pair_input_bytes: Optional[Tuple[int, ...]] = None
+    if pair_bytes is not None:
+        if normalized_kind != "all_to_all":
+            raise ValueError("pair_bytes is only valid for all_to_all")
+        if physical_shard_bytes is not None or tensor_elements is not None:
+            raise ValueError(
+                "pair_bytes cannot be combined with tensor_elements or "
+                "physical_shard_bytes"
+            )
+        pair_bytes = tuple(tuple(row) for row in pair_bytes)
+        if len(pair_bytes) != len(ranks) or any(
+            len(row) != len(ranks) for row in pair_bytes
+        ):
+            raise ValueError(
+                "pair_bytes must be a {0}x{0} matrix".format(len(ranks))
+            )
+        pair_input_bytes = tuple(
+            sum(row) - row[index] for index, row in enumerate(pair_bytes)
+        )
     if (
         len(ranks) > 1
         and normalized_kind in {"all_reduce", "reduce_scatter"}
@@ -10826,19 +10879,27 @@ def _add_collective_tasks(
         )
     else:
         normalized_inputs: List[str] = []
-        for rank in ranks:
+        for rank_index, rank in enumerate(ranks):
             source_component = (
                 builder.rank_value_component(dependencies, rank.rank)
                 or rank.component_id
             )
-            if source_component != rank.component_id:
+            input_bytes = (
+                rank_input_bytes
+                if pair_input_bytes is None
+                else pair_input_bytes[rank_index]
+            )
+            # A pairwise participant that sends nothing moves no input.
+            if source_component != rank.component_id and (
+                pair_input_bytes is None or input_bytes > 0
+            ):
                 normalized_inputs.append(
                     _add_transfer_tasks(
                         builder,
                         router,
                         source_component,
                         rank.component_id,
-                        rank_input_bytes,
+                        input_bytes,
                         dependencies,
                         name="{}.rank{:03d}.input_to_collective".format(
                             name, rank.rank
@@ -10859,6 +10920,10 @@ def _add_collective_tasks(
     components = tuple(
         dict.fromkeys(rank_value_components[rank.rank] for rank in ranks)
     )
+    if pair_bytes is not None and len(components) != len(ranks):
+        raise ValueError(
+            "pair_bytes all_to_all requires one component per rank"
+        )
     collective = _collective_plan(
         scenario,
         router,
@@ -10867,6 +10932,7 @@ def _add_collective_tasks(
         transport_tensor_bytes,
         algorithm=plan.collective_algorithm,
         routing_policy=plan.routing_policy,
+        pair_bytes=pair_bytes,
     )
     normalized_kind = collective.kind
     reduction_elements: Optional[int] = None
@@ -10887,6 +10953,14 @@ def _add_collective_tasks(
         base_metadata.setdefault("collective_logical_bytes", tensor_bytes)
         base_metadata.setdefault(
             "collective_physical_bytes", transport_tensor_bytes
+        )
+    if pair_bytes is not None:
+        base_metadata.setdefault("collective_pairwise", True)
+        base_metadata.setdefault(
+            "collective_pair_bytes_total", sum(pair_input_bytes)
+        )
+        base_metadata.setdefault(
+            "collective_pair_bytes_max_send", max(pair_input_bytes)
         )
     prior = collective_dependencies
     if not collective.rounds:
@@ -16184,6 +16258,27 @@ def _logical_kv_bytes_per_token_for_rank(
     return int(math.ceil(2 * logical_heads * head_dim * dtype_bits / 8.0))
 
 
+def _generic_kv_request_capacities(scenario):
+    """Requests and their declared live KV token budgets, once per context."""
+    def build():
+        requests = {request.request_id: request for request in scenario.workload.requests}
+        capacity = (int(scenario.llama_cpp_config.context) if scenario.llama_cpp_config is not None
+                    else int(_execution_view(scenario).max_sequence_length))
+        extra = int(getattr(scenario.workload.mtp, "candidate_tokens", 0) or 0)
+        # A generic request owns its declared live token budget, not the model's
+        # maximum supported context. Reserving max_sequence_length per request
+        # made small, otherwise admissible KV-only devices fail address binding
+        # (e.g. a 136-token request allocated a 262K-token physical buffer).
+        # An explicit llama.cpp context retains its native reserved-buffer rule.
+        minimum_capacity = capacity if scenario.llama_cpp_config is not None else 1
+        capacities = {key: max(minimum_capacity, int(request.prompt_tokens) + max(0, int(request.output_tokens) - 1) + extra)
+                      for key, request in requests.items()}
+        total_capacity = max(sum(capacities.values()), 1) if capacities else max(capacity, 1)
+        return requests, capacities, total_capacity
+    context = _active_compilation_context(scenario)
+    return build() if context is None else context.invariant(("generic_kv_request_capacities",), build)
+
+
 def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
                          token_batch, context_tokens, history_tokens,
                          materialized_tokens, includes_current=False):
@@ -16195,12 +16290,19 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
     row_bytes = _kv_tensor_bytes(scenario, layer, plan.tp_degree, 1)
     if layer.attention_chunk_size and includes_current:
         raise ValueError("fixed-chunk KV cannot use the undeclared full unified-scan view")
-    requests = {request.request_id: request for request in scenario.workload.requests}
+    if includes_current:
+        _require_single_ep(plan, "the unified-scan KV view")
+    requests, capacities, total_capacity = _generic_kv_request_capacities(scenario)
+    # Under attention data parallelism the builder holds only the lanes of the
+    # EP group being lowered, and ``rank`` is one of that group's ranks, so the
+    # owners (and their rank-qualified buffer ids) live on the owning group.
     lanes = tuple(getattr(builder, "_attention_invocation_lanes", ()))
     owners = []
     if lanes:
-        for request_id in dict.fromkeys(lane.request_id for lane in lanes):
-            rows = tuple(lane for lane in lanes if lane.request_id == request_id)
+        rows_by_request: Dict[str, List[object]] = {}
+        for lane in lanes:
+            rows_by_request.setdefault(lane.request_id, []).append(lane)
+        for request_id, rows in rows_by_request.items():
             end = max(lane.context_tokens for lane in rows)
             materialized = tuple(lane.context_tokens - 1 for lane in rows if lane.kv_materialized_tokens)
             ranges = [(layer.attention_kv_start(lane.context_tokens - 1),
@@ -16239,18 +16341,6 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
         else:
             request_id, _end, materialized, _ranges = owners[0]
             owners = [(request_id, history_tokens, materialized, [(0, history_tokens)])]
-    capacity = (int(scenario.llama_cpp_config.context) if scenario.llama_cpp_config is not None
-                else int(_execution_view(scenario).max_sequence_length))
-    extra = int(getattr(scenario.workload.mtp, "candidate_tokens", 0) or 0)
-    # A generic request owns its declared live token budget, not the model's
-    # maximum supported context. Reserving max_sequence_length per request
-    # made small, otherwise admissible KV-only devices fail address binding
-    # (e.g. a 136-token request allocated a 262K-token physical buffer).
-    # An explicit llama.cpp context retains its native reserved-buffer rule.
-    minimum_capacity = capacity if scenario.llama_cpp_config is not None else 1
-    capacities = {key: max(minimum_capacity, int(request.prompt_tokens) + max(0, int(request.output_tokens) - 1) + extra)
-                  for key, request in requests.items()}
-    total_capacity = max(sum(capacities.values()), 1) if capacities else max(capacity, 1)
     result = {"schema": "analytical-token-major-kv/v1", "row_bytes": row_bytes,
               "layout": "separate_token_major_k_and_v", "read_tokens": 0,
               "materialized_tokens": 0, "owners": []}
@@ -16366,9 +16456,12 @@ def _generic_kv_accesses(contract, part, *, write=False):
 
 
 def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
-                                history_tokens: int, *,
+                                history_tokens: int, *, ep_group: int,
                                 execution_control: Optional[ExecutionControl] = None):
     """Declare the same resident KV buffers as one final-prompt invocation.
+
+    ``ep_group`` is the request's attention data-parallel owner: its KV lives
+    only on that group's TP ranks, so only those ranks declare buffers.
 
     This is inventory only: it shares the ordinary serving lane, KV contract,
     access descriptor and allocation lowerer, without constructing compute or
@@ -16382,6 +16475,8 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
     control.raise_if_cancelled()
     if type(history_tokens) is not int or history_tokens < 0:
         raise ValueError("native KV ingress history must be a non-negative integer")
+    if type(ep_group) is not int:
+        raise ValueError("native KV ingress ep_group must be an integer")
     request = next((row for row in scenario.workload.requests if row.request_id == request_id), None)
     if request is None or history_tokens != request.prompt_tokens - 1:
         raise ValueError("native KV ingress requires the request's final-prompt history")
@@ -16393,20 +16488,21 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
     # Use serving's lane projection rather than a second causal-range rule.
     item = SimpleNamespace(request_id=request_id, phase="prefill", token_count=1,
         context_tokens=history_tokens, kv_append_tokens=1, kv_materialized_tokens=1,
-        logit_tokens=1, committed_tokens=0)
+        logit_tokens=1, committed_tokens=0, ep_group=ep_group)
     lanes, = _serving_invocation_lanes(SimpleNamespace(kind="prefill", items=(item,)),
         inter_invocation_positions=False)
     builder = SimpleNamespace(request=request, _attention_invocation_lanes=lanes)
-    declarations, configs, contracts = {}, {}, []
+    declarations, configs, contracts, owners = {}, {}, [], {}
     with _compilation_scope(scenario):
         plan = _parallel_plan(scenario)
-        if plan.ep_degree != 1:
-            raise ValueError("native KV ingress has no declared EP request/attention ownership")
+        if not 0 <= ep_group < plan.ep_degree:
+            raise ValueError("native KV ingress ep_group {} is outside 0..{}".format(
+                ep_group, plan.ep_degree - 1))
         for layer in _execution_layers(scenario):
             control.raise_if_cancelled()
             if layer.is_linear_attention or _qwen35_attention_source_work(layer) is not None:
                 raise ValueError("native KV ingress inventory requires ordinary generic attention")
-            for rank in plan.tp_group(plan.stage_for_layer(layer), 0):
+            for rank in plan.tp_group(plan.stage_for_layer(layer), ep_group):
                 control.raise_if_cancelled()
                 contract = _generic_kv_contract(builder, scenario, plan, rank, layer,
                     token_batch=1, context_tokens=history_tokens, history_tokens=history_tokens,
@@ -16414,8 +16510,11 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
                 target = _parallel_target(scenario, layer, "attention", rank)
                 component_id, _offload, _ratio = _kv_components(scenario, rank, target, layer)
                 component = _component(scenario, component_id)
-                _cached_physical_memory_config(component)
-                owner = resolve_service(component).physical_owner
+                if component_id not in owners:
+                    # One service per KV component; every layer/rank reuses it.
+                    _cached_physical_memory_config(component)
+                    owners[component_id] = resolve_service(component).physical_owner
+                owner = owners[component_id]
                 config = component.metadata["physical_memory_config"]
                 configs[owner] = config
                 accesses = tuple({**_physical_access_from_cache_access(access),
@@ -18070,33 +18169,31 @@ def _iter_parallel_request_task_chunks(
     selection = _final_output_selection(scenario, plan, request.prompt_tokens, (request.prompt_tokens - 1,))
     invocation_prior, output_indices = _prepare_output_selection_inputs(
         builder, scenario, router, plan, selection, "prefill", (prepared,))
-    end = _compile_parallel_iteration(
-        builder,
-        scenario,
-        plan,
-        router,
+    # Autoregressive prefill consumes only the final prompt position's
+    # logits.  Backbone/KV work still covers the whole prompt below.
+    partitions = _offline_request_partitions(
+        scenario, plan, request,
         token_batch=request.prompt_tokens,
         context_tokens=request.prompt_tokens,
         kv_read_tokens=0,
         kv_append_tokens=request.prompt_tokens,
         kv_materialized_tokens=request.prompt_tokens,
+        logit_row_indices=(request.prompt_tokens - 1,),
+        committed_logit_rows=1,
+    )
+    end = _compile_parallel_iteration(
+        builder,
+        scenario,
+        plan,
+        router,
+        partitions=partitions,
         phase="prefill",
         output_selection=selection,
         output_indices_dependency=output_indices,
         dependencies=invocation_prior,
     )
-    end = _compile_parallel_lm_head(
-        builder,
-        scenario,
-        plan,
-        router,
-        "prefill",
-        (end,),
-        # Autoregressive prefill consumes only the final prompt position's
-        # logits.  Backbone/KV work still covers the whole prompt above.
-        token_batch=1,
-        source_token_batch=request.prompt_tokens,
-        source_row_indices=(request.prompt_tokens - 1,),
+    end = _compile_partition_lm_heads(
+        builder, scenario, plan, router, "prefill", (end,), partitions,
         output_selection=selection,
         output_indices_dependency=output_indices,
     )
@@ -18112,6 +18209,7 @@ def _iter_parallel_request_task_chunks(
             phase="prefill",
             logit_rows=1,
             committed_rows=1,
+            ep_logit_rows=_partition_logit_rows(plan, partitions),
         )
         end = _add_request_marker_boundary(
             builder, scenario, request, end, marker="first_token"
@@ -18123,6 +18221,8 @@ def _iter_parallel_request_task_chunks(
     yield RequestTaskChunk(builder.drain(), end)
 
     mtp = _mtp_configuration(scenario)
+    if mtp is not None:
+        _require_single_ep(plan, "MTP verification and drafting")
     mtp_cursor = MTPRequestCursor(mtp) if mtp is not None else None
     while next_token < request.output_tokens:
         if mtp is None:
@@ -18154,11 +18254,8 @@ def _iter_parallel_request_task_chunks(
             selection = _final_output_selection(scenario, plan, 1, (0,))
             invocation_prior, output_indices = _prepare_output_selection_inputs(
                 builder, scenario, router, plan, selection, phase, (prepared,))
-            end = _compile_parallel_iteration(
-                builder,
-                scenario,
-                plan,
-                router,
+            partitions = _offline_request_partitions(
+                scenario, plan, request,
                 token_batch=1,
                 context_tokens=request.prompt_tokens + next_token,
                 kv_read_tokens=max(
@@ -18166,15 +18263,24 @@ def _iter_parallel_request_task_chunks(
                 ),
                 kv_append_tokens=1,
                 kv_materialized_tokens=1,
+                logit_row_indices=(0,),
+                committed_logit_rows=1,
+            )
+            end = _compile_parallel_iteration(
+                builder,
+                scenario,
+                plan,
+                router,
+                partitions=partitions,
                 phase=phase,
                 output_selection=selection,
                 output_indices_dependency=output_indices,
                 dependencies=invocation_prior,
             )
-            end = _compile_parallel_lm_head(
-                builder, scenario, plan, router, phase, (end,),
-                source_token_batch=1, source_row_indices=(0,),
-                output_selection=selection, output_indices_dependency=output_indices,
+            end = _compile_partition_lm_heads(
+                builder, scenario, plan, router, phase, (end,), partitions,
+                output_selection=selection,
+                output_indices_dependency=output_indices,
             )
             _bind_output_index_upload(builder, scenario, router, plan, first_invocation_task, output_indices)
             end = _add_host_visible_logits_sampling_commit(
@@ -18186,6 +18292,7 @@ def _iter_parallel_request_task_chunks(
                 phase=phase,
                 logit_rows=1,
                 committed_rows=1,
+                ep_logit_rows=_partition_logit_rows(plan, partitions),
             )
             if next_token == 0:
                 end = _add_request_marker_boundary(
@@ -18262,11 +18369,8 @@ def _iter_parallel_request_task_chunks(
             invocation_family="target_operator",
             orchestration_stage="host_target_frontend",
         )
-        end = _compile_parallel_iteration(
-            builder,
-            scenario,
-            plan,
-            router,
+        partitions = _offline_request_partitions(
+            scenario, plan, request,
             token_batch=verifier_tokens,
             context_tokens=request.prompt_tokens + next_token,
             kv_read_tokens=verifier_tokens
@@ -18280,20 +18384,20 @@ def _iter_parallel_request_task_chunks(
                 read_source="committed",
                 release_temporary=True,
             ),
-            phase=phase,
-            dependencies=(target_frontend,),
+            logit_row_indices=tuple(range(verifier_tokens)),
+            committed_logit_rows=accepted,
         )
-        end = _compile_parallel_lm_head(
+        end = _compile_parallel_iteration(
             builder,
             scenario,
             plan,
             router,
-            phase,
-            (end,),
-            token_batch=verifier_tokens,
-            source_token_batch=verifier_tokens,
-            source_row_indices=tuple(range(verifier_tokens)),
+            partitions=partitions,
+            phase=phase,
+            dependencies=(target_frontend,),
         )
+        end = _compile_partition_lm_heads(
+            builder, scenario, plan, router, phase, (end,), partitions)
         end = _add_host_visible_logits_sampling_commit(
             builder,
             scenario,
@@ -18790,6 +18894,123 @@ def _activation_bytes(
     return int(math.ceil(max(0, elements) * activation_bits / 8.0))
 
 
+@dataclass(frozen=True)
+class _EpPartition:
+    """One EP group's share of a physical invocation (attention data parallelism).
+
+    The group owns a fixed set of requests: their KV lives on that group's TP
+    ranks and their embedding, attention, norms, dense MLP, router, shared
+    expert, final norm and lm_head run there.  Only the routed experts couple
+    groups.  ``lanes=None`` leaves the builder's invocation-wide lane state as
+    the caller set it (offline requests and direct single-group callers).
+    """
+
+    ep_rank: int
+    token_batch: int
+    context_tokens: int
+    kv_read_tokens: int
+    kv_append_tokens: int
+    kv_materialized_tokens: int
+    linear_state_runtime: Optional[_LinearStateRuntimeSemantics] = None
+    lanes: Optional[Tuple[_ServingInvocationLane, ...]] = None
+    request_ids: Tuple[str, ...] = ()
+    attention_read_includes_current: bool = False
+    # Rows of this partition whose logits are sampled, in partition order.
+    logit_row_indices: Tuple[int, ...] = ()
+    committed_logit_rows: int = 0
+
+
+def _ep_prefix(plan: ParallelPlan, prefix: str, ep_rank: int) -> str:
+    """Per-EP-group name prefix; unchanged when there is a single group."""
+
+    return prefix + ".ep{:03d}".format(ep_rank) if plan.ep_degree > 1 else prefix
+
+
+@contextmanager
+def _ep_partition_scope(
+    builder: _TaskBuilder, partition: _EpPartition
+) -> Iterator[None]:
+    """Expose one partition's lanes to the builder-wide readers.
+
+    KV contracts, chunked/NoPE visibility, temperature tuning, linear-state
+    owners and CPU graph rows are read from the builder deep inside the
+    lowering helpers.  Inside this scope they describe only this partition.
+    """
+
+    if partition.lanes is None:
+        yield
+        return
+    names = (
+        "_cpu_graph_rows",
+        "_linear_state_owner_request_ids",
+        "_attention_invocation_lanes",
+        "_attention_read_includes_current",
+    )
+    missing = object()
+    saved = {name: getattr(builder, name, missing) for name in names}
+    builder._cpu_graph_rows = max(1, int(partition.token_batch))
+    builder._linear_state_owner_request_ids = partition.request_ids
+    builder._attention_invocation_lanes = partition.lanes
+    builder._attention_read_includes_current = (
+        partition.attention_read_includes_current
+    )
+    # Serving tags every task of the invocation; tasks lowered inside this
+    # scope belong to the partition, the rest to the parent group.
+    spans = getattr(builder, "_ep_partition_spans", None)
+    first_task_index = len(builder.tasks)
+    try:
+        yield
+    finally:
+        if spans is not None:
+            spans.append((partition.ep_rank, first_task_index, len(builder.tasks)))
+        for name, value in saved.items():
+            if value is missing:
+                delattr(builder, name)
+            else:
+                setattr(builder, name, value)
+
+
+def _ep_partition_from_group(
+    group: _ServingInvocationGroup,
+    *,
+    context_tokens: Optional[int] = None,
+    kv_read_tokens: Optional[int] = None,
+    lanes: Optional[Tuple[_ServingInvocationLane, ...]] = None,
+    attention_read_includes_current: bool = False,
+) -> _EpPartition:
+    return _EpPartition(
+        ep_rank=group.ep_rank,
+        token_batch=group.token_batch,
+        context_tokens=(
+            group.context_tokens if context_tokens is None else context_tokens
+        ),
+        kv_read_tokens=(
+            group.kv_read_tokens if kv_read_tokens is None else kv_read_tokens
+        ),
+        kv_append_tokens=group.kv_append_tokens,
+        kv_materialized_tokens=group.kv_materialized_tokens,
+        linear_state_runtime=group.linear_state_runtime(),
+        lanes=lanes,
+        request_ids=group.request_ids,
+        attention_read_includes_current=attention_read_includes_current,
+        logit_row_indices=tuple(
+            index for index, lane in enumerate(group.lanes)
+            if lane.requires_logits
+        ),
+        committed_logit_rows=group.committed_logit_token_batch,
+    )
+
+
+def _require_single_ep(plan: ParallelPlan, feature: str) -> None:
+    """Reject features whose lowering only exists for one rank."""
+
+    if plan.ep_degree > 1:
+        raise ValueError(
+            "{} is lowered for a single rank and has no attention "
+            "data-parallel (ep_degree > 1) semantics".format(feature)
+        )
+
+
 def _compile_parallel_embedding(
     builder: _TaskBuilder,
     scenario: ScenarioConfig,
@@ -18799,9 +19020,15 @@ def _compile_parallel_embedding(
     dependencies: Sequence[str],
     *,
     token_batch: int,
+    ep_rank: int = 0,
 ) -> str:
-    """Lower one typed embedding lookup for a backbone invocation."""
+    """Lower one typed embedding lookup for a backbone invocation.
+
+    With attention data parallelism each EP group embeds only its own rows on
+    its own TP ranks (the control plane replicates the table per group).
+    """
     builder._cpu_graph_rows = max(1, int(token_batch))
+    group_phase = _ep_prefix(plan, phase, ep_rank)
 
     from .llama_tensor_storage import (
         qualify_llama_tensor_storage_contract, resolve_embedding_gather_access,
@@ -18855,7 +19082,7 @@ def _compile_parallel_embedding(
     if declared_weight_bytes <= 0:
         return _add_join(
             builder,
-            phase + ".embedding.no_physical_weight",
+            group_phase + ".embedding.no_physical_weight",
             dependencies,
             metadata={
                 "event_kind": "embedding_skipped",
@@ -18869,7 +19096,7 @@ def _compile_parallel_embedding(
         raise ValueError("F32 embedding storage requires an unsharded physical weight row")
     output_bits = 32 if declared_f32_storage else _dtype_bits(output_tensor.dtype)
     rank_ends: List[str] = []
-    for rank in plan.tp_group(stage, 0):
+    for rank in plan.tp_group(stage, ep_rank):
         target_component_id = _primitive_target(
             scenario,
             router,
@@ -19142,7 +19369,7 @@ def _compile_parallel_embedding(
         rank_ends.append(end)
     return _add_join(
         builder,
-        phase + ".embedding.complete",
+        group_phase + ".embedding.complete",
         rank_ends,
         metadata={
             "event_kind": "embedding_complete",
@@ -19419,23 +19646,30 @@ def _compile_parallel_iteration(
     plan: ParallelPlan,
     router: TopologyRouter,
     *,
-    token_batch: int,
-    context_tokens: int,
+    partitions: Sequence[_EpPartition],
     physical_attention_context_tokens: int = 0,
-    kv_read_tokens: Optional[int] = None,
-    kv_append_tokens: Optional[int] = None,
-    kv_materialized_tokens: Optional[int] = None,
     q4_mma_view_tokens_lower_bound: int = 0,
-    linear_state_runtime: Optional[_LinearStateRuntimeSemantics] = None,
     output_selection: Optional[_FinalOutputSelection] = None,
     output_indices_dependency: Optional[str] = None,
     phase: str,
     dependencies: Sequence[str],
 ) -> str:
+    # One partition per EP group in group order (a group without requests has
+    # zero rows).  Groups run their dense path independently; they meet at
+    # one embedding join, the routed-expert exchange and one barrier per layer.
+    partitions = tuple(partitions)
+    if tuple(p.ep_rank for p in partitions) != tuple(range(plan.ep_degree)):
+        raise ValueError("an invocation needs exactly one partition per EP group")
+    live = tuple(p for p in partitions if p.token_batch > 0)
+    if not live:
+        raise ValueError("an invocation needs at least one row")
+    if output_selection is not None:
+        _require_single_ep(plan, "final output selection")
+    total_rows = sum(p.token_batch for p in live)
     # Carry the physical graph invocation row count to every CPU operator
     # lowered below.  This is intentionally builder-local: host orchestration
     # and sampling tasks do not get treated as batch graph work.
-    builder._cpu_graph_rows = max(1, int(token_batch))
+    builder._cpu_graph_rows = max(1, int(total_rows))
     previous = _add_join(
         builder,
         phase + ".start",
@@ -19443,17 +19677,36 @@ def _compile_parallel_iteration(
         metadata={"event_kind": "iteration_start", "phase": phase},
     )
     if any(_QWEN35_ATTENTION_SOURCE_KEY in layer.metadata for layer in _execution_layers(scenario)):
+        _require_single_ep(plan, "Qwen3.5 attention source work")
         previous = _add_qwen35_shared_graph_inputs(
-            builder, scenario, router, plan, token_batch, phase + ".qwen35_shared_inputs", (previous,))
-    previous = _compile_parallel_embedding(
-        builder,
-        scenario,
-        plan,
-        router,
-        phase,
-        (previous,),
-        token_batch=token_batch,
-    )
+            builder, scenario, router, plan, total_rows, phase + ".qwen35_shared_inputs", (previous,))
+    embedding_ends = []
+    for partition in live:
+        with _ep_partition_scope(builder, partition):
+            embedding_ends.append(_compile_parallel_embedding(
+                builder,
+                scenario,
+                plan,
+                router,
+                phase,
+                (previous,),
+                token_batch=partition.token_batch,
+                ep_rank=partition.ep_rank,
+            ))
+    builder._cpu_graph_rows = max(1, int(total_rows))
+    if plan.ep_degree == 1:
+        previous = embedding_ends[0]
+    else:
+        # Layer synchrony: no group starts layer 0 before every group embedded
+        # (the paper's ``now = max(gathered)``).
+        previous = _add_join(
+            builder,
+            phase + ".embedding.complete",
+            embedding_ends,
+            metadata={"event_kind": "embedding_complete", "phase": phase,
+                      "ep_groups": len(embedding_ends)},
+        )
+    last_layer_id = _execution_layers(scenario)[-1].layer_id
     for stage in range(plan.pp_degree):
         layers = tuple(
             layer
@@ -19462,30 +19715,21 @@ def _compile_parallel_iteration(
         )
         stage_end = previous
         for layer in layers:
+            layer_partitions = partitions
+            if physical_attention_context_tokens and not layer.is_linear_attention:
+                layer_partitions = tuple(
+                    replace(p, context_tokens=physical_attention_context_tokens)
+                    for p in partitions
+                )
             stage_end = _compile_parallel_layer(
                 builder,
                 scenario,
                 plan,
                 router,
                 layer,
-                token_batch=token_batch,
-                context_tokens=(physical_attention_context_tokens
-                    if physical_attention_context_tokens and not layer.is_linear_attention
-                    else context_tokens),
-                kv_read_tokens=(
-                    context_tokens if kv_read_tokens is None else kv_read_tokens
-                ),
-                kv_append_tokens=(
-                    token_batch if kv_append_tokens is None else kv_append_tokens
-                ),
-                kv_materialized_tokens=(
-                    token_batch
-                    if kv_materialized_tokens is None
-                    else kv_materialized_tokens
-                ),
+                partitions=layer_partitions,
                 q4_mma_view_tokens_lower_bound=q4_mma_view_tokens_lower_bound,
-                linear_state_runtime=linear_state_runtime,
-                output_selection=(output_selection if layer.layer_id == _execution_layers(scenario)[-1].layer_id else None),
+                output_selection=(output_selection if layer.layer_id == last_layer_id else None),
                 output_indices_dependency=output_indices_dependency,
                 phase=phase,
                 dependencies=(stage_end,),
@@ -19495,47 +19739,55 @@ def _compile_parallel_iteration(
             continue
         boundary_ends: List[str] = []
         last_layer = layers[-1]
-        bytes_per_rank = _activation_bytes(
-            last_layer,
-            token_batch
-            * shard_extent(
-                last_layer.hidden_size,
-                plan.tp_degree,
-                0,
-                allow_padding=plan.allow_padding,
-            ).local_size,
-            scenario=scenario,
-        )
-        for tp_rank in range(plan.tp_degree):
-            source = plan.rank_at(tp_rank, stage, 0)
-            target = plan.rank_at(tp_rank, stage + 1, 0)
-            source_component = (
-                builder.rank_value_component((stage_end,), source.rank)
-                or source.component_id
+        for partition in live:
+            bytes_per_rank = _activation_bytes(
+                last_layer,
+                partition.token_batch
+                * shard_extent(
+                    last_layer.hidden_size,
+                    plan.tp_degree,
+                    0,
+                    allow_padding=plan.allow_padding,
+                ).local_size,
+                scenario=scenario,
             )
-            boundary = _add_transfer_tasks(
-                builder,
-                router,
-                source_component,
-                target.component_id,
-                bytes_per_rank,
-                (stage_end,),
-                name="{}.pp{:02d}_to_{:02d}.tp{:02d}".format(
-                    phase, stage, stage + 1, tp_rank
-                ),
-                routing_policy=plan.routing_policy,
-                metadata={
-                    "event_kind": "pipeline_activation",
-                    "phase": phase,
-                    "source_stage": stage,
-                    "target_stage": stage + 1,
-                    "tp_rank": tp_rank,
-                },
-            )
-            builder.record_rank_value(
-                boundary, target.rank, target.component_id
-            )
-            boundary_ends.append(boundary)
+            for tp_rank in range(plan.tp_degree):
+                source = plan.rank_at(tp_rank, stage, partition.ep_rank)
+                target = plan.rank_at(tp_rank, stage + 1, partition.ep_rank)
+                source_component = (
+                    builder.rank_value_component((stage_end,), source.rank)
+                    or source.component_id
+                )
+                boundary = _add_transfer_tasks(
+                    builder,
+                    router,
+                    source_component,
+                    target.component_id,
+                    bytes_per_rank,
+                    (stage_end,),
+                    name="{}.tp{:02d}".format(
+                        _ep_prefix(
+                            plan,
+                            "{}.pp{:02d}_to_{:02d}".format(phase, stage, stage + 1),
+                            partition.ep_rank,
+                        ),
+                        tp_rank,
+                    ),
+                    routing_policy=plan.routing_policy,
+                    metadata={
+                        "event_kind": "pipeline_activation",
+                        "phase": phase,
+                        "source_stage": stage,
+                        "target_stage": stage + 1,
+                        "tp_rank": tp_rank,
+                        **({"ep_rank": partition.ep_rank}
+                           if plan.ep_degree > 1 else {}),
+                    },
+                )
+                builder.record_rank_value(
+                    boundary, target.rank, target.component_id
+                )
+                boundary_ends.append(boundary)
         previous = _add_join(
             builder,
             "{}.pp{:02d}_to_{:02d}.complete".format(phase, stage, stage + 1),
@@ -19552,13 +19804,8 @@ def _compile_parallel_layer(
     router: TopologyRouter,
     layer: LayerSpec,
     *,
-    token_batch: int,
-    context_tokens: int,
-    kv_read_tokens: int,
-    kv_append_tokens: int,
-    kv_materialized_tokens: int,
+    partitions: Sequence[_EpPartition],
     q4_mma_view_tokens_lower_bound: int = 0,
-    linear_state_runtime: Optional[_LinearStateRuntimeSemantics],
     output_selection: Optional[_FinalOutputSelection] = None,
     output_indices_dependency: Optional[str] = None,
     phase: str,
@@ -19573,93 +19820,46 @@ def _compile_parallel_layer(
     bypasses this layer-level cache.
     """
 
-    if layer.is_linear_attention:
+    def lower() -> str:
         return _compile_parallel_layer_body(
             builder,
             scenario,
             plan,
             router,
             layer,
-            token_batch=token_batch,
-            context_tokens=context_tokens,
-            kv_read_tokens=kv_read_tokens,
-            kv_append_tokens=kv_append_tokens,
-            kv_materialized_tokens=kv_materialized_tokens,
             q4_mma_view_tokens_lower_bound=q4_mma_view_tokens_lower_bound,
-            linear_state_runtime=linear_state_runtime,
             output_selection=output_selection,
             output_indices_dependency=output_indices_dependency,
             phase=phase,
             dependencies=dependencies,
+            ep_partitions=partitions,
         )
+
+    if layer.is_linear_attention or plan.ep_degree > 1:
+        # Attention data parallelism: task names embed absolute rank numbers
+        # and a replay only rebinds prefix and phase, so a template captured
+        # for one set of partitions can never serve another.  The provider's
+        # outer exact cohort cache owns reuse; the per-group dense-MLP and
+        # linear-mixer segment caches below are keyed on the group's ranks.
+        return lower()
     context = _active_compilation_context(scenario)
     if context is None:
-        return _compile_parallel_layer_body(
-            builder,
-            scenario,
-            plan,
-            router,
-            layer,
-            token_batch=token_batch,
-            context_tokens=context_tokens,
-            kv_read_tokens=kv_read_tokens,
-            kv_append_tokens=kv_append_tokens,
-            kv_materialized_tokens=kv_materialized_tokens,
-            q4_mma_view_tokens_lower_bound=q4_mma_view_tokens_lower_bound,
-            linear_state_runtime=linear_state_runtime,
-            output_selection=output_selection,
-            output_indices_dependency=output_indices_dependency,
-            phase=phase,
-            dependencies=dependencies,
-        )
+        return lower()
     if not context.eager_full_attention_segments:
         # The provider's outer exact cohort cache owns reuse across cohorts.
         # Full-attention payloads are context-exact, so a newly seen outer key
         # cannot hit this same leaf key before the completed BatchCost is
         # retained.  Avoid compiling a large clone plan that would be dead on
         # arrival; direct CompilationContext callers keep eager leaf reuse.
-        return _compile_parallel_layer_body(
-            builder,
-            scenario,
-            plan,
-            router,
-            layer,
-            token_batch=token_batch,
-            context_tokens=context_tokens,
-            kv_read_tokens=kv_read_tokens,
-            kv_append_tokens=kv_append_tokens,
-            kv_materialized_tokens=kv_materialized_tokens,
-            q4_mma_view_tokens_lower_bound=q4_mma_view_tokens_lower_bound,
-            linear_state_runtime=linear_state_runtime,
-            output_selection=output_selection,
-            output_indices_dependency=output_indices_dependency,
-            phase=phase,
-            dependencies=dependencies,
-        )
+        return lower()
     cache = _task_segment_cache(
         context,
         ("full_attention_layer_task_segment_cache_v1",),
     )
     if cache is None:
-        return _compile_parallel_layer_body(
-            builder,
-            scenario,
-            plan,
-            router,
-            layer,
-            token_batch=token_batch,
-            context_tokens=context_tokens,
-            kv_read_tokens=kv_read_tokens,
-            kv_append_tokens=kv_append_tokens,
-            kv_materialized_tokens=kv_materialized_tokens,
-            q4_mma_view_tokens_lower_bound=q4_mma_view_tokens_lower_bound,
-            linear_state_runtime=linear_state_runtime,
-            output_selection=output_selection,
-            output_indices_dependency=output_indices_dependency,
-            phase=phase,
-            dependencies=dependencies,
-        )
+        return lower()
 
+    partition, = partitions
     ranks = plan.tp_group(plan.stage_for_layer(layer), 0)
     input_components = tuple(
         builder.rank_value_component(dependencies, rank.rank)
@@ -19667,11 +19867,11 @@ def _compile_parallel_layer(
     )
     cache_key = (
         str(layer.layer_id),
-        int(token_batch),
-        int(context_tokens),
-        int(kv_read_tokens),
-        int(kv_append_tokens),
-        int(kv_materialized_tokens),
+        int(partition.token_batch),
+        int(partition.context_tokens),
+        int(partition.kv_read_tokens),
+        int(partition.kv_append_tokens),
+        int(partition.kv_materialized_tokens),
         int(q4_mma_view_tokens_lower_bound),
         input_components,
         len(tuple(dependencies)),
@@ -19706,24 +19906,7 @@ def _compile_parallel_layer(
     initial_counter = builder.counter
     initial_previous = builder.previous
     initial_dma = builder._last_coherent_dma_task
-    terminal = _compile_parallel_layer_body(
-        builder,
-        scenario,
-        plan,
-        router,
-        layer,
-        token_batch=token_batch,
-        context_tokens=context_tokens,
-        kv_read_tokens=kv_read_tokens,
-        kv_append_tokens=kv_append_tokens,
-        kv_materialized_tokens=kv_materialized_tokens,
-        q4_mma_view_tokens_lower_bound=q4_mma_view_tokens_lower_bound,
-        linear_state_runtime=linear_state_runtime,
-        output_selection=output_selection,
-        output_indices_dependency=output_indices_dependency,
-        phase=phase,
-        dependencies=dependencies,
-    )
+    terminal = lower()
     captured = _TaskSegmentTemplate.capture(
         builder,
         first_task_index=first_task_index,
@@ -19915,53 +20098,151 @@ def _compile_parallel_layer_body(
     router: TopologyRouter,
     layer: LayerSpec,
     *,
+    token_batch: Optional[int] = None,
+    context_tokens: Optional[int] = None,
+    kv_read_tokens: Optional[int] = None,
+    kv_append_tokens: Optional[int] = None,
+    kv_materialized_tokens: Optional[int] = None,
+    q4_mma_view_tokens_lower_bound: int = 0,
+    linear_state_runtime: Optional[_LinearStateRuntimeSemantics] = None,
+    output_selection: Optional[_FinalOutputSelection] = None,
+    output_indices_dependency: Optional[str] = None,
+    phase: str,
+    dependencies: Sequence[str],
+    ep_partitions: Optional[Sequence[_EpPartition]] = None,
+) -> str:
+    """Lower one layer: per-EP-group dense path, cross-group routed experts.
+
+    Without ``ep_partitions`` the scalar arguments describe the lone partition
+    of a single-group plan.  Each non-empty partition runs its attention (or
+    linear mixer) and its dense or shared/router work on its own TP ranks;
+    a MoE layer exchanges routed tokens across groups.  With several groups
+    the layer ends in exactly one cross-group barrier carrying ``layer_id``.
+    """
+
+    if ep_partitions is None:
+        if plan.ep_degree != 1:
+            raise ValueError("a multi-group layer needs explicit EP partitions")
+        scalars = (token_batch, context_tokens, kv_read_tokens,
+                   kv_append_tokens, kv_materialized_tokens)
+        if any(value is None for value in scalars):
+            raise ValueError("single-group layer lowering needs every row/kv count")
+        ep_partitions = (_EpPartition(0, *scalars, linear_state_runtime),)
+    prefix = "{}.{}".format(phase, layer.layer_id)
+    attention_ends: Dict[int, str] = {}
+    ffn_rows: Dict[int, int] = {}
+    for partition in ep_partitions:
+        if partition.token_batch <= 0:
+            continue
+        with _ep_partition_scope(builder, partition):
+            if layer.is_linear_attention:
+                attention_ends[partition.ep_rank] = _compile_parallel_linear_mixer(
+                    builder,
+                    scenario,
+                    plan,
+                    router,
+                    layer,
+                    token_batch=partition.token_batch,
+                    context_tokens=partition.context_tokens,
+                    linear_state_runtime=partition.linear_state_runtime,
+                    phase=phase,
+                    dependencies=dependencies,
+                    ep_rank=partition.ep_rank,
+                )
+                ffn_rows[partition.ep_rank] = partition.token_batch
+                continue
+            end, rows = _compile_parallel_attention_group(
+                builder,
+                scenario,
+                plan,
+                router,
+                layer,
+                token_batch=partition.token_batch,
+                context_tokens=partition.context_tokens,
+                kv_read_tokens=partition.kv_read_tokens,
+                kv_append_tokens=partition.kv_append_tokens,
+                kv_materialized_tokens=partition.kv_materialized_tokens,
+                q4_mma_view_tokens_lower_bound=q4_mma_view_tokens_lower_bound,
+                output_selection=output_selection,
+                output_indices_dependency=output_indices_dependency,
+                phase=phase,
+                prefix=_ep_prefix(plan, prefix, partition.ep_rank),
+                dependencies=dependencies,
+                ep_rank=partition.ep_rank,
+            )
+        if rows == 0:
+            # Selected empty tail (single-rank output selection only).
+            return end
+        attention_ends[partition.ep_rank] = end
+        ffn_rows[partition.ep_rank] = rows
+    if not attention_ends:
+        raise ValueError("a layer needs at least one non-empty EP partition")
+    if layer.is_moe:
+        group_ends = _compile_parallel_moe(
+            builder, scenario, plan, router, layer, ep_partitions, prefix,
+            attention_ends, ffn_rows,
+        )
+    else:
+        first_ffn = len(builder.tasks)
+        group_ends = {}
+        for partition in ep_partitions:
+            ep_rank = partition.ep_rank
+            if ep_rank not in attention_ends:
+                continue
+            with _ep_partition_scope(builder, partition):
+                group_ends[ep_rank] = _compile_parallel_dense_mlp(
+                    builder,
+                    scenario,
+                    plan,
+                    router,
+                    layer,
+                    ffn_rows[ep_rank],
+                    _ep_prefix(plan, prefix, ep_rank),
+                    (attention_ends[ep_rank],),
+                    ep_rank=ep_rank,
+                )
+        if output_selection is not None and not layer.is_linear_attention:
+            _tag_output_selection_tasks(builder, first_ffn, output_selection, "last_ffn")
+    if plan.ep_degree == 1:
+        return group_ends[0]
+    # Layer synchrony: the next layer starts once every group finished this
+    # one, exactly like the bypass model's global per-layer ``max``.
+    return _add_join(
+        builder,
+        prefix + ".layer_complete",
+        tuple(group_ends[ep_rank] for ep_rank in sorted(group_ends)),
+        metadata={"event_kind": "layer_barrier", "layer_id": layer.layer_id,
+                  "phase": phase, "ep_groups": len(group_ends)},
+    )
+
+
+def _compile_parallel_attention_group(
+    builder: _TaskBuilder,
+    scenario: ScenarioConfig,
+    plan: ParallelPlan,
+    router: TopologyRouter,
+    layer: LayerSpec,
+    *,
     token_batch: int,
     context_tokens: int,
     kv_read_tokens: int,
     kv_append_tokens: int,
     kv_materialized_tokens: int,
     q4_mma_view_tokens_lower_bound: int = 0,
-    linear_state_runtime: Optional[_LinearStateRuntimeSemantics],
     output_selection: Optional[_FinalOutputSelection] = None,
     output_indices_dependency: Optional[str] = None,
     phase: str,
+    prefix: str,
     dependencies: Sequence[str],
-) -> str:
-    if layer.is_linear_attention:
-        mixer_end = _compile_parallel_linear_mixer(
-            builder,
-            scenario,
-            plan,
-            router,
-            layer,
-            token_batch=token_batch,
-            context_tokens=context_tokens,
-            linear_state_runtime=linear_state_runtime,
-            phase=phase,
-            dependencies=dependencies,
-        )
-        prefix = "{}.{}".format(phase, layer.layer_id)
-        if layer.is_moe:
-            return _compile_parallel_moe(
-                builder,
-                scenario,
-                plan,
-                router,
-                layer,
-                token_batch,
-                prefix,
-                (mixer_end,),
-            )
-        return _compile_parallel_dense_mlp(
-            builder,
-            scenario,
-            plan,
-            router,
-            layer,
-            token_batch,
-            prefix,
-            (mixer_end,),
-        )
+    ep_rank: int = 0,
+) -> Tuple[str, int]:
+    """Lower one EP group's attention half of a full-attention layer.
+
+    The group's TP ranks run QKV, KV write/read, attention, output projection,
+    the TP all-reduce and residual for the rows of the requests it owns.
+    Returns ``(attention_end, ffn_rows)``; ``ffn_rows == 0`` marks an empty
+    selected tail whose returned join is already the layer terminal.
+    """
 
     absolute_context_tokens = context_tokens
     visibility_lengths, visibility_groups = (), ()
@@ -19993,7 +20274,7 @@ def _compile_parallel_layer_body(
             context_tokens = max(visibility_lengths)
     tail_rows = output_selection.ffn_rows if output_selection is not None else token_batch
     stage = plan.stage_for_layer(layer)
-    tp_ranks = plan.tp_group(stage, 0)
+    tp_ranks = plan.tp_group(stage, ep_rank)
     attention_execution = _attention_execution_descriptor(layer)
     source_geometry = _qwen35_attention_source_work(layer)
     head_dim = (
@@ -20110,7 +20391,6 @@ def _compile_parallel_layer_body(
     rank_ends: List[str] = []
     pending_residual_metadata = {}
     pending_residual_inputs = {}
-    prefix = "{}.{}".format(phase, layer.layer_id)
     logical_context_tokens = (kv_read_tokens + kv_materialized_tokens
         if scenario.workload.metadata.get("native_rope_source_contract") is not None
         else absolute_context_tokens)
@@ -20235,6 +20515,7 @@ def _compile_parallel_layer_body(
             "shard_padding": 0,
             "sequence_mixer": layer.sequence_mixer,
             "coverage_component": layer.sequence_mixer,
+            **({"ep_rank": ep_rank} if plan.ep_degree > 1 else {}),
             **({"attention_chunk_size": layer.attention_chunk_size,
                 "query_context_lengths": visibility_lengths, "query_group_sizes": visibility_groups,
                 "use_rope": layer.use_rope} if visibility_lengths else {}),
@@ -21881,7 +22162,7 @@ def _compile_parallel_layer_body(
     if tail_rows == 0:
         return _add_join(builder, prefix + ".empty_tail", rank_ends,
             metadata={"event_kind": "empty_output_tail", "layer_id": layer.layer_id,
-                "final_layer_output_selection": _selection_audit(output_selection, "empty_tail")})
+                "final_layer_output_selection": _selection_audit(output_selection, "empty_tail")}), 0
     attention_bytes = _activation_bytes(layer, tail_rows * layer.hidden_size, scenario=scenario)
     attention_end = _add_collective_tasks(
         builder,
@@ -21901,38 +22182,14 @@ def _compile_parallel_layer_body(
             "stage": stage,
             "sequence_mixer": "full_attention",
             "coverage_component": "full_attention",
+            **({"ep_rank": ep_rank} if plan.ep_degree > 1 else {}),
         },
     )
     attention_end = _add_tp_residuals(
         builder, scenario, router, plan, layer, tp_ranks, prefix, "attention", tail_rows,
         attention_end, pending_residual_metadata, extra_dependencies=pending_residual_inputs,
     )
-    if layer.is_moe:
-        return _compile_parallel_moe(
-            builder,
-            scenario,
-            plan,
-            router,
-            layer,
-            tail_rows,
-            prefix,
-            (attention_end,),
-        )
-    first_ffn = len(builder.tasks)
-    terminal = _compile_parallel_dense_mlp(
-        builder,
-        scenario,
-        plan,
-        router,
-        layer,
-        tail_rows,
-        prefix,
-        (attention_end,),
-    )
-
-    if output_selection is not None:
-        _tag_output_selection_tasks(builder, first_ffn, output_selection, "last_ffn")
-    return terminal
+    return attention_end, tail_rows
 
 def _compile_parallel_linear_mixer(
     builder: _TaskBuilder,
@@ -21946,6 +22203,7 @@ def _compile_parallel_linear_mixer(
     linear_state_runtime: Optional[_LinearStateRuntimeSemantics] = None,
     phase: str,
     dependencies: Sequence[str],
+    ep_rank: int = 0,
 ) -> str:
     """Compile or replay a linear mixer while refreshing context audit data.
 
@@ -21968,6 +22226,7 @@ def _compile_parallel_linear_mixer(
             linear_state_runtime=linear_state_runtime,
             phase=phase,
             dependencies=dependencies,
+            ep_rank=ep_rank,
         )
     cache = _task_segment_cache(
         context, ("linear_mixer_task_segment_cache_v1",)
@@ -21984,9 +22243,10 @@ def _compile_parallel_linear_mixer(
             linear_state_runtime=linear_state_runtime,
             phase=phase,
             dependencies=dependencies,
+            ep_rank=ep_rank,
         )
     state_runtime = linear_state_runtime or _LinearStateRuntimeSemantics()
-    ranks = plan.tp_group(plan.stage_for_layer(layer), 0)
+    ranks = plan.tp_group(plan.stage_for_layer(layer), ep_rank)
     input_components = tuple(
         builder.rank_value_component(dependencies, rank.rank)
         for rank in ranks
@@ -22007,6 +22267,7 @@ def _compile_parallel_linear_mixer(
         input_components,
         len(tuple(dependencies)),
         builder._last_coherent_dma_task is not None,
+        ep_rank,
     )
     if any(component.metadata.get("physical_memory_config") is not None
            for component in scenario.hardware.components):
@@ -22015,7 +22276,7 @@ def _compile_parallel_linear_mixer(
         cache_key += (tuple(getattr(builder, "_linear_state_owner_request_ids", (builder.request.request_id,))),)
         if state_runtime.uses_temporary_state:
             cache_key += (builder.request.request_id,)
-    prefix = "{}.{}".format(phase, layer.layer_id)
+    prefix = _ep_prefix(plan, "{}.{}".format(phase, layer.layer_id), ep_rank)
     if any(component.metadata.get("physical_memory_config") is not None
            for component in scenario.hardware.components):
         # Physical descriptors include request-owned buffers and integer
@@ -22079,6 +22340,7 @@ def _compile_parallel_linear_mixer(
         linear_state_runtime=linear_state_runtime,
         phase=phase,
         dependencies=dependencies,
+        ep_rank=ep_rank,
     )
     captured = _TaskSegmentTemplate.capture(
         builder,
@@ -22108,6 +22370,7 @@ def _compile_parallel_linear_mixer_uncached(
     linear_state_runtime: Optional[_LinearStateRuntimeSemantics] = None,
     phase: str,
     dependencies: Sequence[str],
+    ep_rank: int = 0,
 ) -> str:
     """Lower a linear mixer without attention/KV-shaped surrogate GEMMs."""
 
@@ -22116,8 +22379,8 @@ def _compile_parallel_linear_mixer_uncached(
         raise ValueError("线性注意力层缺少明确的几何参数")
     state_runtime = linear_state_runtime or _LinearStateRuntimeSemantics()
     stage = plan.stage_for_layer(layer)
-    ranks = plan.tp_group(stage, 0)
-    prefix = "{}.{}".format(phase, layer.layer_id)
+    ranks = plan.tp_group(stage, ep_rank)
+    prefix = _ep_prefix(plan, "{}.{}".format(phase, layer.layer_id), ep_rank)
     projected_width = (
         geometry.query_width + geometry.key_width + geometry.value_width
     )
@@ -22789,6 +23052,7 @@ def _compile_parallel_dense_mlp(
     token_batch: int,
     prefix: str,
     dependencies: Sequence[str],
+    ep_rank: int = 0,
 ) -> str:
     """Compile or replay the context-independent dense-MLP task segment.
 
@@ -22812,6 +23076,7 @@ def _compile_parallel_dense_mlp(
             token_batch,
             prefix,
             dependencies,
+            ep_rank,
         )
     cache = _task_segment_cache(context, ("dense_mlp_task_segment_cache_v1",))
     if cache is None:
@@ -22824,8 +23089,9 @@ def _compile_parallel_dense_mlp(
             token_batch,
             prefix,
             dependencies,
+            ep_rank,
         )
-    ranks = plan.tp_group(plan.stage_for_layer(layer), 0)
+    ranks = plan.tp_group(plan.stage_for_layer(layer), ep_rank)
     input_components = tuple(
         builder.rank_value_component(dependencies, rank.rank)
         for rank in ranks
@@ -22839,6 +23105,7 @@ def _compile_parallel_dense_mlp(
         builder.request.prompt_tokens,
         builder.request.output_tokens,
         getattr(builder, "_cpu_graph_rows", None),
+        ep_rank,
     )
     physical = any(component.metadata.get("physical_memory_config") is not None
                    for component in scenario.hardware.components)
@@ -22869,6 +23136,7 @@ def _compile_parallel_dense_mlp(
             token_batch,
             prefix,
             dependencies,
+            ep_rank,
         )
     finally:
         builder._physical_segment_sources = previous_sources
@@ -22928,9 +23196,10 @@ def _compile_parallel_dense_mlp_uncached(
     token_batch: int,
     prefix: str,
     dependencies: Sequence[str],
+    ep_rank: int = 0,
 ) -> str:
     stage = plan.stage_for_layer(layer)
-    ranks = plan.tp_group(stage, 0)
+    ranks = plan.tp_group(stage, ep_rank)
     gated_mlp = bool(layer.gated_mlp)
     down_shard = shard_extent(
         layer.intermediate_size,
@@ -23475,7 +23744,40 @@ def _compile_parallel_dense_mlp_uncached(
     )
 
 
-def _compile_parallel_moe(
+def _moe_routing_contract(
+    scenario: ScenarioConfig, layer: LayerSpec
+) -> Tuple[Mapping[str, object], str, str, bool, float]:
+    """Validate and return (contract, gating, weight_application, normalize, scale)."""
+
+    route_contract = layer.metadata.get("moe_routing", {})
+    if not route_contract and _execution_view(scenario).architecture in {"qwen3", "qwen3moe"}:
+        raise ValueError("Qwen3 MoE requires an explicit moe_routing contract")
+    if not isinstance(route_contract, Mapping):
+        raise ValueError("moe_routing must be a mapping")
+    if route_contract and not {"gating", "normalize_selected_weights", "weight_scale"} <= set(route_contract):
+        raise ValueError("moe_routing requires gating, normalize_selected_weights, and weight_scale")
+    gating = route_contract.get("gating", "softmax")
+    if gating not in {"softmax", "sigmoid"}:
+        raise ValueError("MoE routing requires softmax or selected-logit sigmoid gating")
+    weight_application = route_contract.get("weight_application", "output")
+    if weight_application not in {"input", "output"}:
+        raise ValueError("MoE weight_application must be input or output")
+    if gating == "sigmoid" and (weight_application != "input" or route_contract.get("normalize_selected_weights") is not False):
+        raise ValueError("selected-logit sigmoid routing requires unnormalized expert-input weighting")
+    if gating == "sigmoid" and route_contract.get("selection_before_gating") is not True:
+        raise ValueError("sigmoid routing requires explicit top-k selection before gating")
+    if route_contract.get("load_model", "deterministic_balanced_histogram") != "deterministic_balanced_histogram":
+        raise ValueError("native MoE currently requires deterministic_balanced_histogram load model")
+    normalize_weights = route_contract.get("normalize_selected_weights", False)
+    if type(normalize_weights) is not bool:
+        raise ValueError("normalize_selected_weights must be boolean")
+    weight_scale = route_contract.get("weight_scale", 1.0)
+    if isinstance(weight_scale, bool) or not isinstance(weight_scale, (int, float)) or not math.isfinite(weight_scale) or weight_scale <= 0:
+        raise ValueError("MoE weight_scale must be positive and finite")
+    return route_contract, gating, weight_application, normalize_weights, weight_scale
+
+
+def _compile_parallel_moe_route(
     builder: _TaskBuilder,
     scenario: ScenarioConfig,
     plan: ParallelPlan,
@@ -23484,11 +23786,20 @@ def _compile_parallel_moe(
     token_batch: int,
     prefix: str,
     dependencies: Sequence[str],
-) -> str:
-    gated_mlp = layer.gated_mlp
-    up_projection = "up_gate" if gated_mlp else "up"
+    ep_rank: int,
+) -> Tuple[str, str]:
+    """One EP group's post-attention norm, shared expert and router.
+
+    Returns ``(router_ready, shared_end)``; ``shared_end`` is empty without a
+    shared expert.  Everything runs on the group's own TP ranks for the rows
+    of the requests the group owns.
+    """
+
     stage = plan.stage_for_layer(layer)
-    tp_ranks = plan.tp_group(stage, 0)
+    tp_ranks = plan.tp_group(stage, ep_rank)
+    route_contract, gating, weight_application, normalize_weights, weight_scale = (
+        _moe_routing_contract(scenario, layer)
+    )
     norm_ends: List[str] = []
     for rank in tp_ranks:
         activation_bits = _activation_storage_bits(layer, scenario)
@@ -23630,7 +23941,7 @@ def _compile_parallel_moe(
             builder,
             prefix + ".post_attention_norm.complete",
             norm_ends,
-            metadata={"event_kind": "post_attention_norm_barrier"},
+            metadata={"event_kind": "post_attention_norm_barrier", "layer_id": layer.layer_id},
         ),
     )
     shared_end = ""
@@ -23644,6 +23955,7 @@ def _compile_parallel_moe(
             token_batch,
             prefix,
             dependencies,
+            ep_rank=ep_rank,
         )
     router_ends: List[str] = []
     expert_score_shard = shard_extent(
@@ -23705,31 +24017,6 @@ def _compile_parallel_moe(
         metadata={"layer_id": layer.layer_id, "stage": stage,
                   "event_kind": "router_logits_all_gather"},
     )
-    route_contract = layer.metadata.get("moe_routing", {})
-    if not route_contract and _execution_view(scenario).architecture in {"qwen3", "qwen3moe"}:
-        raise ValueError("Qwen3 MoE requires an explicit moe_routing contract")
-    if not isinstance(route_contract, Mapping):
-        raise ValueError("moe_routing must be a mapping")
-    if route_contract and not {"gating", "normalize_selected_weights", "weight_scale"} <= set(route_contract):
-        raise ValueError("moe_routing requires gating, normalize_selected_weights, and weight_scale")
-    gating = route_contract.get("gating", "softmax")
-    if gating not in {"softmax", "sigmoid"}:
-        raise ValueError("MoE routing requires softmax or selected-logit sigmoid gating")
-    weight_application = route_contract.get("weight_application", "output")
-    if weight_application not in {"input", "output"}:
-        raise ValueError("MoE weight_application must be input or output")
-    if gating == "sigmoid" and (weight_application != "input" or route_contract.get("normalize_selected_weights") is not False):
-        raise ValueError("selected-logit sigmoid routing requires unnormalized expert-input weighting")
-    if gating == "sigmoid" and route_contract.get("selection_before_gating") is not True:
-        raise ValueError("sigmoid routing requires explicit top-k selection before gating")
-    if route_contract.get("load_model", "deterministic_balanced_histogram") != "deterministic_balanced_histogram":
-        raise ValueError("native MoE currently requires deterministic_balanced_histogram load model")
-    normalize_weights = route_contract.get("normalize_selected_weights", False)
-    if type(normalize_weights) is not bool:
-        raise ValueError("normalize_selected_weights must be boolean")
-    weight_scale = route_contract.get("weight_scale", 1.0)
-    if isinstance(weight_scale, bool) or not isinstance(weight_scale, (int, float)) or not math.isfinite(weight_scale) or weight_scale <= 0:
-        raise ValueError("MoE weight_scale must be positive and finite")
     router_ends = []
     for rank in tp_ranks:
         activation_bits = _activation_storage_bits(layer, scenario)
@@ -23927,7 +24214,7 @@ def _compile_parallel_moe(
             )
         )
     router_ready = _add_join(builder, prefix + ".router.complete", router_ends,
-                             metadata={"event_kind": "router_complete"})
+                             metadata={"event_kind": "router_complete", "layer_id": layer.layer_id})
     routed_tokens = token_batch * layer.experts_per_token
     if weight_application == "input":
         weighted_inputs = []
@@ -23949,7 +24236,53 @@ def _compile_parallel_moe(
             weighted_inputs.append(_return_rank_value(builder, router, plan, rank, weighted, component,
                 _activation_bytes(layer, count, scenario=scenario),
                 name="{}.rank{:03d}.expert_input_weight.output_to_gpu".format(prefix, rank.rank)))
-        router_ready = _add_join(builder, prefix + ".expert_input_weight.complete", weighted_inputs)
+        router_ready = _add_join(builder, prefix + ".expert_input_weight.complete", weighted_inputs,
+                                 metadata={"layer_id": layer.layer_id})
+    return router_ready, shared_end
+
+
+def _compile_parallel_moe_experts(
+    builder: _TaskBuilder,
+    scenario: ScenarioConfig,
+    plan: ParallelPlan,
+    router: TopologyRouter,
+    layer: LayerSpec,
+    rows_by_ep: Sequence[int],
+    prefix: str,
+    router_ready: Sequence[str],
+) -> str:
+    """Cross-group expert dispatch, expert GEMMs and combine.
+
+    Source group ``e`` sends its ``rows_by_ep[e] * top_k`` routed token copies
+    split evenly over the EP ring (``ceil(T_e / E)`` per peer); the combine is
+    the transpose.  Expert work uses the global routed-token histogram, so
+    every expert rank processes the tokens of all groups.  Groups without rows
+    send nothing but still receive and compute.  Returns the combine join.
+    """
+
+    gated_mlp = layer.gated_mlp
+    up_projection = "up_gate" if gated_mlp else "up"
+    stage = plan.stage_for_layer(layer)
+    ep_degree = plan.ep_degree
+    routed_by_ep = tuple(rows * layer.experts_per_token for rows in rows_by_ep)
+    routed_tokens = sum(routed_by_ep)
+    send_bytes = tuple(
+        _activation_bytes(layer, count * layer.hidden_size, scenario=scenario)
+        for count in routed_by_ep
+    )
+    dispatch_pairs = combine_pairs = None
+    group_metadata: Dict[str, object] = {}
+    if ep_degree > 1:
+        chunk = tuple((value + ep_degree - 1) // ep_degree for value in send_bytes)
+        dispatch_pairs = tuple(
+            tuple(0 if i == j else chunk[i] for j in range(ep_degree))
+            for i in range(ep_degree)
+        )
+        combine_pairs = tuple(
+            tuple(0 if i == j else chunk[j] for j in range(ep_degree))
+            for i in range(ep_degree)
+        )
+        group_metadata = {"ep_group_rows": tuple(rows_by_ep)}
     dispatch_ends: List[str] = []
     for tp_rank in range(plan.tp_degree):
         ep_group = plan.ep_group(stage, tp_rank)
@@ -23962,20 +24295,18 @@ def _compile_parallel_moe(
                 "{}.tp{:02d}.expert_dispatch".format(prefix, tp_rank),
                 "all_to_all",
                 ep_group,
-                _activation_bytes(
-                    layer,
-                    routed_tokens * layer.hidden_size,
-                    scenario=scenario,
-                ),
-                (router_ready,),
-                metadata={"layer_id": layer.layer_id, "stage": stage},
+                max(send_bytes),
+                tuple(router_ready),
+                metadata={"layer_id": layer.layer_id, "stage": stage,
+                          **group_metadata},
+                pair_bytes=dispatch_pairs,
             )
         )
     dispatch_ready = _add_join(
         builder,
         prefix + ".expert_dispatch.complete",
         dispatch_ends,
-        metadata={"event_kind": "moe_dispatch_barrier"},
+        metadata={"event_kind": "moe_dispatch_barrier", "layer_id": layer.layer_id},
     )
     base_experts, extra_experts = divmod(layer.num_experts, plan.ep_degree)
     base_tokens, extra_tokens = divmod(routed_tokens, layer.num_experts)
@@ -23988,6 +24319,7 @@ def _compile_parallel_moe(
                     builder,
                     "{}.rank{:03d}.experts_idle".format(prefix, rank.rank),
                     (dispatch_ready,),
+                    metadata={"layer_id": layer.layer_id},
                 )
             )
             continue
@@ -24183,7 +24515,7 @@ def _compile_parallel_moe(
         builder,
         prefix + ".experts.complete",
         expert_ends,
-        metadata={"event_kind": "moe_expert_barrier"},
+        metadata={"event_kind": "moe_expert_barrier", "layer_id": layer.layer_id},
     )
     combine_ends = []
     for tp_rank in range(plan.tp_degree):
@@ -24196,21 +24528,40 @@ def _compile_parallel_moe(
                 "{}.tp{:02d}.expert_combine".format(prefix, tp_rank),
                 "all_to_all",
                 plan.ep_group(stage, tp_rank),
-                _activation_bytes(
-                    layer,
-                    routed_tokens * layer.hidden_size,
-                    scenario=scenario,
-                ),
+                max(send_bytes),
                 (experts_ready,),
-                metadata={"layer_id": layer.layer_id, "stage": stage},
+                metadata={"layer_id": layer.layer_id, "stage": stage,
+                          **group_metadata},
+                pair_bytes=combine_pairs,
             )
         )
     combined = _add_join(
         builder,
         prefix + ".expert_combine.complete",
         combine_ends,
-        metadata={"event_kind": "moe_combine_barrier"},
+        metadata={"event_kind": "moe_combine_barrier", "layer_id": layer.layer_id},
     )
+    return combined
+
+
+def _compile_parallel_moe_tail(
+    builder: _TaskBuilder,
+    scenario: ScenarioConfig,
+    plan: ParallelPlan,
+    router: TopologyRouter,
+    layer: LayerSpec,
+    token_batch: int,
+    prefix: str,
+    combined: str,
+    shared_end: str,
+    ep_rank: int,
+) -> str:
+    """One EP group's weighted sum, TP all-reduce and residual."""
+
+    stage = plan.stage_for_layer(layer)
+    tp_ranks = plan.tp_group(stage, ep_rank)
+    weight_application = _moe_routing_contract(scenario, layer)[2]
+    routed_tokens = token_batch * layer.experts_per_token
     weighted_ends = []
     for rank in tp_ranks:
         bits = _activation_storage_bits(layer, scenario)
@@ -24328,8 +24679,74 @@ def _compile_parallel_moe(
         builder,
         prefix + ".moe_residual.complete",
         residual_ends,
-        metadata={"event_kind": "moe_residual_barrier"},
+        metadata={"event_kind": "moe_residual_barrier", "layer_id": layer.layer_id},
     )
+
+
+
+
+def _compile_parallel_moe(
+    builder: _TaskBuilder,
+    scenario: ScenarioConfig,
+    plan: ParallelPlan,
+    router: TopologyRouter,
+    layer: LayerSpec,
+    partitions: Sequence[_EpPartition],
+    prefix: str,
+    dependencies_by_ep: Mapping[int, str],
+    ffn_rows_by_ep: Mapping[int, int],
+) -> Dict[int, str]:
+    """Lower a MoE FFN across the EP groups; returns each group's terminal.
+
+    Per group: norm, shared expert, router, weighted sum, TP all-reduce and
+    residual on the group's TP ranks, over that group's FFN rows (its
+    attention tail).  Across groups: expert dispatch, expert GEMMs on every
+    rank and combine.  Groups without rows skip the dense work but stay in
+    the expert exchange (they hold experts).
+    """
+
+    rows_by_ep = [0] * plan.ep_degree
+    live = tuple(p for p in partitions if p.ep_rank in dependencies_by_ep)
+    for partition in live:
+        rows_by_ep[partition.ep_rank] = ffn_rows_by_ep[partition.ep_rank]
+    router_ready: List[str] = []
+    shared_by_ep: Dict[int, str] = {}
+    for partition in live:
+        ep_rank = partition.ep_rank
+        with _ep_partition_scope(builder, partition):
+            ready, shared_by_ep[ep_rank] = _compile_parallel_moe_route(
+                builder,
+                scenario,
+                plan,
+                router,
+                layer,
+                rows_by_ep[ep_rank],
+                _ep_prefix(plan, prefix, ep_rank),
+                (dependencies_by_ep[ep_rank],),
+                ep_rank,
+            )
+        router_ready.append(ready)
+    combined = _compile_parallel_moe_experts(
+        builder, scenario, plan, router, layer, rows_by_ep, prefix,
+        router_ready,
+    )
+    group_ends: Dict[int, str] = {}
+    for partition in live:
+        ep_rank = partition.ep_rank
+        with _ep_partition_scope(builder, partition):
+            group_ends[ep_rank] = _compile_parallel_moe_tail(
+                builder,
+                scenario,
+                plan,
+                router,
+                layer,
+                rows_by_ep[ep_rank],
+                _ep_prefix(plan, prefix, ep_rank),
+                combined,
+                shared_by_ep[ep_rank],
+                ep_rank,
+            )
+    return group_ends
 
 
 def _compile_parallel_shared_expert(
@@ -24341,11 +24758,12 @@ def _compile_parallel_shared_expert(
     token_batch: int,
     prefix: str,
     dependencies: Sequence[str],
+    ep_rank: int = 0,
 ) -> str:
     gated_mlp = layer.gated_mlp
     up_projection = "up_gate" if gated_mlp else "up"
     stage = plan.stage_for_layer(layer)
-    ranks = plan.tp_group(stage, 0)
+    ranks = plan.tp_group(stage, ep_rank)
     down_shard = shard_extent(
         layer.shared_expert_intermediate_size,
         plan.tp_degree,
@@ -24798,6 +25216,7 @@ def _compile_parallel_final_norm(
     *,
     source_token_batch: int,
     source_row_indices: Tuple[int, ...],
+    ep_rank: int = 0,
 ) -> Mapping[int, str]:
     """Lower the typed model-level RMSNorm before the output projection."""
 
@@ -24849,7 +25268,7 @@ def _compile_parallel_final_norm(
         raise ValueError("final_norm requires explicit ordered input row views")
     stage = plan.pp_degree - 1
     ends: Dict[int, str] = {}
-    for rank in plan.tp_group(stage, 0):
+    for rank in plan.tp_group(stage, ep_rank):
         hidden_elements = max(1, batch_tokens * hidden_size)
         hidden_bytes = (hidden_elements * activation_bits + 7) // 8
         row_bytes = (hidden_size * activation_bits + 7) // 8
@@ -24971,6 +25390,85 @@ def _compile_parallel_final_norm(
     return ends
 
 
+def _compile_partition_lm_heads(
+    builder: _TaskBuilder,
+    scenario: ScenarioConfig,
+    plan: ParallelPlan,
+    router: TopologyRouter,
+    phase: str,
+    dependencies: Sequence[str],
+    partitions: Sequence[_EpPartition],
+    *,
+    output_selection: Optional[_FinalOutputSelection] = None,
+    output_indices_dependency: Optional[str] = None,
+) -> str:
+    """Final norm and lm_head on every EP group that samples logits."""
+
+    head_ends = []
+    for partition in partitions:
+        if partition.token_batch <= 0 or (
+                output_selection is None and not partition.logit_row_indices):
+            continue
+        with _ep_partition_scope(builder, partition):
+            head_ends.append(_compile_parallel_lm_head(
+                builder,
+                scenario,
+                plan,
+                router,
+                phase,
+                dependencies,
+                token_batch=len(partition.logit_row_indices),
+                source_token_batch=partition.token_batch,
+                source_row_indices=partition.logit_row_indices,
+                output_selection=output_selection,
+                output_indices_dependency=output_indices_dependency,
+                ep_rank=partition.ep_rank,
+            ))
+    if len(head_ends) == 1:
+        return head_ends[0]
+    return _add_join(
+        builder, phase + ".lm_head.complete", head_ends,
+        metadata={"event_kind": "lm_head_group_complete", "phase": phase})
+
+
+def _partition_logit_rows(
+    plan: ParallelPlan, partitions: Sequence[_EpPartition]
+) -> Optional[Tuple[int, ...]]:
+    """Sampled rows per EP group for the host logits commit (None: one group)."""
+
+    if plan.ep_degree == 1:
+        return None
+    return tuple(len(partition.logit_row_indices) for partition in partitions)
+
+
+def _offline_request_partitions(
+    scenario: ScenarioConfig,
+    plan: ParallelPlan,
+    request: RequestSpec,
+    **shape: object,
+) -> Tuple[_EpPartition, ...]:
+    """Partitions of one stand-alone request: its owner group holds every row.
+
+    The owner follows the paper's slot rule (request index modulo EP); the
+    other groups stay idle except for the routed-expert exchange.
+    """
+
+    owner = 0
+    if plan.ep_degree > 1:
+        index = next(
+            (position for position, row in enumerate(scenario.workload.requests)
+             if row.request_id == request.request_id),
+            0,
+        )
+        owner = index % plan.ep_degree
+    return tuple(
+        _EpPartition(ep_rank, **shape)
+        if ep_rank == owner
+        else _EpPartition(ep_rank, 0, 1, 0, 0, 0)
+        for ep_rank in range(plan.ep_degree)
+    )
+
+
 def _compile_parallel_lm_head(
     builder: _TaskBuilder,
     scenario: ScenarioConfig,
@@ -24984,7 +25482,9 @@ def _compile_parallel_lm_head(
     *,
     source_token_batch: int,
     source_row_indices: Tuple[int, ...],
+    ep_rank: int = 0,
 ) -> str:
+    group_phase = _ep_prefix(plan, phase, ep_rank)
     if output_selection is not None:
         if output_selection.logit_rows != token_batch:
             raise ValueError("output-head rows disagree with selected output indices")
@@ -24995,13 +25495,13 @@ def _compile_parallel_lm_head(
     execution_view = _execution_view(scenario)
     vocabulary_size = execution_view.vocabulary_size
     if vocabulary_size <= 0:
-        return _add_join(builder, phase + ".lm_head.none", dependencies)
+        return _add_join(builder, group_phase + ".lm_head.none", dependencies)
     layer = execution_view.layer_instances[-1].layer
     lm_head_layer = _lm_head_layer_for_gemm(scenario)
     if lm_head_layer is None:
         raise ValueError("lm_head requires at least one executable decoder layer")
     stage = plan.pp_degree - 1
-    ranks = plan.tp_group(stage, 0)
+    ranks = plan.tp_group(stage, ep_rank)
     final_norm_ends = _compile_parallel_final_norm(
         builder,
         scenario,
@@ -25013,6 +25513,7 @@ def _compile_parallel_lm_head(
         output_selection=output_selection,
         source_token_batch=source_token_batch,
         source_row_indices=source_row_indices,
+        ep_rank=ep_rank,
     )
     head_operators = tuple(operator for operator in execution_view.operators
                            if operator.operator_id == "lm_head")
@@ -25172,7 +25673,7 @@ def _compile_parallel_lm_head(
         scenario,
         router,
         plan,
-        phase + ".lm_head_all_gather",
+        group_phase + ".lm_head_all_gather",
         "all_gather",
         ranks,
         int(
@@ -25492,8 +25993,15 @@ def _add_host_visible_logits_sampling_commit(
     phase: str,
     logit_rows: int,
     committed_rows: int,
+    ep_logit_rows: Optional[Sequence[int]] = None,
 ) -> str:
-    """Make one physical logits batch host-visible, sampled, and committed."""
+    """Make one physical logits batch host-visible, sampled, and committed.
+
+    ``ep_logit_rows`` gives the sampled rows each EP group produced (the
+    logits live on that group's last-stage ranks); every non-empty group
+    transfers its own rows to the host and one CPU sampling/commit covers
+    the whole batch.
+    """
 
     rows = max(0, int(logit_rows))
     commits = max(0, min(rows, int(committed_rows)))
@@ -25537,159 +26045,212 @@ def _add_host_visible_logits_sampling_commit(
         "host_output_memory_component_id": tail_target.memory_component_id,
         "host_output_memory_semantics": tail_target.memory_semantics,
     }
-    prior = tuple(dependencies)
-    contract = scenario.host_output_contract
-    if contract is None:
-        transfer_end = builder.add(
-            phase + ".output.d2h_unmodeled",
-            TaskCategory.COMMUNICATION,
-            dependencies=prior,
-            advance=False,
-            metadata=_communication_task_metadata(
-                {
-                    **common,
-                    "event_kind": "logits_d2h_unmodeled",
-                    "serving_output_stage": "device_output_completion",
-                    "modeling_status": "partial",
-                    "partial_reason": "host_output_contract_not_declared",
-                    "direction": "device_to_host",
-                }
-            ),
-        )
-    else:
-        target_component = tail_target.memory_component_id
-        if target_component is None:  # pragma: no cover - validated contract
-            raise AssertionError(
-                "declared host output contract has no physical memory target"
+    def d2h_chain(
+        chain_rank: LogicalRank,
+        chain_rows: int,
+        chain_phase: str,
+        chain_dependencies: Sequence[str],
+    ) -> str:
+        chain_bytes = int(math.ceil(chain_rows * vocabulary_size * logit_bits / 8.0))
+        chain_source = chain_rank.component_id
+        chain_transfer_source = (
+            chain_rank.memory_component_id
+            or _compute_local_runtime_memory_component_id(scenario, chain_source)
+        ) if tail_target.memory_component_id is not None else chain_source
+        chain_common = {
+            **common,
+            "logit_rows": chain_rows,
+            "logits_bytes": chain_bytes,
+            "output_source_component_id": chain_source,
+            "output_transfer_source_component_id": chain_transfer_source,
+        }
+        prior = tuple(chain_dependencies)
+        contract = scenario.host_output_contract
+        if contract is None:
+            transfer_end = builder.add(
+                chain_phase + ".output.d2h_unmodeled",
+                TaskCategory.COMMUNICATION,
+                dependencies=prior,
+                advance=False,
+                metadata=_communication_task_metadata(
+                    {
+                        **chain_common,
+                        "event_kind": "logits_d2h_unmodeled",
+                        "serving_output_stage": "device_output_completion",
+                        "modeling_status": "partial",
+                        "partial_reason": "host_output_contract_not_declared",
+                        "direction": "device_to_host",
+                    }
+                ),
             )
-        pages = max(
-            1,
-            (logits_bytes + transport.iommu_page_size_bytes - 1)
-            // transport.iommu_page_size_bytes,
-        )
-        misses = max(
-            1,
-            (pages + transport.iommu_tlb_entries - 1)
-            // transport.iommu_tlb_entries,
-        )
-        walk_batches = max(
-            1,
-            (misses + transport.iommu_max_outstanding_walks - 1)
-            // transport.iommu_max_outstanding_walks,
-        )
-        translated = builder.add(
-            phase + ".output.iommu_translate",
-            TaskCategory.MEMORY,
-            (
-                ResourceDemand(
-                    "{}.iommu".format(profile.cpu_component_id),
-                    walk_batches * transport.iommu_miss_latency_ns,
-                    work_units=float(pages),
+        else:
+            target_component = tail_target.memory_component_id
+            if target_component is None:  # pragma: no cover - validated contract
+                raise AssertionError(
+                    "declared host output contract has no physical memory target"
+                )
+            pages = max(
+                1,
+                (chain_bytes + transport.iommu_page_size_bytes - 1)
+                // transport.iommu_page_size_bytes,
+            )
+            misses = max(
+                1,
+                (pages + transport.iommu_tlb_entries - 1)
+                // transport.iommu_tlb_entries,
+            )
+            walk_batches = max(
+                1,
+                (misses + transport.iommu_max_outstanding_walks - 1)
+                // transport.iommu_max_outstanding_walks,
+            )
+            translated = builder.add(
+                chain_phase + ".output.iommu_translate",
+                TaskCategory.MEMORY,
+                (
+                    ResourceDemand(
+                        "{}.iommu".format(profile.cpu_component_id),
+                        walk_batches * transport.iommu_miss_latency_ns,
+                        work_units=float(pages),
+                    ),
                 ),
-            ),
-            dependencies=prior,
-            advance=False,
-            metadata={
-                **common,
-                "event_kind": "logits_d2h_iommu_translation",
-                "serving_output_stage": "device_output_completion",
-                "runtime_phase": "iommu_translate",
-                "transaction_kind": "address_translation",
-                "transaction_count": pages,
-                "transaction_batches": walk_batches,
-                "target_component": target_component,
-                "direction": "device_to_host",
-            },
-        )
-        dma_setup = _dma_setup_service(
-            logits_bytes,
-            batch_bytes=transport.dma_batch_bytes,
-            queue_depth=transport.dma_queue_depth,
-            max_outstanding=transport.dma_max_outstanding,
-            fixed_latency_ns=profile.dma_latency_ns,
-            submission_ns_per_wave=profile.dma_queue_submission_ns,
-        )
-        queued = builder.add(
-            phase + ".output.dma_queue",
-            TaskCategory.COMMUNICATION,
-            (
-                ResourceDemand(
-                    profile.dma_resource_id,
-                    dma_setup.service_ns,
-                    work_units=float(dma_setup.transaction_count),
-                ),
-            ),
-            dependencies=(translated,),
-            advance=False,
-            metadata=_communication_task_metadata(
-                {
-                    **common,
-                    "event_kind": "logits_d2h_dma_controller_batch",
+                dependencies=prior,
+                advance=False,
+                metadata={
+                    **chain_common,
+                    "event_kind": "logits_d2h_iommu_translation",
                     "serving_output_stage": "device_output_completion",
-                    "runtime_phase": "dma_queue",
-                    "transaction_kind": "device_to_host_dma",
-                    "transaction_count": dma_setup.transaction_count,
-                    "transaction_batches": dma_setup.wave_count,
-                    "queue_parallelism": dma_setup.queue_parallelism,
-                    "queue_depth": transport.dma_queue_depth,
-                    "max_outstanding": transport.dma_max_outstanding,
+                    "runtime_phase": "iommu_translate",
+                    "transaction_kind": "address_translation",
+                    "transaction_count": pages,
+                    "transaction_batches": walk_batches,
                     "target_component": target_component,
                     "direction": "device_to_host",
-                    "cost_owner": "dma_descriptor_queue",
-                    "bulk_service_owner": False,
-                }
+                },
+            )
+            dma_setup = _dma_setup_service(
+                chain_bytes,
+                batch_bytes=transport.dma_batch_bytes,
+                queue_depth=transport.dma_queue_depth,
+                max_outstanding=transport.dma_max_outstanding,
+                fixed_latency_ns=profile.dma_latency_ns,
+                submission_ns_per_wave=profile.dma_queue_submission_ns,
+            )
+            queued = builder.add(
+                chain_phase + ".output.dma_queue",
+                TaskCategory.COMMUNICATION,
+                (
+                    ResourceDemand(
+                        profile.dma_resource_id,
+                        dma_setup.service_ns,
+                        work_units=float(dma_setup.transaction_count),
+                    ),
+                ),
+                dependencies=(translated,),
+                advance=False,
+                metadata=_communication_task_metadata(
+                    {
+                        **chain_common,
+                        "event_kind": "logits_d2h_dma_controller_batch",
+                        "serving_output_stage": "device_output_completion",
+                        "runtime_phase": "dma_queue",
+                        "transaction_kind": "device_to_host_dma",
+                        "transaction_count": dma_setup.transaction_count,
+                        "transaction_batches": dma_setup.wave_count,
+                        "queue_parallelism": dma_setup.queue_parallelism,
+                        "queue_depth": transport.dma_queue_depth,
+                        "max_outstanding": transport.dma_max_outstanding,
+                        "target_component": target_component,
+                        "direction": "device_to_host",
+                        "cost_owner": "dma_descriptor_queue",
+                        "bulk_service_owner": False,
+                    }
+                ),
+            )
+            transfer_end = _add_transfer_tasks(
+                builder,
+                router,
+                chain_transfer_source,
+                target_component,
+                chain_bytes,
+                (queued,),
+                name=chain_phase + ".output.d2h",
+                routing_policy=plan.routing_policy,
+                metadata={
+                    **chain_common,
+                    "event_kind": "logits_d2h",
+                    "serving_output_stage": "device_output_completion",
+                    "target_component": target_component,
+                    "direction": "device_to_host",
+                    "allocation_semantics": contract.allocation_semantics,
+                    "modeling_status": "complete",
+                },
+            )
+        completed = builder.add(
+            chain_phase + ".output.completion_interrupt",
+            TaskCategory.SYNCHRONIZATION,
+            (
+                ResourceDemand(
+                    _HOST_OUTPUT_COMPLETION_INTERRUPT_RESOURCE_ID,
+                    0.0,
+                ),
             ),
-        )
-        transfer_end = _add_transfer_tasks(
-            builder,
-            router,
-            transfer_source_component,
-            target_component,
-            logits_bytes,
-            (queued,),
-            name=phase + ".output.d2h",
-            routing_policy=plan.routing_policy,
+            dependencies=(transfer_end,),
+            advance=False,
             metadata={
-                **common,
-                "event_kind": "logits_d2h",
+                **chain_common,
+                "event_kind": "logits_d2h_completion_interrupt",
                 "serving_output_stage": "device_output_completion",
-                "target_component": target_component,
+                "opaque_device_fence": True,
+                "completion_interrupt_service_ns": 0.0,
+                "completion_interrupt_status": "partial",
+                "completion_interrupt_resource_id": (
+                    _HOST_OUTPUT_COMPLETION_INTERRUPT_RESOURCE_ID
+                ),
+                "completion_interrupt_resource_status": (
+                    "declared_shared_runtime_resource"
+                ),
+                "partial_reason": "completion_interrupt_latency_not_declared",
+                "wait_accounting": "dependency_elapsed_time",
+                "host_wait_service_ns": 0.0,
+                "timing_completeness": "partial",
                 "direction": "device_to_host",
-                "allocation_semantics": contract.allocation_semantics,
-                "modeling_status": "complete",
             },
         )
-    completed = builder.add(
-        phase + ".output.completion_interrupt",
-        TaskCategory.SYNCHRONIZATION,
-        (
-            ResourceDemand(
-                _HOST_OUTPUT_COMPLETION_INTERRUPT_RESOURCE_ID,
-                0.0,
-            ),
-        ),
-        dependencies=(transfer_end,),
-        advance=False,
-        metadata={
-            **common,
-            "event_kind": "logits_d2h_completion_interrupt",
-            "serving_output_stage": "device_output_completion",
-            "opaque_device_fence": True,
-            "completion_interrupt_service_ns": 0.0,
-            "completion_interrupt_status": "partial",
-            "completion_interrupt_resource_id": (
-                _HOST_OUTPUT_COMPLETION_INTERRUPT_RESOURCE_ID
-            ),
-            "completion_interrupt_resource_status": (
-                "declared_shared_runtime_resource"
-            ),
-            "partial_reason": "completion_interrupt_latency_not_declared",
-            "wait_accounting": "dependency_elapsed_time",
-            "host_wait_service_ns": 0.0,
-            "timing_completeness": "partial",
-            "direction": "device_to_host",
-        },
-    )
+        return completed
+
+    if ep_logit_rows is None:
+        if plan.ep_degree > 1:
+            raise ValueError(
+                "host logits commit needs per-EP-group rows when ep_degree > 1"
+            )
+        sources = ((rank, rows, phase),)
+    else:
+        if len(ep_logit_rows) != plan.ep_degree or sum(ep_logit_rows) != rows:
+            raise ValueError("per-EP-group logit rows must sum to the batch rows")
+        sources = tuple(
+            (plan.rank_at(0, plan.pp_degree - 1, ep_rank), count,
+             _ep_prefix(plan, phase, ep_rank))
+            for ep_rank, count in enumerate(ep_logit_rows)
+            if count > 0
+        )
+    completions = [
+        d2h_chain(chain_rank, count, chain_phase, dependencies)
+        for chain_rank, count, chain_phase in sources
+    ]
+    if len(completions) == 1:
+        completed = completions[0]
+    else:
+        completed = _add_join(
+            builder,
+            phase + ".output.d2h_complete",
+            completions,
+            metadata={
+                **common,
+                "event_kind": "logits_d2h_group_complete",
+                "serving_output_stage": "device_output_completion",
+            },
+        )
 
     # CPU lowering already charges the exact target HostMemoryProfile below.
     # Adding a second host-memory-to-CPU transfer would charge the same logits
@@ -26055,6 +26616,9 @@ class _ServingInvocationLane:
     state_in_committed_prefix: bool
     state_commit_boundary: bool
     state_release_boundary: bool
+    # Attention data-parallel owner: the EP group whose TP ranks hold this
+    # request's KV and run its attention/dense path for the request's life.
+    ep_group: int = 0
 
     def identity_metadata(self, kind: str) -> Mapping[str, object]:
         identity: Dict[str, object] = {
@@ -26066,6 +26630,7 @@ class _ServingInvocationLane:
             "position": self.position,
             "phase": self.phase,
             "requires_logits": self.requires_logits,
+            "ep_group": self.ep_group,
         }
         if self.phase == "mtp":
             identity["verifier_position"] = self.position
@@ -26181,10 +26746,38 @@ class _ServingInvocationGroup:
     kv_scan_tokens: int = 0
     q4_mma_view_tokens_lower_bound: int = 0
     nonflash_kv_view: Mapping[str, object] = field(default_factory=dict)
+    # Set only on the per-EP-group sub-views from ``ep_partitions``.
+    ep_rank: int = 0
 
     @property
     def group_id(self) -> str:
         return "operator-invocation-group-{:04d}".format(self.group_index)
+
+    def ep_partitions(
+        self, ep_degree: int
+    ) -> Tuple["_ServingInvocationGroup", ...]:
+        """Split the physical invocation by owning EP group, once.
+
+        Every aggregate property (rows, kv tokens, logit rows, request ids,
+        linear-state runtime) of a sub-view is that group's own share.  The
+        split is stable, so lane order inside a group is the cohort order.
+        """
+
+        lanes_by_group: List[List[_ServingInvocationLane]] = [
+            [] for _ in range(ep_degree)
+        ]
+        for lane in self.lanes:
+            if not 0 <= lane.ep_group < ep_degree:
+                raise ValueError(
+                    "request {} is owned by EP group {} outside 0..{}".format(
+                        lane.request_id, lane.ep_group, ep_degree - 1
+                    )
+                )
+            lanes_by_group[lane.ep_group].append(lane)
+        return tuple(
+            replace(self, lanes=tuple(lanes), ep_rank=ep_rank)
+            for ep_rank, lanes in enumerate(lanes_by_group)
+        )
 
     @property
     def token_batch(self) -> int:
@@ -26400,6 +26993,7 @@ def _serving_invocation_lanes(
         )
         logit_tokens = _serving_item_logit_tokens(item)
         first_logit_position = token_count - logit_tokens
+        ep_group = int(getattr(item, "ep_group", 0))
         fused_prefill_chunk = kind == "prefill" or phase in {
             "prefill",
             "recompute",
@@ -26439,6 +27033,7 @@ def _serving_invocation_lanes(
                     state_release_boundary=(
                         is_mtp and position == token_count - 1
                     ),
+                    ep_group=ep_group,
                 )
             )
         item_lanes.append(tuple(lanes))
@@ -26774,11 +27369,15 @@ def _tag_serving_invocation_group_tasks(
     builder: _TaskBuilder,
     first_task_index: int,
     group: _ServingInvocationGroup,
+    last_task_index: Optional[int] = None,
+    metadata: Optional[Mapping[str, object]] = None,
 ) -> None:
     """Attach one auditable group identity to every task it lowered."""
 
-    metadata = _serving_invocation_group_task_metadata(group)
-    for index in range(first_task_index, len(builder.tasks)):
+    if metadata is None:
+        metadata = _serving_invocation_group_task_metadata(group)
+    stop = len(builder.tasks) if last_task_index is None else last_task_index
+    for index in range(first_task_index, stop):
         task = builder.tasks[index]
         sources = builder._physical_segment_sources
         if sources is not None and task.task_id in sources:
@@ -26862,6 +27461,12 @@ def _serving_invocation_segment_binding(
 ]:
     """Admit the narrow exact invocation shape used by local decode replay."""
 
+    if plan.ep_degree > 1:
+        # The template assumes the lone lane's attention runs on EP group 0 and
+        # keys on neither its owner group nor that group's ranks.  Large-batch
+        # attention data parallelism never reduces to one lane per physical
+        # invocation, so the replay is simply not offered.
+        return None
     context = _active_compilation_context(scenario)
     state_runtime = group.linear_state_runtime()
     runtime_structure = (
@@ -27057,41 +27662,52 @@ def _compile_or_replay_serving_invocation(
         scenario, plan, group) else None
     if invocation_sources is not None:
         builder._physical_segment_sources = invocation_sources
+    partition_spans: Optional[List[Tuple[int, int, int]]] = None
     try:
         selection = _final_output_selection(scenario, plan, group.token_batch,
             tuple(index for index, lane in enumerate(group.lanes) if lane.requires_logits))
         prepared, output_indices = _prepare_output_selection_inputs(
             builder, scenario, router, plan, selection, phase, dependencies)
+        if plan.ep_degree == 1:
+            partition_groups = (group,)
+            partitions = (_ep_partition_from_group(
+                group,
+                context_tokens=group.context_tokens if physical_k else attention_context_tokens,
+                kv_read_tokens=attention_kv_read_tokens,
+            ),)
+        else:
+            if (group.kv_scan_tokens or group.q4_mma_view_tokens_lower_bound
+                    or group.nonflash_kv_view or scenario.workload.mtp is not None
+                    or scenario.llama_cpp_config is not None):
+                _require_single_ep(plan, "llama.cpp KV scan views and MTP lowering")
+            # Attention data parallelism: split the physical invocation by
+            # owner once; each group lowers only its own requests.
+            partition_groups = group.ep_partitions(plan.ep_degree)
+            partitions = tuple(
+                _ep_partition_from_group(
+                    sub, lanes=sub.lanes,
+                    attention_read_includes_current=False,
+                )
+                for sub in partition_groups
+            )
+            partition_spans = []
+            builder._ep_partition_spans = partition_spans
         group_end = _compile_parallel_iteration(
             builder,
             scenario,
             plan,
             router,
-            token_batch=group.token_batch,
-            context_tokens=group.context_tokens if physical_k else attention_context_tokens,
+            partitions=partitions,
             physical_attention_context_tokens=physical_k,
-            kv_read_tokens=attention_kv_read_tokens,
-            kv_append_tokens=group.kv_append_tokens,
-            kv_materialized_tokens=group.kv_materialized_tokens,
             q4_mma_view_tokens_lower_bound=group.q4_mma_view_tokens_lower_bound,
-            linear_state_runtime=group.linear_state_runtime(),
             output_selection=selection,
             output_indices_dependency=output_indices,
             phase=phase,
             dependencies=prepared,
         )
         if group.logit_token_batch > 0 or (selection is not None and selection.final_norm_rows > 0):
-            group_end = _compile_parallel_lm_head(
-                builder,
-                scenario,
-                plan,
-                router,
-                phase,
-                (group_end,),
-                token_batch=group.logit_token_batch,
-                source_token_batch=group.token_batch,
-                source_row_indices=tuple(index for index, lane in enumerate(group.lanes)
-                                         if lane.requires_logits),
+            group_end = _compile_partition_lm_heads(
+                builder, scenario, plan, router, phase, (group_end,), partitions,
                 output_selection=selection,
                 output_indices_dependency=output_indices,
             )
@@ -27105,14 +27721,38 @@ def _compile_or_replay_serving_invocation(
                     phase=phase,
                     logit_rows=group.logit_token_batch,
                     committed_rows=group.committed_logit_token_batch,
+                    ep_logit_rows=_partition_logit_rows(plan, partitions),
                 )
         _bind_output_index_upload(builder, scenario, router, plan, first_task_index, output_indices)
-        _tag_serving_invocation_group_tasks(
-            builder,
-            first_task_index,
-            group,
-        )
+        if partition_spans:
+            # Partition-owned tasks carry that group's requests and lanes;
+            # the cross-group experts and layer barriers keep the parent's.
+            # Scopes never nest, so the spans are disjoint and recorded in
+            # lowering order; each identity is built once.
+            parent_metadata = _serving_invocation_group_task_metadata(group)
+            partition_metadata = tuple(
+                _serving_invocation_group_task_metadata(sub)
+                for sub in partition_groups
+            )
+            cursor = first_task_index
+            for ep_rank, start, end in partition_spans:
+                _tag_serving_invocation_group_tasks(
+                    builder, cursor, group, start, parent_metadata)
+                _tag_serving_invocation_group_tasks(
+                    builder, start, partition_groups[ep_rank], end,
+                    partition_metadata[ep_rank])
+                cursor = end
+            _tag_serving_invocation_group_tasks(
+                builder, cursor, group, metadata=parent_metadata)
+        else:
+            _tag_serving_invocation_group_tasks(
+                builder,
+                first_task_index,
+                group,
+            )
     finally:
+        if partition_spans is not None:
+            del builder._ep_partition_spans
         if invocation_sources is not None:
             builder._physical_segment_sources = previous_sources
             if previous_sources is not None:
@@ -28168,6 +28808,7 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
                 if _serving_item_is_mtp(item)
                 else 0
             ),
+            int(getattr(item, "ep_group", 0)),
         )
         for item in items
     )
@@ -31033,6 +31674,14 @@ def _lower_serving_cohort(
             phase="{}.{}".format(cohort_id, kind),
             logit_rows=sum(group.logit_token_batch for group in invocation_groups),
             committed_rows=sum(group.committed_logit_token_batch for group in invocation_groups),
+            ep_logit_rows=(
+                None if plan.ep_degree == 1
+                else tuple(
+                    sum(1 for group in invocation_groups for lane in group.lanes
+                        if lane.requires_logits and lane.ep_group == ep_rank)
+                    for ep_rank in range(plan.ep_degree)
+                )
+            ),
         ),)
         output_sources = tuple(
             lane.identity_metadata(kind) for group in invocation_groups
@@ -31247,6 +31896,16 @@ def _lower_serving_cohort(
                     **dict(group.audit_metadata()),
                     "terminal_task_id": group_ends[group.group_id],
                     "consumer_task_ids": (group_ends[group.group_id],),
+                    **({"ep_partitions": tuple(
+                        {
+                            "ep_rank": sub.ep_rank,
+                            "lane_count": len(sub.lanes),
+                            "token_batch": sub.token_batch,
+                            "logit_token_batch": sub.logit_token_batch,
+                            "request_ids": sub.request_ids,
+                        }
+                        for sub in group.ep_partitions(plan.ep_degree)
+                    )} if plan.ep_degree > 1 else {}),
                 }
                 for group in invocation_groups
             ),
@@ -31342,6 +32001,11 @@ def _lower_serving_cohort(
             "tp_degree": plan.tp_degree,
             "pp_degree": plan.pp_degree,
             "ep_degree": plan.ep_degree,
+            **({"ep_group_token_counts": tuple(
+                sum(1 for group in invocation_groups for lane in group.lanes
+                    if lane.ep_group == ep_rank)
+                for ep_rank in range(plan.ep_degree)
+            )} if plan.ep_degree > 1 else {}),
         },
     )
 

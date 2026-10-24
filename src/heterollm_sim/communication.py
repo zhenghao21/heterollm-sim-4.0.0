@@ -304,11 +304,14 @@ class CollectiveRound:
 
 @dataclass(frozen=True)
 class CollectivePlan:
+    # With ``pair_bytes`` (all_to_all only) ``tensor_bytes`` is descriptive
+    # metadata: the rounds carry exactly the per-pair byte counts.
     kind: str
     algorithm: str
     participants: Tuple[str, ...]
     tensor_bytes: int
     rounds: Tuple[CollectiveRound, ...]
+    pair_bytes: Optional[Tuple[Tuple[int, ...], ...]] = None
 
 
 def _metadata_non_negative_number(
@@ -994,12 +997,15 @@ def plan_collective(
     *,
     algorithm: str = "auto",
     routing_policy: str = "lowest_latency",
+    pair_bytes: Optional[Sequence[Sequence[int]]] = None,
 ) -> CollectivePlan:
     normalized_kind = kind.strip().lower().replace("-", "_")
     supported = {"all_reduce", "all_gather", "reduce_scatter", "all_to_all"}
     if normalized_kind not in supported:
         raise ValueError("unsupported collective kind {}".format(kind))
     _non_negative_integer(tensor_bytes, "tensor_bytes")
+    if pair_bytes is not None and normalized_kind != "all_to_all":
+        raise ValueError("pair_bytes is only valid for all_to_all")
     ordered = tuple(str(item) for item in participants)
     if not ordered:
         raise ValueError("collective participants must not be empty")
@@ -1018,6 +1024,16 @@ def plan_collective(
         )
     if normalized_kind == "all_to_all":
         selected = "ring"
+    if pair_bytes is not None:
+        matrix = _pair_byte_matrix(pair_bytes, len(ordered))
+        rounds = (
+            _pairwise_all_to_all_rounds(router, ordered, matrix, routing_policy)
+            if len(ordered) > 1
+            else ()
+        )
+        return CollectivePlan(
+            normalized_kind, selected, ordered, tensor_bytes, rounds, matrix
+        )
     if len(ordered) <= 1 or tensor_bytes == 0:
         return CollectivePlan(normalized_kind, selected, ordered, tensor_bytes, ())
     if selected == "ring":
@@ -1029,6 +1045,54 @@ def plan_collective(
             router, normalized_kind, ordered, tensor_bytes, routing_policy
         )
     return CollectivePlan(normalized_kind, selected, ordered, tensor_bytes, rounds)
+
+
+def _pair_byte_matrix(
+    pair_bytes: Sequence[Sequence[int]], count: int
+) -> Tuple[Tuple[int, ...], ...]:
+    matrix = tuple(tuple(row) for row in pair_bytes)
+    if len(matrix) != count or any(len(row) != count for row in matrix):
+        raise ValueError(
+            "pair_bytes must be a {0}x{0} matrix".format(count)
+        )
+    for row in matrix:
+        for value in row:
+            _non_negative_integer(value, "pair_bytes")
+    return matrix
+
+
+def _pairwise_all_to_all_rounds(
+    router: TopologyRouter,
+    participants: Tuple[str, ...],
+    pair_bytes: Tuple[Tuple[int, ...], ...],
+    routing_policy: str,
+) -> Tuple[CollectiveRound, ...]:
+    # Same rotation as the scalar all-to-all ring, but every transfer carries
+    # its own pair's bytes.  Zero-byte pairs (including the diagonal) are not
+    # generated, and a round without any transfer is dropped.
+    count = len(participants)
+    rounds: List[CollectiveRound] = []
+    for round_index in range(count - 1):
+        transfers = []
+        for rank, source in enumerate(participants):
+            target_index = (rank + round_index + 1) % count
+            byte_count = pair_bytes[rank][target_index]
+            if byte_count == 0:
+                continue
+            target = participants[target_index]
+            transfers.append(
+                CollectiveTransfer(
+                    source,
+                    target,
+                    byte_count,
+                    router.route(
+                        source, target, byte_count, policy=routing_policy
+                    ),
+                )
+            )
+        if transfers:
+            rounds.append(CollectiveRound(len(rounds), tuple(transfers)))
+    return tuple(rounds)
 
 
 def _ring_rounds(

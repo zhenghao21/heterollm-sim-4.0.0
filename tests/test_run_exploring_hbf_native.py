@@ -11,9 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_exploring_hbf_native as run
 
 
-def small_parameters():
+LAYOUT = run.CONTROL_LAYOUT
+
+
+def small_parameters(layout=LAYOUT):
     case = {**run.case_matrix()[0], "output_tokens": 4}
-    return run.parameters(case, 2)
+    return run.parameters(case, layout, 2)
 
 
 def fake_result():
@@ -21,8 +24,10 @@ def fake_result():
              for key in ("seed", "fresh1", "fresh2", "unfinished")]
     times = {"seed": [10.], "fresh1": [20., 25., 30., 35.],
              "fresh2": [24., 29., 34., 39.], "unfinished": [40., 45., 50.]}
-    events = [NS(event_type="tokens_committed", timestamp_ns=stamp, request_id=key,
-                 details={"visible_tokens": 1}) for key, stamps in times.items() for stamp in stamps]
+    events = [NS(event_type="external_kv_import_start", timestamp_ns=stamp, request_id=key, details={})
+              for key, stamp in (("fresh1", 2.), ("fresh2", 4.), ("unfinished", 6.))]
+    events += [NS(event_type="tokens_committed", timestamp_ns=stamp, request_id=key,
+                  details={"visible_tokens": 1}) for key, stamps in times.items() for stamp in stamps]
     metrics = {key: NS(request_id=key, status="finished" if key != "unfinished" else "running",
                        rejection_reason=None, ttft_ns=stamps[0]) for key, stamps in times.items()}
     window = {"complete": True, "start_ns": 10., "end_ns": 50., "measured_decode_cohorts": 6,
@@ -34,8 +39,8 @@ def fake_result():
                                             "imported_logical_bytes": 2048}))
 
 
-def candidate(case, batch=1, state="completed"):
-    return {"parameters": run.parameters(case, batch), "candidate_id": run.candidate_id(case, batch),
+def candidate(case, batch=1, state="completed", layout=LAYOUT):
+    return {"parameters": run.parameters(case, layout, batch), "candidate_id": run.candidate_id(case, layout, batch),
         "status": state, "backend": run.BACKEND, "runner_contract": run.CONTRACT, "forecast_tokens": 0,
         "metrics": {"cluster_tokens_per_second": 800./batch, "tokens_per_second_per_gpu": 100./batch,
                     "mean_complete_request_tpot_ns": 1e7} if state == "completed" else None}
@@ -45,8 +50,9 @@ def test_exact_9_6_15_order_and_60_default_batch_candidates():
     cases = run.case_matrix()
     assert len(cases) == 30
     assert [row["phase"] for row in cases] == ["dense_native"]*9 + ["dense_plus"]*6 + ["maverick_native"]*15
-    assert len({run.candidate_id(case, batch) for case in cases for batch in (1, 8)}) == 60
-    assert all((case["tp"], case["pp"], case["ep"], case["gpu_count"]) == (8, 1, 1, 8) for case in cases)
+    assert len({run.candidate_id(case, LAYOUT, batch) for case in cases for batch in (1, 8)}) == 60
+    # The layout is a searched candidate dimension, not part of the case.
+    assert all(case["gpu_count"] == 8 and not {"dp", "tp", "pp", "ep"} & case.keys() for case in cases)
     assert all(case["output_tokens"] in (373, 499, 1100) for case in cases)
 
 
@@ -55,7 +61,7 @@ def _fast_result(upper=99e6, accepted=True):
     from heterollm_sim.reporting import FastScenarioResult
     from heterollm_sim.native_fast_window import NativeWindowForecast
     scenario = build_reference_scenario()
-    forecast = NativeWindowForecast(100., 5, 1111, 6, 1111, {}, {},
+    forecast = NativeWindowForecast(100., 0, 1111, 0, 1111, {}, {},
         {"cluster_tokens_per_second": 80., "tokens_per_second_per_gpu": 10.,
          "mean_complete_request_tpot_ns": 95e6},
         {"mean_complete_request_tpot_ns": {"estimate": 95e6, "lower": 90e6, "upper": upper}},
@@ -66,8 +72,75 @@ def _fast_result(upper=99e6, accepted=True):
         (), "aggregate", native_window_forecast=forecast)
 
 
+REJECTED_PREFILL = {"prefill_id": "prefill", "status": "rejected", "prefill_pass": {"metric_bounds": {}},
+                    "rejection_reasons": ["native_prefill_independent_budget_exceeded"], "wall_seconds": 1.}
+
+
+def _prefill(lower, upper, observed=None):
+    from heterollm_sim.native_stationary import _interval
+    return {"prefill_id": "prefill", "status": "accepted", "rejection_reasons": [], "wall_seconds": 1.,
+            "prefill_pass": {"metric_bounds": {"prefill_pass_ns": _interval(lower, upper)},
+                             "error_budget": {"observed_pass_ns": observed}}}
+
+
+def test_ttft_adds_the_prefill_pass_to_the_ingress_ttft():
+    from heterollm_sim.native_stationary import _interval
+    fast = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
+    ingress = _interval(40e6, 44e6)
+    row = {"metrics": {"mean_complete_request_ingress_ttft_ns": ingress["estimate"]},
+           "diagnostics": {"metric_bounds": {"mean_complete_request_ingress_ttft_ns": ingress}}}
+    run.with_prefill_ttft(row, fast, _prefill(100e6, 108e6))
+    total = row["diagnostics"]["metric_bounds"]["mean_complete_request_ttft_ns"]
+    assert (total["lower"], total["upper"]) == (140e6, 152e6)
+    # The sum's relative budget lies between its parts' (mediant).
+    assert total["relative_error_budget"] <= max(ingress["relative_error_budget"], 8 / 208)
+    assert row["metrics"]["mean_complete_request_ttft_ns"] == total["estimate"]
+    assert row["metrics"]["prefill_pass_ns"] == _interval(100e6, 108e6)["estimate"]
+    detailed = run.parameters(run.case_matrix()[0], LAYOUT, 1)
+    row = {"metrics": {"mean_complete_request_ingress_ttft_ns": 42e6}}
+    run.with_prefill_ttft(row, detailed, _prefill(99.9e6, 100.1e6, observed=100e6))
+    assert row["metrics"]["mean_complete_request_ttft_ns"] == 142e6
+    row = {"metrics": {"mean_complete_request_ingress_ttft_ns": 42e6}}
+    run.with_prefill_ttft(row, detailed, REJECTED_PREFILL)
+    assert row["metrics"]["mean_complete_request_ttft_ns"] is row["metrics"]["prefill_pass_ns"] is None
+    assert row["prefill_pass"]["rejection_reasons"] == ["native_prefill_independent_budget_exceeded"]
+
+
+def test_prefill_pass_runs_once_per_model_prompt_and_layout(tmp_path):
+    seen = []
+
+    def builder(model, workload, **options):
+        seen.append((model, workload, options))
+        return _fast_result().scenario
+
+    def runner(scenario, **options):
+        assert scenario.simulation.native_prefill.full_pass is False
+        assert scenario.simulation.native_prefill.max_wall_seconds == run.PREFILL_WALL_BUDGET_SECONDS
+        return NS(approximation={"prefill_pass": {"accepted": True}, "rejection_reasons": []},
+                  layer_window_samples=())
+
+    hbm, hbf = run.case_matrix()[0], run.case_matrix()[6]
+    assert hbm["hardware"] != hbf["hardware"] and hbm["workload"] == hbf["workload"]
+    first = run.prefill_pass(run.parameters(hbm, LAYOUT, 1, "fast"), tmp_path, builder=builder, runner=runner)
+    again = run.prefill_pass(run.parameters(hbf, LAYOUT, 8, "fast"), tmp_path, builder=builder,
+                             runner=lambda *a, **k: pytest.fail("shared Prefill pass rerun"))
+    assert first == again and first["status"] == "accepted"
+    assert seen == [(hbm["model"], hbm["workload"], {"tp": 8, "pp": 1, "ep": 1, "full_pass": False})]
+    assert first["parameters"]["prefill_hardware"] == "HBM4" and "batch_size" not in first["parameters"]
+    def detailed(scenario, **options):
+        # The detailed contract's full pass has no wall cap, like its Decode run.
+        assert scenario.simulation.native_prefill.max_wall_seconds is None
+        assert options["control"].deadline_monotonic is None
+        return NS(approximation={"prefill_pass": {"accepted": scenario.simulation.native_prefill.full_pass},
+                                 "rejection_reasons": []}, layer_window_samples=())
+
+    assert run.prefill_pass(run.parameters(hbm, LAYOUT, 1), tmp_path, builder=builder,
+                            runner=detailed)["status"] == "accepted"
+    assert len(seen) == 2 and seen[-1][2]["full_pass"] is True
+
+
 def test_native_fast_runner_uses_upper_bound_and_keeps_full_traffic_unknown():
-    params = run.parameters(run.case_matrix()[0], 1, "fast")
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
     row = run.native_fast_result(_fast_result(upper=101e6), params)
     assert row["status"] == "slo_rejected" and row["metrics"] is None
     assert row["diagnostics"]["observed_metrics"]["mean_complete_request_tpot_ns"] < run.SLO_NS
@@ -76,7 +149,7 @@ def test_native_fast_runner_uses_upper_bound_and_keeps_full_traffic_unknown():
 
 
 def test_native_fast_runner_rejection_is_terminal_with_empty_metrics():
-    params = run.parameters(run.case_matrix()[0], 1, "fast")
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
     row = run.native_fast_result(_fast_result(accepted=False), params)
     assert row["status"] == "forecast_rejected" and row["metrics"] is None
     assert row["rejection_reason"] == "future_cache_not_bounded"
@@ -84,72 +157,59 @@ def test_native_fast_runner_rejection_is_terminal_with_empty_metrics():
     assert params["runner_contract"] != run.CONTRACT
 
 
-@pytest.mark.parametrize("unit", ["cohorts", "layer_windows"])
-def test_native_fast_assumptions_do_not_claim_complete_physical_window(unit):
+def test_budget_rejected_point_reports_its_intervals_as_missing_the_target(tmp_path):
+    from dataclasses import replace
+    case = run.case_matrix()[0]
+    params = run.parameters(case, LAYOUT, 1, "fast")
+    bounds = {"cluster_tokens_per_second": {"estimate": 80., "lower": 70., "upper": 90., "relative_error_budget": .125},
+              "mean_complete_request_tpot_ns": {"estimate": 95e6, "lower": 85e6, "upper": 105e6, "relative_error_budget": .11}}
+    value = _fast_result(accepted=False)
+    value = replace(value, approximation={**value.approximation, "metric_bounds": bounds,
+        "rejection_reasons": ["native_stationary_independent_budget_exceeded"]})
+    row = run.native_fast_result(value, params)
+    assert row["status"] == "forecast_rejected" and row["metrics"] is None
+    assert row["rejected_metric_bounds"] == {"target_relative_error": .1, "target_met": False,
+        "label": "未达到10%目标的条件区间，不是通过验收的结果", "metrics": bounds}
+    assert "rejected_metric_bounds" not in run.native_fast_result(_fast_result(accepted=False), params)
+    identity = run.candidate_id(case, LAYOUT, 1)
+    row = {**row, "parameters": params, "candidate_id": identity, "backend": run.BACKEND}
+    run.write_json(tmp_path / "candidates" / (identity + ".json"), row)
+    run.refresh(tmp_path, [case], {case["case_id"]: [(LAYOUT, 1)]}, mode="fast")
+    report = (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert "未达到10%目标" in report and "70.000～90.000" in report and "12.50%（未达标）" in report
+    summary = (tmp_path / "summary.csv").read_text(encoding="utf-8")
+    assert "unaccepted_cluster_tokens_per_second_lower" in summary and ",70.0,90.0," in summary
+    point = run.select_case(case, [identity], [row], "fast")
+    assert point["status"] == "all_candidates_rejected" and point["selected"] is None
+
+
+def test_native_fast_assumptions_do_not_claim_complete_physical_window():
     from exploring_hbf_native_config import PHYSICAL_WINDOW_ASSUMPTION
     scenario = NS(assumptions=("authored hardware assumption", PHYSICAL_WINDOW_ASSUMPTION))
-    assumptions = run.native_fast_assumptions(scenario, unit)
+    assumptions = run.native_fast_assumptions(scenario)
     assert PHYSICAL_WINDOW_ASSUMPTION not in assumptions
     assert "authored hardware assumption" in assumptions
     assert any("10%" in text and "conditional" in text for text in assumptions)
-    assert run.native_fast_assumptions(NS(assumptions=assumptions), unit) == assumptions
-    assert any("layer windows" in text for text in assumptions) == (unit == "layer_windows")
+    assert run.native_fast_assumptions(NS(assumptions=assumptions)) == assumptions
+    assert any("continuous-refill" in text for text in assumptions)
+    from heterollm_sim.native_stationary import SAME_CLASS_ADDRESS_ASSUMPTION
+    assert SAME_CLASS_ADDRESS_ASSUMPTION in assumptions
 
 
-def test_fast_paired_reference_excludes_detailed_and_mismatched_candidates(tmp_path):
-    case = run.case_matrix()[0]
-    params = run.parameters(run.case_matrix()[6], 1, "fast")
-    path = tmp_path / "candidates" / (run.candidate_id(case, 1) + ".json")
-    row = candidate(case)
-    row["approximation"] = {"error_budget": {"paired_reference": {"source_id": "matched"}}}
-    run.write_json(path, row)
-    assert run.matched_fast_reference(params, tmp_path) is None
-    row.update(parameters=run.parameters(case, 1, "fast"), runner_contract=run.FAST_CONTRACT)
-    run.write_json(path, row)
-    assert run.matched_fast_reference(params, tmp_path) == {"source_id": "matched"}
-    row["parameters"]["output_tokens"] = 1
-    run.write_json(path, row)
-    assert run.matched_fast_reference(params, tmp_path) is None
-
-
-def test_native_layer_runner_contract_cannot_reuse_cohort_or_detailed_reference(tmp_path):
-    case, target = run.case_matrix()[0], run.case_matrix()[6]
-    params = run.parameters(target, 8, "fast", "layer_windows")
-    assert params["runner_contract"] == run.FAST_LAYER_CONTRACT
-    assert params["target_relative_error"] == .1
-    assert params["candidate_wall_budget_seconds"] == 1800.
-    assert params["candidate_wall_target_seconds"] == 600.
-    path = tmp_path / "candidates" / (run.candidate_id(case, 8) + ".json")
-    row = candidate(case, 8)
-    reference = {"source_id": "same-native-layer-contract"}
-    row["approximation"] = {"error_budget": {"paired_reference": reference}}
-    for mode, unit in (("detailed", "cohorts"), ("fast", "cohorts")):
-        row.update(parameters=run.parameters(case, 8, mode, unit),
-                   runner_contract=run.runner_contract(mode, unit))
-        run.write_json(path, row)
-        assert run.matched_fast_reference(params, tmp_path) is None
-    row.update(parameters=run.parameters(case, 8, "fast", "layer_windows"),
-               runner_contract=run.FAST_LAYER_CONTRACT)
-    run.write_json(path, row)
-    assert run.matched_fast_reference(params, tmp_path) == reference
-
-
-def test_layer_runner_preserves_sample_scope_and_rejects_mismatched_forecast():
+def test_fast_runner_contract_keeps_the_budget_and_sample_scope():
     from test_native_fast_reporting import layer_sample
 
-    params = run.parameters(run.case_matrix()[0], 1, "fast", "layer_windows")
-    value = _fast_result()
-    with pytest.raises(RuntimeError, match="sampling contract"):
-        run.native_fast_result(value, params)
-    value = replace(value, native_window_forecast=replace(value.native_window_forecast,
-        sampling_unit="layer_windows", sampled_decode_cohorts=0, sampled_visible_output_tokens=0),
-        layer_window_samples=(layer_sample(),))
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
+    assert params["runner_contract"] == run.FAST_CONTRACT != run.CONTRACT
+    assert params["target_relative_error"] == .1
+    assert params["candidate_wall_budget_seconds"] == 1800.
+    value = replace(_fast_result(), layer_window_samples=(layer_sample(),))
     row = run.native_fast_result(value, params)
     assert row["status"] == "completed" and row["sampled_tokens"] == 0
-    assert row["traffic"] is row["physical_prefix_traffic"] is None
+    assert row["traffic"] is None and "physical_prefix_traffic" not in row
     assert row["physical_layer_samples"][0]["visible_output_tokens_observed"] == 0
     assert not row["physical_layer_samples"][0]["complete_native_cohort"]
-    with pytest.raises(RuntimeError, match="sampling contract"):
+    with pytest.raises(RuntimeError, match="partial cohort"):
         run.native_fast_result(replace(value, sampled=object()), params)
 
 
@@ -157,7 +217,7 @@ def test_layer_runner_preserves_sample_scope_and_rejects_mismatched_forecast():
 def test_fast_total_wall_budget_includes_bootstrap_and_user_pause_wins(tmp_path, monkeypatch, stop):
     import heterollm_sim.execution_control as execution_control
     value = _fast_result()
-    params = run.parameters(run.case_matrix()[0], 1, "fast")
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
     clock = [0.]
     monkeypatch.setattr(run.time, "perf_counter", lambda: clock[0])
     monkeypatch.setattr(execution_control, "perf_counter", lambda: clock[0])
@@ -181,8 +241,8 @@ def test_real_progress_writer_uses_native_stop_deadline_and_flushes_queue(tmp_pa
     monkeypatch.setattr(run.time, "perf_counter", lambda: clock[0])
     monkeypatch.setattr(execution_control, "perf_counter", lambda: clock[0])
     value = _fast_result()
-    params = run.parameters(run.case_matrix()[0], 1, "fast")
-    writer = run.ProgressWriter(tmp_path, params["case_id"])
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
+    writer = run.ProgressWriter(tmp_path, run.params_candidate_id(params))
     writer.begin_candidate(params)
     def runner(scenario, **options):
         control = options["control"]
@@ -198,34 +258,14 @@ def test_real_progress_writer_uses_native_stop_deadline_and_flushes_queue(tmp_pa
         clock[0] = 9.
         return value
     row = run.execute_candidate(params, tmp_path, writer,
-        builder=lambda *a, **kw: value.scenario, runner=runner)
+        builder=lambda *a, **kw: value.scenario, runner=runner, prefill=lambda *a: REJECTED_PREFILL)
     assert row["status"] == "completed"
+    assert row["metrics"]["mean_complete_request_ttft_ns"] is None and row["prefill_pass"]["status"] == "rejected"
     assert row["progress"]["cumulative_progress"]["visible_output_tokens"] == 2
     assert row["progress"]["wall_breakdown_seconds"] == {
         "starting": 2., "serving_boundary": 5., "serving_cohorts": 2.}
     writer.publish()
     assert run.read_json(writer.path)["cumulative_progress"]["visible_output_tokens"] == 2
-
-
-def test_fast_layer_runner_preserves_explicit_contiguous_window_search(tmp_path):
-    value = _fast_result()
-    value = replace(value, native_window_forecast=replace(value.native_window_forecast,
-        sampling_unit="layer_windows", sampled_decode_cohorts=0, sampled_visible_output_tokens=0))
-    params = {**run.parameters(run.case_matrix()[0], 1, "fast", "layer_windows"),
-        "layer_window_size": 1, "max_layer_window_size": 4}
-    seen = []
-
-    def runner(scenario, **_options):
-        seen.append(scenario.simulation.native_window)
-        return value
-
-    row = run.execute_candidate(params, tmp_path, NS(report=lambda _p: None),
-        builder=lambda *a, **kw: value.scenario, runner=runner)
-    assert row["status"] == "completed"
-    assert row["parameters"] == params
-    assert seen[0].layer_window_size == 1 and seen[0].max_layer_window_size == 4
-    assert seen[0].target_relative_error == .1
-    assert 0 < seen[0].max_wall_seconds <= params["candidate_wall_budget_seconds"] == 1800.
 
 
 def test_measurement_uses_start_exclusive_actual_tokens_and_complete_fresh_requests():
@@ -235,6 +275,8 @@ def test_measurement_uses_start_exclusive_actual_tokens_and_complete_fresh_reque
     assert metrics["cluster_tokens_per_second"] == 11e9/40
     assert metrics["tokens_per_second_per_gpu"] == 11e9/40/8
     assert metrics["mean_complete_request_tpot_ns"] == 5.
+    # Ingress TTFT runs from each fresh request's paid import start.
+    assert metrics["mean_complete_request_ingress_ttft_ns"] == 19.
     assert diagnostics["complete_request_tpot_ns"] == {"fresh1": 5., "fresh2": 5.}
     assert diagnostics["unfinished_requests_at_measurement_stop"] == 1
 
@@ -251,9 +293,10 @@ def test_aggregate_native_maverick_pd_sram_window_reaches_runner_metrics():
     observations = []
     result = run_scenario(scenario, retention_policy="aggregate",
                           control=ExecutionControl(progress_callback=observations.append))
-    case = {**run.case_matrix()[-3], "gpu_count": 2, "tp": 2, "input_tokens": 7, "output_tokens": 4}
-    metrics, diagnostics = run.measure_result(result, run.parameters(case, 2))
-    assert metrics["complete_fresh_requests"] >= 2 and diagnostics["slo_met"]
+    case = {**run.case_matrix()[-3], "gpu_count": 2, "input_tokens": 7, "output_tokens": 4}
+    metrics, diagnostics = run.measure_result(result, run.parameters(case, run.make_layout(1, 2, 1, 1), 2))
+    # Centered seed ages leave one fresh request complete inside this window.
+    assert metrics["complete_fresh_requests"] >= 1 and diagnostics["slo_met"]
     assert metrics["cluster_tokens_per_second"] == metrics["tokens_per_second_per_gpu"] * 2
     assert not any(component.normalized_kind == "hbm" for component in result.scenario.hardware.components)
     traffic = run.traffic_result(result)
@@ -286,7 +329,9 @@ def test_100ms_gate_uses_mean_request_tpot_instead_of_maximum_request_gap():
     replacement = {"seed": [10.], "fresh1": [20. + 10e6*i for i in range(4)],
                    "fresh2": [24. + 190e6*i for i in range(4)],
                    "unfinished": [590e6, 595e6, 600e6]}
-    result.serving.events = [NS(event_type="tokens_committed", timestamp_ns=stamp,
+    result.serving.events = [event for event in result.serving.events
+                             if event.event_type == "external_kv_import_start"]
+    result.serving.events += [NS(event_type="tokens_committed", timestamp_ns=stamp,
         request_id=key, details={"visible_tokens": 1}) for key, stamps in replacement.items() for stamp in stamps]
     result.serving.decode_measurement.update(end_ns=600e6,
         complete_request_tpot_ns={"fresh1": 10e6, "fresh2": 190e6})
@@ -314,15 +359,16 @@ def test_incomplete_or_unexplained_measurements_are_failures(mutation, reason):
 def test_best_actual_passing_candidate_and_real_failed_candidate_are_distinct():
     case = run.case_matrix()[0]
     a, b = candidate(case), candidate(case, 8, "slo_rejected")
-    selected = run.select_case(case, [1, 8], [a, b])
+    planned = [a["candidate_id"], b["candidate_id"]]
+    selected = run.select_case(case, planned, [a, b])
     assert selected["status"] == "completed"
     assert selected["selected"] == a
     assert "not a global optimum" in selected["selection_scope"]
     b["status"] = "failed"
     b["error"] = {"type": "MemoryError", "message": "host out of memory"}
-    rejected = run.select_case(case, [1, 8], [a, b])
+    rejected = run.select_case(case, planned, [a, b])
     assert rejected["status"] == "failed" and rejected["selected"] is None
-    assert run.select_case(case, [1, 8], [candidate(case, 1, "capacity_rejected"),
+    assert run.select_case(case, planned, [candidate(case, 1, "capacity_rejected"),
         candidate(case, 8, "slo_rejected")])["status"] == "all_candidates_rejected"
 
 
@@ -359,7 +405,7 @@ def test_rejected_candidates_keep_official_csv_metrics_blank(tmp_path):
     row["diagnostics"] = {"observed_metrics": {"mean_complete_request_tpot_ns": 101e6}}
     row["rejection_reason"] = "over 100ms"
     run.write_json(tmp_path / "candidates" / (row["candidate_id"] + ".json"), row)
-    run.refresh(tmp_path, [case], [1])
+    run.refresh(tmp_path, [case], {case["case_id"]: [(LAYOUT, 1)]})
     import csv
     with (tmp_path / "summary.csv").open(encoding="utf-8", newline="") as handle:
         saved, = list(csv.DictReader(handle))
@@ -372,28 +418,32 @@ def test_final_rejections_and_live_cases_are_not_reported_as_all_success(tmp_pat
     for case in cases:
         row = candidate(case, state="capacity_rejected" if case == cases[0] else "completed")
         run.write_json(tmp_path / "points" / (case["case_id"] + ".json"),
-                       run.select_case(case, [1], [row]))
+                       run.select_case(case, [row["candidate_id"]], [row]))
     assert run.run_manager(tmp_path, batches=[1], spawn=lambda *a: pytest.fail("terminal point rerun")) == 0
     saved = run.read_json(tmp_path / "status.json")
     assert saved["state"] == "completed_with_rejections"
     assert saved["counts"] == {"all_candidates_rejected": 1, "completed": 29}
     active = cases[0]
     (tmp_path / "points" / (active["case_id"] + ".json")).unlink()
-    state = run.refresh(tmp_path, cases, [1], [{"case_id": active["case_id"], "launcher_pid": 1}])
+    state = run.refresh(tmp_path, cases, {case["case_id"]: [(LAYOUT, 1)] for case in cases}, [{"case_id": active["case_id"],
+        "candidate_id": run.candidate_id(active, LAYOUT, 1), "launcher_pid": 1}])
     assert state["counts"]["running"] == 1 and state["counts"]["completed"] == 29
 
 
-def test_worker_reuses_exact_terminal_candidates_without_executing_native(tmp_path, monkeypatch):
+def test_worker_reuses_an_exact_terminal_candidate_without_executing_native(tmp_path, monkeypatch):
     case = run.case_matrix()[0]
     rows = [candidate(case, batch) for batch in (1, 8)]
     for row in rows:
         run.write_json(tmp_path / "candidates" / (row["candidate_id"] + ".json"), row)
     monkeypatch.setattr(run, "execute_candidate", lambda *a, **k: pytest.fail("completed candidate rerun"))
-    assert run.worker_case(case, [1, 8], tmp_path) == 0
+    assert run.worker_candidate(case, LAYOUT, 8, tmp_path) == 0
+    assert run.read_json(tmp_path / "progress" / (rows[1]["candidate_id"] + ".json"))["state"] == "completed"
+    # The worker never writes the case point; the manager selects it.
+    assert not (tmp_path / "points").exists()
+    run.write_case_point(tmp_path, case, LAYOUT, [1, 8])
     saved = run.read_json(tmp_path / "points" / (case["case_id"] + ".json"))
     assert saved["status"] == "completed"
     assert saved["selected"]["parameters"]["batch_size"] == 1
-    assert run.read_json(tmp_path / "progress" / (case["case_id"] + ".json"))["state"] == "completed"
 
 
 def test_stop_marker_is_preserved_and_no_candidate_is_started(tmp_path):
@@ -404,30 +454,41 @@ def test_stop_marker_is_preserved_and_no_candidate_is_started(tmp_path):
     assert run.read_json(tmp_path / "status.json")["state"] == "paused"
 
 
-def test_phase_barriers_concurrency_and_terminal_resume(tmp_path):
+def _manager_run(tmp_path, workers, mode="detailed", *, concurrent=None):
     cases = run.case_matrix()
-    spawned = []
-    active = []
+    spawned, active = [], []
+    concurrent = workers if concurrent is None else concurrent
     class Process:
-        def __init__(self, case):
-            self.case, self.pid = case, 123456 + len(spawned)
+        def __init__(self, case, layout, batch):
+            self.case, self.layout, self.batch, self.pid = case, layout, batch, 123456 + len(spawned)
         def poll(self):
             active.remove(self.case["case_id"])
-            run.write_json(tmp_path / "points" / (self.case["case_id"] + ".json"),
-                           run.select_case(self.case, [1], [candidate(self.case)]))
+            row = candidate(self.case, self.batch, layout=self.layout)
+            run.write_json(tmp_path / "candidates" / (row["candidate_id"] + ".json"), row)
             return 0
-    def spawn(case, batches, directory):
-        assert len(active) < 2
-        index = cases.index(case)
-        for prior in cases[:9 if index >= 9 else 0] + (cases[9:15] if index >= 15 else []):
-            assert run.read_json(tmp_path / "points" / (prior["case_id"] + ".json"))["status"] == "completed"
+    def spawn(case, layout, batch, directory):
+        assert len(active) < concurrent and layout == LAYOUT and batch == 1
         active.append(case["case_id"])
         spawned.append(case["case_id"])
-        return Process(case)
-    assert run.run_manager(tmp_path, batches=[1], spawn=spawn, poll_seconds=0) == 0
-    assert spawned == [row["case_id"] for row in cases]
+        return Process(case, layout, batch)
+    assert run.run_manager(tmp_path, workers=workers, batches=[1], spawn=spawn, poll_seconds=0,
+                           mode=mode) == 0
     assert run.read_json(tmp_path / "status.json")["state"] == "completed"
-    assert run.run_manager(tmp_path, batches=[1], spawn=lambda *a: pytest.fail("terminal case rerun")) == 0
+    assert run.run_manager(tmp_path, workers=workers, batches=[1], mode=mode,
+                           spawn=lambda *a: pytest.fail("terminal case rerun")) == 0
+    return cases, spawned
+
+
+def test_one_queue_keeps_phase_order_without_barriers_and_resumes_terminal(tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "available_memory_bytes", lambda: 1 << 50)
+    cases, spawned = _manager_run(tmp_path, 4)
+    assert spawned == [row["case_id"] for row in cases]
+
+
+def test_low_memory_admits_no_additional_worker(tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "available_memory_bytes", lambda: run.WORKER_MEMORY_RESERVE_BYTES-1)
+    cases, spawned = _manager_run(tmp_path, 4, concurrent=1)
+    assert len(spawned) == len(cases)
 
 
 def test_failed_worker_stops_queue_and_preserves_empty_official_metrics(tmp_path):
@@ -461,9 +522,9 @@ def test_historical_backend_is_not_reused_as_native(tmp_path):
         run.run_manager(tmp_path)
 
 
-@pytest.mark.parametrize("workers", [0, 3, True])
+@pytest.mark.parametrize("workers", [0, run.MAX_WORKERS+1, True])
 def test_parallel_worker_limit_is_explicit(tmp_path, workers):
-    with pytest.raises(ValueError, match="at most two"):
+    with pytest.raises(ValueError, match="workers must be an integer"):
         run.run_manager(tmp_path, workers=workers)
 
 
@@ -471,8 +532,8 @@ def test_progress_keeps_committed_counters_when_next_task_count_resets(tmp_path,
     from heterollm_sim.execution_control import ExecutionProgress
     clock = NS(now=0.)
     monkeypatch.setattr(run.time, "perf_counter", lambda: clock.now)
-    writer = run.ProgressWriter(tmp_path, run.case_matrix()[0]["case_id"])
     params = small_parameters()
+    writer = run.ProgressWriter(tmp_path, run.params_candidate_id(params))
     writer.begin_candidate(params)
     clock.now = 2.
     writer.report(ExecutionProgress("cohort_tasks", 25, 100,
@@ -500,3 +561,168 @@ def test_progress_keeps_committed_counters_when_next_task_count_resets(tmp_path,
     assert reset["cumulative_progress"]["visible_output_tokens"] == 0
     assert reset["current_cohort"] is None
     assert reset["candidate_wall_seconds"] == 0.
+
+
+def test_contracts_are_the_layout_search_v16_and_the_default_directory_is_new():
+    assert run.CONTRACT.endswith("_v16") and run.FAST_CONTRACT.endswith("_v16")
+    assert "tp8" not in run.CONTRACT and "tp8" not in run.FAST_CONTRACT
+    assert run.parameters(run.case_matrix()[0], LAYOUT, 1)["runner_contract"] == run.CONTRACT
+    assert run.DEFAULT_DIRECTORY.name != "exploring_hbf_native_20261019"
+    assert run.DEFAULT_DIRECTORY.parent == run.RETIRED_DIRECTORIES[0].parent
+    assert run.DEFAULT_DIRECTORY not in run.RETIRED_DIRECTORIES
+
+
+def test_identity_and_parameters_carry_the_layout_and_must_fill_the_gpus():
+    case = run.case_matrix()[-1]
+    a, b = run.make_layout(1, 8, 1, 1), run.make_layout(2, 2, 1, 2)
+    assert len({run.candidate_id(case, a, 8), run.candidate_id(case, b, 8), run.candidate_id(case, b, 4)}) == 3
+    assert run.candidate_id(case, b, 4) == case["case_id"] + "__DP2_TP2_PP1_EP2__B4"
+    params = run.parameters(case, b, 4)
+    assert [params[key] for key in ("dp", "tp", "pp", "ep", "batch_size")] == [2, 2, 1, 2, 4]
+    assert run.params_layout(params) == b and run.params_candidate_id(params) == run.candidate_id(case, b, 4)
+    with pytest.raises(ValueError, match="exactly 8 GPUs"):
+        run.parameters(case, run.make_layout(1, 4, 1, 1), 4)
+    with pytest.raises(ValueError, match="positive"):
+        run.make_layout(1, 8, 0, 1)
+
+
+def test_layout_rejection_follows_the_model_graph(tmp_path):
+    dense, maverick = run.case_matrix()[0], run.case_matrix()[-1]
+    split = run.make_layout(1, 2, 1, 4)
+    assert run.layout_rejection(dense, LAYOUT, 8) is None
+    assert "MoE" in run.layout_rejection(dense, split, 8)
+    assert run.layout_rejection(maverick, split, 8) is None
+    assert "divisible by ep" in run.layout_rejection(maverick, split, 6)
+    assert "exactly 8 GPUs" in run.layout_rejection(maverick, run.make_layout(1, 2, 1, 2), 8)
+    # A grid with one unbuildable candidate starts nothing and opens no lock.
+    with pytest.raises(ValueError, match="cannot be built"):
+        run.run_manager(tmp_path, layout=split, batches=[8], spawn=lambda *a: pytest.fail("started"))
+    assert not (tmp_path / "manager.lock").exists()
+
+
+@pytest.mark.parametrize("layout,replica_gpus", [(run.make_layout(1, 8, 1, 1), 8), (run.make_layout(2, 4, 1, 1), 4),
+    (run.make_layout(2, 2, 1, 2), 4), (run.make_layout(1, 2, 2, 2), 8), (run.make_layout(4, 1, 1, 2), 2)])
+def test_throughput_is_replica_rate_over_replica_gpus_scaled_to_the_cluster(layout, replica_gpus):
+    metrics, _ = run.measure_result(fake_result(), small_parameters(layout))
+    replica = 11e9/40
+    assert metrics["replica_tokens_per_second"] == replica
+    assert metrics["tokens_per_second_per_gpu"] == pytest.approx(replica / replica_gpus)
+    assert metrics["cluster_tokens_per_second"] == pytest.approx(replica * layout["dp"])
+    assert metrics["cluster_tokens_per_second"] == pytest.approx(metrics["tokens_per_second_per_gpu"] * 8)
+
+
+def test_selection_is_by_per_gpu_throughput_across_layouts():
+    case = run.case_matrix()[-1]
+    a = candidate(case, 1, layout=run.make_layout(1, 8, 1, 1))
+    b = candidate(case, 8, layout=run.make_layout(2, 2, 1, 2))
+    b["metrics"] = {**b["metrics"], "tokens_per_second_per_gpu": 140., "cluster_tokens_per_second": 1120.}
+    point = run.select_case(case, [a["candidate_id"], b["candidate_id"]], [a, b])
+    assert point["selected"] is b and point["planned_candidate_ids"] == [a["candidate_id"], b["candidate_id"]]
+    # A larger cluster rate alone does not win when the per-GPU rate is lower.
+    a["metrics"] = {**a["metrics"], "tokens_per_second_per_gpu": 100., "cluster_tokens_per_second": 9999.}
+    assert run.select_case(case, [a["candidate_id"], b["candidate_id"]], [a, b])["selected"] is b
+
+
+def test_builder_receives_the_candidate_layout_and_batch(tmp_path):
+    case = run.case_matrix()[-1]
+    layout = run.make_layout(2, 2, 1, 2)
+    seen = {}
+    def builder(*names, **options):
+        seen.update(names=names, **options)
+        raise RuntimeError("stop after construction")
+    row = run.execute_candidate(run.parameters(case, layout, 4), tmp_path, NS(report=lambda p: None), builder=builder)
+    assert seen == {"names": (case["model"], case["hardware"], case["workload"]), "batch_size": 4, "tp": 2, "pp": 1, "ep": 2}
+    assert row["status"] == "failed" and row["candidate_id"] == run.candidate_id(case, layout, 4)
+
+
+def test_placement_capacity_diagnostics_are_capacity_rejections_but_other_placement_failures_are_not(tmp_path):
+    from heterollm_sim.planner import ScenarioValidationError
+    capacity = {"code": "runtime_placement_unplaced", "stage": "capacity_check", "item_id": "dense0.mlp",
+                "message_zh": "总容量约束排除了所有可行候选项", "message_en": "总容量约束排除了所有可行候选项"}
+    error = ScenarioValidationError("运行时控制平面无法完成放置：总容量约束排除了所有可行候选项",
+                                    [capacity, {**capacity, "item_id": "lm_head"}])
+    assert run.capacity_error(error)
+    other = {**capacity, "message_zh": "没有可用的放置候选项", "message_en": "没有可用的放置候选项"}
+    assert not run.capacity_error(ScenarioValidationError("无法放置", [capacity, other]))
+    assert not run.capacity_error(ScenarioValidationError("无法放置", [{**capacity, "stage": "model_check"}]))
+    assert not run.capacity_error(ScenarioValidationError("无法放置", [{**capacity, "code": "runtime_placement_validation"}]))
+    assert not run.capacity_error(ScenarioValidationError("无法放置"))
+    assert run.capacity_error(ScenarioValidationError("x", [{"message_en": "KV demand exceeds available capacity"}]))
+    case = run.case_matrix()[0]
+    def builder(*names, **options):
+        raise error
+    row = run.execute_candidate(run.parameters(case, LAYOUT, 8), tmp_path, NS(report=lambda p: None), builder=builder)
+    assert row["status"] == "capacity_rejected" and row["metrics"] is None
+
+
+def test_each_candidate_gets_its_own_worker_command_that_main_parses_back(tmp_path, monkeypatch):
+    case = run.case_matrix()[-1]
+    layout = run.make_layout(2, 2, 1, 2)
+    command = run.candidate_command(case, layout, 4, tmp_path, "fast")
+    assert Path(command[1]).name == "run_exploring_hbf_native.py"
+    assert command[command.index("--layout") + 1:command.index("--layout") + 5] == ["2", "2", "1", "2"]
+    seen = []
+    monkeypatch.setattr(run, "worker_candidate", lambda *args: seen.append(args) or 0)
+    assert run.main(command[2:]) == 0
+    assert seen == [(case, layout, 4, tmp_path, "fast")]
+
+
+def test_manager_spawns_one_process_per_candidate_and_writes_the_per_gpu_selection(tmp_path, monkeypatch):
+    monkeypatch.setattr(run, "available_memory_bytes", lambda: 1 << 50)
+    cases, spawned = run.case_matrix(), []
+    class Process:
+        pid = 1
+        def __init__(self, case, batch):
+            self.case, self.batch = case, batch
+        def poll(self):
+            row = candidate(self.case, self.batch)
+            run.write_json(tmp_path / "candidates" / (row["candidate_id"] + ".json"), row)
+            return 0
+    def spawn(case, layout, batch, directory):
+        spawned.append((case["case_id"], batch))
+        return Process(case, batch)
+    assert run.run_manager(tmp_path, batches=[1, 8], workers=1, spawn=spawn, poll_seconds=0) == 0
+    assert len(spawned) == 60 and spawned[:2] == [(cases[0]["case_id"], 1), (cases[0]["case_id"], 8)]
+    point = run.read_json(tmp_path / "points" / (cases[0]["case_id"] + ".json"))
+    assert point["status"] == "completed" and point["selected"]["parameters"]["batch_size"] == 1
+    assert run.read_json(tmp_path / "run_manifest.json")["layout"] == LAYOUT
+    import csv
+    with (tmp_path / "summary.csv").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 60 and {(r["dp"], r["tp"], r["pp"], r["ep"]) for r in rows} == {("1", "8", "1", "1")}
+    with pytest.raises(RuntimeError, match="manifest differs"):
+        run.run_manager(tmp_path, layout=run.make_layout(2, 4, 1, 1), batches=[1, 8],
+                        spawn=lambda *a: pytest.fail("started"))
+
+
+def test_the_paused_v15_scan_directory_is_never_opened(tmp_path, monkeypatch):
+    retired = tmp_path / "paused"
+    monkeypatch.setattr(run, "RETIRED_DIRECTORIES", (retired,))
+    with pytest.raises(ValueError, match="paused v15 scan"):
+        run.run_manager(retired)
+    with pytest.raises(SystemExit):
+        run.main(["--directory", str(retired)])
+    with pytest.raises(ValueError, match="paused v15 scan"):
+        run._spawn(run.case_matrix()[0], LAYOUT, 1, retired)
+    assert not retired.exists()
+
+
+def test_fast_forecast_is_scaled_from_one_replica_to_the_cluster():
+    from dataclasses import replace
+    from heterollm_sim.native_fast_window import NativeWindowForecast
+    case = run.case_matrix()[-1]
+    params = run.parameters(case, run.make_layout(2, 2, 1, 2), 4, "fast")
+    bounds = {"cluster_tokens_per_second": {"estimate": 80., "lower": 70., "upper": 90., "relative_error_budget": .05},
+              "mean_complete_request_tpot_ns": {"estimate": 95e6, "lower": 90e6, "upper": 99e6}}
+    forecast = NativeWindowForecast(100., 0, 1111, 0, 1111, {}, {},
+        {"cluster_tokens_per_second": 80., "tokens_per_second_per_gpu": 999., "mean_complete_request_tpot_ns": 95e6},
+        bounds, (), {"accepted": True})
+    row = run.native_fast_result(replace(_fast_result(), native_window_forecast=forecast), params)
+    # One replica of 80 tokens/s on 4 GPUs is 20/GPU; two replicas fill the 8 GPUs.
+    assert (row["metrics"]["replica_tokens_per_second"], row["metrics"]["tokens_per_second_per_gpu"],
+            row["metrics"]["cluster_tokens_per_second"]) == (80., 20., 160.)
+    scaled = row["diagnostics"]["metric_bounds"]
+    assert scaled["cluster_tokens_per_second"] == {"estimate": 160., "lower": 140., "upper": 180., "relative_error_budget": .05}
+    assert scaled["mean_complete_request_tpot_ns"] == bounds["mean_complete_request_tpot_ns"]
+    assert row["replica_scaling"]["dp"] == 2 and row["replica_scaling"]["gpus_per_replica"] == 4
+    assert row["native_window_forecast"]["metrics"]["cluster_tokens_per_second"] == 80.

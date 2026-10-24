@@ -55,67 +55,64 @@ class FastDecodeConfig:
 
 @dataclass(frozen=True)
 class NativeWindowFastConfig:
-    """Native physical samples with an independently bounded window forecast.
+    """Native stationary samples with an independently bounded window forecast.
 
-    ``cohorts`` executes complete native batches. ``layer_windows`` executes
-    explicitly bounded layer groups and never claims a completed cohort or
-    visible output Token merely because those layer tasks finished.
+    The first continuous-refill cohort boundary is sampled on independent
+    copies: ``calibration_layers`` from the stack's start with the step
+    prefix, ``holdout_layers`` from its end with the step suffix. Samples
+    never claim a completed cohort or a visible output Token.
     """
 
-    sampling_unit: str = "cohorts"
-    warmup_cohorts: int = 1
-    calibration_cohorts: int = 2
-    validation_cohorts: int = 2
-    max_sample_cohorts: int = 8
     max_wall_seconds: float = 1800.
     target_relative_error: float = .10
-    layer_window_size: int = 1
-    # None keeps a fixed physical window. An explicit maximum permits
-    # bounded doubling only after an eligible conditional-budget refusal.
-    max_layer_window_size: int | None = None
-    calibration_layer_windows: int = 2
-    validation_layer_windows: int = 2
-    # The full-batch cap spans all native layer classes. Calibration and
-    # validation counts apply independently to each structural class.
-    max_sample_layer_windows: int = 16
-    # A multislot seed-shape anchor has its own disjoint calibration and
-    # holdout set. It does not borrow the full-batch sample cap or Tokens.
-    max_seed_anchor_layer_windows: int = 16
+    calibration_layers: int = 8
+    holdout_layers: int = 4
 
     def __post_init__(self) -> None:
-        if not isinstance(self.sampling_unit, str) or self.sampling_unit not in {"cohorts", "layer_windows"}:
-            raise ValueError("simulation.native_window.sampling_unit must be cohorts or layer_windows")
-        for name, minimum in (("warmup_cohorts", 0), ("calibration_cohorts", 2),
-                              ("validation_cohorts", 2), ("max_sample_cohorts", 4)):
-            _integer(getattr(self, name), "simulation.native_window." + name, minimum)
-        if self.max_sample_cohorts < self.sample_cohorts:
-            raise ValueError("simulation.native_window.max_sample_cohorts must cover all sample windows")
         if (isinstance(self.max_wall_seconds, bool)
                 or not isinstance(self.max_wall_seconds, (int, float))
                 or not math.isfinite(self.max_wall_seconds)
                 or not 0 < self.max_wall_seconds <= 1800.):
             raise ValueError("simulation.native_window.max_wall_seconds must be finite and in (0, 1800]")
         _bounded_fraction(self.target_relative_error, "simulation.native_window.target_relative_error", .10)
-        for name, minimum in (("layer_window_size", 1), ("calibration_layer_windows", 2),
-                              ("validation_layer_windows", 2), ("max_sample_layer_windows", 4),
-                              ("max_seed_anchor_layer_windows", 4)):
-            _integer(getattr(self, name), "simulation.native_window." + name, minimum)
-        if self.max_layer_window_size is not None:
-            _integer(self.max_layer_window_size, "simulation.native_window.max_layer_window_size", 1)
-            if self.max_layer_window_size < self.layer_window_size:
-                raise ValueError("simulation.native_window.max_layer_window_size must cover layer_window_size")
-        if self.max_sample_layer_windows < self.sample_layer_windows:
-            raise ValueError("simulation.native_window.max_sample_layer_windows must cover calibration and disjoint validation windows")
-        if self.max_seed_anchor_layer_windows < self.sample_layer_windows:
-            raise ValueError("simulation.native_window.max_seed_anchor_layer_windows must cover calibration and disjoint validation windows")
+        _integer(self.calibration_layers, "simulation.native_window.calibration_layers", 2)
+        _integer(self.holdout_layers, "simulation.native_window.holdout_layers", 2)
 
-    @property
-    def sample_cohorts(self) -> int:
-        return self.warmup_cohorts + self.calibration_cohorts + self.validation_cohorts
 
-    @property
-    def sample_layer_windows(self) -> int:
-        return self.calibration_layer_windows + self.validation_layer_windows
+@dataclass(frozen=True)
+class NativePrefillPassConfig:
+    """One request's Prefill forward pass, natively from its cohort boundary.
+
+    ``full_pass`` runs the prefix and every layer in one native window;
+    otherwise at least ``calibration_layers`` from the stack's start (with
+    the prefix) and ``holdout_layers`` from its end, extended until both runs
+    step every layer class, are run on independent copies of the boundary
+    and the pass is composed within ``target_relative_error``. Only
+    a full pass may run without a wall limit (``max_wall_seconds`` None),
+    like a detailed run. Two layers each way keep a 100K-token 405B pass
+    (about 230 s of wall per layer) inside the 1800 s limit.
+    """
+
+    max_wall_seconds: float | None = 1800.
+    target_relative_error: float = .10
+    calibration_layers: int = 2
+    holdout_layers: int = 2
+    full_pass: bool = False
+
+    def __post_init__(self) -> None:
+        if type(self.full_pass) is not bool:
+            raise ValueError("simulation.native_prefill.full_pass must be a boolean")
+        if self.max_wall_seconds is None:
+            if not self.full_pass:
+                raise ValueError("simulation.native_prefill.max_wall_seconds may be null only for a full pass")
+        elif (isinstance(self.max_wall_seconds, bool)
+                or not isinstance(self.max_wall_seconds, (int, float))
+                or not math.isfinite(self.max_wall_seconds)
+                or not 0 < self.max_wall_seconds <= 1800.):
+            raise ValueError("simulation.native_prefill.max_wall_seconds must be null or finite and in (0, 1800]")
+        _bounded_fraction(self.target_relative_error, "simulation.native_prefill.target_relative_error", .10)
+        _integer(self.calibration_layers, "simulation.native_prefill.calibration_layers", 2)
+        _integer(self.holdout_layers, "simulation.native_prefill.holdout_layers", 2)
 
 
 @dataclass(frozen=True)
@@ -125,6 +122,7 @@ class SimulationConfig:
     mode: str = "detailed"
     fast_decode: FastDecodeConfig = field(default_factory=FastDecodeConfig)
     native_window: NativeWindowFastConfig | None = None
+    native_prefill: NativePrefillPassConfig | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.mode, str) or self.mode not in {"detailed", "fast"}:
@@ -136,6 +134,11 @@ class SimulationConfig:
                 raise ValueError("simulation.native_window must be a NativeWindowFastConfig")
             if self.mode != "fast":
                 raise ValueError("simulation.native_window requires fast mode")
+        if self.native_prefill is not None:
+            if not isinstance(self.native_prefill, NativePrefillPassConfig):
+                raise ValueError("simulation.native_prefill must be a NativePrefillPassConfig")
+            if self.mode != "fast" or self.native_window is not None:
+                raise ValueError("simulation.native_prefill requires fast mode without native_window")
 
 
 def simulation_from_dict(data: Mapping[str, Any]) -> SimulationConfig:
@@ -143,7 +146,7 @@ def simulation_from_dict(data: Mapping[str, Any]) -> SimulationConfig:
 
     if not isinstance(data, Mapping):
         raise ValueError("simulation must be an object")
-    unknown = set(data) - {"mode", "fast_decode", "native_window"}
+    unknown = set(data) - {"mode", "fast_decode", "native_window", "native_prefill"}
     if unknown:
         raise ValueError("unknown simulation fields: {}".format(", ".join(sorted(map(str, unknown)))))
     raw_fast = data.get("fast_decode", {})
@@ -162,8 +165,17 @@ def simulation_from_dict(data: Mapping[str, Any]) -> SimulationConfig:
         if unknown_native:
             raise ValueError("unknown simulation.native_window fields: {}".format(", ".join(sorted(map(str, unknown_native)))))
         native_window = NativeWindowFastConfig(**native_window)
+    native_prefill = data.get("native_prefill")
+    if native_prefill is not None:
+        if not isinstance(native_prefill, Mapping):
+            raise ValueError("simulation.native_prefill must be an object or null")
+        unknown_prefill = set(native_prefill) - {item.name for item in fields(NativePrefillPassConfig)}
+        if unknown_prefill:
+            raise ValueError("unknown simulation.native_prefill fields: {}".format(", ".join(sorted(map(str, unknown_prefill)))))
+        native_prefill = NativePrefillPassConfig(**native_prefill)
     return SimulationConfig(mode=data.get("mode", "detailed"), fast_decode=FastDecodeConfig(**raw_fast),
-                            native_window=native_window)
+                            native_window=native_window, native_prefill=native_prefill)
 
 
-__all__ = ["FastDecodeConfig", "NativeWindowFastConfig", "SimulationConfig", "simulation_from_dict"]
+__all__ = ["FastDecodeConfig", "NativePrefillPassConfig", "NativeWindowFastConfig", "SimulationConfig",
+           "simulation_from_dict"]

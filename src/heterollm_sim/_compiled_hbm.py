@@ -253,14 +253,15 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.READ),
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.WRITE),
         c.maximum_active_ns, c.four_activate_window_ns], dtype=np.float64)
-    # Column commands are emitted on the clock grid. Restored/authored state
-    # may contain arbitrary timestamps, so prove that invariant before using
-    # the monotone, grouped history reduction in the numeric controller.
+    # ACT anchors and column commands are emitted on the clock grid.
+    # Restored/authored state may contain arbitrary timestamps, so prove that
+    # invariant before using the monotone, grouped history reductions in the
+    # numeric controller.
     half_clock = t[0] / 2
-    columns = history[:, :, 1:3]
-    ticks = np.rint(columns / half_clock)
-    grid_history = bool(np.all((columns < 0) | ((np.abs(ticks) < 2. ** 49)
-                                              & (columns == ticks * half_clock))))
+    stamps = history[:, :, 0:3]
+    ticks = np.rint(stamps / half_clock)
+    grid_history = bool(np.all((stamps < 0) | ((np.abs(ticks) < 2. ** 49)
+                                             & (stamps == ticks * half_clock))))
     g = np.append(g, np.int64(grid_history))
     if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t, windows)):
         return None
@@ -280,6 +281,9 @@ class _HBMNumericState:
     def __init__(self, core, bank_ids, pc_keys, channel_keys, ids, g, t, run_numeric, arrays):
         self.core = core
         self.bank_ids, self.pc_keys, self.channel_keys, self.ids = bank_ids, pc_keys, channel_keys, ids
+        # Selecting touched resource names by index array avoids a Python
+        # generator frame per name on every request publication.
+        self._id_objects = np.array(ids, dtype=object)
         self.g, self.t, self.run_numeric, self.arrays = g, t, run_numeric, arrays
         self._controller_before = self._copy_controller_arrays()
         self._controller_commits = 0
@@ -582,7 +586,7 @@ class _HBMNumericState:
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
          resources, moved, directions, touched, windows, window_counts) = self.arrays
         indices = np.flatnonzero(touched)
-        timeline._remember_resources(ids[index] for index in indices)
+        timeline._remember_resources(self._id_objects[indices].tolist())
         publish_resource_columns(ids, resources, moved, indices,
             timeline.lane_available, timeline.ready_ns, timeline.busy_ns,
             timeline.last_intervals, timeline.bytes_moved, timeline.directions,

@@ -113,14 +113,22 @@ def build_native_plan() -> dict:
              "case_count": 15, "start_when": ["paper_gpu_profile", "external_prefill_admission", "decode_measurement_boundary", "maverick_architecture", "logic_die_sram"]},
         ],
         "deployment_search": {
-            "implementation": "脚本只枚举原生 ParallelSpec，调用同一 run_scenario；不计算替代算子时延。",
+            "implementation": "脚本枚举原生 ParallelSpec(TP, PP, EP) 与独立 DP 副本数的布局，每个候选（布局＋每副本批量）调用同一 run_scenario，在独立子进程中运行；不计算替代算子时延。",
+            "layout": "DP×TP×PP×EP 恰好占满每配置的 GPU 数（8）。只仿真一个副本（TP×PP×EP 张 GPU），批量是每副本批量，由 EP 个注意力数据并行组平分（每组 B/EP 个请求）。",
             "first_control": {"tp_degree": 8, "pp_degree": 1, "ep_degree": 1, "dp_replicas": 1},
             "dense_followups": [{"tp_degree": 4, "pp_degree": 2, "ep_degree": 1, "dp_replicas": 1},
                                 {"tp_degree": 2, "pp_degree": 4, "ep_degree": 1, "dp_replicas": 1}],
-            "dp_scope": "独立原生实例作为副本；原生无 dp_degree，不能添加不存在的 ParallelSpec 字段；共享 NIC 须共享资源，不能直接乘吞吐。",
-            "pp_scope": "先检查原生 DAG 的微批阶段重叠，未验证前不声称 GPipe 重叠。",
-            "batch_search": "本轮只实际执行批量1和8，选择通过SLO者中吞吐最高的一项；不是论文最大批量或全局最优搜索。后续部署搜索另行安排。",
-            "formal_batch_candidates": [1, 8],
+            "ep_scope": "仅 Maverick（MoE）可取 EP>1：每个 EP 组独占 B/EP 个请求及其 KV，注意力、稠密 MLP、路由和共享专家在本组 TP 卡上执行（稠密权重每组一份）；专家由各组共享，经原生 all_to_all 分发/合并，每层在跨组屏障处同步。要求 B 与每个 MoE 层的专家数都能被 EP 整除。",
+            "dp_scope": "DP 副本是互相独立的拷贝，不共享 KV 或批次；只仿真一个副本，单GPU吞吐＝副本吞吐÷(TP×PP×EP)，集群吞吐＝单GPU吞吐×GPU总数。每个副本有自己的 PD 入站，未建模副本之间共享网卡或 PD 源的争用，也不添加不存在的 ParallelSpec 字段。",
+            "pp_scope": "原生没有GPipe微批；稳态快速模型不组合流水线各级之间的发送，PP>1布局不进入原生搜索。",
+            "selection": "每配置在已实际执行的候选中选择通过 100ms 请求均值 TPOT 约束的最高单GPU吞吐；容量不足的布局或批量记为容量拒绝。不是论文最大批量或全局最优搜索。",
+            "batch_search": ("搜索驱动（run_exploring_hbf_native.py --search，总是fast）：旁路模型（exploring_hbf_search）对每个配置筛选全部合法布局并给出批量区间；"
+                             "取旁路排名前2且原生可运行的布局（无微批、PP=1、通过原生布局校验），首点取旁路批量的一半且不超过512，"
+                             "第二点按原生/旁路TPOT比例缩放旁路TPOT直线推到100ms，未夹住100ms时再定第三点；"
+                             "超出容量或壁钟（按已测点线性投影到1800s的90%）的点减半或二分。夹住100ms的相邻两点线性插值TPOT上界，"
+                             "在预测单GPU吞吐最高的布局上做一次原生快速验收；验收未过退回已测通过点；够不到100ms的布局停在已测最大点并标注受限，不外推。"
+                             "旁路数值只用于放置批量点，最终数字只取原生候选。固定批量管理器仅用于对照点。"),
+            "control_batch_candidates": [1, 8],
         },
         "measurement": {
             "decode_nodes_only": True,
@@ -128,10 +136,12 @@ def build_native_plan() -> dict:
             "request_tpot_definition": "测量窗内完整可见输出请求的 (最后Token-首Token)/(输出Token数-1)，再按请求等权算术平均；少于2个输出未定义。",
             "non_slo_diagnostics": "最大请求TPOT、TBT分布、系统迭代仅单独报告，不当作同一个100ms均值门槛。",
             "slo_note": "论文未公开精确聚合口径；同时报告平均/最大 TBT、平均/最大请求 TPOT 和系统迭代，不能混为同一个值。",
-            "decode_ingress_ttft": "外部已完成Prefill的请求到达Decode入口至本节点首个可见输出；包含PD/准入等待，不含外部Prefill计算。",
+            "decode_ingress_ttft": "请求实付KV导入开始至本节点首个可见输出；包含PD导入与准入等待，不含Prefill计算。",
+            "ttft": "TTFT = Prefill通路 + 入口TTFT。Prefill副本为HBM4、与Decode副本相同的TP/PP/EP布局，请求到达即单独一次不分块前向计算前P-1个提示Token，至最后一层完成（开始导出KV）；快速合约为分层采样区间，详细合约为一次覆盖全部层的原生运行。",
             "output_count_basis": "外部只提供输入prompt的KV；本节点真实生成声明的全部输出，首输出仍付实际Decode成本；TPOT分母为D-1。",
             "window": "原生闭环预热一个输出生命周期、测量两个生命周期，排除最终 drain；实际事件定义边界。",
-            "report": ["tokens/s/GPU", "cluster tokens/s", "decode-ingress TTFT and request TPOT", "TBT distribution",
+            "report": ["tokens/s/GPU", "cluster tokens/s", "TTFT with Prefill, its Prefill pass and decode-ingress parts",
+                       "request TPOT", "TBT distribution",
                        "system iteration duration", "maximum validated batch", "weight/KV/workspace capacity",
                        "PD bytes/time and waits", "DRAM/NAND read/program/erase traffic", "wall time"],
             "normalization": "同模型、负载、GPU 数、精度及 SLO 口径，除以各自原生 HBM4 基线。",

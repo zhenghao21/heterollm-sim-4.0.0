@@ -31,7 +31,15 @@ def test_native_matrix_is_separate_and_export_does_not_execute_prepared_cases():
     for phase in plan["phases"][1:]:
         assert {"paper_gpu_profile", "external_prefill_admission", "decode_measurement_boundary"} <= set(phase["start_when"])
     assert "logic_die_sram" in plan["phases"][-1]["start_when"]
-    assert plan["deployment_search"]["formal_batch_candidates"] == [1, 8]
+    search = plan["deployment_search"]
+    assert search["first_control"] == {"tp_degree": 8, "pp_degree": 1, "ep_degree": 1, "dp_replicas": 1}
+    assert search["control_batch_candidates"] == [1, 8] and "formal_batch_candidates" not in search
+    assert "--search" in search["batch_search"] and "不外推" in search["batch_search"]
+    for key in ("layout", "ep_scope", "dp_scope", "selection"):
+        assert search[key]
+    assert "单GPU吞吐" in search["dp_scope"] and "独立子进程" in search["implementation"]
+    # Cases are hardware/workload points; the layout is searched, never fixed per case.
+    assert all(not {"tp", "pp", "ep", "dp"} & case.keys() for case in plan["cases"])
 
 
 def test_exported_inputs_roundtrip_through_native_parsers_with_real_sram(tmp_path):

@@ -21,14 +21,6 @@ from .runtime_state import RuntimeState
 from .planner import ScenarioValidationError
 
 
-_NATIVE_BOOTSTRAP_KERNEL_ORIGIN = object()
-
-
-def _is_native_bootstrap_kernel(kernel: object) -> bool:
-    return (type(kernel) is UnifiedEventKernel
-        and vars(kernel).get("_native_bootstrap_origin") is _NATIVE_BOOTSTRAP_KERNEL_ORIGIN)
-
-
 @dataclass(frozen=True)
 class ControlPlaneBootstrap:
     """Mapped scenario plus the realized control-plane DAG and live kernel."""
@@ -472,8 +464,11 @@ def _runtime_profile(
         if gpu_transfer_bytes is None
         else max(0, int(gpu_transfer_bytes))
     )
-    if transfer_bytes > weight_bytes:
-        raise ValueError("GPU weight transfer bytes exceed physical weight bytes")
+    # Replicated shards (dense weights across EP groups) are each copied to
+    # their own GPU, so the transfer may exceed the artifact; no rank can
+    # hold more than one full copy.
+    if transfer_bytes > weight_bytes * max(1, len(scenario.placement.parallel.rank_mapping)):
+        raise ValueError("GPU weight transfer bytes exceed one physical weight copy per rank")
     gpu_id = scenario.host_orchestration_profile.gpu_component_id
     gpu = controller.gpu_controllers[gpu_id]
     page_count = (
@@ -1023,7 +1018,6 @@ def bootstrap_control_plane(
         raise RuntimeError("control-plane runtime did not create a kernel")
     from .hbf_resident_init import initialize_hbf_resident_weights
     initialize_hbf_resident_weights(mapped, kernel)
-    kernel._native_bootstrap_origin = _NATIVE_BOOTSTRAP_KERNEL_ORIGIN
     return ControlPlaneBootstrap(mapped, decision, result, kernel)
 
 

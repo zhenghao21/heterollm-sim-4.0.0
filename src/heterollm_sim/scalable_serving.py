@@ -47,13 +47,23 @@ class ScheduleCostResult:
 
 
 class _PathLink:
+    """One node of the critical-path forest, linked to its predecessor.
+
+    ``depth`` and ``jump`` are skew-binary jump pointers (Myers): the jump
+    target's depth is a function of the node's depth alone, so ancestors at
+    any depth are reached in O(log depth) steps with one extra pointer per
+    node. They replace materialized key tuples for the lexicographic
+    tie-break (see ``_path_precedes``).
+    """
+
     __slots__ = (
         "previous",
         "duration_ns",
         "category",
         "node_key",
         "distance",
-        "materialized_path",
+        "depth",
+        "jump",
     )
 
     def __init__(
@@ -61,34 +71,68 @@ class _PathLink:
         previous: Optional["_PathLink"],
         duration_ns: float,
         category: Optional[TaskCategory],
-        node_key: Optional[str],
+        node_key: str,
     ) -> None:
         self.previous = previous
         self.duration_ns = duration_ns
         self.category = category
         self.node_key = node_key
         self.distance = (previous.distance if previous is not None else 0.0) + duration_ns
-        self.materialized_path: Optional[Tuple[str, ...]] = None
+        if previous is None:
+            self.depth = 1
+            self.jump = None
+        else:
+            self.depth = previous.depth + 1
+            skip = previous.jump
+            if skip is not None and previous.depth - skip.depth == skip.depth - (
+                    skip.jump.depth if skip.jump is not None else 0):
+                self.jump = skip.jump
+            else:
+                self.jump = previous
 
 
-def _materialize_path(link: Optional[_PathLink]) -> Tuple[str, ...]:
-    if link is not None and link.materialized_path is not None:
-        return link.materialized_path
-    reverse_keys: List[str] = []
-    cursor = link
-    prefix: Tuple[str, ...] = ()
-    while cursor is not None:
-        if cursor.materialized_path is not None:
-            prefix = cursor.materialized_path
-            break
-        if cursor.node_key is not None:
-            reverse_keys.append(cursor.node_key)
-        cursor = cursor.previous
-    reverse_keys.reverse()
-    result = prefix + tuple(reverse_keys)
-    if link is not None:
-        link.materialized_path = result
-    return result
+def _ancestor_at(link: _PathLink, depth: int) -> _PathLink:
+    while link.depth > depth:
+        skip = link.jump
+        link = skip if skip is not None and skip.depth >= depth else link.previous
+    return link
+
+
+def _path_precedes(left: Optional[_PathLink], right: Optional[_PathLink]) -> bool:
+    """Whether ``left``'s root-to-link node-key sequence sorts before ``right``'s.
+
+    Exactly the tuple order of the two key sequences, without building them.
+    Links are shared prefixes of one forest, so the first position where the
+    sequences can differ is just below the lowest common ancestor. Distinct
+    links built independently with the same key (and ancestors with the same
+    keys) are compared position by position, so equal sequences stay equal.
+    """
+    if left is right or right is None:
+        return False
+    if left is None:
+        return True
+    if left.previous is right.previous:
+        return left.node_key < right.node_key
+    shared = min(left.depth, right.depth)
+    low, high = _ancestor_at(left, shared), _ancestor_at(right, shared)
+    if low is high:
+        # One sequence is a proper prefix of the other.
+        return left.depth < right.depth
+    low_child = high_child = low
+    while low is not high:
+        if low.jump is not high.jump:
+            low, high = low.jump, high.jump
+        else:
+            low_child, high_child = low, high
+            low, high = low.previous, high.previous
+    if low_child.node_key != high_child.node_key:
+        return low_child.node_key < high_child.node_key
+    for depth in range(low_child.depth + 1, shared + 1):
+        left_key = _ancestor_at(left, depth).node_key
+        right_key = _ancestor_at(right, depth).node_key
+        if left_key != right_key:
+            return left_key < right_key
+    return left.depth < right.depth
 
 
 def _better_path(
@@ -99,7 +143,7 @@ def _better_path(
     if candidate_distance > current_distance:
         return candidate
     if candidate_distance == current_distance:
-        if _materialize_path(candidate) < _materialize_path(current):
+        if _path_precedes(candidate, current):
             return candidate
     return current
 

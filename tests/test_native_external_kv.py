@@ -177,7 +177,7 @@ def test_inventory_matches_native_full_graph_declarations_without_compiling_oper
         if contract is not None and contract not in contracts:
             contracts.append(contract)
     monkeypatch.setattr(planner,"_lower_serving_cohort",lambda *_a,**_k: pytest.fail("inventory compiled operator DAG"))
-    inventory = native_kv_ingress_inventory(scenario,request.request_id,history)
+    inventory = native_kv_ingress_inventory(scenario,request.request_id,history,ep_group=0)
     actual = {(row["physical_owner"],row["buffer_id"],row.get("generation",0)):row
               for row in inventory["physical_allocations"]}
     assert actual == expected
@@ -196,7 +196,7 @@ def test_inventory_cancellation_is_reachable_inside_rank_loop(monkeypatch):
     monkeypatch.setattr(planner,"_generic_kv_contract",record)
     control = ExecutionControl(cancellation_callback=lambda: bool(calls))
     with pytest.raises(ExecutionCancelledError):
-        native_kv_ingress_inventory(scenario,"r0",6,execution_control=control)
+        native_kv_ingress_inventory(scenario,"r0",6,ep_group=0,execution_control=control)
     assert calls == [0]
 
 
@@ -261,7 +261,7 @@ def test_all_chunk_layers_at_fresh_chunk_boundary_import_nothing_but_execute_fir
         output_weight_bytes=64*128*2,output_head_dtype="bf16"))
     scenario = replace(scenario,model=model,workload=replace(scenario.workload,
         metadata=ingress_scenario(count=1).workload.metadata))
-    inventory = native_kv_ingress_inventory(scenario,"native-mav",prompt-1)
+    inventory = native_kv_ingress_inventory(scenario,"native-mav",prompt-1,ep_group=0)
     assert len(inventory["physical_allocations"]) == 8
     result = run_scenario(scenario)
     assert result.serving.external_kv_ingress_metrics["imported_logical_bytes"] == 0

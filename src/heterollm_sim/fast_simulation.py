@@ -816,17 +816,17 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                   paired_reference: PairedTimingReference | None = None) -> FastSimulationOutcome:
     """Execute a real prefix and forecast only inside the declared safe domain."""
     if scenario.simulation.native_window is not None:
-        if scenario.simulation.native_window.sampling_unit == "layer_windows":
-            from .native_fast_layers import simulate_native_layer_windows
-            return simulate_native_layer_windows(scenario, batch_lowerer=batch_lowerer,
-                execution_control=execution_control, residency_manager=residency_manager,
-                execution_kernel=execution_kernel, runtime_origin_ns=runtime_origin_ns,
-                custom_lowerer=custom_lowerer, paired_reference=paired_reference)
-        from .native_fast_window import simulate_native_window
-        return simulate_native_window(scenario, batch_lowerer=batch_lowerer,
+        from .native_stationary import simulate_native_stationary
+        return simulate_native_stationary(scenario, batch_lowerer=batch_lowerer,
             execution_control=execution_control, residency_manager=residency_manager,
             execution_kernel=execution_kernel, runtime_origin_ns=runtime_origin_ns,
-            custom_lowerer=custom_lowerer, paired_reference=paired_reference)
+            custom_lowerer=custom_lowerer)
+    if scenario.simulation.native_prefill is not None:
+        from .native_prefill import simulate_native_prefill_pass
+        return simulate_native_prefill_pass(scenario, batch_lowerer=batch_lowerer,
+            execution_control=execution_control, residency_manager=residency_manager,
+            execution_kernel=execution_kernel, runtime_origin_ns=runtime_origin_ns,
+            custom_lowerer=custom_lowerer)
     control = execution_control or ExecutionControl()
     options = scenario.simulation.fast_decode
     if paired_reference is not None and not isinstance(paired_reference, PairedTimingReference):

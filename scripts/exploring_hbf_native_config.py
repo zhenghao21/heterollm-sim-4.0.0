@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import asdict, replace
+import math
 from pathlib import Path
 import sys
 
@@ -37,6 +38,55 @@ PD_BUFFER_BYTES = 64 * 1024**2
 PHYSICAL_WINDOW_ASSUMPTION = (
     "Bounded physical execution has no sampled suffix: approximation error from forecasting is zero; "
     "this is not a claim of <10% hardware model error versus silicon or paper.")
+PD_LINK_BYTES_PER_SECOND = 100e9
+_DTYPE_BYTES = {"bf16": 2, "fp16": 2, "fp32": 4, "fp8": 1}
+
+
+def native_import_pool(layers, prompt, output, batch_size, tp, pp, ep, published, slo_tpot_s=.1):
+    """Prepared-import slots for continuous refill near the TPOT SLO.
+
+    Every EP group owns B/ep requests and refills only its own slots, so the
+    pool is per group: each step frees up to ceil((B/ep)/output) slots of a
+    group at once, each refilled at the next step from one of that group's
+    ready requests. A request entering the pool must finish its import, at the
+    per-rank PD link and KV-tier write rates of Table I, before its turn: the
+    pool holds that many requests for every step an import may span, with a
+    factor of four margin (twice the import time at half the SLO TPOT). A
+    request's KV lives only on its own group's tp*pp ranks, hence the import
+    time divides by tp*pp, not by ep. The pool's KV is ordinary allocated
+    capacity, so it counts against the batch. Returns the total over groups.
+    """
+    if batch_size % ep:
+        raise ValueError("batch_size must be divisible by ep")
+    kv_bytes = 0
+    for layer in layers:
+        if layer.sequence_mixer == "linear_attention" or not layer.kv_heads:
+            continue
+        head_dim = layer.attention_head_dim or layer.hidden_size // layer.attention_heads
+        tokens = min(prompt-1, layer.attention_chunk_size) if layer.attention_chunk_size else prompt-1
+        kv_bytes += 2 * layer.kv_heads * head_dim * _DTYPE_BYTES[layer.dtype] * tokens
+    write = (published.hbf_write_gb_s if published.hbf_stacks else published.hbm_write_gb_s) * 1e9
+    seconds = kv_bytes / (tp * pp) / min(PD_LINK_BYTES_PER_SECOND, write)
+    return ep * math.ceil(batch_size // ep / output) * (1 + math.ceil(4 * seconds / slo_tpot_s))
+
+
+def validate_native_layout(layers, batch_size, ep):
+    """Reject an EP degree the model or batch cannot be split by.
+
+    The batch is per data-parallel replica; its B/ep requests per EP group
+    and every MoE layer's experts must divide evenly. EP shards the experts
+    of MoE layers only, so a model without any has nothing to split.
+    """
+    if batch_size % ep:
+        raise ValueError(f"batch_size {batch_size} must be divisible by ep {ep}")
+    if ep == 1:
+        return
+    moe = [layer for layer in layers if layer.is_moe]
+    if not moe:
+        raise ValueError("ep > 1 requires a model with MoE layers")
+    bad = sorted({layer.num_experts for layer in moe if layer.num_experts % ep})
+    if bad:
+        raise ValueError(f"every MoE layer's num_experts must be divisible by ep {ep}; got {bad}")
 
 
 def gpu_reference(component_id: str):
@@ -106,6 +156,12 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
         *, batch_size: int = 1, tp: int = 8, pp: int = 1, ep: int = 1,
         model_override=None, prompt_override=None, output_override=None,
         warmup_override=None, measurement_override=None):
+    """Build one data-parallel replica of the native paper deployment.
+
+    The replica spans tp*pp*ep GPUs and ``batch_size`` is its batch, shared
+    by its ep attention-DP groups (B/ep requests each); independent replicas
+    (DP) are not simulated here, the runner scales one replica's throughput.
+    """
     if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
         raise ValueError("batch_size must be positive")
     published = hardware_by_id(hardware_id)
@@ -120,6 +176,8 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
     world = tp * pp * ep
     if min(tp, pp, ep) < 1 or world > 16:
         raise ValueError("native deployment must use 1..16 ranks")
+    layers = model_graph_execution_layers(model.graph)
+    validate_native_layout(layers, batch_size, ep)
     # The old scan builder supplies only CPU/HOST wiring. Discard its model,
     # tensor targets, source identity and rank contracts below.
     template = build_scan_scenario("qwen2_5-0_5b", "HBM" if hardware_id == "HBM4" else "HBF", 2, 2)
@@ -144,7 +202,6 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
                   for kind, registry in template.component_profiles.items()}
     local = [c for c in template.hardware.components if c.component_id not in {"cpu0", "hostmem0"}]
     ranks = []
-    layers = model_graph_execution_layers(model.graph)
     for index in range(world):
         names = {"gpu0": f"gpu{index}", "hbm0": f"hbm{index}",
                  "hbf0": f"hbf{index}", "sram0": f"sram{index}"}
@@ -224,23 +281,31 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
         collective_algorithm="ring")
     warmup = output - 1 if warmup_override is None else warmup_override
     measurement = 2 * (output - 1) if measurement_override is None else measurement_override
+    # Continuous batching: a freed slot refills at the next step from the
+    # prepared-import pool, and each new request's one-token final prompt
+    # rides in that mixed decode cohort instead of a separate forward pass.
     scheduler = replace(template.workload.scheduler, mode="continuous", max_num_seqs=batch_size,
         max_num_batched_tokens=batch_size, max_num_ubatch_tokens=batch_size,
-        prefill_chunk_tokens=1, preemption_enabled=False, slo_ttft_ns=None, slo_tbt_ns=None,
-        slo_tpot_ns=100_000_000.)
+        prefill_chunk_tokens=1, mixed_phase_batching=True, preemption_enabled=False,
+        slo_ttft_ns=None, slo_tbt_ns=None, slo_tpot_ns=100_000_000.)
+    pool = native_import_pool(layers, prompt, output, batch_size, tp, pp, ep, published)
     rank_stores = {str(index): (f"hbf{index}" if published.hbf_stacks else f"hbm{index}") for index in range(world)}
     metadata = {"rank_weight_components": rank_stores, "rank_kv_components": rank_stores,
         "llama_backend_memory": {f"hbf{i}": {"device_id": f"gpu{i}", "buffer_kind": "HBF", "access": "direct", "priority": 1}
                                  for i in range(world)} if published.hbf_stacks else {}}
     requests = []
     for index in range(batch_size * 4):
-        # Paid warmup seeds spread completion phases across slots. These are
+        # Warmup seeds spread completion phases across slots. These are
         # actual longer histories with fewer remaining visible outputs, not
         # free generated tokens or a hand-written steady-state scheduler.
-        age = index * (output - 1) // batch_size if index < batch_size else 0
+        # Their KV is preloaded (allocator and capacity charged, no paid
+        # import); every fresh request still pays its native PD import.
+        # Centered ages cover all output phases 0..output-1, so the first
+        # step's mean context is the steady state's.
+        age = (2 * index + 1) * output // (2 * batch_size) if index < batch_size else 0
         requests.append(RequestSpec(f"native-request-{index:08d}", 0., prompt + age, output - age,
                                     metadata={"warmup_seed": index < batch_size}))
-    s = replace(template, name=f"native-{model_id}-{hardware_id}-{workload_id}-B{batch_size}",
+    s = replace(template, name=f"native-{model_id}-{hardware_id}-{workload_id}-TP{tp}PP{pp}EP{ep}-B{batch_size}",
         hardware=hardware, component_profiles=registries, model=model,
         simulation=SimulationConfig(mode="detailed"),
         fusion_policy=replace(template.fusion_policy, flash_attention=True),
@@ -252,8 +317,9 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
             requests=tuple(requests),
             request_count=batch_size * 4, scheduler=scheduler, metadata={"native_paper_comparison": True,
                 "external_kv_ingress": {"source_component": "pd_host", "buffer_bytes": PD_BUFFER_BYTES,
-                    "chunk_bytes": 1024**2, "max_inflight_requests": 2, "relay_components": [],
-                    "require_full_batch": True, "warmup_decode_cohorts": warmup,
+                    "chunk_bytes": 1024**2, "max_inflight_requests": pool, "relay_components": [],
+                    "require_full_batch": False, "preload_warmup_seed_kv": True,
+                    "warmup_decode_cohorts": warmup,
                     "measurement_decode_cohorts": measurement, "finish_after_measurement": True}}),
         assumptions=("Native serving, planner, GPU cost profiles and physical DRAM/NAND/SRAM services; no paper_* execution.",
             "Paper Table I per-GPU capacity and interface budgets, BF16 model and KV, decimal workload K.",
@@ -261,6 +327,9 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
             "8x40MB intermediate SRAM is modeled as a pooled 8-port array; bandwidth/latency/credits are explicit research inputs.",
             "External producer streams prompt-1 KV tokens; native one-token final-prompt generates the first visible output and pays its complete cost.",
             "Warmup seeds use real age-extended prompt histories and shorter remaining outputs to stagger completion; fresh measured requests retain the declared paper lengths.",
+            "Warmup-seed KV is preloaded with allocator pages and capacity charged but no paid import; controllers start clean with no in-flight writes (the paper does not publish its initial state). Every fresh request pays its native PD import.",
+            "Continuous batching: freed slots refill at the next step from the pre-imported requests of their own EP group (%d group(s), up to %d per group, %d in total; pool sized from the slots a group frees per step and the steps one import spans at Table I write rates, x4 margin; its KV counts against capacity); final-prompt queries join mixed decode cohorts." % (ep, pool // ep, pool),
+            *(("Attention data parallelism over %d EP groups: each group owns B/ep requests and runs their attention, dense MLP, router and shared expert on its own TP ranks (dense weights replicated per group, KV only on the owner group); MoE experts are shared by native all_to_all dispatch and combine across groups, and every layer ends at one cross-group barrier." % ep,) if ep > 1 else ()),
             PHYSICAL_WINDOW_ASSUMPTION))
     requirements = _derive_requirements(s)
     native_parallel = build_parallel_plan(s)
@@ -280,3 +349,47 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
         "kv_cache_target": weight0}
     return replace(s, placement=replace(s.placement,
         metadata={**s.placement.metadata, "control_plane": {"policy": {"options": options}}}))
+
+
+PREFILL_NODE_ASSUMPTION = (
+    "TTFT includes Prefill: an HBM4 Prefill replica with the Decode replica's tp/pp/ep layout prefills each "
+    "request alone the moment it arrives (no queueing) in one unchunked forward pass over its first prompt-1 "
+    "tokens; the pass ends when its last layer completes, where the KV export to the Decode node starts. The "
+    "Decode node computes the final prompt token and the first output token, so TTFT = Prefill pass + "
+    "ingress TTFT (KV import start to first token).")
+
+
+def build_native_prefill_scenario(model_id: str, workload_id: str, *, tp: int = 8, pp: int = 1, ep: int = 1,
+                                  full_pass: bool = False, model_override=None, prompt_override=None):
+    """The Prefill replica of a native deployment, running one request's pass.
+
+    Same model, tp/pp/ep layout and per-rank structure as the Decode replica,
+    on HBM4 for every memory configuration, without the PD source: a single
+    request of prompt-1 tokens and one output, scheduled as one forward pass.
+    """
+    from heterollm_sim.simulation_options import NativePrefillPassConfig
+
+    decode = build_native_comparison_scenario(model_id, "HBM4", workload_id, batch_size=ep, tp=tp, pp=pp, ep=ep,
+        model_override=model_override, prompt_override=prompt_override, output_override=2)
+    workload = next(row for row in workload_catalog() if row.workload_id == workload_id)
+    tokens = (workload.input_tokens if prompt_override is None else prompt_override) - 1
+    hardware = replace(decode.hardware, name=decode.hardware.name.replace("native-paper-", "native-prefill-"),
+        components=tuple(c for c in decode.hardware.components if c.component_id != "pd_host"),
+        links=tuple(link for link in decode.hardware.links if "pd_host" not in {
+            link.source_component, link.target_component}))
+    scheduler = replace(decode.workload.scheduler, max_num_seqs=ep, max_num_batched_tokens=tokens,
+        max_num_ubatch_tokens=tokens, prefill_chunk_tokens=tokens, slo_tpot_ns=None)
+    control = decode.placement.metadata["control_plane"]
+    options = {**control["policy"]["options"], "design_prefill_tokens": tokens}
+    kept = [value for value in decode.assumptions if value.startswith(("Native serving,", "Paper Table I",
+        "Native generic NAND", "8x40MB", "Attention data parallelism"))]
+    return replace(decode, name=decode.name.replace("native-", "native-prefill-", 1).rsplit("-B", 1)[0],
+        hardware=hardware,
+        placement=replace(decode.placement, hardware_name=hardware.name,
+            metadata={**decode.placement.metadata, "control_plane": {**control, "policy": {
+                **control["policy"], "options": options}}}),
+        workload=replace(decode.workload, name="native-prefill-node",
+            requests=(RequestSpec("native-prefill-request", 0., tokens, 1),), request_count=1,
+            scheduler=scheduler, metadata={"native_paper_comparison": True}),
+        simulation=SimulationConfig(mode="fast", native_prefill=NativePrefillPassConfig(full_pass=full_pass)),
+        assumptions=(*kept, PREFILL_NODE_ASSUMPTION))

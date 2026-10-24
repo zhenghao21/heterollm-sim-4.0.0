@@ -14,14 +14,19 @@ from collections import Counter, OrderedDict
 from collections.abc import Mapping as _ABCMapping, Sequence as _ABCSequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
+import bisect
 import heapq
 import math
 import copy
+import weakref
 from typing import (
     Any,
     Callable,
+    ClassVar,
     Dict,
     FrozenSet,
+    Iterable,
+    Iterator,
     List,
     Mapping,
     Optional,
@@ -117,6 +122,9 @@ class RequestStatus(str, Enum):
 
 
 _TERMINAL_STATUSES = (RequestStatus.FINISHED, RequestStatus.REJECTED)
+# A mixed cohort advances every running decode request by one token while a
+# newly admitted request's final prompt query rides along.
+_DECODE_STEP_KINDS = frozenset(("decode", "mixed"))
 @dataclass(frozen=True)
 class ServingPolicy:
     mode: str = "continuous_batching"
@@ -259,6 +267,16 @@ class KVCachePolicy:
     kv_layer_attention_limits: Mapping[str, int] = field(default_factory=dict)
     capacity_bytes_by_component: Mapping[str, int] = field(default_factory=dict)
     bottleneck_component: Optional[str] = None
+    # EP attention data parallelism: a request's KV lives on the TP ranks of
+    # one EP group.  The page-size fields above describe ONE group and
+    # ``capacity_pages`` is the per-group page capacity, while
+    # ``component_bytes_per_page``/``capacity_bytes_by_component`` cover the
+    # components of every group (``ep_group_components`` splits them).
+    # ``kv_layer_group_shards`` lists, per layer, each group's shard owners;
+    # ``kv_layer_component_shards`` lists every owner across groups.
+    ep_degree: int = 1
+    ep_group_components: Tuple[Tuple[str, ...], ...] = ()
+    kv_layer_group_shards: Mapping[str, Tuple[Tuple[str, ...], ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -376,6 +394,10 @@ class ServingPlan:
     mtp: MTPPolicy
 
     @property
+    def ep_degree(self) -> int:
+        return self.kv_policy.ep_degree
+
+    @property
     def kv_layer_components(self) -> Mapping[str, str]:
         return self.kv_policy.kv_layer_components
 
@@ -383,12 +405,12 @@ class ServingPlan:
     def kv_component_bytes_per_token(self) -> Mapping[str, int]:
         by_component: Dict[str, int] = {}
         for layer, owner in self.kv_policy.kv_layer_components.items():
-            owners = self.kv_policy.kv_layer_component_shards.get(layer, (owner,))
-            bytes_per_owner = int(
-                self.kv_policy.kv_layer_bytes_per_token.get(layer, 0)
-            ) // max(1, len(owners))
-            for component in owners:
-                by_component[component] = by_component.get(component, 0) + bytes_per_owner
+            for owners in self.kv_policy.kv_layer_group_shards.get(layer, ((owner,),)):
+                bytes_per_owner = int(
+                    self.kv_policy.kv_layer_bytes_per_token.get(layer, 0)
+                ) // max(1, len(owners))
+                for component in owners:
+                    by_component[component] = by_component.get(component, 0) + bytes_per_owner
         return by_component
 
     @property
@@ -427,6 +449,9 @@ class BatchItem:
     # Cursor visible when this item's terminal DAG task completes.  Planner
     # metadata uses it to distinguish multiple chunks/rounds of one phase.
     completion_cursor: Optional[int] = None
+    # EP group that owns the request's KV and dense-path compute; fixed for
+    # the request's whole life.
+    ep_group: int = field(default=0, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -1616,6 +1641,7 @@ class ServingRequestState:
     rejection_reason: Optional[str] = None
     engine_start_ns: Optional[float] = None
     slot_id: Optional[int] = None
+    ep_group: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -1756,6 +1782,11 @@ class KVCacheMetrics:
     requested_allocation_policy: str = "lazy"
     effective_allocation_policy: str = "lazy"
     allocation_policy_reason: Optional[str] = None
+    # With EP attention data parallelism the page fields above are per group:
+    # ``peak_used_pages`` is the busiest group's peak, comparable with the
+    # per-group ``capacity_pages``.
+    ep_degree: int = 1
+    peak_used_pages_by_group: Tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1895,8 +1926,9 @@ class ServingResult:
     )
     # Ordered, JSON-safe scheduler observations.  ``events`` remains the
     # low-level timeline; this view records the decision boundary and the
-    # logical-to-physical work selected at that boundary.
-    schedule_trace: Tuple[Mapping[str, Any], ...] = ()
+    # logical-to-physical work selected at that boundary.  Rows are rebuilt
+    # lazily from per-row state deltas (see ``_ScheduleTrace``).
+    schedule_trace: Sequence[Mapping[str, Any]] = ()
 
     runtime_kernel_metrics: Mapping[str, object] = field(default_factory=dict)
     # Event timestamps remain on the shared absolute simulation clock, while
@@ -1967,9 +1999,45 @@ BatchLowerer = Union[
 ]
 
 
+def _require_ep_divisible_pools(scenario: ScenarioConfig) -> None:
+    """EP attention data parallelism splits slots and imports evenly per group.
+
+    The control-plane placement pass replaces the scheduler with a
+    one-sequence placeholder because it makes no admission decisions; its
+    numbers describe no slot pool, so the real workload is checked instead.
+    """
+
+    ep_degree = int(scenario.placement.parallel.ep_degree)
+    scheduler = scenario.workload.scheduler
+    if (
+        ep_degree == 1
+        or scheduler is None
+        or scenario.workload.metadata.get("_control_plane_placement_validation")
+    ):
+        return
+    if int(scheduler.max_num_seqs) % ep_degree:
+        raise ValueError(
+            "max_num_seqs {} must be divisible by ep_degree {}".format(
+                scheduler.max_num_seqs, ep_degree
+            )
+        )
+    ingress = scenario.workload.metadata.get("external_kv_ingress")
+    inflight = (
+        ingress.get("max_inflight_requests", 2)
+        if isinstance(ingress, _ABCMapping)
+        else 0
+    )
+    if type(inflight) is int and inflight % ep_degree:
+        raise ValueError(
+            "external_kv_ingress max_inflight_requests {} must be divisible "
+            "by ep_degree {}".format(inflight, ep_degree)
+        )
+
+
 def compile_serving_plan(scenario: ScenarioConfig) -> ServingPlan:
     """Compile serving policy and capacity with one graph projection."""
 
+    _require_ep_divisible_pools(scenario)
     with _compilation_scope(scenario):
         return _compile_serving_plan_in_context(scenario)
 
@@ -2002,6 +2070,7 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         or max_ubatch_tokens <= 0
     ):
         raise ValueError("serving sequence, token, and prefill chunk budgets must be positive")
+    ep_degree = int(scenario.placement.parallel.ep_degree)
     scheduler = ServingPolicy(
         mode=str(scheduler_spec.mode),
         max_num_seqs=max_num_seqs,
@@ -2095,7 +2164,9 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
     layer_bytes_per_token: Dict[str, int] = {}
     layer_bytes_per_page: Dict[str, int] = {}
     layer_component_shards: Dict[str, Tuple[str, ...]] = {}
+    layer_group_shards: Dict[str, Tuple[Tuple[str, ...], ...]] = {}
     layer_component_bytes: Dict[str, int] = {}
+    ep_group_components: Tuple[Tuple[str, ...], ...] = ()
     if (layout_mode == "llama_static_layer" and layer_map) or rank_kv_components is not None:
         layer_ids = {
             layer.layer_id
@@ -2131,39 +2202,65 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
             layer_bytes_per_token[layer.layer_id] = physical_layer_bytes
             layer_bytes_per_page[layer.layer_id] = physical_layer_bytes * page_tokens
             parallel = _parallel_plan(scenario)
-            rank_components = (
-                tuple(str(rank_kv_components[str(rank.rank)]) for rank in parallel.ranks_for_layer(layer))
-                if rank_kv_components is not None else
-                (str(owner),)
-                if (tier_layer_map and not native_layer_map) or native_layer_map
-                else tuple(
-                    dict.fromkeys(
-                        str(rank.memory_component_id)
-                        for rank in parallel.ranks_for_layer(layer)
-                        if rank.memory_component_id
+            if rank_kv_components is not None:
+                # One shard-owner tuple per EP group.  A request's KV lives on
+                # a single group, so the aggregate per-token/per-page bytes
+                # describe group 0 (groups are symmetric) while the
+                # per-component ledger below covers every group's ranks.
+                stage_ranks = parallel.ranks_for_layer(layer)
+                group_components = tuple(
+                    tuple(str(rank_kv_components[str(rank.rank)])
+                          for rank in stage_ranks if rank.ep_rank == group)
+                    for group in range(parallel.ep_degree)
+                )
+                rank_components = group_components[0]
+            else:
+                rank_components = (
+                    (str(owner),)
+                    if (tier_layer_map and not native_layer_map) or native_layer_map
+                    else tuple(
+                        dict.fromkeys(
+                            str(rank.memory_component_id)
+                            for rank in parallel.ranks_for_layer(layer)
+                            if rank.memory_component_id
+                        )
                     )
                 )
-            )
+                group_components = (rank_components,)
             if not rank_components:
                 rank_components = (str(owner),)
+                group_components = (rank_components,) + group_components[1:]
             if rank_kv_components is not None:
                 physical_layer_bytes = physical_layer_bytes // parallel.tp_degree * len(rank_components)
                 layer_bytes_per_token[layer.layer_id] = physical_layer_bytes
                 layer_bytes_per_page[layer.layer_id] = physical_layer_bytes * page_tokens
-            layer_component_shards[layer.layer_id] = rank_components
+            layer_component_shards[layer.layer_id] = tuple(
+                component for group in group_components for component in group
+            )
+            layer_group_shards[layer.layer_id] = group_components
             shard_bytes = (
                 physical_layer_bytes // len(rank_components)
                 if len(rank_components) > 1
                 else physical_layer_bytes
             )
-            for component_id in rank_components:
-                layer_component_bytes[component_id] = (
-                    layer_component_bytes.get(component_id, 0)
-                    + shard_bytes * page_tokens
-                )
+            for group in group_components:
+                for component_id in group:
+                    layer_component_bytes[component_id] = (
+                        layer_component_bytes.get(component_id, 0)
+                        + shard_bytes * page_tokens
+                    )
         layer_map = {str(key): str(value) for key, value in layer_map.items()}
         if rank_kv_components is not None:
-            bytes_per_page = sum(layer_component_bytes.values())
+            groups: List[Dict[str, None]] = [{} for _ in range(parallel.ep_degree)]
+            for group_components in layer_group_shards.values():
+                for index, group in enumerate(group_components):
+                    groups[index].update(dict.fromkeys(group))
+            if len({c for group in groups for c in group}) != sum(map(len, groups)):
+                raise ValueError("EP groups must not share KV components")
+            ep_group_components = tuple(tuple(group) for group in groups)
+            bytes_per_page = sum(
+                layer_component_bytes[component] for component in ep_group_components[0]
+            )
     kv_unified = bool(kv_spec.kv_unified)
     logical_context_tokens = 0
     n_seq_max = max_num_seqs
@@ -2525,9 +2622,9 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         for layer_id, bpt in layer_bytes_per_token.items():
             if layer_id in chunk_limits:
                 continue
-            owners = layer_component_shards[layer_id]
-            for owner in owners:
-                full_bytes[owner] = full_bytes.get(owner, 0) + bpt // len(owners) * page_tokens
+            for owners in layer_group_shards[layer_id]:
+                for owner in owners:
+                    full_bytes[owner] = full_bytes.get(owner, 0) + bpt // len(owners) * page_tokens
         bounds = [budgets[owner] // value for owner, value in full_bytes.items() if value]
         capacity_pages = min(bounds) if bounds else max(
             (int(request.prompt_tokens) + int(request.output_tokens) + page_tokens-1)//page_tokens
@@ -2623,6 +2720,9 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         kv_layer_attention_limits=chunk_limits if layer_map else {},
         capacity_bytes_by_component=component_capacity_bytes,
         bottleneck_component=bottleneck_component,
+        ep_degree=ep_degree,
+        ep_group_components=ep_group_components,
+        kv_layer_group_shards=layer_group_shards,
     )
     if kv_policy.allocation_policy not in ("lazy", "eager"):
         raise ValueError("KV allocation_policy must be lazy or eager")
@@ -2681,6 +2781,15 @@ def _compile_serving_plan_in_context(scenario: ScenarioConfig) -> ServingPlan:
         )
     if mtp.proposal_cost_scale <= 0:
         raise ValueError("MTP proposal_cost_scale must be positive")
+    if ep_degree > 1 and (
+        mtp.enabled or layout_mode == "paged_pool" or linear_state_bytes > 0
+        or not kv_unified
+    ):
+        raise ValueError(
+            "ep_degree > 1 supports neither MTP, paged KV pools, "
+            "linear-attention state, nor non-unified per-slot KV windows: "
+            "their runtime paths have no EP group ownership"
+        )
 
     if scenario.workload.requests:
         requests = []
@@ -2891,11 +3000,23 @@ def simulate_online(
         return runtime.run()
 
 
+# Request fields that scheduler-trace rows report.  The runtime is told about
+# every write to them so a row only has to encode the states that changed.
+_TRACED_STATE_FIELDS = frozenset((
+    "status", "slot_id", "ep_group", "prefill_cursor", "committed", "kv_pages",
+    "recompute_cursor", "recompute_target",
+))
+
+
 @dataclass
 class _MutableRequest:
     spec: ServingRequest
     status: RequestStatus = RequestStatus.ARRIVALS
     slot_id: Optional[int] = None
+    # EP group owning this request's KV and dense-path compute.  Unassigned
+    # until the request first needs KV placement; fixed afterwards until the
+    # request leaves the runtime (see ``_OnlineRuntime._assign_ep_group``).
+    ep_group: Optional[int] = None
     prefill_cursor: int = 0
     committed: int = 0
     proposed: int = 0
@@ -2935,6 +3056,16 @@ class _MutableRequest:
     kv_cache_range_error: Optional[str] = None
     # Captured before logical release; residency is rechecked at save time.
     recurrent_save_identity: Optional[Mapping[str, Any]] = None
+    # ``list.append`` of the owning runtime's pending-trace list.  A builtin
+    # method, so snapshot deep copies keep sharing the same list.
+    _trace_sink: ClassVar[Optional[Callable[["_MutableRequest"], None]]] = None
+    _trace_pending: ClassVar[bool] = False
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        object.__setattr__(self, name, value)
+        if name in _TRACED_STATE_FIELDS and not self._trace_pending and self._trace_sink is not None:
+            object.__setattr__(self, "_trace_pending", True)
+            self._trace_sink(self)
 
     @property
     def cached_tokens(self) -> int:
@@ -2942,6 +3073,70 @@ class _MutableRequest:
         # KV entry when a later decode/MTP step consumes it, so the live bound
         # remains prompt + output - 1.
         return self.prefill_cursor + max(0, self.committed - 1)
+
+
+class _ScheduleTrace(_ABCSequence):
+    """Scheduler observations stored as per-row request-state deltas.
+
+    Embedding every request's state in every row made the trace quadratic in
+    the request count.  A row keeps only the states that changed since the
+    previous row; iterating rebuilds the full rows, each with its ``states``
+    tuple sorted by request id.  The state mappings of unchanged requests are
+    shared between rows and must be treated as read-only.
+    """
+
+    def __init__(self, request_ids: Sequence[str]) -> None:
+        self._order = tuple(sorted(request_ids))
+        self._rows: List[Mapping[str, Any]] = []
+        self._deltas: List[Tuple[Tuple[str, Mapping[str, Any]], ...]] = []
+
+    def append(
+        self,
+        row: Mapping[str, Any],
+        changed_states: Tuple[Tuple[str, Mapping[str, Any]], ...],
+    ) -> None:
+        self._rows.append(row)
+        self._deltas.append(changed_states)
+
+    def snapshot(self) -> "_ScheduleTrace":
+        copied = _ScheduleTrace(())
+        copied._order = self._order
+        copied._rows = list(self._rows)
+        copied._deltas = list(self._deltas)
+        return copied
+
+    def __len__(self) -> int:
+        return len(self._rows)
+
+    def __iter__(self) -> Iterator[Mapping[str, Any]]:
+        current: Dict[str, Mapping[str, Any]] = {}
+        order = self._order
+        for row, changed in zip(self._rows, self._deltas):
+            current.update(changed)
+            yield {**row, "states": tuple(current[request_id] for request_id in order)}
+
+    def __getitem__(self, index):
+        if isinstance(index, slice):
+            return tuple(self)[index]
+        count = len(self._rows)
+        if index < 0:
+            index += count
+        if not 0 <= index < count:
+            raise IndexError("schedule trace index out of range")
+        current: Dict[str, Mapping[str, Any]] = {}
+        for changed in self._deltas[: index + 1]:
+            current.update(changed)
+        return {
+            **self._rows[index],
+            "states": tuple(current[request_id] for request_id in self._order),
+        }
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, _ABCSequence) and not isinstance(other, (str, bytes)):
+            return len(other) == len(self) and all(
+                left == right for left, right in zip(self, other)
+            )
+        return NotImplemented
 
 
 class _PhysicalCapacityLedger:
@@ -3071,16 +3266,19 @@ class _PhysicalCapacityLedger:
         return True
 
 
-def _kv_policy_component_usage(policy: KVCachePolicy, pages: int) -> Mapping[str, int]:
-    """Exact bounded-ring footprints plus ordinary full-attention pages."""
+def _kv_policy_component_usage(policy: KVCachePolicy, pages: int, group: int = 0) -> Mapping[str, int]:
+    """Exact bounded-ring footprints plus ordinary full-attention pages of one EP group."""
     if not policy.kv_layer_attention_limits:
         if policy.component_bytes_per_page:
+            if len(policy.ep_group_components) > 1:
+                return {owner: pages*policy.component_bytes_per_page[owner]
+                        for owner in policy.ep_group_components[group]}
             return {owner: pages*amount for owner, amount in policy.component_bytes_per_page.items()}
         return {policy.cache_component: pages*policy.bytes_per_page} if policy.cache_component else {}
     result = {}
     tokens = pages*policy.tokens_per_page
     for layer, amount in policy.kv_layer_bytes_per_token.items():
-        owners = policy.kv_layer_component_shards[layer]
+        owners = policy.kv_layer_group_shards[layer][group]
         live = min(tokens, policy.kv_layer_attention_limits.get(layer, tokens))
         for owner in owners:
             result[owner] = result.get(owner, 0) + live*(amount//len(owners))
@@ -3106,6 +3304,51 @@ class _KVLedger:
         self.offload_used_bytes = 0
         self.offload_peak_bytes = 0
         self.paged_pool: Optional[DynamicKVPool] = None
+        # EP attention data parallelism: a request charges only its own EP
+        # group's components and page budget, so page counters are kept per
+        # group.  One group is just ``used_pages``/``peak_pages``.  Without
+        # per-rank KV components every request charges the shared owners, so
+        # the ledger stays global.  The paged pool (rejected for EP > 1) and
+        # swap (``offload`` refuses partitioned KV) never run with groups.
+        self.groups = max(1, len(getattr(policy, "ep_group_components", ())))
+        self.group_used_pages = [0] * self.groups
+        self.group_peak_pages = [0] * self.groups
+        self._group_page_bytes = (
+            [{component: policy.component_bytes_per_page[component] for component in components}
+             for components in policy.ep_group_components]
+            if self.groups > 1
+            else None
+        )
+
+    def _group_of(self, request: _MutableRequest) -> int:
+        if self.groups == 1:
+            return 0
+        if request.ep_group is None:
+            raise RuntimeError(
+                "KV request {} has no EP group".format(request.spec.request_id)
+            )
+        return request.ep_group
+
+    def _group_used(self, request: _MutableRequest) -> int:
+        return self.used_pages if self.groups == 1 else self.group_used_pages[self._group_of(request)]
+
+    def _track_group_pages(self, request: _MutableRequest, delta: int) -> None:
+        """Mirror a used-page change into the owning EP group's counters."""
+        if self.groups > 1:
+            group = self._group_of(request)
+            used = self.group_used_pages[group] + delta
+            self.group_used_pages[group] = used
+            if used > self.group_peak_pages[group]:
+                self.group_peak_pages[group] = used
+
+    @property
+    def max_group_used_pages(self) -> int:
+        return max(self.group_used_pages) if self.groups > 1 else self.used_pages
+
+    @property
+    def peak_group_pages(self) -> int:
+        """Busiest group's peak, comparable with the per-group page capacity."""
+        return max(self.group_peak_pages) if self.groups > 1 else self.peak_pages
 
     def _sync_paged_pool_physical_pages(self) -> None:
         """Keep physical page allocations aligned with the logical pool.
@@ -3195,19 +3438,25 @@ class _KVLedger:
             ),
         )
 
-    def _active_deltas(self, byte_count: int) -> Mapping[str, int]:
+    def _active_deltas(self, byte_count: int, group: int = 0) -> Mapping[str, int]:
         if not self.policy.component_bytes_per_page:
             return {self.policy.cache_component: byte_count} if self.policy.cache_component else {}
         if not self.policy.bytes_per_page or byte_count % self.policy.bytes_per_page:
             raise ValueError("partitioned KV allocation must use whole pages")
         pages = byte_count // self.policy.bytes_per_page
-        return {component: pages * n for component, n in self.policy.component_bytes_per_page.items()}
+        page_bytes = (
+            self.policy.component_bytes_per_page
+            if self._group_page_bytes is None
+            else self._group_page_bytes[group]
+        )
+        return {component: pages * n for component, n in page_bytes.items()}
 
     def _request_deltas(self, request: _MutableRequest, pages: int) -> Mapping[str, int]:
+        group = self._group_of(request)
         if not self.policy.kv_layer_attention_limits:
-            return self._active_deltas((pages-request.kv_pages)*self.policy.bytes_per_page)
-        before = _kv_policy_component_usage(self.policy, request.kv_pages)
-        after = _kv_policy_component_usage(self.policy, pages)
+            return self._active_deltas((pages-request.kv_pages)*self.policy.bytes_per_page, group)
+        before = _kv_policy_component_usage(self.policy, request.kv_pages, group)
+        after = _kv_policy_component_usage(self.policy, pages, group)
         return {owner:after.get(owner,0)-before.get(owner,0) for owner in set(before)|set(after)}
 
     def pages_for_tokens(self, token_count: int) -> int:
@@ -3222,8 +3471,12 @@ class _KVLedger:
             if pages == request.kv_pages:
                 return True
             return self.paged_pool.can_resize(request.spec.request_id, pages)
+        if self.groups > 1 and request.ep_group is None and pages == request.kv_pages:
+            # A request without an EP group holds no KV (e.g. rejected while
+            # waiting): there is nothing to charge or release.
+            return True
         return (
-            self.used_pages + pages - request.kv_pages <= self.policy.capacity_pages
+            self._group_used(request) + pages - request.kv_pages <= self.policy.capacity_pages
             and self.physical.can_adjust_many(self._request_deltas(request, pages))
         )
 
@@ -3262,11 +3515,14 @@ class _KVLedger:
             return True
         if pages < 0 or not self.can_resize(request, pages):
             return False
+        if self.groups > 1 and request.ep_group is None and pages == request.kv_pages:
+            return True
         delta = pages - request.kv_pages
         if not self.physical.adjust_many(self._request_deltas(request, pages)):
             return False
         self.used_pages += delta
         self.persistent_used_pages += delta
+        self._track_group_pages(request, delta)
         request.kv_pages = pages
         request.peak_kv_pages = max(request.peak_kv_pages, pages)
         self.peak_pages = max(self.peak_pages, self.used_pages)
@@ -3314,15 +3570,17 @@ class _KVLedger:
                 self.temporary_allocations += 1
             return True
         delta_bytes = temporary_pages * self.policy.bytes_per_page
+        group = self._group_of(request)
         if (
-            self.used_pages + temporary_pages > self.policy.capacity_pages
-            or not self.physical.can_adjust_many(self._active_deltas(delta_bytes))
+            self._group_used(request) + temporary_pages > self.policy.capacity_pages
+            or not self.physical.can_adjust_many(self._active_deltas(delta_bytes, group))
         ):
             return False
-        if not self.physical.adjust_many(self._active_deltas(delta_bytes)):
+        if not self.physical.adjust_many(self._active_deltas(delta_bytes, group)):
             return False
         request.temporary_kv_pages = temporary_pages
         self.used_pages += temporary_pages
+        self._track_group_pages(request, temporary_pages)
         self.temporary_used_pages += temporary_pages
         self.peak_pages = max(self.peak_pages, self.used_pages)
         self.temporary_peak_pages = max(
@@ -3351,8 +3609,9 @@ class _KVLedger:
             request.temporary_kv_pages = 0
             self.temporary_releases += 1
             return
-        self.physical.adjust_many(self._active_deltas(-byte_count))
+        self.physical.adjust_many(self._active_deltas(-byte_count, self._group_of(request)))
         self.used_pages -= temporary_pages
+        self._track_group_pages(request, -temporary_pages)
         self.temporary_used_pages -= temporary_pages
         request.temporary_kv_pages = 0
         self.temporary_releases += 1
@@ -5511,12 +5770,6 @@ class _OnlineRuntime:
             raise TypeError("execution_kernel must be a UnifiedEventKernel")
         if execution_kernel is not None and execution_kernel.has_active_tasks:
             raise ValueError("execution_kernel must be drained before serving append")
-        # Normal reporting hands over the original native control-plane
-        # kernel. Its provenance does not replace the live state/hook checks;
-        # it only distinguishes that path from an arbitrary external kernel.
-        from .control_plane import _is_native_bootstrap_kernel
-        self._native_window_owns_execution_kernel = (
-            execution_kernel is None or _is_native_bootstrap_kernel(execution_kernel))
         self._requested_kv_allocation_policy = plan.kv_policy.allocation_policy
         self._kv_allocation_policy_reason = None
         cache_components = set(plan.kv_policy.component_bytes_per_page)
@@ -5586,6 +5839,14 @@ class _OnlineRuntime:
             for item in plan.requests
         }
         self._state_values = tuple(self.states.values())
+        # Trace rows only encode request states written since the last row;
+        # every state is pending until the first row records it.
+        self._schedule_trace = _ScheduleTrace(self.states)
+        self._trace_last_states: Dict[str, Mapping[str, Any]] = {}
+        self._trace_pending_states: List[_MutableRequest] = list(self._state_values)
+        for state in self._state_values:
+            state._trace_sink = self._trace_pending_states.append
+            state._trace_pending = True
         self._configure_agent_lifecycle()
         self.pending = plan.requests
         self._pending_index = 0
@@ -5597,11 +5858,17 @@ class _OnlineRuntime:
         # Native server slots are distinct from residency-manager slots.  A
         # request keeps its slot while running; a swap/rejection/finish
         # releases it so the next admission observes explicit reuse.
-        self._free_slot_ids: List[int] = list(
-            range(max(0, int(plan.scheduler.max_num_seqs)))
-        )
+        # With EP attention data parallelism slot ``s`` belongs to EP group
+        # ``s % ep_degree``: a request only ever runs in a slot of its own
+        # group, and slots return to that group.  ``_ep_load`` counts the
+        # live (non-terminal) requests each group owns.
+        self._ep_degree = plan.ep_degree
+        self._free_slot_ids_by_group: List[List[int]] = [
+            list(range(group, max(0, int(plan.scheduler.max_num_seqs)), self._ep_degree))
+            for group in range(self._ep_degree)
+        ]
+        self._ep_load: List[int] = [0] * self._ep_degree
         self._slot_bindings: Dict[int, str] = {}
-        self._schedule_trace: List[Mapping[str, Any]] = []
         self._decision_sequence = 0
         physical_limits = dict(_physical_runtime_limits(plan))
         _add_prompt_cache_runtime_limits(
@@ -5886,6 +6153,8 @@ class _OnlineRuntime:
         self._external_executor = None
         self._external_imported_requests = 0
         self._external_imported_bytes = 0
+        self._external_preloaded_requests = 0
+        self._external_preloaded_bytes = 0
         self._external_buffer_peak_bytes = 0
         self._decode_window = {}
         if self._external_ingress is None:
@@ -5893,7 +6162,7 @@ class _OnlineRuntime:
         config = self._external_ingress
         allowed = {"protocol", "source_component", "buffer_bytes", "chunk_bytes", "max_inflight_requests",
             "relay_components", "warmup_decode_cohorts", "measurement_decode_cohorts",
-            "finish_after_measurement", "require_full_batch"}
+            "finish_after_measurement", "require_full_batch", "preload_warmup_seed_kv"}
         if not isinstance(config, Mapping) or set(config) - allowed:
             raise ValueError("external_kv_ingress contains unsupported fields")
         if config.get("protocol", "native_external_kv_v1") != "native_external_kv_v1":
@@ -5912,7 +6181,7 @@ class _OnlineRuntime:
             value = config.get(key, default)
             if type(value) is not int or value < minimum:
                 raise ValueError("external KV " + key + " has an invalid integer value")
-        for key in ("finish_after_measurement", "require_full_batch"):
+        for key in ("finish_after_measurement", "require_full_batch", "preload_warmup_seed_kv"):
             if key in config and not isinstance(config[key], bool):
                 raise ValueError("external KV " + key + " must be boolean")
         if any(state.spec.prompt_tokens < 1 or state.spec.output_tokens < 1 for state in self._state_values):
@@ -5943,8 +6212,12 @@ class _OnlineRuntime:
         from .planner import native_kv_ingress_inventory
         scenario = self.plan.scenario
         history = state.spec.prompt_tokens - 1
+        if state.ep_group is None:
+            # Import start and seed preload choose the group themselves; this
+            # covers a direct inventory query for a request nobody placed yet.
+            self._assign_ep_group(state, self._least_loaded_ep_group(range(self._ep_degree)))
         inventory = native_kv_ingress_inventory(scenario, state.spec.request_id, history,
-            execution_control=self.execution_control)
+            ep_group=state.ep_group, execution_control=self.execution_control)
         configs, contracts = inventory["physical_memory_configs"], inventory["contracts"]
         declarations = {(row["physical_owner"], row["buffer_id"], row.get("generation", 0)): row
             for row in inventory["physical_allocations"]}
@@ -5959,9 +6232,12 @@ class _OnlineRuntime:
                 "physical_memory_config": configs[first_owner], "physical_memory_configs": configs,
                 "physical_allocations": tuple(declarations.values())})
         register_physical_allocations(task, self._execution_resource_kernel.physical_runtime)
-        self._execution_resource_kernel._request_physical_buffers.setdefault(state.spec.request_id, set()).update(declarations)
+        self._execution_resource_kernel.register_request_physical_buffers(state.spec.request_id, declarations)
         component_by_owner = {service.physical_owner: component
             for component, service in self._external_executor.services.items()}
+        keys_by_identity = {}
+        for key in declarations:
+            keys_by_identity.setdefault(key[1], []).append(key)
         spans = {}
         for contract in contracts:
             self.execution_control.raise_if_cancelled()
@@ -5981,7 +6257,7 @@ class _OnlineRuntime:
                         raise ValueError("native external KV range maps disagree")
                     for part in ("k", "v"):
                         identity = owner["id"] + ":" + part
-                        keys = [key for key in declarations if key[1] == identity]
+                        keys = keys_by_identity.get(identity, ())
                         if len(keys) != 1:
                             raise ValueError("native external KV identity does not select one private owner")
                         key = keys[0]
@@ -6000,24 +6276,95 @@ class _OnlineRuntime:
                     "generation": generation, "offset_bytes": start, "size_bytes": end-start})
         return destinations
 
+    def _preload_warmup_seed_kv(self):
+        """Install warmup-seed KV histories as already resident, unpaid.
+
+        The paper does not publish how its Decode node reaches the initial
+        full batch. Seeds keep their real staggered histories, allocator
+        pages and native physical buffers, so capacity is charged and later
+        attention reads the same destinations. No source read, link or target
+        write is submitted; the window starts from clean controllers with no
+        in-flight writes. Every fresh request is still a paid native import.
+        Seeds become ready before admission, so imports start at admissions
+        exactly as in the paid flow.
+        """
+        if self._external_executor is None or not self._external_ingress.get("preload_warmup_seed_kv", False):
+            return
+        seed_index = -1
+        for state in self._state_values:
+            request_id = state.spec.request_id
+            if not state.spec.metadata.get("warmup_seed", False):
+                continue
+            # The k-th seed in request order belongs to EP group k % ep_degree
+            # so every group holds the full spread of staggered ages.
+            seed_index += 1
+            if state.status != RequestStatus.WAITING or request_id in self._external_initialized:
+                continue
+            placed_here = state.ep_group is None
+            if placed_here:
+                self._assign_ep_group(state, seed_index % self._ep_degree)
+            pages = self.ledger.pages_for_tokens(_max_live_kv_tokens(state.spec.prompt_tokens, state.spec.output_tokens))
+            if not self.ledger.can_resize(state, pages):
+                if placed_here:
+                    self._release_ep_group(state)
+                continue
+            previous = state.kv_pages
+            try:
+                if not self.ledger.resize(state, pages):
+                    if placed_here:
+                        self._release_ep_group(state)
+                    continue
+                size = sum(row["size_bytes"] for row in self._external_destination_ranges(state))
+            except BaseException:
+                self._execution_resource_kernel.forget_request_physical_buffers(request_id)
+                self.ledger.resize(state, previous)
+                if placed_here:
+                    self._release_ep_group(state)
+                raise
+            state.prefill_cursor = state.spec.prompt_tokens-1
+            self._external_ready.add(request_id)
+            self._external_initialized.add(request_id)
+            self._external_preloaded_requests += 1
+            self._external_preloaded_bytes += size
+            self.events.append(ServingEvent(self.now, "external_kv_preloaded", request_id,
+                details={"logical_bytes": size, "history_tokens": state.spec.prompt_tokens-1, "paid": False}))
+
     def _start_external_imports(self):
         if self._external_executor is None:
             return
         config = self._external_ingress
         limit = config.get("max_inflight_requests", 2)
+        # Each EP group owns an equal share of the in-flight import pool.
+        group_limit = limit // self._ep_degree
+        inflight = [0] * self._ep_degree
+        for request_id in (*self._external_pending, *self._external_ready):
+            inflight[self.states[request_id].ep_group] += 1
         for state in self._state_values:
             request_id = state.spec.request_id
-            if len(self._external_pending) + len(self._external_ready) >= limit:
+            if sum(inflight) >= limit:
                 break
             if state.status != RequestStatus.WAITING or request_id in self._external_pending or request_id in self._external_ready:
                 continue
+            # A new request goes to the least-loaded group with pool room.
+            placed_here = state.ep_group is None
+            if placed_here:
+                open_groups = [group for group in range(self._ep_degree) if inflight[group] < group_limit]
+                if not open_groups:
+                    break
+                self._assign_ep_group(state, self._least_loaded_ep_group(open_groups))
+            elif inflight[state.ep_group] >= group_limit:
+                continue
             pages = self.ledger.pages_for_tokens(_max_live_kv_tokens(state.spec.prompt_tokens, state.spec.output_tokens))
             if not self.ledger.can_resize(state, pages):
+                if placed_here:
+                    self._release_ep_group(state)
                 continue
             previous = state.kv_pages
             snapshot = self._external_executor.snapshot()
             try:
                 if not self.ledger.resize(state, pages):
+                    if placed_here:
+                        self._release_ep_group(state)
                     continue
                 destinations = self._external_destination_ranges(state)
                 size = sum(row["size_bytes"] for row in destinations)
@@ -6025,11 +6372,13 @@ class _OnlineRuntime:
                     state.prefill_cursor = state.spec.prompt_tokens-1
                     self._external_ready.add(request_id)
                     self._external_initialized.add(request_id)
+                    inflight[state.ep_group] += 1
                     continue
                 plan = self._external_executor.prepare_external_import(source_component=config["source_component"],
                     destinations=destinations, buffer_bytes=config.get("buffer_bytes", 64*1024**2)//limit,
                     chunk_bytes=config.get("chunk_bytes", 1024**2), request_id=request_id, arrival_ns=self.now)
                 self._external_pending[request_id] = {"plan": plan, "bytes": size}
+                inflight[state.ep_group] += 1
                 self._external_buffer_peak_bytes = max(self._external_buffer_peak_bytes,
                     len(self._external_pending)*min(config.get("chunk_bytes", 1024**2), config.get("buffer_bytes",64*1024**2)//limit))
                 self.events.append(ServingEvent(self.now, "external_kv_import_start", request_id,
@@ -6037,8 +6386,10 @@ class _OnlineRuntime:
                 self._publish_prefetch_resource_availability(plan=plan, executor=self._external_executor)
             except BaseException:
                 self._external_executor.restore(snapshot)
-                self._execution_resource_kernel._request_physical_buffers.pop(request_id, None)
+                self._execution_resource_kernel.forget_request_physical_buffers(request_id)
                 self.ledger.resize(state, previous)
+                if placed_here:
+                    self._release_ep_group(state)
                 raise
 
     def _advance_external_imports_until(self, timestamp_ns):
@@ -6081,12 +6432,14 @@ class _OnlineRuntime:
             plan.cancel()
             self.ledger.resize(self.states[request_id], 0)
             self._execution_resource_kernel.release_request_physical_allocations(request_id)
+            self._release_ep_group(self.states[request_id])
             del self._external_pending[request_id]
         for request_id in tuple(self._external_ready):
             self.ledger.resize(self.states[request_id], 0)
             self._execution_resource_kernel.release_request_physical_allocations(request_id)
             self.states[request_id].prefill_cursor = 0
             self._external_initialized.discard(request_id)
+            self._release_ep_group(self.states[request_id])
         self._external_ready.clear()
 
     def _observe_decode_measurement(self, cohort):
@@ -6096,7 +6449,7 @@ class _OnlineRuntime:
         if window["start_ns"] is None and self._completed_decode_steps >= window["warmup_decode_cohorts"]:
             window["start_ns"] = self.now
             self.events.append(ServingEvent(self.now, "decode_measurement_start"))
-        if (cohort.kind == "decode" and window["start_ns"] is not None
+        if (cohort.kind in _DECODE_STEP_KINDS and window["start_ns"] is not None
                 and self._completed_decode_steps > window["warmup_decode_cohorts"]):
             window["measured_decode_cohorts"] += 1
             if window["measured_decode_cohorts"] >= window["requested_decode_cohorts"]:
@@ -6108,6 +6461,7 @@ class _OnlineRuntime:
             "request_id": state.spec.request_id,
             "status": state.status.value,
             "slot_id": state.slot_id,
+            "ep_group": state.ep_group,
             "prefill_cursor": int(state.prefill_cursor),
             "committed_tokens": int(state.committed),
             "cached_tokens": int(state.cached_tokens),
@@ -6143,6 +6497,7 @@ class _OnlineRuntime:
                 "rows": tuple({
                     "request_id": item.request_id,
                     "slot_id": self.states[item.request_id].slot_id,
+                    "ep_group": item.ep_group,
                     "phase": item.phase,
                     "token_count": int(item.token_count),
                     "context_tokens": int(item.context_tokens),
@@ -6157,18 +6512,70 @@ class _OnlineRuntime:
             row["completion_ns"] = float(batch.end_ns)
         if details:
             row["details"] = dict(details)
-        row["states"] = tuple(
-            self._state_trace(state)
-            for state in sorted(self._state_values, key=lambda item: item.spec.request_id)
-        )
-        self._schedule_trace.append(row)
+        # Only requests written since the previous row can differ from it.
+        last = self._trace_last_states
+        changed = []
+        for state in self._trace_pending_states:
+            state._trace_pending = False
+            entry = self._state_trace(state)
+            request_id = state.spec.request_id
+            if last.get(request_id) != entry:
+                last[request_id] = entry
+                changed.append((request_id, entry))
+        self._trace_pending_states.clear()
+        self._schedule_trace.append(row, tuple(changed))
         self._decision_sequence += 1
 
-    def _assign_slot(self, request_id: str) -> int:
-        if not self._free_slot_ids:
+    def _mark_all_trace_states_pending(self) -> None:
+        """Re-check every state after a rollback rewrote them behind the hook."""
+        self._trace_pending_states.clear()
+        self._trace_pending_states.extend(self._state_values)
+        for state in self._state_values:
+            state._trace_pending = True
+
+    def _mark_trace_state_pending(self, state: _MutableRequest) -> None:
+        """Re-check one state whose ``__dict__`` a rollback restored wholesale.
+
+        The restored pending flag may predate a row that already drained the
+        pending list, so the state is queued again (a duplicate is harmless).
+        """
+        state._trace_pending = True
+        self._trace_pending_states.append(state)
+
+    def _assign_ep_group(self, state: _MutableRequest, group: int) -> None:
+        state.ep_group = group
+        self._ep_load[group] += 1
+
+    def _release_ep_group(self, state: _MutableRequest) -> None:
+        """Take back an assignment whose KV placement did not happen."""
+        if state.ep_group is not None:
+            self._ep_load[state.ep_group] -= 1
+            state.ep_group = None
+
+    def _least_loaded_ep_group(self, groups: Iterable[int]) -> int:
+        """Fewest live owned requests; ties go to the lowest group index."""
+        return min(groups, key=lambda group: (self._ep_load[group], group))
+
+    def _slot_group(self, slot_id: int) -> int:
+        return slot_id % self._ep_degree
+
+    def _admission_ep_group(self) -> int:
+        """Group for a request admitted without an earlier KV placement."""
+        free = [group for group, slots in enumerate(self._free_slot_ids_by_group) if slots]
+        if not free:
             raise RuntimeError("llama.cpp slot pool is exhausted")
-        slot_id = self._free_slot_ids.pop(0)
-        self._slot_bindings[slot_id] = str(request_id)
+        return self._least_loaded_ep_group(free)
+
+    def _assign_slot(self, state: _MutableRequest) -> int:
+        group = state.ep_group
+        if group is None:
+            group = self._admission_ep_group()
+            self._assign_ep_group(state, group)
+        free = self._free_slot_ids_by_group[group]
+        if not free:
+            raise RuntimeError("llama.cpp slot pool is exhausted")
+        slot_id = free.pop(0)
+        self._slot_bindings[slot_id] = str(state.spec.request_id)
         return slot_id
 
     def _release_slot(self, state: _MutableRequest) -> None:
@@ -6176,9 +6583,9 @@ class _OnlineRuntime:
         if slot_id is None:
             return
         self._slot_bindings.pop(slot_id, None)
-        if slot_id not in self._free_slot_ids:
-            self._free_slot_ids.append(slot_id)
-            self._free_slot_ids.sort()
+        free = self._free_slot_ids_by_group[self._slot_group(slot_id)]
+        if slot_id not in free:
+            bisect.insort(free, slot_id)
         state.slot_id = None
 
     def _capture_residency_interval_peak(self) -> None:
@@ -10030,10 +10437,15 @@ class _OnlineRuntime:
                 self._retained_kv_state.invalidate(status.value)
         if status == RequestStatus.RUNNING:
             if state.slot_id is None:
-                state.slot_id = self._assign_slot(state.spec.request_id)
+                state.slot_id = self._assign_slot(state)
             self._assign_residency_slot(state.spec.request_id)
         elif previous_status == RequestStatus.RUNNING or status in _TERMINAL_STATUSES:
             self._release_slot(state)
+        if state.ep_group is not None:
+            # A group owns a request until it leaves the runtime (terminal).
+            was_live = previous_status not in _TERMINAL_STATUSES
+            if was_live != (status not in _TERMINAL_STATUSES):
+                self._ep_load[state.ep_group] += 1 if not was_live else -1
         if state.status == RequestStatus.RUNNING:
             self._running_count -= 1
         elif state.status == RequestStatus.FINISHED:
@@ -10069,6 +10481,7 @@ class _OnlineRuntime:
                 "to": status.value,
                 "slot_id": state.slot_id,
                 "previous_slot_id": previous_slot_id,
+                "ep_group": state.ep_group,
             },
         )
 
@@ -10414,15 +10827,17 @@ class _OnlineRuntime:
                         "cumulative_progress": self._progress_observation()})
                 self._record_schedule_trace("decision", selected=cohort)
                 self._execute(cohort)
-                if cohort.kind == "decode":
+                if cohort.kind in _DECODE_STEP_KINDS:
                     self._completed_decode_steps += 1
                 self._observe_decode_measurement(cohort)
                 self._sync_paged_pool_events()
                 if (self.execution_control.progress_callback is not None
                         or self.execution_control.progress_queue is not None):
                     self._progress_counters["cohorts"] += 1
-                    if cohort.kind in {"prefill", "decode"}:
-                        self._progress_counters[cohort.kind + "_cohorts"] += 1
+                    if cohort.kind in _DECODE_STEP_KINDS:
+                        self._progress_counters["decode_cohorts"] += 1
+                    elif cohort.kind == "prefill":
+                        self._progress_counters["prefill_cohorts"] += 1
                     self._progress_counters["prefill_compute_tokens"] += sum(
                         event.details["chunk_tokens"]
                         for event in self.events[observed_event_start:]
@@ -10478,6 +10893,8 @@ class _OnlineRuntime:
             "request_count": self._request_count,
             "external_imported_requests": self._external_imported_requests,
             "external_imported_logical_bytes": self._external_imported_bytes,
+            "external_preloaded_seed_requests": self._external_preloaded_requests,
+            "external_preloaded_seed_logical_bytes": self._external_preloaded_bytes,
             "external_submitted_source_read_bytes": (
                 self._external_executor.counters["read_bytes"] if self._external_executor else 0),
             "external_submitted_target_write_bytes": (
@@ -10519,6 +10936,7 @@ class _OnlineRuntime:
             self._complete_external_imports()
             self._process_agent_events()
             self._arrive()
+            self._preload_warmup_seed_kv()
             self._priority_preempt()
             self._fill_slots()
             self._start_external_imports()
@@ -10899,7 +11317,7 @@ class _OnlineRuntime:
 
     def _fill_slots(self) -> None:
         while self._running_count < self.plan.scheduler.max_num_seqs:
-            if not self._free_slot_ids:
+            if not any(self._free_slot_ids_by_group):
                 return
             candidates = [
                 state for state in self._state_values
@@ -10929,67 +11347,82 @@ class _OnlineRuntime:
                     # that commitment legal without turning the untouched
                     # address range into resident GPU pages.
                     continue
-                prior_pages = state.kv_pages
-                if state.status == RequestStatus.SWAPPED and state.preemption_strategy == "swap":
-                    if not self._resume_swap(state):
-                        continue
-                elif self.plan.kv_policy.allocation_policy == "eager":
-                    target_pages = self.ledger.pages_for_tokens(
-                        _max_live_kv_tokens(
-                            state.spec.prompt_tokens, state.spec.output_tokens
-                        )
-                    )
-                    if not self._reserve_with_pressure(state, target_pages):
-                        continue
-                if not self.prompt_cache.ensure_capacity(
-                    max(
-                        0,
-                        int(self.plan.linear_state_policy.bytes_per_request)
-                        if not state.linear_state_resident
-                        else 0,
-                    )
-                ):
-                    if state.kv_pages != prior_pages:
-                        self.ledger.resize(state, prior_pages)
+                # A request only runs in a slot of its own EP group.  One that
+                # has no KV placement yet (no external import) picks the
+                # least-loaded group that still has a free slot.
+                placed_here = state.ep_group is None
+                if placed_here:
+                    self._assign_ep_group(state, self._admission_ep_group())
+                elif not self._free_slot_ids_by_group[state.ep_group]:
                     continue
-                if not self.state_ledger.restore(state):
-                    self.ledger.resize(state, prior_pages)
-                    continue
-                if self.prompt_cache.policy.save_implementation == "llama_cpp_host_tensor_get_combined":
-                    if self._running_count == 0:
-                        self._prompt_cache_wave_requests.clear()
-                    elif any(self.states[key].status == RequestStatus.FINISHED
-                             for key in self._prompt_cache_wave_requests):
-                        # seq_rm can rewind the pool head into a freed slot,
-                        # even before capacity wrap. No allocator is modeled.
-                        for key in self._prompt_cache_wave_requests | {state.spec.request_id}:
-                            self.states[key].kv_cache_range_error = "unknown_physical_slot_reuse"
-                    self._prompt_cache_wave_requests.add(state.spec.request_id)
-                if self._kv_scan_enabled:
-                    if self._running_count == 0:
-                        self._kv_scan_wave_requests.clear()
-                    elif any(self.states[key].status == RequestStatus.FINISHED
-                             for key in self._kv_scan_wave_requests):
-                        raise ValueError("KV scan lower bound does not support slot reuse inside a wave")
-                    self._kv_scan_wave_requests.add(state.spec.request_id)
-                self._set_status(state, RequestStatus.RUNNING)
-                self._external_ready.discard(state.spec.request_id)
-                if state.admission_sequence is None:
-                    state.admission_sequence = self._admission_sequence
-                    self._admission_sequence += 1
-                state.queued_since_ns = self.now
-                event_type = "request_admitted" if state.preemption_strategy is None else "request_resumed"
-                self.events.append(ServingEvent(
-                    self.now,
-                    event_type,
-                    state.spec.request_id,
-                    details={"slot_id": state.slot_id, "admission_sequence": state.admission_sequence},
-                ))
-                state.preemption_strategy = None
-                admitted = True
-                break
+                if self._admit_candidate(state):
+                    admitted = True
+                    break
+                if placed_here:
+                    self._release_ep_group(state)
             if not admitted:
                 return
+
+    def _admit_candidate(self, state: _MutableRequest) -> bool:
+        """Reserve KV and state for ``state`` and run it; False leaves it queued."""
+        prior_pages = state.kv_pages
+        if state.status == RequestStatus.SWAPPED and state.preemption_strategy == "swap":
+            if not self._resume_swap(state):
+                return False
+        elif self.plan.kv_policy.allocation_policy == "eager":
+            target_pages = self.ledger.pages_for_tokens(
+                _max_live_kv_tokens(
+                    state.spec.prompt_tokens, state.spec.output_tokens
+                )
+            )
+            if not self._reserve_with_pressure(state, target_pages):
+                return False
+        if not self.prompt_cache.ensure_capacity(
+            max(
+                0,
+                int(self.plan.linear_state_policy.bytes_per_request)
+                if not state.linear_state_resident
+                else 0,
+            )
+        ):
+            if state.kv_pages != prior_pages:
+                self.ledger.resize(state, prior_pages)
+            return False
+        if not self.state_ledger.restore(state):
+            self.ledger.resize(state, prior_pages)
+            return False
+        if self.prompt_cache.policy.save_implementation == "llama_cpp_host_tensor_get_combined":
+            if self._running_count == 0:
+                self._prompt_cache_wave_requests.clear()
+            elif any(self.states[key].status == RequestStatus.FINISHED
+                     for key in self._prompt_cache_wave_requests):
+                # seq_rm can rewind the pool head into a freed slot,
+                # even before capacity wrap. No allocator is modeled.
+                for key in self._prompt_cache_wave_requests | {state.spec.request_id}:
+                    self.states[key].kv_cache_range_error = "unknown_physical_slot_reuse"
+            self._prompt_cache_wave_requests.add(state.spec.request_id)
+        if self._kv_scan_enabled:
+            if self._running_count == 0:
+                self._kv_scan_wave_requests.clear()
+            elif any(self.states[key].status == RequestStatus.FINISHED
+                     for key in self._kv_scan_wave_requests):
+                raise ValueError("KV scan lower bound does not support slot reuse inside a wave")
+            self._kv_scan_wave_requests.add(state.spec.request_id)
+        self._set_status(state, RequestStatus.RUNNING)
+        self._external_ready.discard(state.spec.request_id)
+        if state.admission_sequence is None:
+            state.admission_sequence = self._admission_sequence
+            self._admission_sequence += 1
+        state.queued_since_ns = self.now
+        event_type = "request_admitted" if state.preemption_strategy is None else "request_resumed"
+        self.events.append(ServingEvent(
+            self.now,
+            event_type,
+            state.spec.request_id,
+            details={"slot_id": state.slot_id, "admission_sequence": state.admission_sequence},
+        ))
+        state.preemption_strategy = None
+        return True
 
     def _prompt_cache_save_enabled(self) -> bool:
         return (
@@ -12081,6 +12514,7 @@ class _OnlineRuntime:
             )
             state.__dict__.clear()
             state.__dict__.update(copy.deepcopy(paged_request_snapshot))
+            self._mark_trace_state_pending(state)
             del self.events[event_count_before_resume:]
             for key, value in paged_runtime_snapshot.items():
                 setattr(self, key, value)
@@ -12173,7 +12607,7 @@ class _OnlineRuntime:
     def _priority_preempt(self) -> None:
         if not self.plan.scheduler.preemption_enabled:
             return
-        if self._running_count < self.plan.scheduler.max_num_seqs:
+        if self._running_count < self.plan.scheduler.max_num_seqs and self._ep_degree == 1:
             return
         best = None
         best_rank = None
@@ -12190,6 +12624,18 @@ class _OnlineRuntime:
                 active.append(state)
         if best is None or best_rank is None or not active:
             return
+        if self._ep_degree > 1:
+            # Only the best waiter's own group can free a usable slot, and a
+            # victim of another group would release KV that waiter cannot use.
+            if best.ep_group is None:
+                if self._running_count < self.plan.scheduler.max_num_seqs:
+                    return
+            else:
+                if self._free_slot_ids_by_group[best.ep_group]:
+                    return
+                active = [state for state in active if state.ep_group == best.ep_group]
+                if not active:
+                    return
         for victim in sorted(active, key=self._rank, reverse=True):
             if best_rank >= self._rank(victim):
                 return
@@ -12200,7 +12646,11 @@ class _OnlineRuntime:
     def _select_cohort(self) -> Optional[BatchCohort]:
         if (self._external_ingress is not None and self._external_ingress.get("require_full_batch", True)
                 and self._running_count < self.plan.scheduler.max_num_seqs
-                and any(state.status == RequestStatus.WAITING for state in self._state_values)):
+                and any(state.status == RequestStatus.WAITING
+                        and (state.ep_group is None or self._free_slot_ids_by_group[state.ep_group])
+                        for state in self._state_values)):
+            # A batch is full only when every group's slots are taken or its
+            # waiting requests belong to groups that have no free slot.
             return None
         active: List[_MutableRequest] = []
         decode: List[_MutableRequest] = []
@@ -12491,6 +12941,7 @@ class _OnlineRuntime:
                     committed_tokens=committed_tokens,
                     logit_tokens=proposed,
                     completion_cursor=state.committed + accepted,
+                    ep_group=state.ep_group,
                 )
             )
             protected.add(request_id)
@@ -12618,6 +13069,7 @@ class _OnlineRuntime:
                         else 0
                     ),
                     completion_cursor=current_cached + chunk,
+                    ep_group=state.ep_group,
                 )
             )
             protected.add(request_id)
@@ -12710,6 +13162,8 @@ class _OnlineRuntime:
             and state.status == RequestStatus.RUNNING
             and state.spec.request_id not in protected
             and state.kv_pages > 0
+            # Evicting another EP group's request frees none of owner's pages.
+            and (self.ledger.groups == 1 or state.ep_group == owner.ep_group)
         ]
         victims.sort(key=self._rank, reverse=True)
         for victim in victims:
@@ -12852,6 +13306,7 @@ class _OnlineRuntime:
                 )
                 state.__dict__.clear()
                 state.__dict__.update(copy.deepcopy(paged_request_snapshot))
+                self._mark_trace_state_pending(state)
             elif not swapped and kv_offloaded:
                 if not self.ledger.restore(state):
                     raise RuntimeError("failed to roll back incomplete KV swap")
@@ -12986,6 +13441,8 @@ class _OnlineRuntime:
             token_count=0,
             context_tokens=state.cached_tokens,
             main_tokens=0, draft_tokens=0, verifier_tokens=0, committed_tokens=0, logit_tokens=0,
+            # Only a request that ran (and so owns a group) swaps.
+            ep_group=state.ep_group,
         )
         return BatchCohort(
             cohort_id="cohort-{:06d}".format(len(self.batches)),
@@ -15598,7 +16055,11 @@ class _OnlineRuntime:
                 "_last_serial_device_end_ns", "now", "_paged_pool_event_cursor",
             )
         }
-        slot_snapshot = (list(self._free_slot_ids), dict(self._slot_bindings))
+        slot_snapshot = (
+            [list(slots) for slots in self._free_slot_ids_by_group],
+            dict(self._slot_bindings),
+            list(self._ep_load),
+        )
         accounting_snapshot = {
             "_batch_kind_counts": dict(self._batch_kind_counts),
             "_batch_phase_counts": dict(self._batch_phase_counts),
@@ -15667,11 +16128,13 @@ class _OnlineRuntime:
             for request_id, state in self.states.items():
                 state.__dict__.clear()
                 state.__dict__.update(copy.deepcopy(state_snapshot[request_id]))
+            self._mark_all_trace_states_pending()
             for key, value in lifecycle_snapshot.items():
                 setattr(self, key, value)
-            self._free_slot_ids[:] = slot_snapshot[0]
+            self._free_slot_ids_by_group[:] = slot_snapshot[0]
             self._slot_bindings.clear()
             self._slot_bindings.update(slot_snapshot[1])
+            self._ep_load[:] = slot_snapshot[2]
             self._batch_kind_counts.clear()
             self._batch_kind_counts.update(accounting_snapshot["_batch_kind_counts"])
             self._batch_phase_counts.clear()
@@ -15812,18 +16275,6 @@ class _OnlineRuntime:
             runtime_controller_ledger = self._runtime_controller_ledger(
                 stages
             )
-        if self.plan.scenario.simulation.native_window is not None and stages:
-            # Summarize the actual native IR before aggregate retention drops
-            # it. This observes task requirements without executing extra work
-            # or advancing any physical controller/calendar.
-            from .native_window_producer import summarize_native_stages
-            layer_bounds = self.plan.scenario.simulation.native_window.sampling_unit == "layer_windows"
-            cost = BatchCost(cost.duration_ns, {**cost.metadata,
-                "native_fast_budget_observations": summarize_native_stages(
-                    stages, self.plan.scenario,
-                    self._execution_resource_kernel.physical_runtime,
-                    allow_bounded_clock=layer_bounds,
-                    native_runtime=self if layer_bounds else None)})
         layer_sampler = getattr(self, "_native_layer_sampler", None)
         if layer_sampler is not None:
             layer_sampler(self, cohort, cost, stages, request_ready_ns)
@@ -16489,7 +16940,7 @@ class _OnlineRuntime:
             state.finished_ns = self.now
             state.rejection_reason = reason
             if (
-                self.ledger.used_pages >= self.plan.kv_policy.capacity_pages
+                self.ledger.max_group_used_pages >= self.plan.kv_policy.capacity_pages
                 or self.plan.kv_policy.bottleneck_component is not None
             ):
                 self.events.append(
@@ -16513,6 +16964,8 @@ class _OnlineRuntime:
         return {"protocol": "native_external_kv_v1", "config": dict(self._external_ingress),
             "imported_requests": self._external_imported_requests,
             "imported_logical_bytes": self._external_imported_bytes,
+            "preloaded_seed_requests": self._external_preloaded_requests,
+            "preloaded_seed_logical_bytes": self._external_preloaded_bytes,
             "source_buffer_peak_bytes": self._external_buffer_peak_bytes,
             "pending_imports": len(self._external_pending),
             "counters": dict(self._external_executor.counters),
@@ -16535,6 +16988,7 @@ class _OnlineRuntime:
                 state.rejection_reason,
                 engine_start_ns=state.engine_start_ns,
                 slot_id=state.slot_id,
+                ep_group=state.ep_group,
             )
             queue_delay = state.started_ns - spec.arrival_ns if state.started_ns is not None else None
             ttft = state.first_token_ns - spec.arrival_ns if state.first_token_ns is not None else None
@@ -16562,13 +17016,20 @@ class _OnlineRuntime:
         self.events.sort(key=_event_sort_key)
         events = tuple(self.events)
         batch_kind_counts = self._batch_kind_counts
+        # Several EP groups never hold temporary (MTP) pages, so a group's
+        # persistent peak is its total peak.
+        persistent_peak_pages = (
+            self.ledger.peak_group_pages
+            if self.ledger.groups > 1
+            else self.ledger.persistent_peak_pages
+        )
         kv_metrics = KVCacheMetrics(
             self.plan.kv_policy.tokens_per_page,
             self.plan.kv_policy.bytes_per_page,
             self.plan.kv_policy.capacity_pages,
             self.plan.kv_policy.capacity_bytes,
-            self.ledger.peak_pages,
-            self.ledger.peak_pages * self.plan.kv_policy.bytes_per_page,
+            self.ledger.peak_group_pages,
+            self.ledger.peak_group_pages * self.plan.kv_policy.bytes_per_page,
             self.ledger.allocations,
             self.ledger.releases,
             self.swap_events,
@@ -16646,10 +17107,9 @@ class _OnlineRuntime:
                 "persistent_kv_traffic_separate_from_mtp_temporary_"
                 "verification_and_resource_accounting"
             ),
-            persistent_peak_used_pages=self.ledger.persistent_peak_pages,
+            persistent_peak_used_pages=persistent_peak_pages,
             persistent_peak_used_bytes=(
-                self.ledger.persistent_peak_pages
-                * self.plan.kv_policy.bytes_per_page
+                persistent_peak_pages * self.plan.kv_policy.bytes_per_page
             ),
             mtp_materialized_tokens=self.mtp_materialized_tokens,
             mtp_temporary_tokens=self.mtp_temporary_tokens,
@@ -16728,6 +17188,12 @@ class _OnlineRuntime:
             bottleneck_component=self.plan.kv_policy.bottleneck_component,
             effective_physical_capacity_bytes=_kv_device_resident_capacity_bytes(
                 self.plan
+            ),
+            ep_degree=self.ledger.groups,
+            peak_used_pages_by_group=(
+                tuple(self.ledger.group_peak_pages)
+                if self.ledger.groups > 1
+                else (self.ledger.peak_pages,)
             ),
             batch_retry_count=sum(
                 1
@@ -16881,7 +17347,8 @@ class _OnlineRuntime:
             elapsed = end-start
             visible = sum(int(event.details.get("visible_tokens", 0)) for event in events
                           if event.event_type == "tokens_committed" and start < event.timestamp_ns <= end)
-            decode_batches = [batch for batch in self.batches if batch.kind == "decode" and start < batch.end_ns <= end]
+            decode_batches = [batch for batch in self.batches
+                              if batch.kind in _DECODE_STEP_KINDS and start < batch.end_ns <= end]
             endpoints = [start] + [batch.end_ns for batch in decode_batches]
             intervals = [b-a for a,b in zip(endpoints,endpoints[1:])]
             complete_requests = [metric for metric in metrics.values() if metric.status == RequestStatus.FINISHED
@@ -16916,7 +17383,7 @@ class _OnlineRuntime:
             decode_measurement=measurement,
             prompt_cache_metrics=self.prompt_cache.metrics(),
             owner_residency_metrics=owner_residency_metrics,
-            schedule_trace=tuple(self._schedule_trace),
+            schedule_trace=self._schedule_trace.snapshot(),
             runtime_kernel_metrics={
                 **dict(self._execution_resource_kernel.metrics),
                 "llama_cpu_graph_lifecycle": self._llama_graph_runtime.summary(),
@@ -18273,7 +18740,52 @@ def _dynamic_component_capacity(
         and tensor not in non_owning_special
         and scenario.placement.tensor_to_component.get(tensor) == component_id
     )
-    return max(0, capacity - claimed_bytes - occupied)
+    resident_rank_shards = _resident_rank_weight_bytes(
+        scenario, decision, logical_views | aliases | non_owning_special
+    ).get(str(component_id), 0)
+    return max(0, capacity - claimed_bytes - occupied - resident_rank_shards)
+
+
+_RESIDENT_RANK_WEIGHT_BYTES: Dict[int, Tuple[Any, Mapping[str, int]]] = {}
+
+
+def _resident_rank_weight_bytes(
+    scenario: ScenarioConfig,
+    decision: Mapping[object, object],
+    excluded: Set[str],
+) -> Mapping[str, int]:
+    """Bytes of resident per-rank weight shards on each storage component.
+
+    Rank-sharded tensors carry no representative ``tensor_bytes`` entry; every
+    rank's shard, and every EP replica of a dense shard, is a separate
+    physical allocation that runtime state cannot use.  The result is
+    memoized per scenario because each capacity query would otherwise rescan
+    every shard.
+    """
+
+    if not scenario.weights_resident:
+        return {}
+    cached = _RESIDENT_RANK_WEIGHT_BYTES.get(id(scenario))
+    if cached is not None and cached[0]() is scenario:
+        return cached[1]
+    totals: Dict[str, int] = {}
+    represented = scenario.placement.tensor_bytes
+    for tensor_id, entries in _mapping_or_empty(
+        decision.get("rank_weight_shards")
+    ).items():
+        if str(tensor_id) in excluded or tensor_id in represented:
+            continue
+        for entry in entries:
+            if entry.get("residency") == "cold_cim_transient":
+                continue
+            component = str(entry["storage_component_id"])
+            totals[component] = totals.get(component, 0) + int(entry["physical_bytes"])
+    key = id(scenario)
+    _RESIDENT_RANK_WEIGHT_BYTES[key] = (
+        weakref.ref(scenario, lambda _ref: _RESIDENT_RANK_WEIGHT_BYTES.pop(key, None)),
+        totals,
+    )
+    return totals
 
 
 def _kv_device_resident_capacity_bytes(plan: ServingPlan) -> int:

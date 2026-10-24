@@ -44,6 +44,20 @@ class PhysicalAllocation:
             )
         return self.base_address + offset_bytes
 
+    def __deepcopy__(self, memo):
+        # Frozen with only immutable fields: kernel snapshots share each
+        # extent instead of rebuilding thousands per request.
+        return self
+
+
+class _AllocationSave:
+    """The allocation map one transaction rolls back to."""
+
+    __slots__ = ("allocations",)
+
+    def __init__(self):
+        self.allocations = None
+
 
 class PhysicalAddressAllocator:
     """A run-local, aligned, non-moving physical address allocator.
@@ -72,6 +86,54 @@ class PhysicalAddressAllocator:
         self._largest_allocation = 0
         self._aliases_by_target = {}
         self._free_extents = [(0, capacity_bytes)]
+        # Open transactions, innermost last. A save holds None until the map
+        # first changes; the saves filled then share one copy.
+        self._open_saves = []
+        # A copy of the current map that nothing mutates, shared by every save
+        # filled before the next change; None once the map has changed.
+        self._unchanged = None
+
+    def begin_transaction(self) -> "_AllocationSave":
+        save = _AllocationSave()
+        self._open_saves.append(save)
+        return save
+
+    def _close(self, save):
+        saves = self._open_saves
+        for index in range(len(saves) - 1, -1, -1):
+            if saves[index] is save:
+                # A finished transaction stays restorable, so every save that
+                # saw no change takes the shared copy of the current map.
+                for closed in saves[index:]:
+                    if closed.allocations is None:
+                        closed.allocations = self._current_copy()
+                del saves[index:]
+                return
+
+    def commit_transaction(self, save: "_AllocationSave") -> None:
+        self._close(save)
+
+    def rollback_transaction(self, save: "_AllocationSave") -> None:
+        self._close(save)
+        if save.allocations is not self._unchanged:
+            self._restore_allocations(save.allocations)
+            self._unchanged = save.allocations
+
+    def _current_copy(self):
+        if self._unchanged is None:
+            self._unchanged = dict(self._allocations)
+        return self._unchanged
+
+    def _before_mutation(self):
+        saves = self._open_saves
+        if saves and saves[-1].allocations is None:
+            # Unfilled saves are the innermost ones and saw no change yet.
+            current = self._current_copy()
+            for save in reversed(saves):
+                if save.allocations is not None:
+                    break
+                save.allocations = current
+        self._unchanged = None
 
     def _free_extent(self, base, end):
         """Merge a retired root; aliases never reserve an extra extent."""
@@ -110,6 +172,7 @@ class PhysicalAddressAllocator:
         previous = self._allocations.get(key)
         if previous is allocation:
             return
+        self._before_mutation()
         if previous is not None:
             if previous.alias_of is None:
                 self._free_extent(previous.base_address, previous.base_address + previous.size_bytes)
@@ -139,6 +202,7 @@ class PhysicalAddressAllocator:
 
     def _restore_allocations(self, allocations):
         """Rebuild the address index at the existing rollback boundary."""
+        self._before_mutation()
         self._allocations.clear()
         self._allocations.update(allocations)
         self._address_rows = sorted(allocations.values(),
@@ -429,6 +493,7 @@ class PhysicalAddressAllocator:
         # weight/KV allocations, or all the chains, once per physical task.
         if self._aliases_by_target.get(key):
             raise AllocationError("cannot release allocation {} generation {} with live aliases".format(*key))
+        self._before_mutation()
         previous = self._allocations.pop(key)
         if previous.alias_of is None:
             self._free_extent(previous.base_address, previous.base_address + previous.size_bytes)
