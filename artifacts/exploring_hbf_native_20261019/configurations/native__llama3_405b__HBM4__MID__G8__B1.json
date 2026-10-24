@@ -15046,11 +15046,12 @@
     "8x40MB intermediate SRAM is modeled as a pooled 8-port array; bandwidth/latency/credits are explicit research inputs.",
     "External producer streams prompt-1 KV tokens; native one-token final-prompt generates the first visible output and pays its complete cost.",
     "Warmup seeds use real age-extended prompt histories and shorter remaining outputs to stagger completion; fresh measured requests retain the declared paper lengths.",
-    "Bounded physical execution has no sampled suffix: approximation error from forecasting is zero; this is not a claim of <10% hardware model error versus silicon or paper."
+    "Independent complete native layer windows and boundary samples are physical; omitted layers, cohorts and visible Tokens are separate conditional predictions.",
+    "Single-point and fixed-direction HBM4 ratio error budgets retain the 10% target; conditional budgets are not full-window detailed validation or silicon/paper accuracy guarantees."
   ],
   "llama_cpp_config": null,
   "simulation": {
-    "mode": "detailed",
+    "mode": "fast",
     "fast_decode": {
       "warmup_tokens": 8,
       "calibration_tokens": 32,
@@ -15060,6 +15061,21 @@
       "max_context_growth": 0.2,
       "segment_tokens": 256,
       "sampling_strategy": "adaptive"
+    },
+    "native_window": {
+      "sampling_unit": "layer_windows",
+      "warmup_cohorts": 1,
+      "calibration_cohorts": 2,
+      "validation_cohorts": 2,
+      "max_sample_cohorts": 8,
+      "max_wall_seconds": 1799.8049935000017,
+      "target_relative_error": 0.1,
+      "layer_window_size": 1,
+      "max_layer_window_size": null,
+      "calibration_layer_windows": 2,
+      "validation_layer_windows": 2,
+      "max_sample_layer_windows": 16,
+      "max_seed_anchor_layer_windows": 16
     }
   }
 }

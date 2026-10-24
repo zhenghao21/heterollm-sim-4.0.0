@@ -1,0 +1,2 @@
+{"case_id": "native__llama3_405b__HBM4__LONG__G8", "batch_size": 1, "status": "forecast_rejected", "wall_seconds": 1800.8458732999861}
+{"case_id": "native__llama3_405b__HBM4__LONG__G8", "batch_size": 8, "status": "paused", "wall_seconds": 153.37136560003273}

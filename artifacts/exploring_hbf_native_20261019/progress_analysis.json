@@ -1,7 +1,7 @@
 {
   "schema": "exploring-hbf-native-dashboard/v1",
   "scan_id": "exploring_hbf_native_20261019",
-  "observed_at": "2026-10-22T00:01:20.387054+08:00",
+  "observed_at": "2026-10-22T04:59:55.604456+08:00",
   "status": {
     "state": "paused",
     "updated_at": "2026-10-20T00:51:13.793748+00:00",
@@ -26,7 +26,7 @@
     "stop_requested": true,
     "error": null,
     "freshness": {
-      "age_seconds": 141006.593306,
+      "age_seconds": 158921.810708,
       "manager_process": {
         "pid": 16184,
         "alive": false,
@@ -695,8 +695,8 @@
       "launcher_pid": null,
       "progress_scope": "current_native_stage_only",
       "cumulative_progress_available": false,
-      "progress_age_seconds": 143847.549533,
-      "heartbeat_age_seconds": 143140.533115,
+      "progress_age_seconds": 161762.766935,
+      "heartbeat_age_seconds": 161055.750517,
       "process": {
         "pid": 29120,
         "alive": false,
@@ -724,8 +724,8 @@
       "launcher_pid": null,
       "progress_scope": "current_native_stage_only",
       "cumulative_progress_available": false,
-      "progress_age_seconds": 143536.207341,
-      "heartbeat_age_seconds": 143505.161081,
+      "progress_age_seconds": 161451.424743,
+      "heartbeat_age_seconds": 161420.378483,
       "process": {
         "pid": 42592,
         "alive": false,

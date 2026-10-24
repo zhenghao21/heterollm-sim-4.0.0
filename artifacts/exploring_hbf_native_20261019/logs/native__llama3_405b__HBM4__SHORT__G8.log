@@ -1,1 +1,3 @@
-{"case_id": "native__llama3_405b__HBM4__SHORT__G8", "batch_size": 1, "status": "paused", "wall_seconds": 28122.45703499997}
+{"case_id": "native__llama3_405b__HBM4__SHORT__G8", "batch_size": 1, "status": "paused", "wall_seconds": 383.16353280004114}
+{"case_id": "native__llama3_405b__HBM4__SHORT__G8", "batch_size": 1, "status": "forecast_rejected", "wall_seconds": 749.3623650999507}
+{"case_id": "native__llama3_405b__HBM4__SHORT__G8", "batch_size": 8, "status": "forecast_rejected", "wall_seconds": 713.8677770999493}

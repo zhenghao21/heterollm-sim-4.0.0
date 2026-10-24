@@ -15,21 +15,23 @@
     "kv_dtype": "bf16"
   },
   "case_id": "native__llama3_405b__HBM4__SHORT__G8",
-  "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+  "runner_contract": "native_layer_sampled_tp8_finite_batch_controls_v3",
   "backend": "native_serving_physical",
-  "status": "paused",
+  "status": "all_candidates_rejected",
   "batch_sizes": [
     1,
     8
   ],
   "candidate_ids": [
-    "native__llama3_405b__HBM4__SHORT__G8__B1"
+    "native__llama3_405b__HBM4__SHORT__G8__B1",
+    "native__llama3_405b__HBM4__SHORT__G8__B8"
   ],
   "candidate_statuses": {
-    "1": "paused"
+    "1": "forecast_rejected",
+    "8": "forecast_rejected"
   },
   "selected": null,
   "error": null,
-  "updated_at": "2026-10-20T00:09:35.225469+00:00",
-  "selection_scope": "highest measured passing throughput among the explicitly executed fixed-TP8 batch candidates; not a global optimum or maximum feasible batch"
+  "updated_at": "2026-10-22T00:24:13.979858+00:00",
+  "selection_scope": "highest conditionally accepted projected throughput among sampled fixed-TP8 batch candidates; not a global optimum or maximum feasible batch"
 }

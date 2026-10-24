@@ -1,0 +1,2 @@
+{"case_id": "native__llama4_maverick__HBF__MID__G8", "batch_size": 1, "status": "forecast_rejected", "wall_seconds": 454.96340330003295}
+{"case_id": "native__llama4_maverick__HBF__MID__G8", "batch_size": 8, "status": "paused", "wall_seconds": 275.94314560003113}

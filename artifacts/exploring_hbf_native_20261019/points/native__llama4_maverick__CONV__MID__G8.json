@@ -1,0 +1,37 @@
+{
+  "case": {
+    "case_id": "native__llama4_maverick__CONV__MID__G8",
+    "phase": "maverick_native",
+    "model": "llama4_maverick",
+    "hardware": "CONV",
+    "workload": "MID",
+    "input_tokens": 5900,
+    "output_tokens": 499,
+    "gpu_count": 8,
+    "tp": 8,
+    "pp": 1,
+    "ep": 1,
+    "weight_dtype": "bf16",
+    "kv_dtype": "bf16"
+  },
+  "case_id": "native__llama4_maverick__CONV__MID__G8",
+  "runner_contract": "native_layer_sampled_tp8_finite_batch_controls_v3",
+  "backend": "native_serving_physical",
+  "status": "paused",
+  "batch_sizes": [
+    1,
+    8
+  ],
+  "candidate_ids": [
+    "native__llama4_maverick__CONV__MID__G8__B1",
+    "native__llama4_maverick__CONV__MID__G8__B8"
+  ],
+  "candidate_statuses": {
+    "1": "forecast_rejected",
+    "8": "paused"
+  },
+  "selected": null,
+  "error": null,
+  "updated_at": "2026-10-22T00:32:24.759042+00:00",
+  "selection_scope": "highest conditionally accepted projected throughput among sampled fixed-TP8 batch candidates; not a global optimum or maximum feasible batch"
+}

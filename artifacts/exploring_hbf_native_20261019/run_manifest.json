@@ -1,5 +1,5 @@
 {
-  "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+  "runner_contract": "native_layer_sampled_tp8_finite_batch_controls_v3",
   "backend": "native_serving_physical",
   "cases": [
     {
@@ -457,13 +457,14 @@
     1,
     8
   ],
-  "max_parallel_configurations": 2,
+  "max_parallel_configurations": 12,
   "phases": [
     "dense_native",
     "dense_plus",
     "maverick_native"
   ],
-  "forecast_tokens": 0,
+  "simulation_mode": "fast",
+  "sampling_unit": "layer_windows",
   "fixed_deployment": "TP8/PP1/EP1",
   "selection_scope": "finite actually executed batches, not optimum or maximum capacity"
 }

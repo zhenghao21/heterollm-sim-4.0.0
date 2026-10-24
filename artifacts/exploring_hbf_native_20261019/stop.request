@@ -1,1 +1,8 @@
-user_pause_actual_scan_optimization_20261020
+{
+  "reason": "stop_after_hbm4_b1_analysis_20261021",
+  "requested_at": "2026-10-22T00:32:23.850226+00:00",
+  "findings": [
+    "HBM4: native_refresh_source_nonempty_unowned_python_state makes every IR summary unqualified; LONG B1 exhausted 1800s in the PD ingress boundary",
+    "Maverick: every candidate rejected by native_layer_steady_layer_completions_invalid (new steady-layer check)"
+  ]
+}

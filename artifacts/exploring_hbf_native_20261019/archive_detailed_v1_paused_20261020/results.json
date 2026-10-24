@@ -1,0 +1,746 @@
+{
+  "status": {
+    "state": "paused",
+    "updated_at": "2026-10-20T00:51:13.793748+00:00",
+    "manager_pid": 16184,
+    "current_phase": "dense_native",
+    "total_cases": 30,
+    "total_candidates": 60,
+    "counts": {
+      "paused": 2,
+      "pending": 28
+    },
+    "candidate_counts": {
+      "paused": 2
+    },
+    "running": [],
+    "batch_sizes": [
+      1,
+      8
+    ],
+    "backend": "native_serving_physical",
+    "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+    "stop_requested": true,
+    "error": null
+  },
+  "cases": [
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBM4__SHORT__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBM4__SHORT__G8",
+      "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+      "backend": "native_serving_physical",
+      "status": "paused",
+      "batch_sizes": [
+        1,
+        8
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__HBM4__SHORT__G8__B1"
+      ],
+      "candidate_statuses": {
+        "1": "paused"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-20T00:09:35.225469+00:00",
+      "selection_scope": "highest measured passing throughput among the explicitly executed fixed-TP8 batch candidates; not a global optimum or maximum feasible batch"
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBM4__MID__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBM4__MID__G8",
+      "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+      "backend": "native_serving_physical",
+      "status": "paused",
+      "batch_sizes": [
+        1,
+        8
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__HBM4__MID__G8__B1"
+      ],
+      "candidate_statuses": {
+        "1": "paused"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-20T00:15:39.855288+00:00",
+      "selection_scope": "highest measured passing throughput among the explicitly executed fixed-TP8 batch candidates; not a global optimum or maximum feasible batch"
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBM4__LONG__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBM4__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV__SHORT__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "CONV",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV__MID__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "CONV",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV__LONG__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "CONV",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF__SHORT__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBF",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF__MID__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBF",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF__LONG__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBF",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV_plus__SHORT__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "CONV+",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV_plus__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV_plus__MID__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "CONV+",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV_plus__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV_plus__LONG__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "CONV+",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV_plus__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF_plus__SHORT__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF_plus__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF_plus__MID__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF_plus__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF_plus__LONG__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF_plus__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBM4__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBM4__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBM4__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBM4",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBM4__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBM4__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBM4",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBM4__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV_plus__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV+",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV_plus__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV_plus__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV+",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV_plus__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV_plus__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV+",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV_plus__LONG__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF_plus__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF_plus__SHORT__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF_plus__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF_plus__MID__G8",
+      "status": "pending",
+      "selected": null
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF_plus__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF_plus__LONG__G8",
+      "status": "pending",
+      "selected": null
+    }
+  ],
+  "candidates": [
+    {
+      "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+      "backend": "native_serving_physical",
+      "parameters": {
+        "case_id": "native__llama3_405b__HBM4__SHORT__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16",
+        "batch_size": 1,
+        "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+        "warmup_decode_cohorts": 372,
+        "measurement_decode_cohorts": 744,
+        "slo_tpot_ns": 100000000.0
+      },
+      "candidate_id": "native__llama3_405b__HBM4__SHORT__G8__B1",
+      "status": "paused",
+      "metrics": null,
+      "started_at": "2026-10-19T16:20:52.765564+00:00",
+      "forecast_tokens": 0,
+      "fidelity": "complete_bounded_native_physical_window_no_forecast_no_old_reference",
+      "reason": "仿真任务已取消",
+      "finished_at": "2026-10-20T00:09:35.224105+00:00",
+      "wall_seconds": 28122.45703499997
+    },
+    {
+      "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+      "backend": "native_serving_physical",
+      "parameters": {
+        "case_id": "native__llama3_405b__HBM4__MID__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "tp": 8,
+        "pp": 1,
+        "ep": 1,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16",
+        "batch_size": 1,
+        "runner_contract": "native_fixed_tp8_finite_batch_controls_v1",
+        "warmup_decode_cohorts": 498,
+        "measurement_decode_cohorts": 996,
+        "slo_tpot_ns": 100000000.0
+      },
+      "candidate_id": "native__llama3_405b__HBM4__MID__G8__B1",
+      "status": "paused",
+      "metrics": null,
+      "forecast_tokens": 0,
+      "finished_at": "2026-10-20T00:15:39.855288+00:00",
+      "wall_seconds": 28481.86500609998,
+      "reason": "User pause: terminated after cooperative cancellation could not interrupt ongoing native graph construction; no completed candidate was discarded.",
+      "progress": {
+        "case_id": "native__llama3_405b__HBM4__MID__G8",
+        "pid": 29120,
+        "state": "paused",
+        "stage": "paused",
+        "batch_size": 1,
+        "candidate_id": "native__llama3_405b__HBM4__MID__G8__B1",
+        "completed": 2,
+        "total": null,
+        "simulated_time_ns": 196277728.22857144,
+        "message": "",
+        "last_progress_at": "2026-10-20T00:03:52.837521+00:00",
+        "metadata": {
+          "cohort_kind": "decode",
+          "finished_requests": 0,
+          "request_count": 4
+        },
+        "updated_at": "2026-10-20T00:15:39.853939+00:00",
+        "wall_seconds": 28481.86500609998,
+        "pause_reason": "User pause: terminated after cooperative cancellation could not interrupt ongoing native graph construction; no completed candidate was discarded."
+      },
+      "fidelity": "incomplete_native_physical_attempt_no_result"
+    }
+  ]
+}
