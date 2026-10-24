@@ -87,7 +87,7 @@ def test_full_serving_computes_only_new_tokens_and_resumes_after_copy():
 
 
 def test_idle_ttl_cancels_inflight_copy_and_recomputes_entire_prompt():
-    result = run_scenario(build_agent_scenario(ttl_ns=800000., think_times=(2000000.,),
+    result = run_scenario(build_agent_scenario(ttl_ns=400000., think_times=(2000000.,),
         predictions=(100000.,), prefetch_lead_ns=100000., hbf_page_read_ns=500000.)).serving
     assert result.agent_lifecycle_metrics["cancellations"] == 1
     assert result.agent_lifecycle_metrics["expired_tokens"] == 67

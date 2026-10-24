@@ -88,7 +88,7 @@ def run_agent_study():
         ("agent-prediction-miss", {"think_times": (500000., 10000.), "predictions": (100000., 500000.)}),
         ("agent-ttl-unused", {"ttl_ns": 400000., "think_times": (1000000.,),
              "predictions": (100000.,), "prefetch_lead_ns": 100000., "hbf_page_read_ns": 1000.}),
-        ("agent-ttl-cancel", {"ttl_ns": 800000., "think_times": (2000000.,),
+        ("agent-ttl-cancel", {"ttl_ns": 400000., "think_times": (2000000.,),
              "predictions": (100000.,), "prefetch_lead_ns": 100000., "hbf_page_read_ns": 500000.}),
     )
     rows = []

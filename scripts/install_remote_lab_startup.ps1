@@ -5,16 +5,21 @@ param(
     [string]$CloudflaredPath = 'C:\Program Files (x86)\cloudflared\cloudflared.exe'
 )
 $ErrorActionPreference = 'Stop'
+$PrivateDirectory = [System.IO.Path]::GetFullPath($PrivateDirectory)
 trap {
-    $_.Exception.Message | Set-Content -LiteralPath (Join-Path $PrivateDirectory 'autostart.install-error.log') -Encoding UTF8
+    try {
+        New-Item -ItemType Directory -Path $PrivateDirectory -Force | Out-Null
+        $_.Exception.Message | Set-Content -LiteralPath (Join-Path $PrivateDirectory 'autostart.install-error.log') -Encoding UTF8
+    } catch { }
     exit 1
 }
+$null = New-Item -ItemType Directory -Path $PrivateDirectory -Force
 $labTaskName = 'HeteroLLM Remote Lab'
 $labProjectRoot = Split-Path -Parent $PSScriptRoot
 $labStartupScript = Join-Path $PSScriptRoot 'start_remote_lab.ps1'
 # Use Windows' own PowerShell, independent of Codex's bundled runtime.
 $labPowerShell = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
-foreach ($labPath in @($labStartupScript, $labPowerShell, $TunnelCredential, $CloudflaredPath, (Join-Path $PrivateDirectory 'api-token.txt'))) {
+foreach ($labPath in @($labStartupScript, $labPowerShell, $TunnelCredential, $CloudflaredPath)) {
     if (-not (Test-Path -LiteralPath $labPath -PathType Leaf)) { throw "Required service file is missing: $labPath" }
 }
 $labArguments = '-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -File "{0}" -PrivateDirectory "{1}" -TunnelCredential "{2}" -CloudflaredPath "{3}" -KeepAlive' -f $labStartupScript, $PrivateDirectory, $TunnelCredential, $CloudflaredPath

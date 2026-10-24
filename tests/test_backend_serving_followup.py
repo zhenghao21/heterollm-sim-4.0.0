@@ -29,11 +29,11 @@ def stateful_l2_agent_scenario():
 
 
 def test_full_agent_serving_with_stateful_l2_uses_live_cache_for_migration(monkeypatch):
-    import heterollm_sim.event_kernel as kernel_module
+    import heterollm_sim._token_program as token_program_module
     scenario = stateful_l2_agent_scenario()
     runner = _OnlineRuntime(compile_serving_plan(scenario), TopologyAwareBatchCostProvider(scenario))
     executor = runner._paged_pool_transfer_executor
-    original = kernel_module.resolve_l2_task
+    original = token_program_module.resolve_l2_task
     page_accesses, caches = [], {}
 
     def observe(task, states, physical_runtime=None):
@@ -55,7 +55,7 @@ def test_full_agent_serving_with_stateful_l2_uses_live_cache_for_migration(monke
                 page_accesses.append(access)
         return resolved
 
-    monkeypatch.setattr(kernel_module, "resolve_l2_task", observe)
+    monkeypatch.setattr(token_program_module, "resolve_l2_task", observe)
     result = runner.run()
     assert result.agent_lifecycle_metrics["handoffs"] == 2
     assert {access["operation"] for access in page_accesses} == {"read", "write"}
