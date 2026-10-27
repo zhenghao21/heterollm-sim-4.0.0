@@ -133,6 +133,69 @@ def test_refill_not_ready_is_too_big_and_marks_import_limit(reason):
     assert limit == 511 and label == "native_import_limited"
 
 
+def test_pipeline_budget_rejection_is_retried_then_search_continues_to_larger_batch():
+    """A cached PP budget rejection must not freeze the layout at B=512."""
+    layout = TP8 | {"pp": 2, "tp": 4}
+    rows = {512: fake_row(512, lambda _batch: 50e6, lambda _batch: 1.)}
+    rejected = {"status": "forecast_rejected",
+                "rejection_reason": "native_pipeline_independent_budget_exceeded"}
+    retried = set()
+
+    def lookup(batch):
+        row = rows.get(batch, rejected)
+        if row and search.forecast_retryable(row) and batch not in retried:
+            retried.add(batch)
+            return None
+        return row
+
+    candidate = entry(layout, candidate=2048, line=(0., .228e6), capacity=4096)
+    first = search.plan_case([candidate], [lookup], SLO, 1800., [8], policy=search.MAX_BATCH_POLICY)
+    assert first["next"] and first["next"][0][1] > 512
+    # The fresh attempt succeeds under the wider budget.  The normal planner
+    # must then schedule a point above the reused B=1024 evidence.
+    retry_batch = first["next"][0][1]
+    rows[retry_batch] = fake_row(retry_batch, lambda _batch: 60e6, lambda _batch: 1.)
+    second = search.plan_case([candidate], [lookup], SLO, 1800., [8], policy=search.MAX_BATCH_POLICY)
+    assert second["next"] and second["next"][0][1] > 1024
+
+
+@pytest.mark.parametrize("reason", [
+    "native_pipeline_independent_budget_exceeded",
+    "native_pipeline_activation_transfer_sample_missing",
+    "native_pipeline_ingress_ttft_unavailable",
+])
+def test_only_pipeline_forecast_quality_rejections_are_retryable(reason):
+    assert search.forecast_retryable({"status": "forecast_rejected", "rejection_reason": reason})
+    assert not search.forecast_retryable({"status": "forecast_rejected",
+                                          "rejection_reason": "native_pipeline_independent_budget_exceeded:capacity"})
+    assert not search.forecast_retryable({"status": "forecast_rejected",
+                                          "rejection_reason": "unable to allocate 1 byte in capacity 2"})
+    assert not search.forecast_retryable({"status": "forecast_rejected",
+                                          "rejection_reason": "executed task DAG could not be compacted"})
+
+
+def test_reused_pipeline_budget_rejection_is_retried_once(tmp_path):
+    case = run.case_matrix()[0]
+    layout = run.make_layout(1, 4, 2, 1)
+    params = run.parameters(case, layout, 512, "fast")
+    identity = run.params_candidate_id(params)
+    run.save_candidate(tmp_path, {"parameters": params, "candidate_id": identity,
+                                  "backend": run.BACKEND, "status": "forecast_rejected",
+                                  "rejection_reason": "native_pipeline_independent_budget_exceeded"})
+    retry_ids = set()
+    lookup = run._search_lookup(tmp_path, case, layout, retry_ids=retry_ids)
+    assert lookup(512) is None and identity in retry_ids
+    # The same rejected result is terminal after its one fresh attempt; a
+    # failed retry cannot make the manager spin forever.
+    assert lookup(512)["status"] == "forecast_rejected"
+
+    physical = {"parameters": params, "candidate_id": identity,
+                "backend": run.BACKEND, "status": "forecast_rejected",
+                "rejection_reason": "unable to allocate 1 byte in capacity 2"}
+    run.save_candidate(tmp_path, physical)
+    assert run._search_lookup(tmp_path, case, layout, retry_ids=set())(512)["rejection_reason"].startswith("unable")
+
+
 def test_capacity_rejection_bisects_below_the_rejected_batch():
     capacity = ("capacity_rejected", None)
     layouts = [native(lambda b: (7 + .05 * b) * 1e6, lambda b: .5 * b, too_big=lambda b: capacity if b > 900 else None)]

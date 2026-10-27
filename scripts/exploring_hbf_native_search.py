@@ -92,11 +92,36 @@ def search_policy(mode=DEFAULT_SEARCH_MODE):
 _WALL_TOO_BIG = ("wall_budget",)
 CAPACITY_REJECTIONS = ("not_a_full_batch", "import_pool_not_full")
 IMPORT_REJECTIONS = ("native_stationary_refill_not_always_ready", "native_pipeline_refill_not_always_ready")
+# These are forecast-quality failures rather than physical limits.  A later
+# scan may use a wider error budget or a repaired transfer/ingress estimator,
+# so an old terminal row must be allowed one fresh native attempt.  Keep
+# capacity, wall-clock, import-readiness and DAG-shape failures out of this
+# set: those rows are useful evidence of a real upper bound or an invalid
+# layout and must remain reusable as-is.
+RETRYABLE_FORECAST_REJECTIONS = frozenset({
+    "native_pipeline_independent_budget_exceeded",
+    "native_pipeline_activation_transfer_sample_missing",
+    "native_pipeline_ingress_ttft_unavailable",
+    "native_prefill_independent_budget_exceeded",
+    "native_prefill_pass_lower_bound_not_positive",
+})
 
 
 def is_pipeline_layout(layout):
     """Whether a layout uses the native PP/microbatch execution path."""
     return layout.get("pp", 1) > 1 or layout.get("microbatches", 1) > 1
+
+
+def forecast_retryable(row):
+    """Whether a saved forecast rejection should be sampled again once.
+
+    The search cache intentionally retains terminal rows.  Budget and
+    estimator-quality rejections are the exception: they do not establish a
+    batch limit, and reusing them would prevent a repaired/relaxed forecast
+    from ever reaching the next, larger batch point.
+    """
+    return (row.get("status") == "forecast_rejected"
+            and row.get("rejection_reason") in RETRYABLE_FORECAST_REJECTIONS)
 
 
 def screen_layouts(rows, buildable, top=None, *, policy=None, layout_scope="all", pp_only=None):

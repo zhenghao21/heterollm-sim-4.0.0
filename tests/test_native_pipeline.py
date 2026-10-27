@@ -34,6 +34,7 @@ def test_pipeline_fast_request_forecasts_from_a_real_pipeline_prefix():
     assert fast.sampled is None
     assert "native_sampling" not in fast.manifest.metadata
     assert fast.manifest.metadata["native_pipeline_forecast"]["microbatches"] == 2
+    assert fast.native_pipeline_forecast.sampled_decode_cohorts == 4
     payload = _fast_report_dict(fast, include_visualization=False)
     assert payload["result_semantics"]["forecast_used"] is True
     assert payload["native_pipeline_forecast"]["forecast_has_physical_trace"] is False

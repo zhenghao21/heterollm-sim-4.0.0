@@ -741,7 +741,13 @@ def native_fast_result(result, params):
         if "cluster_tokens_per_second" in metrics:
             metrics.update(replica_scaling(metrics["cluster_tokens_per_second"], params))
         target = params["target_relative_error"]
-        accepted = upper <= SLO_NS and float(getattr(pipeline_forecast, "error_budget", {}).get("relative_error", 0.0)) <= target
+        # PP composition has a separate conditional budget from the ordinary
+        # single-replica fast target.  Read the effective target from the
+        # forecast metadata so reporting and admission use the same gate.
+        pipeline_budget = getattr(pipeline_forecast, "error_budget", {}) or {}
+        acceptance_target = float(pipeline_budget.get("target_relative_error", target))
+        accepted = (upper <= SLO_NS
+                    and float(pipeline_budget.get("relative_error", 0.0)) <= acceptance_target)
         details = {"approximation": dict(result.approximation),
             "status": "completed" if accepted else "forecast_rejected",
             "fidelity": "native_pipeline_stage_samples_and_virtual_window_forecast",
@@ -760,8 +766,10 @@ def native_fast_result(result, params):
         if not accepted:
             details["rejection_reason"] = ("mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms"
                 if upper > SLO_NS else "native_pipeline_forecast_error_budget_exceeded")
-            details["rejected_metric_bounds"] = {"target_relative_error": target, "target_met": False,
-                "label": "未达到10%目标的PP条件区间，不是通过验收的结果", "metrics": dp_scaled_bounds(bounds, params)}
+            details["rejected_metric_bounds"] = {"target_relative_error": acceptance_target,
+                "target_met": False,
+                "label": "未达到PP条件误差目标的区间，不是通过验收的结果",
+                "metrics": dp_scaled_bounds(bounds, params)}
         return details
     if result.approximation.get("method") == "native_pipeline_full_window/v1":
         if result.detailed is not None:
@@ -1155,6 +1163,11 @@ def worker_candidate(case, layout, batch, directory, mode="detailed", wall_facto
             if not compatible and row.get("status") in CANDIDATE_TERMINAL:
                 raise RuntimeError("saved terminal candidate parameters/backend differ; historical results cannot be relabeled")
             if not compatible or row["status"] not in CANDIDATE_TERMINAL:
+                row = None
+            elif mode == "fast" and search_plan.forecast_retryable(row):
+                # The manager deliberately schedules one retry for forecast
+                # quality failures.  A terminal row would otherwise be
+                # reused here and the retry would silently execute nothing.
                 row = None
         if row is None:
             progress.begin_candidate(params)
@@ -1788,13 +1801,29 @@ def case_screen(directory, case, screen=None, *, search_mode=None, layout_scope=
     return value
 
 
-def _search_lookup(directory, case, layout):
+def _search_lookup(directory, case, layout, *, retry_ids=None):
+    """Read a native search row, retrying one forecast-quality rejection.
+
+    Saved physical limits remain terminal evidence.  Only the PP forecast
+    quality failures listed by ``forecast_retryable`` are treated as a fresh
+    point, and ``retry_ids`` bounds that behavior to one attempt per manager
+    invocation so a still-failing candidate cannot loop forever.
+    """
     def lookup(batch):
-        row = read_candidate(directory, candidate_id(case, layout, batch))
+        identity = candidate_id(case, layout, batch)
+        row = read_candidate(directory, identity)
         if row is None:
             return None
         expected = parameters(case, layout, batch, "fast")
         saved = row.get("parameters")
+        # A repaired forecast may intentionally change its pipeline contract.
+        # Let that one retry through before the ordinary historical-identity
+        # guard; non-quality failures still fail closed on a mismatch.
+        if (retry_ids is not None and identity not in retry_ids
+                and row.get("backend") == BACKEND
+                and search_plan.forecast_retryable(row)):
+            retry_ids.add(identity)
+            return None
         if (not parameters_compatible(saved, expected) or row.get("backend") != BACKEND) \
                 and row.get("status") in CANDIDATE_TERMINAL:
             raise RuntimeError("saved candidate parameters/backend differ; historical results cannot be relabeled")
@@ -1804,12 +1833,13 @@ def _search_lookup(directory, case, layout):
     return lookup
 
 
-def search_case(directory, case, screen, *, search_mode=None):
+def search_case(directory, case, screen, *, search_mode=None, retry_ids=None):
     """Replay the case's search from its saved rows; write its point. Returns (plan, planned candidates, point)."""
     directory = Path(directory)
     entries = screen["layouts"]
     policy = search_plan.search_policy(search_mode or search_plan.DEFAULT_SEARCH_MODE)
-    plan = search_plan.plan_case(entries, [_search_lookup(directory, case, entry["layout"]) for entry in entries],
+    plan = search_plan.plan_case(entries, [_search_lookup(directory, case, entry["layout"], retry_ids=retry_ids)
+                                          for entry in entries],
         SLO_NS, FAST_CANDIDATE_WALL_BUDGET_SECONDS, [replica_gpus(entry["layout"]) for entry in entries],
         memory_budget_bytes=total_memory_bytes() - WORKER_MEMORY_RESERVE_BYTES, policy=policy)
     planned = []
@@ -1880,9 +1910,15 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
         screens = {case["case_id"]: case_screen(directory, case, screen, search_mode=policy.name,
                                                  layout_scope=layout_scope) for case in cases}
 
+        # Old PP budget/estimator rejections are retried once.  Successful
+        # retries then feed the normal search planner, which can schedule the
+        # next larger batch while reusing all other cached points.
+        retry_ids = set()
+
         def replay():
             return {case["case_id"]: search_case(directory, case, screens[case["case_id"]],
-                                                   search_mode=policy.name) for case in cases}
+                                                   search_mode=policy.name,
+                                                   retry_ids=retry_ids) for case in cases}
 
         plans, active, error, last_report, known = replay(), {}, None, 0., known_peaks(directory)
         failed = next((point for _plan, _planned, point in plans.values() if point["status"] == "failed"), None)

@@ -30,9 +30,17 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
     from .fast_simulation import FastSimulationOutcome
     started = time.perf_counter()
     options = scenario.simulation.native_window
+    # PP stage composition has its own conditional budget. A PP forecast
+    # combines stage compute and activation-transfer intervals; using the
+    # ordinary single-replica target here made the independent gate too
+    # strict for the two-cohort sample used by layout screening.
+    pipeline_target = (options.pipeline_target_relative_error
+                       if scenario.placement.parallel.pp_degree > 1
+                       else options.target_relative_error)
     control = deadline_control(execution_control or ExecutionControl(), started + options.max_wall_seconds)
     diagnostics = {"method":"native_pipeline_stage_forecast/v2", "requested_mode":"fast",
         "effective_mode":"forecast_rejected", "target_relative_error":options.target_relative_error,
+        "pipeline_target_relative_error":pipeline_target,
         "forecast_used":True, "rejection_reasons":[], "fallback_reasons":[],
         "physical_complete_cohort_count":0, "physical_visible_output_token_count":0,
         "pipeline":{"stages":scenario.placement.parallel.pp_degree,
@@ -125,7 +133,7 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
             forecast = compose_pipeline_window(rows, sampled_decode_cohorts=sample_decode,
                 predicted_decode_cohorts=measured, batch_size=plan.scheduler.max_num_seqs,
                 output_tokens=max(2, max((s.spec.output_tokens for s in runtime._state_values), default=2)),
-                cutoff_ns=runtime.now, target_relative_error=options.target_relative_error,
+                cutoff_ns=runtime.now, target_relative_error=pipeline_target,
                 warmup_decode_cohorts=warmup, physical_prefix_decode_cohorts=len(decode_batches),
                 cohort_prefix_samples_ns=prefixes, cohort_suffix_samples_ns=suffixes)
             physical_visible = sum(e.details.get("visible_tokens", 0) for e in runtime.events if e.event_type == "tokens_committed")
@@ -149,7 +157,7 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                     stage_sample_rows, sampled_decode_cohorts=sample_decode,
                     predicted_decode_cohorts=measured, batch_size=plan.scheduler.max_num_seqs,
                     output_tokens=output_tokens, cutoff_ns=runtime.now,
-                    target_relative_error=options.target_relative_error,
+                    target_relative_error=pipeline_target,
                     warmup_decode_cohorts=warmup, physical_prefix_decode_cohorts=0,
                     allow_zero_physical_prefix=True)
             except (NativeFastWallBudgetError, NativeLayerSamplingGuardError,

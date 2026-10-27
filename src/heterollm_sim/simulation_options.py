@@ -75,11 +75,20 @@ class NativeWindowFastConfig:
 
     max_wall_seconds: float = 3000.
     target_relative_error: float = .10
+    # PP stage/transfer windows compose several independently sampled
+    # intervals. Keep their acceptance budget separate from the ordinary
+    # fast Decode target so a two-cohort PP sample is not rejected by the
+    # single-replica bound before it can be used for layout screening.
+    pipeline_target_relative_error: float = .20
     calibration_layers: int = 4
     holdout_layers: int = 2
     tp_rank_symmetry: str = "quiet"
     pd_concurrency_envelope: bool = True
-    pipeline_sample_decode_cohorts: int = 2
+    # Two samples only provide a very wide max-deviation interval. Four
+    # cohorts keep the PP forecast conditional while making the interval
+    # useful for layout screening; callers may lower this explicitly when
+    # they accept the corresponding rejection rate.
+    pipeline_sample_decode_cohorts: int = 4
     pipeline_stage_sampling: bool = True
 
     def __post_init__(self) -> None:
@@ -89,6 +98,8 @@ class NativeWindowFastConfig:
                 or not self.max_wall_seconds > 0):
             raise ValueError("simulation.native_window.max_wall_seconds must be finite and positive")
         _bounded_fraction(self.target_relative_error, "simulation.native_window.target_relative_error", .10)
+        _bounded_fraction(self.pipeline_target_relative_error,
+                          "simulation.native_window.pipeline_target_relative_error", .25)
         _integer(self.calibration_layers, "simulation.native_window.calibration_layers", 4)
         _integer(self.holdout_layers, "simulation.native_window.holdout_layers", 2)
         if type(self.tp_rank_symmetry) is not str or self.tp_rank_symmetry not in ("off", "quiet", "all"):

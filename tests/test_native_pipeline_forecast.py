@@ -34,6 +34,26 @@ def test_pipeline_forecast_rejects_wide_sample_interval():
         compose_pipeline_window(rows,sampled_decode_cohorts=3,predicted_decode_cohorts=4,
             batch_size=2,output_tokens=3)
 
+
+def test_pipeline_forecast_can_use_its_separate_stage_budget():
+    rows = []
+    for cohort, stage_zero in enumerate((10., 10.8)):
+        rows.extend([
+            PipelineStageSample(cohort, 0, 0, 0, stage_zero),
+            PipelineStageSample(cohort, 0, 0, stage_zero, stage_zero + 2,
+                                kind="pipeline_activation_transfer"),
+            PipelineStageSample(cohort, 0, 1, stage_zero + 2, stage_zero + 17),
+        ])
+    with pytest.raises(ValueError, match="independent_budget"):
+        compose_pipeline_window(rows, sampled_decode_cohorts=2,
+            predicted_decode_cohorts=4, batch_size=2, output_tokens=3,
+            target_relative_error=.10)
+    forecast = compose_pipeline_window(rows, sampled_decode_cohorts=2,
+        predicted_decode_cohorts=4, batch_size=2, output_tokens=3,
+        target_relative_error=.20)
+    assert forecast.error_budget["target_relative_error"] == .20
+    assert forecast.error_budget["effective_independent_target"] == pytest.approx(.20 / 2.20)
+
 def test_realized_schedule_rows_bind_microbatch_and_transfer_kind():
     rows=samples_from_execution_schedule((
         {"stage_id":"operator-invocation-group-0001.stage0000","invocation_group_id":"operator-invocation-group-0001","start_ns":1,"end_ns":4,"dependencies":()},

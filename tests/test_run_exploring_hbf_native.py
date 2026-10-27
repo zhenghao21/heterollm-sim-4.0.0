@@ -195,6 +195,20 @@ def test_pipeline_forecast_result_is_terminal_for_worker_reuse():
     assert row["status"] == "completed"
 
 
+def test_pipeline_forecast_uses_effective_pipeline_error_target():
+    from dataclasses import replace
+    from heterollm_sim.native_pipeline_forecast import NativePipelineForecast
+    forecast = NativePipelineForecast(0., 1, 3, 0, 8,
+        {"cluster_tokens_per_second": 80., "mean_complete_request_tpot_ns": 95e6},
+        {"mean_complete_request_tpot_ns": {"estimate": 90e6, "lower": 80e6, "upper": 99e6}},
+        (), (), {"target_relative_error": .20, "relative_error": .12})
+    result = replace(_fast_result(), approximation={"method": "native_pipeline_stage_forecast/v2"},
+                     native_window_forecast=None, native_pipeline_forecast=forecast)
+    params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1), 4, "fast")
+    row = run.native_fast_result(result, params)
+    assert row["status"] == "completed"
+
+
 PREFILL_LAYOUT = {"tp": 8, "pp": 1, "ep": 1}
 REJECTED_PREFILL = {"prefill_id": "prefill", "status": "rejected", "prefill_pass": {"metric_bounds": {}},
                     "parameters": PREFILL_LAYOUT, "rejection_reasons": ["native_prefill_independent_budget_exceeded"], "wall_seconds": 1.}
@@ -658,6 +672,26 @@ def test_worker_reuses_an_exact_terminal_candidate_without_executing_native(tmp_
     saved = run.read_json(tmp_path / "points" / (case["case_id"] + ".json"))
     assert saved["status"] == "completed"
     assert saved["selected"]["parameters"]["batch_size"] == 1
+
+
+def test_worker_reexecutes_one_retryable_fast_forecast_rejection(tmp_path, monkeypatch):
+    case = run.case_matrix()[0]
+    params = run.parameters(case, LAYOUT, 8, "fast")
+    rejected = {"runner_contract": run.FAST_CONTRACT, "backend": run.BACKEND,
+                "parameters": params, "candidate_id": run.params_candidate_id(params),
+                "status": "forecast_rejected", "metrics": None,
+                "rejection_reason": "native_pipeline_independent_budget_exceeded"}
+    run.write_json(tmp_path / "candidates" / (rejected["candidate_id"] + ".json"), rejected)
+    calls = []
+
+    def execute(*args, **kwargs):
+        calls.append(True)
+        return {**rejected, "status": "completed", "metrics": {"tokens_per_second_per_gpu": 1.}}
+
+    monkeypatch.setattr(run, "execute_candidate", execute)
+    assert run.worker_candidate(case, LAYOUT, 8, tmp_path, mode="fast") == 0
+    assert calls == [True]
+    assert run.read_json(tmp_path / "candidates" / (rejected["candidate_id"] + ".json"))["status"] == "completed"
 
 
 def test_stop_marker_is_preserved_and_no_candidate_is_started(tmp_path):
