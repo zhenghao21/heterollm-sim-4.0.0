@@ -98,7 +98,7 @@ def iter_prefill_chunk_inputs(runtime, first_cohort, first_stages, request_ready
             raise NativeLayerSamplingGuardError("native_prefill_declared_chunk_not_contiguous")
         ready = prefill_stage_ready(described, cohort, stages, ready_ns)
         prepared = cohort_layers(described, cohort, stages, ready_ns,
-            "native-prefill-declared-inputs.", ready_by_stage=ready)
+            "native-prefill-declared-inputs.", ready_by_stage=ready, allow_pipeline=True)
         prepared.update(
             chunk_index=index, chunk_id=cohort.cohort_id, prompt_tokens=total,
             chunk_prompt_tokens=item.token_count, context_tokens=context,

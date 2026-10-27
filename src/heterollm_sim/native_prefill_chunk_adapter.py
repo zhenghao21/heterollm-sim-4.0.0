@@ -263,6 +263,10 @@ def build_prefill_chunk_terms(prepared, samples, chunk_index, *, frontier=None):
             "Layer calibration windows declare their boundary independently of prefix execution; "
             "both in-situ prefix entries are sampled, while cache/allocator representativeness remains conditional."]
             if prepared.get("chunk_separate_prefix") else []),
+        *(["PP Prefill layer classes canonicalize owner-local resource and expert-placement names; "
+           "stage activation transfers remain explicit in the sampled task graph and are covered by "
+           "the full-reference error check."]
+          if prepared.get("pipeline_layer_class_normalized") else []),
         *parts.get("assumptions", ()),
         *prepared.get("chunk_input_boundary", {}).get("assumptions", ()))))
     return {"chunk": {"chunk_id": chunk_id, "nodes": nodes, "last_layer_node_id": previous_layer},

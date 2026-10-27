@@ -63,7 +63,7 @@ def _identity(value, name):
 
 
 def compose_prefill_chunks(chunks, *, origin_ns=0.0, target_relative_error=0.10,
-                           assumptions=(), extra_edges=()):
+                           assumptions=(), extra_edges=(), interval_guard_ns=0.0):
     """Compose pure chunk descriptions, ending at the final chunk's last layer.
 
     Each chunk is ``{chunk_id, nodes, last_layer_node_id}``.  A node has
@@ -73,11 +73,14 @@ def compose_prefill_chunks(chunks, *, origin_ns=0.0, target_relative_error=0.10,
     not otherwise be topologically sorted.  ``extra_edges`` is a sequence
     of ``((from_chunk_id, from_node_id), (to_chunk_id, to_node_id))`` pairs.
 
+    ``interval_guard_ns`` widens both ends for an observed PP stage-overlap
+    envelope when concurrent stage service was collapsed into serial terms.
     In keeping with the existing Prefill budget, the independent interval
     limit is target/(2+target).  Passing it is conditional model acceptance;
     it is not full-prompt validation or a hardware accuracy guarantee.
     """
     origin = _number(origin_ns, "origin_ns")
+    interval_guard_ns = _number(interval_guard_ns, "interval_guard_ns")
     target = _number(target_relative_error, "target_relative_error")
     if target <= 0 or target >= 1:
         raise ValueError("target_relative_error must be between zero and one")
@@ -166,7 +169,8 @@ def compose_prefill_chunks(chunks, *, origin_ns=0.0, target_relative_error=0.10,
         raise ValueError("Prefill task/stage/resource constraints contain a cycle")
 
     finish = intervals[terminals[-1]][1]
-    metric = _interval(finish[0] - origin, finish[1] - origin)
+    metric = _interval(max(0.0, finish[0] - origin - interval_guard_ns),
+                       finish[1] - origin + interval_guard_ns)
     effective_target = target / (2 + target)
     estimate, lower, upper = (Fraction(metric[name]) for name in ("estimate", "lower", "upper"))
     valid_lower = lower > 0
@@ -191,6 +195,7 @@ def compose_prefill_chunks(chunks, *, origin_ns=0.0, target_relative_error=0.10,
             "origin_ns": origin, "terminal": terminals[-1], "chunk_count": len(chunks),
             "node_count": len(nodes), "edge_count": sum(map(len, dependencies.values())),
             "assumptions": all_assumptions,
+            "interval_guard_ns": interval_guard_ns,
             "physical_runtime_state_advanced": False, "physical_runtime_state_resumable": False}}
 
 

@@ -49,17 +49,18 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # v21 enables the approved all-rank PD defaults for the two selected
 # Maverick HBM4 EP-group layouts, in addition to the 405B HBM4 exception.
 FAST_CONTRACT = "native_stationary_layout_fast_v21"
-# Prefill evolves independently of the saved Decode evidence. This contract
-# retains model-required chunks and runs every cohort natively when a pass
-# has multiple cohorts; a single-cohort fast pass retains layer sampling.
-PREFILL_CONTRACT = "native_prefill_complete_prompt_pass_v2"
+# Prefill evolves independently of the saved Decode evidence. PP fast passes
+# use the conditional chunk forecast; detailed passes retain the complete
+# native prompt forward.
+PREFILL_CONTRACT = "native_prefill_layer_forecast_v3"
 # PP changes native execution even with one microbatch. Keep its cache
 # identity distinct while the established PP=1/M=1 contracts remain intact.
 PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
 PIPELINE_FORECAST_CONTRACT = "native_stage_fifo_conditional_forecast_v3"
 MAX_BATCH_SEARCH_CONTRACT = "native_max_batch_under_slo_v1"
 THROUGHPUT_SEARCH_CONTRACT = "native_throughput_v1"
-PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_complete_prompt_pass_v1"
+PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_chunk_forecast_v2"
+PIPELINE_PREFILL_FULL_CONTRACT = "native_pp_prefill_complete_prompt_pass_v2"
 BACKEND = "native_serving_physical"
 PHASES = ("dense_native", "dense_plus", "maverick_native")
 TERMINAL = {"completed", "capacity_rejected", "slo_rejected", "all_candidates_rejected", "failed"}
@@ -861,10 +862,11 @@ def prefill_parameters(params):
     tp = prefill_tp(params["model"], params["workload"], params["tp"], params["pp"], params["ep"])
     if tp is None:
         raise ValueError("native_prefill_replica_does_not_fit_hbm4")
+    pipeline_contract = (PIPELINE_PREFILL_CONTRACT if fast else PIPELINE_PREFILL_FULL_CONTRACT)
     return {"model": params["model"], "workload": params["workload"], "input_tokens": params["input_tokens"],
             "tp": tp, "pp": params["pp"], "ep": params["ep"], "prefill_hardware": "HBM4",
-            "pass": "sampled" if fast and params["pp"] == 1 else "full", "runner_contract": params["runner_contract"],
-            "prefill_contract": PIPELINE_PREFILL_CONTRACT if params["pp"] > 1 else PREFILL_CONTRACT,
+            "pass": "sampled" if fast else "full", "runner_contract": params["runner_contract"],
+            "prefill_contract": pipeline_contract if params["pp"] > 1 else PREFILL_CONTRACT,
             **({"target_relative_error": params["target_relative_error"]} if fast else {})}
 
 
@@ -907,10 +909,10 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
     shares it: the Prefill replica is HBM4 with the Decode replica's layout,
     or the larger TP of ``prefill_parameters`` when HBM4 cannot hold its weights.
     No scheduler limit adds chunks beyond those required by the model.
-    Fast candidates run a multi-cohort pass entirely natively and observe
-    its final layer's completion directly, excluding the output head; a
-    single-cohort PP=1 pass retains layer sampling. PP passes execute every
-    layer, and Decode microbatches do not partition this single request.
+    Fast candidates use conditional chunk sampling for PP>1 and single-cohort
+    PP=1 passes; detailed candidates run every prompt chunk and layer natively.
+    PP chunk sampling keeps stage transfers in each independent chunk graph and
+    records the boundary-state/address assumptions in its error budget.
     Both use the same independent budget and their own absolute wall cap
     (outside the candidate). Detailed
     candidates run every cohort and layer natively, without a wall cap like
@@ -937,9 +939,10 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
             return saved
         scenario = (builder or build_native_prefill_scenario)(params["model"], params["workload"],
             tp=expected["tp"], pp=expected["pp"], ep=expected["ep"], full_pass=full)
+        pipeline_sampling = (not full) and expected["pp"] > 1
         scenario = replace(scenario, simulation=SimulationConfig(mode="fast", native_prefill=NativePrefillPassConfig(
             full_pass=full, max_wall_seconds=cap if capped else None,
-            chunked_sampling=operator_reuse,
+            chunked_sampling=pipeline_sampling or operator_reuse,
             operator_reuse_sampling=operator_reuse,
             numeric_transition_cache=operator_reuse,
             tp_rank_symmetry="quiet" if operator_reuse else "off",
@@ -1241,15 +1244,15 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
             if search else
             f"每配置固定 {gpus} GPU；有限候选布局 {', '.join(layout_label(layout) for layout in layouts)}，每副本批量 {', '.join(map(str,batches))}。")
         + f"DP 副本是互相独立的拷贝，只仿真一个副本，集群吞吐为单GPU吞吐乘GPU总数。每配置选择通过 100ms 请求均值TPOT约束的最高{'通过验收的' if mode == 'fast' else '实测'}单GPU吞吐，不表示全局最优部署或最大批量。",
-        ("PP/多微批完整执行原生窗口，指标为实测值；PP=1单微批将原生层样本与预测窗口分开保存，10%为明示条件模型预算。预测尾段没有物理轨迹，预算拒绝时指标为空，不回退详细后缀。"
+        ("PP/多微批Decode使用真实阶段前缀和条件窗口预测，PP Prefill使用分段层采样；PP=1单微批将原生层样本与预测窗口分开保存，10%为明示条件模型预算。预测尾段没有物理轨迹，预算拒绝时指标为空，不回退详细后缀。"
             if mode == "fast" else "完整原生预热与有界测量窗口，无预测尾段；零预测Token不等于与论文或实物误差为零。历史详细参考和旧扫描均未重跑。"),
         ("预测吞吐使用相同测量窗口及可见Token定义，TPOT使用窗口内完整新请求的首末Token预测区间；预测完成不计为物理完成。"
             if mode == "fast" else "吞吐按原生窗口 (开始,结束] 的真实可见Token计算；TPOT仅使用首末Token都在窗口内的完整新请求。未在窗口结束的请求不计为完成。"),
         ("TTFT = Prefill通路 + 入口TTFT。Prefill副本为HBM4、与Decode副本相同的TP/PP/EP布局，请求到达即单独计算完整的前P-1个提示Token（不排队、不额外限制分块，保留模型强制分块），"
             "到最后一块的最后一层完成为止（此时开始导出KV）；入口TTFT从该请求实付KV导入开始到首个Token，Decode侧计算最后一个提示Token并给出首Token。"
-            + ("多分段Prefill全程原生执行，直接观测末块末层完成（不含输出头）；单段保留分层采样。完整通路区间与入口TTFT区间相加，仍满足同一独立预算。" if mode == "fast"
+            + ("多分段Prefill使用独立副本上的分段层采样，阶段传输和跨块边界假设写入误差预算；单段保留分层采样。Prefill区间与入口TTFT区间相加，仍满足同一独立预算。" if mode == "fast"
                else "Prefill通路为覆盖全部块、全部层的原生运行。")),
-        ("PP/多微批的DRAM/NAND/SRAM与PD账本覆盖完整原生运行；PP=1单微批只覆盖真实层样本及入站，全预测窗口物理流量未知。预测尾段不生成虚构的流量、利用率或物理状态。"
+        ("PP/多微批的DRAM/NAND/SRAM与PD账本只覆盖真实采样前缀和入站；PP=1单微批同样只覆盖真实层样本及入站，全预测窗口物理流量未知。预测尾段不生成虚构的流量、利用率或物理状态。"
             if mode == "fast" else "DRAM/NAND/SRAM与PD流量为整个有界运行的真实账本，包含预热和已提交的收尾费用，不是仅测量窗口流量或独占关键路径分解。"), "",
         "累计Token、批次及阶段壁钟见[进度分析](progress_analysis.md)；真实慢路径调查见[原生后端对照说明](../../docs/exploring_hbf_native_comparison.md)。局部事务提速不能代替完整候选耗时验收。", "",
         "| 模型 | 存储 | 输入/输出Token | 配置状态 | 选中布局 | 选中批量/副本 | tokens/s/GPU | 集群tokens/s | 请求均值TPOT(ms) | 请求均值TTFT(ms，含Prefill) |"

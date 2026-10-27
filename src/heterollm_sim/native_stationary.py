@@ -358,7 +358,8 @@ def prefill_stage_ready(runtime, cohort, stages, request_ready_ns, *, host_ns=0.
     return ready
 
 
-def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready_by_stage=None):
+def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready_by_stage=None,
+                  allow_pipeline=False):
     """Task specs of an unexecuted cohort on the unchanged source, with its layer classes.
 
     The part every native layer-sample preparation shares: the boundary
@@ -382,7 +383,8 @@ def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready
     composition, boundary = _graph_facts(specs, inventory)
     if not composition["qualified"]:
         raise NativeLayerSamplingGuardError("native_stationary_requires_serial_layer_composition")
-    if set(boundary) - {"before_first_layer", "after_last_layer"} or composition["nonserial_non_layer_groups"]:
+    if ((set(boundary) - {"before_first_layer", "after_last_layer"}
+         or composition["nonserial_non_layer_groups"]) and not allow_pipeline):
         raise NativeLayerSamplingGuardError("native_stationary_non_layer_work_not_a_serial_prefix_or_suffix")
     by_layer = defaultdict(list)
     for task in specs:
@@ -392,8 +394,17 @@ def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready
         row["native_shape"] = native_layer_shape(by_layer[row["layer_id"]])
         row["class_key"] = json.dumps({"semantics": row["signature"], "native": row["native_shape"]},
                                       ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=repr)
+        if allow_pipeline:
+            key = json.loads(row["class_key"])
+            native = key.get("native")
+            if isinstance(native, dict):
+                native.pop("owner_io_shape", None)
+                native.pop("balanced_expert_shape", None)
+            row["class_key"] = json.dumps(key, ensure_ascii=False, sort_keys=True,
+                                           separators=(",", ":"))
     return {"cohort": cohort, "source": source, "origin": origin, "paid_frontier": paid_frontier,
             **({"native_stage_ready": True} if native_ready else {}),
+            **({"pipeline_layer_class_normalized": True} if allow_pipeline else {}),
             "specs": specs, "inventory": inventory, "composition": composition, "boundary": boundary,
             "by_layer": {layer: [task.task_id for task in tasks] for layer, tasks in by_layer.items()},
             "ranks": {task.task_id: task.metadata["rank"] for task in specs

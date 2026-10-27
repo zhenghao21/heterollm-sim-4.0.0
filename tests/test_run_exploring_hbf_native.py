@@ -145,7 +145,7 @@ def test_exact_pipeline_window_is_measured_without_a_forecast(monkeypatch):
     assert not any("SAME_CLASS" in value or "same native work" in value for value in row["assumptions"])
 
 
-def test_pp_prefill_runs_full_pass_and_does_not_inherit_decode_microbatches(tmp_path):
+def test_pp_prefill_uses_chunk_sampling_and_does_not_inherit_decode_microbatches(tmp_path):
     from heterollm_sim.reference import build_reference_scenario
     params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1, microbatches=2), 4, "fast")
     seen = []
@@ -153,14 +153,15 @@ def test_pp_prefill_runs_full_pass_and_does_not_inherit_decode_microbatches(tmp_
         seen.append(kwargs)
         return build_reference_scenario()
     def runner(scenario, **kwargs):
-        assert scenario.simulation.native_prefill.full_pass
+        assert not scenario.simulation.native_prefill.full_pass
+        assert scenario.simulation.native_prefill.chunked_sampling
         assert scenario.simulation.native_prefill.max_wall_seconds == run.PREFILL_WALL_BUDGET_SECONDS
         assert kwargs["control"].deadline_monotonic is not None
         return NS(approximation={"prefill_pass": {"accepted": True}, "rejection_reasons": []},
                   layer_window_samples=())
     result = run.prefill_pass(params, tmp_path, builder=builder, runner=runner)
-    assert result["parameters"]["pass"] == "full"
-    assert seen == [{"tp": 4, "pp": 2, "ep": 1, "full_pass": True}]
+    assert result["parameters"]["pass"] == "sampled"
+    assert seen == [{"tp": 4, "pp": 2, "ep": 1, "full_pass": False}]
 
 
 def _fast_result(upper=99e6, accepted=True):
@@ -1087,7 +1088,7 @@ def test_widened_decode_layouts_share_prefill_without_reusing_decode_provenance(
     # PP and EP remain physical Prefill identity, even when TP widens alike.
     identities = {saved["prefill_id"]}
     for pp, ep in ((2, 1), (1, 2)):
-        expected_full = mode == "detailed" or pp > 1
+        expected_full = mode == "detailed"
         params = run.parameters(case, run.make_layout(8 // (pp * ep), 1, pp, ep), 8, mode)
         prefill = run.prefill_pass(params, tmp_path,
             builder=lambda *a, **k: _fast_result().scenario, runner=runner)
