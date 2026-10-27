@@ -66,7 +66,6 @@ class AuthoredTokenProgram:
                 name=task.task_id, category=task.category, dependencies=tuple(
                     task_ids[parent] for parent in self.compiled.dependency_positions[position]),
                 demands=task.demands, earliest_start_ns=ready_values[stage_position], marker=None,
-                token_index=None, metadata={**bind_metadata(task.metadata, namespace),
-                                           "execution_stage_id": stage.stage_id})
+                token_index=None, metadata=bind_metadata(task.metadata, namespace, stage.stage_id))
             specs.append(spec)
         return tuple(specs)

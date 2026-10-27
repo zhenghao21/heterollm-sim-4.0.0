@@ -177,6 +177,7 @@ def compact_execution_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any]
             "analytical_ops", "bytes", "cohort_id", "coverage_component", "model_operator_id",
             "memory_direction", "phase", "submission_count",
             "dma_engine_resource_id", "event_kind",
+            "source_stage", "target_stage",
             "execution_component", "gpu_consumer_component_id",
             "gpu_consumer_request_ids", "layer_id", "modeled_memory_write_bytes",
             "opaque_device_fence", "operator_id", "operator_invocation_group_id",

@@ -1,8 +1,12 @@
 """Native Prefill pass of one request, from native layer samples.
 
 The Prefill node is a replica with the Decode replica's tp/pp/ep layout. A
-request is prefilled alone the moment it arrives, in one forward pass over
-its first P-1 prompt tokens; the Decode node imports that KV and computes
+request is prefilled alone the moment it arrives, over its first P-1 prompt
+tokens; model-required chunk boundaries remain in force. A multi-chunk pass
+executes entirely through the ordinary native runtime, including its real
+cross-chunk preparation overlap. Its end is observed at the last layer,
+before the final output head. A single-chunk pass retains layer sampling.
+The Decode node imports that KV and computes
 the final prompt token with the first output token. The pass lasts from its
 cohort boundary to the completion of its last layer, where the KV export
 starts; the output head is not part of it.
@@ -25,9 +29,9 @@ import time
 
 from .execution_control import ExecutionControl, NativeFastWallBudgetError, _NativeLayerSamplingCutoff
 from .native_fast_window import _native_runtime_reasons
-from .native_layer_sampling import NativeLayerSamplingGuardError
+from .native_layer_sampling import NativeLayerSamplingGuardError, _layer_counts
 from .native_stationary import (HOLDOUT_SHIFT_NS, SAME_CLASS_ADDRESS_ASSUMPTION, _completions, _interval,
-                                _within, cohort_layers, compose_layers, deadline_control, run_window,
+                                _within, cohort_layers, cohort_origin, compose_layers, deadline_control, run_window,
                                 window_terms)
 from .planner import _compilation_scope
 from .serving import _OnlineRuntime, compile_serving_plan
@@ -43,29 +47,27 @@ def _eligibility_reasons(scenario, plan, *, custom_lowerer, shared_residency):
                                                shared_residency=shared_residency))
 
 
+def _prefill_item(runtime, cohort):
+    """One native chunk at this request's actually committed cursor."""
+    item = cohort.items[0] if cohort.kind == "prefill" and len(cohort.items) == 1 else None
+    state = runtime.states.get(item.request_id) if item is not None else None
+    if (state is None or item.phase != "prefill" or item.token_count <= 0
+            or item.context_tokens != state.prefill_cursor
+            or item.context_tokens + item.token_count > state.spec.prompt_tokens):
+        raise NativeLayerSamplingGuardError("native_prefill_pass_requires_one_contiguous_prompt_forward")
+    return item, state
+
+
 def prepare_prefill(runtime, cohort, stages, request_ready_ns, control):
-    """The request's whole-prompt forward pass on the unchanged source."""
+    """A whole-prompt single cohort on the unchanged source."""
     started = time.perf_counter()
     control.raise_if_cancelled()
-    item = cohort.items[0] if cohort.kind == "prefill" and len(cohort.items) == 1 else None
-    if (item is None or item.phase != "prefill" or item.context_tokens != 0
-            or item.token_count != runtime.states[item.request_id].spec.prompt_tokens):
+    item, state = _prefill_item(runtime, cohort)
+    if item.context_tokens or item.token_count != state.spec.prompt_tokens:
         raise NativeLayerSamplingGuardError("native_prefill_pass_requires_one_whole_prompt_forward")
     prepared = cohort_layers(runtime, cohort, stages, request_ready_ns, "native-prefill-sample.")
-    return {**prepared, "prompt_tokens": item.token_count,
+    return {**prepared, "prompt_tokens": state.spec.prompt_tokens,
             "preparation_wall_seconds": time.perf_counter() - started}
-
-
-def _layer_counts(classes, calibration, holdout):
-    """Fewest layers from the stack's start and end, at least ``calibration`` and
-    ``holdout``, whose steps (every run layer after the first) reach every class."""
-    wanted, count = set(classes), len(classes)
-
-    def covering(minimum, stepped):
-        return next((n for n in range(minimum, count + 1) if set(stepped(n)) == wanted), count + 1)
-
-    return (covering(calibration, lambda n: classes[1:n]),
-            covering(holdout, lambda n: classes[count - n + 1:]))
 
 
 def sample_prefill(prepared, control, options, records, *, holdout_shift_ns=HOLDOUT_SHIFT_NS):
@@ -146,13 +148,13 @@ def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=N
     deadline = None if options.max_wall_seconds is None else started + options.max_wall_seconds
     control = execution_control or ExecutionControl()
     sample_control = deadline_control(control, deadline)
-    diagnostics = {"method": "native_prefill_pass/v1", "requested_mode": "fast",
+    diagnostics = {"method": "native_prefill_pass/v2", "requested_mode": "fast",
         "effective_mode": "forecast_rejected", "sampling_options": asdict(options),
         "target_relative_error": options.target_relative_error,
         "accuracy_target_is_guarantee": False, "future_physical_state_advanced": False,
         "rejection_reasons": [], "fallback_reasons": [],
         "prefill_pass": {"accepted": False, "metrics": {}, "metric_bounds": {}, "error_budget": {}}}
-    records, prepared, samples = [], {}, {}
+    records, prepared, samples, native_chunks = [], {}, {}, []
     context = getattr(batch_lowerer, "_compilation_context", None)
     with _compilation_scope(scenario, context):
         sample_control.raise_if_cancelled()
@@ -163,24 +165,71 @@ def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=N
             diagnostics.update(rejection_reasons=list(reasons), fallback_reasons=list(reasons),
                                wall_seconds=time.perf_counter() - started)
             return FastSimulationOutcome(diagnostics=diagnostics)
+        runtime = None
         try:
             runtime = _OnlineRuntime(plan, batch_lowerer, execution_control=sample_control,
                 residency_manager=residency_manager, execution_kernel=execution_kernel,
                 runtime_origin_ns=runtime_origin_ns)
 
+            from .ir import model_graph_execution_layers
+            last_layer = model_graph_execution_layers(scenario.model.graph)[-1].layer_id
+            pass_origin_ns, native_chunks_mode = None, False
+
             def sampler(active, cohort, cost, stages, request_ready_ns):
+                nonlocal pass_origin_ns, native_chunks_mode
+                item, state = _prefill_item(active, cohort)
+                if pass_origin_ns is None:
+                    if item.context_tokens:
+                        raise NativeLayerSamplingGuardError("native_prefill_pass_requires_prompt_start")
+                    pass_origin_ns = cohort_origin(active, request_ready_ns)[0]
+                    native_chunks_mode = (item.token_count < state.spec.prompt_tokens
+                                          or scenario.placement.parallel.pp_degree > 1)
+                if native_chunks_mode:
+                    # Sampling a later chunk loses its overlap with earlier
+                    # chunks. PP also contains inter-layer transfers that the
+                    # serial-layer composition cannot represent. Execute both
+                    # cases on the complete live runtime, even for one chunk.
+                    return False
                 prepared.update(prepare_prefill(active, cohort, stages, request_ready_ns, sample_control))
                 raise _NativeLayerSamplingCutoff()
 
+            def completed_chunk(active, cohort, metrics):
+                if not native_chunks_mode:
+                    return
+                item, _state = _prefill_item(active, cohort)
+                ends = metrics.layer_completion_ns()
+                if last_layer not in ends:
+                    raise NativeLayerSamplingGuardError("native_prefill_chunk_last_layer_not_observed")
+                native_chunks.append({"context_tokens": item.context_tokens, "prompt_tokens": item.token_count,
+                                      "last_layer_end_ns": ends[last_layer]})
+
             runtime._native_layer_sampler = sampler
+            runtime._native_prefill_cohort_completed = completed_chunk
             try:
                 runtime.run_until_decode_steps(1, strict_cohort_cutoff=True)
             except _NativeLayerSamplingCutoff:
                 pass
             else:
-                raise RuntimeError("native Prefill sampling unexpectedly committed an ordinary cohort")
-            samples = sample_prefill(prepared, sample_control, options, records)
-            budget = evaluate_prefill(prepared, samples, options)
+                if not native_chunks_mode:
+                    raise RuntimeError("native Prefill sampling unexpectedly committed an ordinary cohort")
+            if native_chunks_mode:
+                state = next(iter(runtime.states.values()))
+                if (not native_chunks or state.prefill_cursor != state.spec.prompt_tokens
+                        or sum(chunk["prompt_tokens"] for chunk in native_chunks) != state.spec.prompt_tokens):
+                    raise NativeLayerSamplingGuardError("native_prefill_complete_prompt_not_observed")
+                value = native_chunks[-1]["last_layer_end_ns"] - pass_origin_ns
+                if value <= 0:
+                    raise NativeLayerSamplingGuardError("native_prefill_pass_lower_bound_not_positive")
+                bounds = {"estimate": value, "lower": value, "upper": value, "relative_error_budget": 0.}
+                budget = {"accepted": True, "reasons": [], "metrics": {"prefill_pass_ns": value},
+                    "metric_bounds": {"prefill_pass_ns": bounds},
+                    "error_budget": {"basis": "complete_native_prompt_chunks; observed_last_layer_completion",
+                        "observed_pass_ns": value, "prompt_tokens": state.spec.prompt_tokens,
+                        "native_chunk_count": len(native_chunks), "chunks": native_chunks,
+                        "pass_origin_ns": pass_origin_ns, "assumptions": []}}
+            else:
+                samples = sample_prefill(prepared, sample_control, options, records)
+                budget = evaluate_prefill(prepared, samples, options)
         except NativeFastWallBudgetError:
             budget = {"accepted": False, "reasons": ["native_prefill_sample_wall_budget_exhausted"]}
         except NativeLayerSamplingGuardError as error:
@@ -195,19 +244,26 @@ def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=N
         if expired:
             reasons.append("native_total_candidate_wall_budget_exhausted")
         accepted = budget.get("accepted") is True and not expired
+        if native_chunks and runtime is not None:
+            diagnostics.update(physical_complete_cohort_count=len(runtime.batches),
+                physical_visible_output_token_count=sum(event.details.get("visible_tokens", 0)
+                    for event in runtime.events if event.event_type == "tokens_committed"))
         diagnostics.update(effective_mode="fast" if accepted else "forecast_rejected",
             rejection_reasons=reasons, fallback_reasons=reasons,
             prefill_pass={"accepted": accepted, "metrics": budget.get("metrics", {}) if accepted else {},
                           "metric_bounds": budget.get("metric_bounds", {}),
                           "error_budget": budget.get("error_budget", {}),
                           "boundary_origin_ns": prepared.get("origin"),
+                          "execution_mode": "complete_native_chunks" if native_chunks else "native_layer_samples",
+                          "native_chunk_count": len(native_chunks),
                           "layer_count": samples.get("layer_count"), "run_layers": samples.get("layers"),
                           "sample_wall_seconds": samples.get("wall_seconds")},
             preparation_wall_seconds=prepared.get("preparation_wall_seconds"),
             physical_layer_window_count=len(layer_samples), wall_seconds=time.perf_counter() - started)
         control.report("native_prefill_pass_complete" if accepted else "native_fast_rejected",
             len(layer_samples), unit="work_units",
-            message="原生Prefill层样本已保存" + ("，Prefill时长区间已通过预算" if accepted else "，未通过预算"))
+            message=("原生Prefill完整前向已执行" if native_chunks else "原生Prefill层样本已保存")
+                    + ("，Prefill时长区间已通过预算" if accepted else "，未通过预算"))
         return FastSimulationOutcome(diagnostics=diagnostics, layer_window_samples=layer_samples)
 
 

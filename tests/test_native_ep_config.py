@@ -7,13 +7,15 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts"), str(ROOT / "tests")]
 from exploring_hbf_native_config import (
-    build_native_comparison_scenario, native_capacity_batch, native_import_pool, validate_native_layout,
+    PD_LINK_BYTES_PER_SECOND, build_native_comparison_scenario, native_capacity_batch, native_import_pool,
+    validate_native_layout,
 )
 from exploring_hbf_native_models import build_native_paper_model
 from exploring_hbf_paper_config import hardware_by_id
 from heterollm_sim.control_plane_planner import plan_runtime_placement
 from heterollm_sim.ir import LayerSpec, model_graph_execution_layers
 from heterollm_sim.parallel import build_parallel_plan
+from heterollm_sim.physical_contract import require_physical_memory_config
 from heterollm_sim.serving import compile_serving_plan
 from test_native_maverick_semantics import miniature_maverick
 
@@ -56,6 +58,21 @@ def test_builder_rejects_unsplittable_ep_before_building_any_hardware():
         build_native_comparison_scenario("llama4_maverick", "HBM4", "SHORT", batch_size=6, tp=2, ep=3)
     with pytest.raises(ValueError, match="1..16 ranks"):
         build_native_comparison_scenario("llama4_maverick", "HBM4", "SHORT", batch_size=32, tp=8, ep=4)
+
+
+def test_pd_source_physical_peak_covers_all_world_links():
+    scenario = build_native_comparison_scenario("llama3_405b", "HBM4", "SHORT", batch_size=1, tp=8)
+    source = scenario.hardware.get_component("pd_host")
+    physical = require_physical_memory_config(source)
+    expected_gb_s = 8 * PD_LINK_BYTES_PER_SECOND / 1e9
+    assert physical.interface_bandwidth_gb_s >= expected_gb_s
+    assert physical.read_bandwidth_gb_s == physical.write_bandwidth_gb_s == physical.interface_bandwidth_gb_s
+    assert source.bandwidth_gbps == pytest.approx(physical.interface_bandwidth_gb_s * 8)
+    assert source.read_bandwidth_gbps == source.write_bandwidth_gbps == source.bandwidth_gbps
+    assert source.ports[0].bandwidth_gbps == pytest.approx(physical.interface_bandwidth_gb_s * 8)
+    profile = scenario.component_profiles["host_memory"]["native-pd-host"]
+    assert profile.bandwidth_gb_s == profile.read_bandwidth_gb_s == profile.write_bandwidth_gb_s == physical.interface_bandwidth_gb_s
+    assert any("world x 100 GB/s" in assumption for assumption in scenario.assumptions)
 
 
 @pytest.mark.parametrize("hardware", ["HBM4", "HBF+"])

@@ -1,32 +1,37 @@
 """Paper-style deployment search over native fast candidates.
 
 Per case the bypass screen (``exploring_hbf_search.search_candidates``) ranks
-every legal layout and brackets its batch. The two best layouts a native
-stationary candidate can run are measured natively at two or three batch
-points, the TPOT upper bound is interpolated to the 100 ms SLO, and one
+every legal layout and brackets its batch. The fixed ``max_batch_under_slo``
+mode measures the two best selected layouts without an artificial point or
+attempt cap, stopping at the SLO bracket; the separate ``throughput`` mode
+keeps its own point budget. The TPOT upper bound is interpolated to the 100 ms SLO, and one
 native acceptance run at the best layout's interpolated batch settles the
 point. Bypass values only place batch points; every reported number is a
 native candidate row.
 
 A layout whose 100 ms batch lies beyond what a native candidate can run (its
-KV capacity, or the wall cap or memory projected from its measured points)
-stops at its largest measured point and is marked limited; it is never
+KV capacity, wall cap, import speed, or memory projected from its measured
+points) stops at its largest measured point and is marked limited; it is never
 extrapolated. The bypass KV capacity bounds the points until a native point
 reaches it; past it native capacity rejections do. A KV capacity rejection
 reports the largest batch the native KV holds, and the next point goes
-straight there. A failed acceptance falls back to the best measured passing
-point.
+straight there. A refill-not-ready rejection is also a too-big point: the
+existing halving/bisection path is reused, and its final limit is labelled
+native_import_limited. A failed acceptance falls back to the best measured
+passing point.
 
 The plan is a pure function of the screen and the saved candidate rows, so a
 stopped search resumes by replaying it.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 TOP_LAYOUTS = 2
 # Measured batch points per layout, and native runs per layout including
 # attempts that were too big to measure.
-MAX_POINTS = 3
-MAX_RUNS = 5
+MAX_POINTS = 6
+MAX_RUNS = 10
 # Native cost grows with the batch (405B B=1024 needs ~1540 s); the first
 # point stays below this.
 FIRST_POINT_MAX_BATCH = 512
@@ -40,39 +45,85 @@ WALL_FILL = .9
 # A new point differs from every measured batch by at least this share (and a
 # quantum) and repeats no tried one; a limit closer than that ends the layout.
 MIN_STEP = .1
-SETTINGS = {"top_layouts": TOP_LAYOUTS, "max_points_per_layout": MAX_POINTS, "max_runs_per_layout": MAX_RUNS,
+THROUGHPUT_SETTINGS = {"top_layouts": TOP_LAYOUTS, "max_points_per_layout": MAX_POINTS, "max_runs_per_layout": MAX_RUNS,
             "first_point_max_batch": FIRST_POINT_MAX_BATCH, "wall_fill": WALL_FILL, "min_step": MIN_STEP,
-            "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+            "native_layouts": "legal DP/TP/PP/EP and pipeline microbatch layouts; PP/microbatch candidates execute complete native windows",
             "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
             "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
             "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
             "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
-            "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker cap; the k-fold cap of k concurrent workers only absorbs their slowdown"}
+            "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+            "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"}
+# The max-Batch mode is a separate fixed search contract. Layout scope is
+# supplied independently, so the same mode can search all layouts or only PP.
+MAX_BATCH_SETTINGS = {**THROUGHPUT_SETTINGS,
+                       "search_mode": "max_batch_under_slo",
+                       "objective": "maximum_batch_under_slo",
+                       "max_points_per_layout": None,
+                       "max_runs_per_layout": None,
+                       "stopping": "SLO upper-bound bracket; physical capacity, memory and wall limits remain hard limits"}
+SETTINGS = MAX_BATCH_SETTINGS
+
+
+@dataclass(frozen=True)
+class SearchPolicy:
+    name: str
+    settings: dict
+    max_points: int | None
+    max_runs: int | None
+    objective: str
+
+
+THROUGHPUT_POLICY = SearchPolicy("throughput", THROUGHPUT_SETTINGS, MAX_POINTS, MAX_RUNS,
+                            "per_gpu_throughput")
+MAX_BATCH_POLICY = SearchPolicy("max_batch_under_slo", MAX_BATCH_SETTINGS, None, None,
+                                "maximum_batch_under_slo")
+SEARCH_POLICIES = {THROUGHPUT_POLICY.name: THROUGHPUT_POLICY, MAX_BATCH_POLICY.name: MAX_BATCH_POLICY}
+DEFAULT_SEARCH_MODE = MAX_BATCH_POLICY.name
+
+
+def search_policy(mode=DEFAULT_SEARCH_MODE):
+    try:
+        return SEARCH_POLICIES[mode]
+    except KeyError as error:
+        raise ValueError("unknown search mode: " + str(mode)) from error
 # Rejections that say the batch is too big for a native candidate: its wall
 # cap, or its KV capacity.
 _WALL_TOO_BIG = ("wall_budget",)
 CAPACITY_REJECTIONS = ("not_a_full_batch", "import_pool_not_full")
+IMPORT_REJECTIONS = ("native_stationary_refill_not_always_ready", "native_pipeline_refill_not_always_ready")
 
 
-def screen_layouts(rows, buildable, top=TOP_LAYOUTS):
+def is_pipeline_layout(layout):
+    """Whether a layout uses the native PP/microbatch execution path."""
+    return layout.get("pp", 1) > 1 or layout.get("microbatches", 1) > 1
+
+
+def screen_layouts(rows, buildable, top=None, *, policy=None, layout_scope="all", pp_only=None):
     """The ``top`` best bypass layouts a native candidate can run, and those skipped above them.
 
-    Native serving has no GPipe microbatching, so only unpartitioned bypass
-    rows rank, and the stationary model does not compose pipeline stages.
+    PP and pipeline microbatches are native execution dimensions. The bypass
+    only ranks them; complete native windows settle their measured metrics.
     ``buildable(layout, quantum)`` returns why the native layout cannot be
     built, else None.
     """
+    policy = policy or MAX_BATCH_POLICY
+    top = policy.settings.get("top_layouts", TOP_LAYOUTS) if top is None else top
+    if pp_only is not None:
+        layout_scope = "pipeline" if pp_only else "all"
     chosen, skipped, seen = [], [], set()
     for row in rows:
         p = row["parallelism"]
         layout = {key: p[key] for key in ("dp", "tp", "pp", "ep")}
+        if p["microbatches"] != 1:
+            layout["microbatches"] = p["microbatches"]
+        if layout_scope == "pipeline" and not is_pipeline_layout(layout):
+            continue
         key = tuple(layout.values())
-        if p["microbatches"] != 1 or key in seen:
+        if key in seen:
             continue
         seen.add(key)
         reason = None if row["status"] == "screened_candidate" else "bypass_" + row["status"]
-        if reason is None and p["pp"] > 1:
-            reason = "native_stationary_does_not_compose_pipeline_stages"
         reason = reason or buildable(layout, row["batch_quantum"])
         if reason:
             skipped.append({"layout": layout, "reason": reason})
@@ -107,13 +158,15 @@ def classify(row):
         return "too_big"
     if status == "forecast_rejected":
         reason = str(row.get("rejection_reason", ""))
-        return "too_big" if any(marker in reason for marker in _WALL_TOO_BIG + CAPACITY_REJECTIONS) else "unusable"
+        return "too_big" if any(marker in reason for marker in _WALL_TOO_BIG + CAPACITY_REJECTIONS + IMPORT_REJECTIONS) else "unusable"
     return "failed" if status == "failed" else "pending"
 
 
 def _point(batch, row):
     bounds = row["diagnostics"]["metric_bounds"]["mean_complete_request_tpot_ns"]
-    wall = max(0., (row.get("wall_seconds") or 0.) - (row.get("prefill_wall_seconds") or 0.))
+    # A measured-pool re-run projects from that attempt alone.
+    wall = (row["native_retry_wall_seconds"] if "native_retry_wall_seconds" in row else
+            max(0., (row.get("wall_seconds") or 0.) - (row.get("prefill_wall_seconds") or 0.)))
     return {"batch": batch, "tpot_upper_ns": bounds["upper"], "tpot_ns": bounds["estimate"],
             "status": row["status"], "native_wall_seconds": wall,
             "peak_memory_bytes": row.get("peak_memory_bytes")}
@@ -134,12 +187,13 @@ def _toward(line, slo_ns):
     return (slo_ns - intercept) / slope if slope > 0 else None
 
 
-def plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes=None):
+def plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes=None, *, policy=None):
     """Replay one layout's batch points; the next batch to run, or the layout's outcome.
 
     ``lookup(batch)`` returns the saved row at that batch, or None;
     ``memory_budget_bytes`` (None: unbounded) bounds a candidate's peak memory.
     """
+    policy = policy or MAX_BATCH_POLICY
     caps = (wall_cap_seconds, memory_budget_bytes)
     q = entry["quantum"]
 
@@ -159,9 +213,10 @@ def plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes=Non
         if kind == "failed":
             return {"runs": runs, "outcome": {"kind": "failed"}}
         points = [_point(run["batch"], lookup(run["batch"])) for run in runs if run["kind"] == "measured"]
-        batch = _following(entry, runs, points, slo_ns, caps, rounded)
+        batch = _following(entry, runs, points, slo_ns, caps, rounded, policy=policy)
         if batch is None:
-            return {"runs": runs, "points": points, "outcome": _outcome(entry, runs, points, slo_ns, caps, rounded)}
+            return {"runs": runs, "points": points,
+                    "outcome": _outcome(entry, runs, points, slo_ns, caps, rounded, policy=policy)}
 
 
 def _limit(entry, runs, points, caps, rounded):
@@ -171,8 +226,12 @@ def _limit(entry, runs, points, caps, rounded):
     big = [run for run in runs if run["kind"] == "too_big"]
     if big:
         smallest = min(big, key=lambda run: run["batch"])
-        wall = any(marker in str(smallest["reason"]) for marker in _WALL_TOO_BIG)
-        limits.append((smallest["batch"] - 1, "native_wall_limited" if wall else "native_capacity_limited"))
+        reason = str(smallest["reason"])
+        wall = any(marker in reason for marker in _WALL_TOO_BIG)
+        import_limited = any(marker in reason for marker in IMPORT_REJECTIONS)
+        label = ("native_wall_limited" if wall else "native_import_limited"
+                 if import_limited else "native_capacity_limited")
+        limits.append((smallest["batch"] - 1, label))
     known = _native_capacities(runs)
     if known:
         limits.append((min(known), "native_capacity_limited"))
@@ -192,14 +251,18 @@ def _limit(entry, runs, points, caps, rounded):
     return min(limits, key=lambda item: item[0])
 
 
-def _following(entry, runs, points, slo_ns, caps, rounded):
+def _following(entry, runs, points, slo_ns, caps, rounded, *, policy=MAX_BATCH_POLICY):
     """The next batch of a layout's search, or None when it is finished."""
     q = entry["quantum"]
-    if len(runs) >= MAX_RUNS or len(points) >= MAX_POINTS or _bracket(points, slo_ns):
+    if _bracket(points, slo_ns):
+        return None
+    if ((policy.max_runs is not None and len(runs) >= policy.max_runs)
+            or (policy.max_points is not None and len(points) >= policy.max_points)):
         return None
     last, known, tried = runs[-1], _native_capacities(runs), [run["batch"] for run in runs]
     if not points:
-        # Too big: the native capacity it reported, else half; an unusable
+        # Too big: a reported native capacity goes there directly; wall and
+        # import-speed rejections use the existing halving path. An unusable
         # rejection ends the layout.
         if last["kind"] != "too_big" or last["batch"] <= q:
             return None
@@ -250,7 +313,7 @@ def _step(batch, q):
     return max(q, MIN_STEP * batch)
 
 
-def _outcome(entry, runs, points, slo_ns, caps, rounded):
+def _outcome(entry, runs, points, slo_ns, caps, rounded, *, policy=MAX_BATCH_POLICY):
     q = entry["quantum"]
     pair = _bracket(points, slo_ns)
     if pair:
@@ -267,28 +330,32 @@ def _outcome(entry, runs, points, slo_ns, caps, rounded):
         limit, reason = _limit(entry, runs, points, caps, rounded)
         # Before the run budget is spent a layout stops only where its limit
         # leaves no batch a step from every tried one.
-        spent = len(runs) >= MAX_RUNS or len(points) >= MAX_POINTS
+        spent = ((policy.max_runs is not None and len(runs) >= policy.max_runs)
+                 or (policy.max_points is not None and len(points) >= policy.max_points))
         if reason is None or (spent and limit - largest["batch"] >= _step(largest["batch"], q)):
-            reason = "points_exhausted"
+            reason = "points_exhausted" if spent else "slo_not_reached"
         return {"kind": "limited", "reason": reason, "batch": largest["batch"]}
     if min(point["batch"] for point in points) == q:
         return {"kind": "slo_unreachable", "batch": q}
     return {"kind": "no_passing_point"}
 
 
-def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_budget_bytes=None):
+def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_budget_bytes=None, *, policy=None):
     """Every layout's plan, the acceptance run, and the case's next native runs.
 
     ``lookups[i]`` reads the saved rows of ``entries[i]``'s layout and
     ``replica_gpus[i]`` its GPUs per replica.
     """
-    layouts = [{**entry, **plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes)}
+    policy = policy or MAX_BATCH_POLICY
+    layouts = [{**entry, **plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes,
+                                        policy=policy)}
                for entry, lookup in zip(entries, lookups)]
     pending = [(plan["layout"], plan["next"]) for plan in layouts if "next" in plan]
     result = {"layouts": layouts, "next": pending, "acceptance": None}
     if pending or any(plan["outcome"]["kind"] == "failed" for plan in layouts):
         return result
     options = []
+    max_batch = policy.objective == "maximum_batch_under_slo"
     for index, plan in enumerate(layouts):
         outcome = plan["outcome"]
         if outcome["kind"] == "interpolated":
@@ -298,11 +365,18 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
             rate = point["batch"] * 1e9 / (point["tpot_ns"] * replica_gpus[index])
         else:
             continue
-        options.append((rate, index))
+        # Max-Batch mode prefers the largest batch that remains within the SLO.
+        # Throughput is a deterministic tie-breaker.
+        options.append(((outcome["batch"], rate) if max_batch else (rate,), index))
     if not options:
         return result
-    rate, index = max(options)
+    _objective, index = max(options)
     plan, outcome = layouts[index], layouts[index]["outcome"]
+    if outcome["kind"] == "interpolated":
+        rate = outcome["batch"] * 1e9 / (outcome["predicted_tpot_ns"] * replica_gpus[index])
+    else:
+        point = next(point for point in plan["points"] if point["batch"] == outcome["batch"])
+        rate = point["batch"] * 1e9 / (point["tpot_ns"] * replica_gpus[index])
     acceptance = {"layout": plan["layout"], "batch": outcome["batch"], "kind": outcome["kind"],
                   "reason": outcome.get("reason"), "predicted_tokens_per_second_per_gpu": rate}
     if outcome["kind"] == "interpolated":

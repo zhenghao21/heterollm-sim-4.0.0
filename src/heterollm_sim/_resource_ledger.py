@@ -36,6 +36,10 @@ except ImportError:
         def exceptval(*args, **kwargs):
             return lambda function: function
 
+        @staticmethod
+        def binding(value):
+            return lambda function: function
+
     cython = _PythonMode()
 
 if cython.compiled:
@@ -43,6 +47,11 @@ if cython.compiled:
     from cython.cimports.cpython.object import PyObject_RichCompareBool, Py_EQ, Py_GT
     from cython.cimports.cpython.tuple import PyTuple_CheckExact, PyTuple_GET_ITEM, PyTuple_GET_SIZE
     from cython.cimports.cpython.ref import PyObject
+
+
+@cython.binding(True)
+def timeline_before_init(self: object, transaction, name):
+    self.transaction, self.name = transaction, name
 
 
 @cython.cfunc
@@ -238,6 +247,10 @@ def _later(interval: object, previous: object) -> cython.bint:
     left_end: cython.pointer(PyObject)
     right_start: cython.pointer(PyObject)
     right_end: cython.pointer(PyObject)
+    interval_end_value: object
+    interval_start_value: object
+    previous_end_value: object
+    previous_start_value: object
     if cython.compiled:
         if (PyTuple_CheckExact(interval) and PyTuple_CheckExact(previous)
                 and PyTuple_GET_SIZE(interval) >= 2 and PyTuple_GET_SIZE(previous) >= 2):
@@ -250,10 +263,20 @@ def _later(interval: object, previous: object) -> cython.bint:
                 if left_end == right_end or PyFloat_AS_DOUBLE(cython.cast(object, left_end)) == PyFloat_AS_DOUBLE(cython.cast(object, right_end)):
                     return PyFloat_AS_DOUBLE(cython.cast(object, left_start)) > PyFloat_AS_DOUBLE(cython.cast(object, right_start))
                 return PyFloat_AS_DOUBLE(cython.cast(object, left_end)) > PyFloat_AS_DOUBLE(cython.cast(object, right_end))
-        # Tuple comparison uses identity-or-equality, including a shared NaN.
-        if PyObject_RichCompareBool(interval[1], previous[1], Py_EQ):
-            return PyObject_RichCompareBool(interval[0], previous[0], Py_GT)
-        return PyObject_RichCompareBool(interval[1], previous[1], Py_GT)
+        # Constructing the original two tuples reads all four items before
+        # any comparison. Capture the same references in the same order:
+        # an authored getter or comparison may mutate the source sequences.
+        interval_end_value = interval[1]
+        interval_start_value = interval[0]
+        previous_end_value = previous[1]
+        previous_start_value = previous[0]
+        # Tuple comparison checks identity-or-equality on both positions;
+        # equal starts must not invoke __gt__, including shared NaNs.
+        if not PyObject_RichCompareBool(interval_end_value, previous_end_value, Py_EQ):
+            return PyObject_RichCompareBool(interval_end_value, previous_end_value, Py_GT)
+        if PyObject_RichCompareBool(interval_start_value, previous_start_value, Py_EQ):
+            return False
+        return PyObject_RichCompareBool(interval_start_value, previous_start_value, Py_GT)
     else:
         return (interval[1], interval[0]) > (previous[1], previous[0])
 
@@ -754,3 +777,94 @@ def record_resource_paths(paths, task, demands, start_ns, resource_lanes,
             duration = end_ns - start_ns
             _put(paths, (resource_id, lane), (task.task_id, start_path, duration,
                                             start_distance + duration, task.category))
+
+
+def can_sink_resource_columns(timeline, column_names):
+    """Check native public operands without invoking their mapping protocols.
+
+    The caller proves the exact timeline class and unchanged namespace before
+    entering this helper. Keep its map order and prove every root before the
+    key pass; no value lookup may precede the complete exact-string key proof.
+    """
+    column: dict
+    rid: object
+    for name in column_names:
+        if type(getattr(timeline, name)) is not dict:
+            return False
+    for name in column_names:
+        column = getattr(timeline, name)
+        for rid in column:
+            if type(rid) is not str:
+                return False
+    # Read native instance storage, not authored properties. The remaining
+    # complete busy/bytes/last value proof also covers foreign resource rows.
+    try:
+        namespace = object.__getattribute__(timeline, "__dict__")
+    except (AttributeError, TypeError):
+        return False
+    if type(namespace) is not dict:
+        return False
+    busy = namespace.get("busy_ns")
+    byte_count = namespace.get("bytes_moved")
+    last = namespace.get("last_intervals")
+    if (type(busy) is not dict or type(byte_count) is not dict
+            or type(last) is not dict
+            or len({id(busy), id(byte_count), id(last)}) != 3):
+        return False
+    for rid, value in busy.items():
+        if (type(rid) is not str or type(value) is not float
+                or not _NATIVE_FINITE(value)):
+            return False
+    for rid, value in byte_count.items():
+        if type(rid) is not str or type(value) is not int:
+            return False
+    for rid, value in last.items():
+        if (type(rid) is not str or type(value) is not tuple or len(value) != 2
+                or type(value[0]) is not float or type(value[1]) is not float
+                or not _NATIVE_FINITE(value[0]) or not _NATIVE_FINITE(value[1])):
+            return False
+    return True
+
+
+def consume_task_resource_sink(sink, metrics):
+    """Consume one native result into independent task and owner bills.
+
+    Callers retain input-request order and exclude authored counter callbacks.
+    Never add an owner subtotal into the task bill: both receive every delta.
+    """
+    if (type(sink) is not tuple or len(sink) != 6
+            or any(type(value) is not dict for value in sink)
+            or len({id(value) for value in sink}) != 6):
+        raise TypeError("task resource sink requires six distinct built-in dictionaries")
+    task_busy: dict = sink[0]
+    task_bytes: dict = sink[1]
+    task_last: dict = sink[2]
+    owner_busy: dict = sink[3]
+    owner_bytes: dict = sink[4]
+    owner_last: dict = sink[5]
+    rid: object
+    value: object
+    previous: object
+    for rid, value in metrics.get("resource_busy_ns", {}).items():
+        task_busy[rid] = _add(task_busy.get(rid, 0.0), value)
+        owner_busy[rid] = _add(owner_busy.get(rid, 0.0), value)
+    for rid, value in metrics.get("resource_bytes", {}).items():
+        task_bytes[rid] = task_bytes.get(rid, 0) + value
+        owner_bytes[rid] = owner_bytes.get(rid, 0) + value
+    for rid, value in metrics.get("resource_last_intervals", {}).items():
+        previous = task_last.get(rid)
+        if previous is None or _later(value, previous):
+            task_last[rid] = value
+        previous = owner_last.get(rid)
+        if previous is None or _later(value, previous):
+            owner_last[rid] = value
+
+
+def memo_keys_are_exact_int(memo):
+    """Original ordered all-int proof for a caller-proven exact memo dict."""
+    mapping: dict = memo
+    key: object
+    for key in mapping:
+        if type(key) is not int:
+            return False
+    return True

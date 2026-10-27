@@ -56,6 +56,113 @@ def test_exact_9_6_15_order_and_60_default_batch_candidates():
     assert all(case["output_tokens"] in (373, 499, 1100) for case in cases)
 
 
+def test_pipeline_microbatch_layout_identity_reaches_worker_and_parameters(tmp_path):
+    case = run.case_matrix()[0]
+    plain = run.make_layout(1, 4, 2, 1)
+    split = run.make_layout(1, 4, 2, 1, microbatches=2)
+    params = run.parameters(case, split, 4, "fast")
+    assert run.params_layout(params) == split
+    assert run.params_candidate_id(params) != run.candidate_id(case, plain, 4)
+    assert run.layout_label(split).endswith("_M2")
+    command = run.candidate_command(case, split, 4, tmp_path, "fast")
+    assert command[command.index("--microbatches") + 1] == "2"
+    assert run.layout_rejection(case, split, 3) == "batch_size must be divisible by ep * microbatches"
+    with pytest.raises(ValueError, match="positive integer"):
+        run.make_layout(1, 4, 2, 1, microbatches=True)
+
+
+@pytest.mark.parametrize("layout", [run.make_layout(1, 4, 2, 1), run.make_layout(1, 8, 1, 1, microbatches=2)])
+def test_pipeline_contract_refuses_old_candidate_and_case_cache(tmp_path, layout):
+    case = run.case_matrix()[0]
+    params = run.parameters(case, layout, 4, "fast")
+    assert params["pipeline_execution_contract"] == run.PIPELINE_FORECAST_CONTRACT
+    assert "pipeline_execution_contract" not in run.parameters(case, LAYOUT, 4, "fast")
+    legacy = {key: value for key, value in params.items() if key != "pipeline_execution_contract"}
+    identity = run.params_candidate_id(params)
+    run.save_candidate(tmp_path, {"parameters": legacy, "candidate_id": identity, "backend": run.BACKEND,
+        "runner_contract": run.FAST_CONTRACT, "status": "forecast_rejected", "metrics": None})
+    assert not run._saved_terminal(tmp_path, case, layout, 4, "fast")
+    with pytest.raises(RuntimeError, match="saved candidate parameters/backend differ"):
+        run._search_lookup(tmp_path, case, layout)(4)
+    run.write_json(tmp_path / "points" / (case["case_id"] + ".json"), {
+        "case": case, "backend": run.BACKEND, "runner_contract": run.FAST_CONTRACT,
+        "status": "all_candidates_rejected", "planned_candidate_ids": [identity]})
+    with pytest.raises(RuntimeError, match="different pipeline execution contract"):
+        run._reusable_point(case, [identity], tmp_path, "fast", layout=layout)
+
+
+def test_pp_prefill_cache_has_a_distinct_contract(tmp_path):
+    from heterollm_sim.reference import build_reference_scenario
+    params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1), 4, "fast")
+    expected = run.prefill_parameters(params)
+    assert expected["prefill_contract"] == run.PIPELINE_PREFILL_CONTRACT != run.PREFILL_CONTRACT
+    assert run.prefill_parameters(run.parameters(run.case_matrix()[0], LAYOUT, 4, "fast"))["prefill_contract"] == run.PREFILL_CONTRACT
+    identity = run.prefill_id(expected)
+    run.write_json(tmp_path / "prefill" / (identity + ".json"), {
+        "parameters": {**expected, "prefill_contract": run.PREFILL_CONTRACT}, "backend": run.BACKEND,
+        "status": "rejected", "rejection_reasons": ["old_pipeline_unsupported"]})
+    observed = []
+    def runner(scenario, **kwargs):
+        observed.append(scenario)
+        return NS(approximation={"prefill_pass": {"accepted": True}, "rejection_reasons": []},
+                  layer_window_samples=())
+    value = run.prefill_pass(params, tmp_path, builder=lambda *a, **k: build_reference_scenario(), runner=runner)
+    assert len(observed) == 1 and value["status"] == "accepted"
+
+
+def test_pipeline_manager_refuses_a_manifest_without_execution_contract(tmp_path, monkeypatch):
+    case, layout = run.case_matrix()[0], run.make_layout(1, 4, 2, 1)
+    monkeypatch.setattr(run, "selected_cases", lambda case_ids=None: [case])
+    monkeypatch.setattr(run, "check_grid", lambda *args: None)
+    run.write_json(tmp_path / "run_manifest.json", {"runner_contract": run.FAST_CONTRACT,
+        "cases": [case], "layout": layout, "max_parallel_configurations": 1, "batch_sizes": [4]})
+    with pytest.raises(RuntimeError, match="existing native manifest differs"):
+        run.run_manager(tmp_path, layout=layout, batches=[4], workers=1, mode="fast")
+
+
+def test_exact_pipeline_window_is_measured_without_a_forecast(monkeypatch):
+    from heterollm_sim.reporting import FastScenarioResult
+    from heterollm_sim.reference import build_reference_scenario
+    scenario = build_reference_scenario()
+    scenario = replace(scenario, placement=replace(scenario.placement,
+        parallel=replace(scenario.placement.parallel, pp_degree=2, rank_mapping=())))
+    detailed = fake_result()
+    result = FastScenarioResult(scenario, None,
+        {"method": "native_pipeline_full_window/v1", "effective_mode": "detailed"},
+        (), "aggregate", detailed=detailed)
+    monkeypatch.setattr(run, "traffic_result", lambda measured: {"native": measured is detailed})
+    params = small_parameters(run.make_layout(2, 2, 2, 1, microbatches=2))
+    row = run.native_fast_result(result, params)
+    assert row["status"] == "completed"
+    assert row["metrics"]["mean_complete_request_tpot_ns"] == 5.
+    assert row["metrics"]["cluster_tokens_per_second"] == 550e6
+    assert row["physical_tokens"] == 12
+    assert row["forecast_tokens"] == 0 and "native_window_forecast" not in row
+    assert row["traffic"] == {"native": True}
+    for name, bound in row["diagnostics"]["metric_bounds"].items():
+        assert bound["lower"] == bound["estimate"] == bound["upper"] == row["metrics"][name]
+        assert bound["relative_error_budget"] == 0.
+    assert not any("SAME_CLASS" in value or "same native work" in value for value in row["assumptions"])
+
+
+def test_pp_prefill_runs_full_pass_and_does_not_inherit_decode_microbatches(tmp_path):
+    from heterollm_sim.reference import build_reference_scenario
+    params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1, microbatches=2), 4, "fast")
+    seen = []
+    def builder(*args, **kwargs):
+        seen.append(kwargs)
+        return build_reference_scenario()
+    def runner(scenario, **kwargs):
+        assert scenario.simulation.native_prefill.full_pass
+        assert scenario.simulation.native_prefill.max_wall_seconds == run.PREFILL_WALL_BUDGET_SECONDS
+        assert kwargs["control"].deadline_monotonic is not None
+        return NS(approximation={"prefill_pass": {"accepted": True}, "rejection_reasons": []},
+                  layer_window_samples=())
+    result = run.prefill_pass(params, tmp_path, builder=builder, runner=runner)
+    assert result["parameters"]["pass"] == "full"
+    assert seen == [{"tp": 4, "pp": 2, "ep": 1, "full_pass": True}]
+
+
 def _fast_result(upper=99e6, accepted=True):
     from heterollm_sim.reference import build_reference_scenario
     from heterollm_sim.reporting import FastScenarioResult
@@ -72,14 +179,15 @@ def _fast_result(upper=99e6, accepted=True):
         (), "aggregate", native_window_forecast=forecast)
 
 
+PREFILL_LAYOUT = {"tp": 8, "pp": 1, "ep": 1}
 REJECTED_PREFILL = {"prefill_id": "prefill", "status": "rejected", "prefill_pass": {"metric_bounds": {}},
-                    "rejection_reasons": ["native_prefill_independent_budget_exceeded"], "wall_seconds": 1.}
+                    "parameters": PREFILL_LAYOUT, "rejection_reasons": ["native_prefill_independent_budget_exceeded"], "wall_seconds": 1.}
 
 
 def _prefill(lower, upper, observed=None):
     from heterollm_sim.native_stationary import _interval
     return {"prefill_id": "prefill", "status": "accepted", "rejection_reasons": [], "wall_seconds": 1.,
-            "prefill_pass": {"metric_bounds": {"prefill_pass_ns": _interval(lower, upper)},
+            "parameters": PREFILL_LAYOUT, "prefill_pass": {"metric_bounds": {"prefill_pass_ns": _interval(lower, upper)},
                              "error_budget": {"observed_pass_ns": observed}}}
 
 
@@ -139,6 +247,38 @@ def test_prefill_pass_runs_once_per_model_prompt_and_layout(tmp_path):
     assert len(seen) == 2 and seen[-1][2]["full_pass"] is True
 
 
+@pytest.mark.parametrize("previous_contract", [None, "native_prefill_whole_prompt_forward_v1"])
+def test_prefill_contract_invalidates_old_rejection_without_changing_decode(tmp_path, monkeypatch, previous_contract):
+    monkeypatch.setattr(run, "prefill_tp", lambda model, workload, tp, pp, ep: tp)
+    case = next(row for row in run.case_matrix() if
+        (row["model"], row["hardware"], row["workload"]) == ("llama4_maverick", "HBM4", "LONG"))
+    params = run.parameters(case, run.make_layout(1, 4, 1, 2), 228, "fast")
+    original_params = deepcopy(params)
+    expected = run.prefill_parameters(params)
+    legacy = {key: value for key, value in expected.items() if key != "prefill_contract"}
+    if previous_contract is not None:
+        legacy["prefill_contract"] = previous_contract
+    path = tmp_path / "prefill" / (run.prefill_id(expected) + ".json")
+    run.write_json(path, {"backend": run.BACKEND, "parameters": legacy, "status": "rejected",
+        "prefill_pass": {"accepted": False},
+        "rejection_reasons": ["native_prefill_pass_requires_one_whole_prompt_forward"]})
+    runs = []
+
+    def runner(scenario, **options):
+        runs.append(scenario)
+        return NS(approximation={"prefill_pass": {"accepted": True}, "rejection_reasons": []},
+                  layer_window_samples=())
+
+    result = run.prefill_pass(params, tmp_path, builder=lambda *a, **k: _fast_result().scenario, runner=runner)
+    assert result["status"] == "accepted" and result["parameters"]["prefill_contract"] == run.PREFILL_CONTRACT
+    again = run.prefill_pass(params, tmp_path,
+        builder=lambda *a, **k: pytest.fail("current Prefill cache rebuilt"),
+        runner=lambda *a, **k: pytest.fail("current Prefill cache rerun"))
+    assert result == again == run.read_json(path) and len(runs) == 1
+    assert params == original_params and "prefill_contract" not in params
+    assert params["runner_contract"] == run.FAST_CONTRACT == "native_stationary_layout_fast_v21"
+
+
 def test_native_fast_runner_uses_upper_bound_and_keeps_full_traffic_unknown():
     params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
     row = run.native_fast_result(_fast_result(upper=101e6), params)
@@ -185,12 +325,13 @@ def test_budget_rejected_point_reports_its_intervals_as_missing_the_target(tmp_p
 
 def test_native_fast_assumptions_do_not_claim_complete_physical_window():
     from exploring_hbf_native_config import PHYSICAL_WINDOW_ASSUMPTION
-    scenario = NS(assumptions=("authored hardware assumption", PHYSICAL_WINDOW_ASSUMPTION))
+    scenario = NS(assumptions=("authored hardware assumption", PHYSICAL_WINDOW_ASSUMPTION),
+                  placement=NS(parallel=NS(pp_degree=1, pipeline_microbatches=1)))
     assumptions = run.native_fast_assumptions(scenario)
     assert PHYSICAL_WINDOW_ASSUMPTION not in assumptions
     assert "authored hardware assumption" in assumptions
     assert any("10%" in text and "conditional" in text for text in assumptions)
-    assert run.native_fast_assumptions(NS(assumptions=assumptions)) == assumptions
+    assert run.native_fast_assumptions(NS(assumptions=assumptions, placement=scenario.placement)) == assumptions
     assert any("continuous-refill" in text for text in assumptions)
     from heterollm_sim.native_stationary import SAME_CLASS_ADDRESS_ASSUMPTION
     assert SAME_CLASS_ADDRESS_ASSUMPTION in assumptions
@@ -202,7 +343,7 @@ def test_fast_runner_contract_keeps_the_budget_and_sample_scope():
     params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
     assert params["runner_contract"] == run.FAST_CONTRACT != run.CONTRACT
     assert params["target_relative_error"] == .1
-    assert params["candidate_wall_budget_seconds_per_worker"] == 1800.
+    assert params["candidate_wall_budget_seconds_per_worker"] == 3000.
     value = replace(_fast_result(), layer_window_samples=(layer_sample(),))
     row = run.native_fast_result(value, params)
     assert row["status"] == "completed" and row["sampled_tokens"] == 0
@@ -224,7 +365,7 @@ def test_fast_total_wall_budget_includes_bootstrap_and_user_pause_wins(tmp_path,
     seen = []
     def runner(scenario, **options):
         seen.append(scenario.simulation)
-        clock[0] = 1801.
+        clock[0] = 3001.
         if stop:
             (tmp_path / "stop.request").write_text("user_pause", encoding="utf-8")
         return value
@@ -250,7 +391,7 @@ def test_real_progress_writer_uses_native_stop_deadline_and_flushes_queue(tmp_pa
         assert control.progress_queue is writer.queue
         assert control.progress_callback is control.cancellation_callback is None
         assert control.stop_request_path == str(tmp_path / "stop.request")
-        assert control.deadline_monotonic == 1800.
+        assert control.deadline_monotonic == 3000.
         clock[0] = 2.
         control.report("serving_boundary", 0, metadata={"cumulative_progress": {"visible_output_tokens": 0}})
         clock[0] = 7.
@@ -378,6 +519,53 @@ def test_unknown_and_host_memory_errors_are_not_device_capacity_rejections():
     assert not run.capacity_error(AllocationError("allocation overlaps another without an explicit alias"))
     assert not run.capacity_error(MemoryError("capacity exhausted in host memory"))
     assert not run.capacity_error(RuntimeError("unexpected bug mentioning capacity"))
+    assert not run.capacity_error(ValueError("GDDR allocation 486127488 exceeds physical capacity 320000000"))
+
+
+def test_real_physical_allocation_capacity_error_rejects_candidate_and_reduces_search_batch(tmp_path):
+    from heterollm_sim.planner import ScenarioValidationError, _gddr_stable_address
+
+    # This is the physical allocation branch the Maverick EP4 pilot reached;
+    # classification must use its structured diagnostic, not its ValueError text.
+    case = next(case for case in run.case_matrix()
+                if case["case_id"] == "native__llama4_maverick__HBF_plus__SHORT__G8")
+    layout = run.make_layout(2, 1, 1, 4)
+    entry = {"layout": layout, "quantum": 4, "bypass": {
+        "candidate_batch": 512, "capacity_max_batch": 8192,
+        "tpot_ns": 80e6, "per_gpu_tokens_s": 100., "tpot_line_ns": (10e6, 1e5)}}
+    initial = run.search_plan.plan_layout(entry, lambda batch: None, run.SLO_NS, 1800.)
+    rejected_batch = initial["next"]
+
+    def builder(*names, **options):
+        _gddr_stable_address("pilot.lm_head.output", 0, 486127488, 320000000, 32,
+            component_id="sram0", physical_kind="SRAM", physical_owner="sram0")
+
+    row = run.execute_candidate(run.parameters(case, layout, rejected_batch, "fast"), tmp_path,
+        NS(report=lambda progress: None), builder=builder)
+    assert row["status"] == "capacity_rejected" and row["metrics"] is None
+    assert row["error"]["type"] == ScenarioValidationError.__name__
+    diagnostic, = row["error"]["details"]["diagnostics"]
+    assert diagnostic["code"] == "physical_memory_capacity_exceeded"
+    assert diagnostic["stage"] == "capacity_check"
+    assert diagnostic["requested_bytes"] == 486127488
+    assert diagnostic["capacity_bytes"] == 320000000
+    assert (diagnostic["component_id"], diagnostic["physical_kind"], diagnostic["physical_owner"]) == (
+        "sram0", "SRAM", "sram0")
+    assert "SRAM" in row["error"]["message"] and "GDDR" not in row["error"]["message"]
+    assert run.search_plan.classify(row) == "too_big"
+    following = run.search_plan.plan_layout(entry,
+        lambda batch: row if batch == rejected_batch else None, run.SLO_NS, 1800.)
+    assert following["next"] == rejected_batch // 2
+
+    # Invalid access geometry remains a correctness failure, even with enough
+    # memory: it cannot be converted into a smaller-batch recommendation.
+    def invalid_builder(*names, **options):
+        _gddr_stable_address("pilot.lm_head.output", 16, 32, 320000000, 32, allocation_size=32)
+
+    invalid = run.execute_candidate(run.parameters(case, layout, 4, "fast"), tmp_path,
+        NS(report=lambda progress: None), builder=invalid_builder)
+    assert invalid["status"] == "failed" and invalid["metrics"] is None
+    assert invalid["error"]["type"] == "ValueError"
 
 
 def test_traffic_adds_pd_once_and_missing_sram_is_unknown(monkeypatch):
@@ -563,13 +751,46 @@ def test_progress_keeps_committed_counters_when_next_task_count_resets(tmp_path,
     assert reset["candidate_wall_seconds"] == 0.
 
 
-def test_contracts_are_the_layout_search_v16_and_the_default_directory_is_new():
-    assert run.CONTRACT.endswith("_v16") and run.FAST_CONTRACT.endswith("_v16")
+# The approved scoped defaults require a separate fast cache contract.
+def test_contracts_keep_detailed_v17_and_separate_scoped_ep_b4_fast_v21():
+    assert run.CONTRACT.endswith("_v17") and run.FAST_CONTRACT.endswith("_v21")
     assert "tp8" not in run.CONTRACT and "tp8" not in run.FAST_CONTRACT
     assert run.parameters(run.case_matrix()[0], LAYOUT, 1)["runner_contract"] == run.CONTRACT
     assert run.DEFAULT_DIRECTORY.name != "exploring_hbf_native_20261019"
     assert run.DEFAULT_DIRECTORY.parent == run.RETIRED_DIRECTORIES[0].parent
     assert run.DEFAULT_DIRECTORY not in run.RETIRED_DIRECTORIES
+
+
+@pytest.mark.parametrize("search", [False, True])
+@pytest.mark.parametrize("legacy_contract", ["native_stationary_layout_fast_v17", "native_stationary_layout_fast_v18", "native_stationary_layout_fast_v19", "native_stationary_layout_fast_v20"])
+def test_scoped_b4_does_not_resume_older_candidates_points_or_manifests(tmp_path, monkeypatch, search, legacy_contract):
+    case = run.case_matrix()[0]
+    params = run.parameters(case, LAYOUT, 1, "fast")
+    legacy_params = {**params, "runner_contract": legacy_contract}
+    identity = run.candidate_id(case, LAYOUT, 1)
+    run.save_candidate(tmp_path, {"parameters": legacy_params, "candidate_id": identity,
+        "backend": run.BACKEND, "runner_contract": legacy_contract, "status": "completed", "metrics": None})
+    assert not run._saved_terminal(tmp_path, case, LAYOUT, 1, "fast")
+    with pytest.raises(RuntimeError, match="saved candidate parameters/backend differ"):
+        run._search_lookup(tmp_path, case, LAYOUT)(1)
+    run.write_json(tmp_path / "points" / (case["case_id"] + ".json"), {
+        "case": case, "backend": run.BACKEND, "runner_contract": legacy_contract,
+        "status": "completed", "planned_candidate_ids": [identity]})
+    with pytest.raises(RuntimeError, match="refusing historical reuse"):
+        run._reusable_point(case, [identity], tmp_path, "fast")
+
+    manifest = {"runner_contract": legacy_contract}
+    run.write_json(tmp_path / "run_manifest.json", manifest)
+    monkeypatch.setattr(run, "check_grid", lambda *args: None)
+    never_spawn = lambda *args: pytest.fail("legacy result caused a worker to start")
+    with pytest.raises(RuntimeError, match="manifest differs"):
+        if search:
+            run.run_search_manager(tmp_path, workers=1, case_ids=[case["case_id"]], spawn=never_spawn)
+        else:
+            run.run_manager(tmp_path, workers=1, batches=[1], mode="fast",
+                            case_ids=[case["case_id"]], spawn=never_spawn)
+    assert run.read_json(tmp_path / "run_manifest.json") == manifest
+    assert not (tmp_path / "stop.request").exists()
 
 
 def test_identity_and_parameters_carry_the_layout_and_must_fill_the_gpus():
@@ -728,7 +949,7 @@ def test_fast_forecast_is_scaled_from_one_replica_to_the_cluster():
     assert row["native_window_forecast"]["metrics"]["cluster_tokens_per_second"] == 80.
 
 
-def test_fast_wall_caps_scale_with_the_concurrency_a_candidate_starts_under(tmp_path, monkeypatch):
+def test_fast_wall_caps_are_absolute_across_concurrency(tmp_path, monkeypatch):
     import heterollm_sim.execution_control as execution_control
     clock = [0.]
     monkeypatch.setattr(run.time, "perf_counter", lambda: clock[0])
@@ -738,13 +959,159 @@ def test_fast_wall_caps_scale_with_the_concurrency_a_candidate_starts_under(tmp_
     seen = []
     def runner(scenario, **options):
         seen.append((options["control"].deadline_monotonic, scenario.simulation.native_window.max_wall_seconds))
-        clock[0] = 1801.
+        clock[0] = 3001.
         return value
     row = run.execute_candidate(params, tmp_path, NS(report=lambda p: None), builder=lambda *a, **kw: value.scenario,
                                 runner=runner, prefill=lambda *a: REJECTED_PREFILL, wall_factor=3)
-    # Past one worker's 1800 s, inside three workers' 5400 s.
-    assert seen == [(5400., 5400.)]
-    assert row["status"] == "completed" and row["wall_factor"] == 3 and row["candidate_wall_budget_seconds"] == 5400.
+    assert seen == [(3000., 3000.)]
+    assert row["status"] == "forecast_rejected" and row["wall_factor"] == 3 and row["candidate_wall_budget_seconds"] == 3000.
+
+
+def test_refill_rejection_reruns_the_batch_once_with_the_measured_pool(tmp_path, monkeypatch):
+    import heterollm_sim.execution_control as execution_control
+    clock = [0.]
+    monkeypatch.setattr(run.time, "perf_counter", lambda: clock[0])
+    monkeypatch.setattr(execution_control, "perf_counter", lambda: clock[0])
+    accepted = _fast_result()
+    rejected = replace(_fast_result(accepted=False), approximation={"effective_mode": "forecast_rejected",
+        "rejection_reasons": ["native_stationary_refill_not_always_ready"],
+        "error_budget": {"import_pool_required": 6, "pd_import_span_ns": {"lower": 2e8, "upper": 3e8}}})
+    pools = []
+
+    def builder(*args, **options):
+        pools.append(options.get("import_pool"))
+        scenario = accepted.scenario
+        return replace(scenario, workload=replace(scenario.workload, metadata={**scenario.workload.metadata,
+            "external_kv_ingress": {"max_inflight_requests": options.get("import_pool") or 2}}))
+
+    def runner(scenario, **options):
+        clock[0] += 100. if len(pools) == 1 else 40.
+        return rejected if len(pools) == 1 else accepted
+
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
+    row = run.execute_candidate(params, tmp_path, NS(report=lambda p: None), builder=builder, runner=runner,
+                                prefill=lambda *a: REJECTED_PREFILL)
+    assert pools == [None, 6] and row["status"] == "completed" and "rejection_reason" not in row
+    attempt, = row["native_import_pool_attempts"]
+    assert (attempt["import_pool"], attempt["required_import_pool"], attempt["wall_seconds"]) == (2, 6, 100.)
+    assert attempt["rejection_reason"] == "native_stationary_refill_not_always_ready"
+    # The planner projects from the re-run alone.
+    assert row["native_retry_wall_seconds"] == 40.
+    assert run.search_plan._point(1, row)["native_wall_seconds"] == 40.
+
+
+def test_prefill_replica_widens_tp_only_when_hbm4_cannot_hold_the_weights(tmp_path, monkeypatch):
+    from heterollm_sim.planner import ScenarioValidationError
+    weights = {"code": "runtime_placement_validation", "stage": "capacity_check", "item_id": "weights",
+               "message_en": "remaining resident model weights require 235904434176 bytes across physical "
+                             "TP/PP/EP placements, but hbm0, hbm1 provide 205946880 bytes"}
+    assert run.capacity_error(ScenarioValidationError("无法放置", [weights]))
+    fits = {1: False, 2: False, 4: True}
+    import heterollm_sim.control_plane as control_plane
+    import exploring_hbf_native_config as config
+    monkeypatch.setattr(config, "build_native_prefill_scenario", lambda model, workload, *, tp, **_: tp)
+    monkeypatch.setattr(control_plane, "bootstrap_control_plane",
+                        lambda tp: None if fits[tp] else (_ for _ in ()).throw(ScenarioValidationError("x", [weights])))
+    run.prefill_tp.cache_clear()
+    try:
+        assert run.prefill_tp("m", "SHORT", 2, 1, 1) == 4 and run.prefill_tp("m", "SHORT", 4, 1, 1) == 4
+        fits[4] = fits[8] = False
+        run.prefill_tp.cache_clear()
+        assert run.prefill_tp("m", "SHORT", 2, 1, 1) is None
+        case = {**run.case_matrix()[6], "model": "m"}
+        monkeypatch.setattr(run, "_model_layers", lambda model: ())
+        monkeypatch.setattr(config, "validate_native_layout", lambda *args: None)
+        layout = run.make_layout(4, 2, 1, 1)
+        assert run.layout_rejection(case, layout, 8) == "native_prefill_replica_does_not_fit_hbm4"
+    finally:
+        run.prefill_tp.cache_clear()
+    monkeypatch.setattr(run, "prefill_tp", lambda model, workload, tp, pp, ep: 4)
+    params = run.parameters(run.case_matrix()[6], run.make_layout(4, 2, 1, 1), 8, "fast")
+    expected = run.prefill_parameters(params)
+    assert expected["tp"] == 4 and "decode_tp" not in expected
+    assert run.prefill_id(expected).endswith("TP4PP1EP1__sampled")
+    row = {"metrics": {"mean_complete_request_ingress_ttft_ns": 42e6}}
+    run.with_prefill_ttft(row, run.parameters(run.case_matrix()[6], run.make_layout(4, 2, 1, 1), 8),
+                          {**_prefill(99e6, 101e6, observed=100e6), "parameters": expected})
+    assert row["prefill_pass"]["layout"] == {"tp": 4, "pp": 1, "ep": 1, "decode_tp": 2,
+                                              "tp_widened_for_hbm4_weights": True}
+
+
+@pytest.mark.parametrize("mode", ["fast", "detailed"])
+def test_widened_decode_layouts_share_prefill_without_reusing_decode_provenance(tmp_path, monkeypatch, mode):
+    from heterollm_sim.native_stationary import _interval
+
+    monkeypatch.setattr(run, "prefill_tp", lambda model, workload, tp, pp, ep: 4)
+    case = next(row for row in run.case_matrix() if
+        (row["model"], row["hardware"], row["workload"]) == ("llama4_maverick", "HBF", "SHORT"))
+    runs = []
+    expected_full = mode == "detailed"
+    pass_bounds, ingress_bounds = _interval(99e6, 101e6), _interval(40e6, 44e6)
+
+    def runner(scenario, **options):
+        runs.append(scenario)
+        assert scenario.simulation.native_prefill.full_pass is expected_full
+        return NS(approximation={"prefill_pass": {"accepted": True,
+            "metric_bounds": {"prefill_pass_ns": pass_bounds},
+            "error_budget": {"observed_pass_ns": 100e6}},
+            "rejection_reasons": []}, layer_window_samples=())
+
+    saved = None
+    for tp in (1, 2, 4, 1):
+        params = run.parameters(case, run.make_layout(8 // tp, tp, 1, 1), 8, mode)
+        prefill = run.prefill_pass(params, tmp_path,
+            builder=lambda *a, **k: _fast_result().scenario, runner=runner)
+        if saved is not None:
+            assert prefill == saved
+        saved = prefill
+        assert "decode_tp" not in prefill["parameters"]
+        row = {"metrics": {"mean_complete_request_ingress_ttft_ns": 42e6}}
+        if mode == "fast":
+            row["metrics"]["mean_complete_request_ingress_ttft_ns"] = ingress_bounds["estimate"]
+            row["diagnostics"] = {"metric_bounds": {
+                "mean_complete_request_ingress_ttft_ns": dict(ingress_bounds)}}
+        run.with_prefill_ttft(row, params, prefill)
+        assert row["prefill_pass"]["layout"] == {
+            "tp": 4, "pp": 1, "ep": 1, "decode_tp": tp,
+            "tp_widened_for_hbm4_weights": tp != 4}
+        if mode == "fast":
+            total = _interval(139e6, 145e6)
+            assert row["diagnostics"]["metric_bounds"]["prefill_pass_ns"] == pass_bounds
+            assert row["diagnostics"]["metric_bounds"]["mean_complete_request_ttft_ns"] == total
+            assert row["metrics"]["prefill_pass_ns"] == pass_bounds["estimate"]
+            assert row["metrics"]["mean_complete_request_ttft_ns"] == total["estimate"]
+        else:
+            assert row["metrics"]["prefill_pass_ns"] == 100e6
+            assert row["metrics"]["mean_complete_request_ttft_ns"] == 142e6
+    assert len(runs) == 1
+    # PP and EP remain physical Prefill identity, even when TP widens alike.
+    identities = {saved["prefill_id"]}
+    for pp, ep in ((2, 1), (1, 2)):
+        expected_full = mode == "detailed" or pp > 1
+        params = run.parameters(case, run.make_layout(8 // (pp * ep), 1, pp, ep), 8, mode)
+        prefill = run.prefill_pass(params, tmp_path,
+            builder=lambda *a, **k: _fast_result().scenario, runner=runner)
+        assert (prefill["parameters"]["tp"], prefill["parameters"]["pp"], prefill["parameters"]["ep"]) == (4, pp, ep)
+        assert prefill["prefill_id"] not in identities
+        identities.add(prefill["prefill_id"])
+    assert len(runs) == 3
+
+
+def test_a_prefill_placement_failure_ends_the_layout_not_the_scan(tmp_path):
+    from heterollm_sim.planner import ScenarioValidationError
+    weights = {"code": "runtime_placement_validation", "stage": "capacity_check", "item_id": "weights",
+               "message_en": "remaining resident model weights require 2 bytes across placements, but hbm0 provide 1 bytes"}
+
+    def prefill(*args):
+        raise ScenarioValidationError("无法放置", [weights])
+
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
+    row = run.execute_candidate(params, tmp_path, NS(report=lambda p: None),
+                                builder=lambda *a, **k: _fast_result().scenario,
+                                runner=lambda *a, **k: _fast_result(), prefill=prefill)
+    assert row["status"] == "forecast_rejected" and row["metrics"] is None
+    assert row["rejection_reason"] == "native_prefill_placement_infeasible"
+    assert run.search_plan.classify(row) == "unusable"
 
 
 def _job(directory, identity, *, factor, peak, working_set=None):
@@ -754,26 +1121,27 @@ def _job(directory, identity, *, factor, peak, working_set=None):
     return {"process": NS(pid=1), "factor": factor, "peak": peak}
 
 
-def test_admission_fills_predicted_memory_and_never_raises_concurrency_above_a_running_cap(tmp_path, monkeypatch):
+def test_admission_fills_predicted_memory_and_uses_the_run_worker_limit(tmp_path, monkeypatch):
     GiB = 2**30
     case = run.case_matrix()[0]
     queue = [(case, LAYOUT, batch) for batch in (100, 101, 102, 103)]
     monkeypatch.setattr(run, "available_memory_bytes", lambda: 8 * GiB + 40 * GiB)
     # Without measured peaks each candidate counts DEFAULT_CANDIDATE_PEAK_BYTES (16 GiB).
     chosen, factor = run.admit(queue, {}, [], 32, tmp_path)
-    assert [item for item, _peak in chosen] == queue[:2] and factor == 2
+    assert [item for item, _peak in chosen] == queue[:2] and factor == 32
     # Nothing running: one candidate always starts, however large.
     monkeypatch.setattr(run, "available_memory_bytes", lambda: 0)
-    assert run.admit(queue, {}, [], 32, tmp_path) == ([(queue[0], 16 * GiB)], 1)
+    assert run.admit(queue, {}, [], 32, tmp_path) == ([(queue[0], 16 * GiB)], 32)
     # A running candidate's remaining predicted growth is reserved; what it
     # already uses is already missing from the available memory.
     monkeypatch.setattr(run, "available_memory_bytes", lambda: 8 * GiB + 20 * GiB)
     known = [(run.parameters(case, LAYOUT, 100, "fast"), 4 * GiB)]
     active = {"a": _job(tmp_path, "a", factor=4, peak=10 * GiB, working_set=8 * GiB)}
     chosen, factor = run.admit(queue, active, known, 32, tmp_path)
-    assert len(chosen) == 3 and factor == 4
+    assert len(chosen) == 4 and factor == 32
     active["b"] = _job(tmp_path, "b", factor=2, peak=1)
-    assert run.admit(queue, active, known, 32, tmp_path) == ([], 2)
+    chosen, factor = run.admit(queue, active, known, 32, tmp_path)
+    assert len(chosen) == 4 and factor == 32
     assert run.admit(queue, {"a": active["a"]}, known, 1, tmp_path) == ([], 1)
 
 
@@ -816,3 +1184,35 @@ def test_capacity_rejection_records_the_largest_batch_the_native_kv_holds():
     assert run.native_capacity_max_batch(held([340]), params, scenario) == 338
     assert run.native_capacity_max_batch({"approximation": {}}, params, scenario) is None
     assert run.native_capacity_max_batch(held([400]), params, scenario) is None
+
+
+@pytest.mark.parametrize("hardware,workload,expected", [
+    ("HBM4", "SHORT", "all"), ("HBM4", "MID", "quiet"), ("HBF", "SHORT", "quiet"),
+])
+def test_fast_runner_uses_and_records_the_shared_scenario_options(tmp_path, hardware, workload, expected):
+    from dataclasses import asdict
+    from exploring_hbf_native_config import native_fast_window_options
+
+    case = next(row for row in run.case_matrix() if
+        (row["model"], row["hardware"], row["workload"]) == ("llama3_405b", hardware, workload))
+    params = run.parameters(case, LAYOUT, 16, "fast")
+    rejected = _fast_result(accepted=False)
+    seen = []
+
+    def runner(scenario, **kwargs):
+        options = scenario.simulation.native_window
+        seen.append(options)
+        assert options == native_fast_window_options(params["model"], hardware, workload,
+            tp=params["tp"], pp=params["pp"], ep=params["ep"], max_wall_seconds=options.max_wall_seconds)
+        assert options.tp_rank_symmetry == expected
+        return replace(rejected, scenario=scenario, approximation={**rejected.approximation,
+            "sampling_options": asdict(options)})
+
+    row = run.execute_candidate(params, tmp_path, NS(report=lambda p: None),
+        builder=lambda *args, **kwargs: rejected.scenario, runner=runner)
+    assert len(seen) == 1
+    assert row["status"] == "forecast_rejected"
+    assert row["sampling_options"] == asdict(seen[0])
+    assert row["approximation"]["sampling_options"] == row["sampling_options"]
+    saved = run.read_json(tmp_path / "configurations" / (row["candidate_id"] + ".json"))
+    assert saved["simulation"]["native_window"] == row["sampling_options"]

@@ -10,17 +10,26 @@ samples taken on independent copies of the first cohort boundary:
 * holdout run: the last layers and the step suffix, later in time;
 * the step's cold ends once more at the other origin;
 * two real in-flight PD imports, each continued alone beside the step
-  prefix and first two layers, against the calibration run without imports.
+  prefix and first two layers, against the calibration run without imports;
+* when a group starts k > 1 imports at one boundary of the measured steps,
+  two sets of k real in-flight imports, each set continued together beside
+  the step prefix and every calibration layer.
 
 Each observation is first widened by the row-state bound of the DRAM banks
 its run reaches first: those start from the boundary's open rows, not from
 the rows the previous step leaves (see native_row_bounds). Layer steps take
 the per-class hull of both runs widened by the drift of the class means
 between them. The prefix with the entry layer, and the suffix, take the
-hull of their two observations widened by its width. A PD import
-adds e to the quiet work it overlaps, so with B running requests of
-``output`` tokens each step grows by B*e/output. No IR worst-case guard is
-used; every term is a native measurement.
+hull of their two observations widened by its width. The imports landing
+in one step all start at the boundary before it, so k of them run together
+and add their measured joint E(k) (not k times the single e) to the quiet
+work they overlap; with B running requests of ``output`` tokens B/output
+imports land per step. The model holds only while one boundary's imports
+finish before the group starts its next ones. No IR worst-case guard is
+used. The default ``pd_concurrency_envelope`` samples only k=1 and the busiest k_max and
+bounds intermediate E(k) and span by their endpoint intervals, conditional
+on both quantities being nondecreasing with k. Disabling it measures every
+concurrency term.
 
 One assumption is not bounded (SAME_CLASS_ADDRESS_ASSUMPTION): an
 unsampled layer takes its class's sampled step. Layers of one class run the
@@ -34,13 +43,14 @@ With attention data parallelism (``ep_degree`` > 1) the replica's B requests
 sit in ep groups of exactly B/ep (the cohort is rejected otherwise), each
 group refilling its own freed slots from its own share of the import pool.
 Layers stay synchronous across groups, so a step lasts as long as its
-slowest group: the import term scales B*e/output by the share of landings
-that fall on the busiest group of each step (see ``_group_refill_schedule``).
+slowest group: each step's import term is E(k) of its busiest group's k
+landings (see ``_group_refill_schedule``).
 """
 from __future__ import annotations
 
 from array import array
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import asdict, replace
 from fractions import Fraction
 import json
@@ -51,11 +61,11 @@ import time
 from .execution_control import ExecutionControl, NativeFastWallBudgetError, _NativeLayerSamplingCutoff
 from .native_fast_window import (NativeLayerWindowSample, NativeWindowForecast, _checked_budget,
                                  _eligibility_reasons)
-from .native_layer_sampling import (NativeLayerSamplingGuardError, _execute_window, _graph_facts,
+from .native_layer_sampling import (NativeLayerSamplingGuardError, _execute_window, _graph_facts, _layer_counts,
                                     drop_unsampled_request_records, layer_inventory,
                                     remaining_import_bytes)
 from .planner import _compilation_scope
-from .serving import _OnlineRuntime, compile_serving_plan
+from .serving import RequestStatus, _OnlineRuntime, compile_serving_plan
 
 HOLDOUT_SHIFT_NS = 10e6
 SAME_CLASS_ADDRESS_ASSUMPTION = (
@@ -198,7 +208,10 @@ def _sample_roles(inventory, layers):
     """
     calibration, holdout = layers
     count = len(inventory)
-    if calibration < 2 or holdout < 2 or calibration + holdout > count:
+    if calibration < 2 or holdout < 2:
+        return None
+    calibration, holdout = _layer_counts([row["class_key"] for row in inventory], calibration, holdout)
+    if calibration + holdout > count:
         return None
     head = [row["layer_id"] for row in inventory[:calibration]]
     tail = [row["layer_id"] for row in inventory[count - holdout:]]
@@ -229,7 +242,10 @@ def _ep_groups(runtime, cohort):
     """Per-group request counts, mean contexts and rank sets of the first cohort.
 
     Layers are synchronous across ep groups, so the stationary composition is
-    only exact when every group serves exactly B/ep requests.
+    only exact when every group serves exactly B/ep requests. A cohort short
+    of B is a KV capacity shortfall: the seeds fill the groups in turn, so it
+    is uneven, and admission rejects it with the per-group holdings the
+    search needs to jump to the native capacity.
     """
     scenario = runtime.plan.scenario
     parallel = scenario.placement.parallel
@@ -241,7 +257,7 @@ def _ep_groups(runtime, cohort):
         requests[item.ep_group] += 1
         contexts[item.ep_group] += item.context_tokens
         group_of[item.request_id] = item.ep_group
-    if degree > 1 and any(count * degree != batch for count in requests):
+    if degree > 1 and sum(requests) == batch and any(count * degree != batch for count in requests):
         raise NativeLayerSamplingGuardError("native_stationary_ep_groups_unbalanced")
     return {"degree": degree, "requests": requests, "group_of": group_of,
             "mean_context_tokens": [total / count if count else 0. for total, count in zip(contexts, requests)],
@@ -286,18 +302,78 @@ def _task_metadata_views(specs, stages, cost):
                 yield metadata
 
 
-def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace):
+def cohort_origin(runtime, request_ready_ns):
+    """The native cohort boundary origin and its already-paid resource frontier."""
+    source = runtime._execution_resource_kernel
+    ready = source.physical_runtime.timeline.ready_ns
+    executor = runtime._external_executor
+    if executor is not None:
+        # The PD source serves only external imports: its queued chunk reads
+        # are import work no Decode task waits for, not an outstanding tail.
+        owner = executor.services[str(runtime._external_ingress["source_component"])].physical_owner + ":"
+        ready = {resource: value for resource, value in ready.items() if not resource.startswith(owner)}
+    paid_frontier = max(ready.values(), default=float(runtime.now))
+    # Each copy starts after every reservation already paid on the source,
+    # so no outstanding tail is multiplied into the samples.
+    origin = max(float(runtime.now), float(request_ready_ns), float(source.makespan_ns), paid_frontier)
+    return origin, paid_frontier
+
+
+def prefill_stage_ready(runtime, cohort, stages, request_ready_ns, *, host_ns=0.0):
+    """Read the native Prefill stage constraints without advancing the boundary.
+
+    This is the readiness calculation in ``_schedule_execution_stages`` for
+    the supplied closed native stages, before they execute. Callers must
+    supply the same stages and host duration; this does not create owner
+    residency transfers or runtime extension stages.
+    """
+    if cohort.kind != "prefill" or any(item.phase != "prefill" for item in cohort.items):
+        raise NativeLayerSamplingGuardError("native_prefill_stage_ready_requires_prefill")
+    component_count = len({stage.component_id for stage in stages})
+    metadata = runtime.plan.scenario.workload.metadata
+    if not isinstance(metadata, Mapping):
+        metadata = {}
+    pipeline_prefill = (component_count > 1 and not bool(
+        metadata.get("llama_cpp_single_request_prefill_serialized", False)))
+    host_request_ready_ns = (max((max(runtime.states[item.request_id].spec.arrival_ns,
+        runtime._runtime_origin_ns) for item in cohort.items), default=runtime.now)
+        if pipeline_prefill else request_ready_ns)
+    previous_device_available_ns = runtime._gpu_available_ns
+    host_start_ns = max(runtime._host_available_ns, host_request_ready_ns)
+    host_end_ns = host_start_ns + host_ns
+    ready = {}
+    for stage in stages:
+        participates = runtime._component_participates_in_device_fence(stage.component_id)
+        requires_fence = stage.requires_device_fence and participates
+        device_fence_ready_ns = 0.0
+        if participates:
+            device_fence_ready_ns = runtime._last_serial_device_end_ns
+            if requires_fence:
+                device_fence_ready_ns = max(device_fence_ready_ns, previous_device_available_ns)
+        cross_chunk_ready = max((runtime._request_stage_ready_ns.get(
+            (request_id, stage.component_id, stage.stage_index),
+            max(runtime.states[request_id].spec.arrival_ns, runtime._runtime_origin_ns))
+            for request_id in stage.request_ids), default=host_end_ns)
+        ready[stage.stage_id] = max(host_end_ns, cross_chunk_ready, device_fence_ready_ns)
+    return ready
+
+
+def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready_by_stage=None):
     """Task specs of an unexecuted cohort on the unchanged source, with its layer classes.
 
     The part every native layer-sample preparation shares: the boundary
     origin, the serial layer composition and each layer's native class.
     """
     source = runtime._execution_resource_kernel
-    paid_frontier = max(source.physical_runtime.timeline.ready_ns.values(), default=float(runtime.now))
-    # Each copy starts after every reservation already paid on the source,
-    # so no outstanding tail is multiplied into the samples.
-    origin = max(float(runtime.now), float(request_ready_ns), float(source.makespan_ns), paid_frontier)
-    specs, _sources = runtime._stage_task_specs(stages, {stage.stage_id: origin for stage in stages},
+    origin, paid_frontier = cohort_origin(runtime, request_ready_ns)
+    native_ready = ready_by_stage is not None
+    if native_ready:
+        if (cohort.kind != "prefill" or set(ready_by_stage) != {stage.stage_id for stage in stages}
+                or any(not math.isfinite(value) or value < 0 for value in ready_by_stage.values())):
+            raise NativeLayerSamplingGuardError("native_prefill_stage_ready_invalid")
+    else:
+        ready_by_stage = {stage.stage_id: origin for stage in stages}
+    specs, _sources = runtime._stage_task_specs(stages, ready_by_stage,
                                                 namespace + cohort.cohort_id)
     # The live run places the cohort's shared resident buffers when it
     # indexes the cohort, before any task runs; every copy inherits them.
@@ -317,6 +393,7 @@ def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace):
         row["class_key"] = json.dumps({"semantics": row["signature"], "native": row["native_shape"]},
                                       ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=repr)
     return {"cohort": cohort, "source": source, "origin": origin, "paid_frontier": paid_frontier,
+            **({"native_stage_ready": True} if native_ready else {}),
             "specs": specs, "inventory": inventory, "composition": composition, "boundary": boundary,
             "by_layer": {layer: [task.task_id for task in tasks] for layer, tasks in by_layer.items()},
             "ranks": {task.task_id: task.metadata["rank"] for task in specs
@@ -380,10 +457,27 @@ def run_window(prepared, control, records, role, layer_ids, groups, origin, samp
     by_layer, cohort = prepared["by_layer"], prepared["cohort"]
     ids = [identity for group in groups for identity in group] + [
         identity for layer in layer_ids for identity in by_layer[layer]]
-    record = _execute_window(prepared["source"], prepared["specs"], ids, origin_ns=origin,
+    specs, execution_origin = prepared["specs"], origin
+    if prepared.get("native_stage_ready"):
+        # Native Prefill host/controller preparation can overlap earlier
+        # chunks. Preserve its absolute constraints instead of fencing it at
+        # the device boundary; later-origin samples shift those same inputs.
+        selected = frozenset(ids)
+        shift = origin - prepared["origin"]
+        specs = tuple(replace(task, earliest_start_ns=task.earliest_start_ns + shift)
+                      for task in specs if task.task_id in selected)
+        execution_origin = min(origin, min((task.earliest_start_ns for task in specs), default=origin))
+    record = _execute_window(prepared["source"], specs, ids, origin_ns=execution_origin,
                              control=control, sample_id=sample_id, concurrent_imports=imports,
-                             row_terms=row_terms)
+                             row_terms=row_terms,
+                             **({"capture_prefill_terms": True} if prepared.get("native_stage_ready") else {}),
+                             **({"tp_symmetry": prepared["tp_symmetry"]}
+                                 if "tp_symmetry" in prepared else {}))
     row = {"layer_ids": layer_ids, "origin_ns": origin, **{key: record[key] for key in _RUN_FIELDS}}
+    if prepared.get("native_stage_ready"):
+        row["prefill_terms"] = record["prefill_terms"]
+        row.update(boundary_origin_ns=origin, elapsed_from_boundary_ns=row["end_ns"] - origin,
+                   execution_origin_ns=execution_origin)
     records.append(NativeLayerWindowSample(window_id=row["sample_id"], role=role,
         cohort_id=cohort.cohort_id, cohort_kind=cohort.kind, decode_step=0,
         layer_ids=tuple(layer_ids),
@@ -398,7 +492,8 @@ def run_window(prepared, control, records, role, layer_ids, groups, origin, samp
     return row
 
 
-def sample_stationary(runtime, prepared, control, layers, records, *, holdout_shift_ns=HOLDOUT_SHIFT_NS):
+def sample_stationary(runtime, prepared, control, layers, records, *, holdout_shift_ns=HOLDOUT_SHIFT_NS,
+                      pd_concurrency_envelope=True):
     """Run the stationary step samples; the source kernel never advances.
 
     Each finished run is appended to ``records`` at once, so a wall limit
@@ -435,7 +530,7 @@ def sample_stationary(runtime, prepared, control, layers, records, *, holdout_sh
         states = {state.get("request_id"): state for state in executor._async_plan_states.values()
                   if not state.get("done") and "destinations" in state}
         # The two imports with the most remaining bytes, each alone; any
-        # other in-flight import stays frozen on its copy. Every task of a
+        # import outside a sampled set stays frozen on its copy. Every task of a
         # layer waits for all terminals of the layer before it, so the
         # prefix and first two layers end exactly as in the calibration run
         # without imports; later layers are not needed for the comparison.
@@ -443,23 +538,60 @@ def sample_stationary(runtime, prepared, control, layers, records, *, holdout_sh
         # remaining bytes outside the first one's group, when there is one.
         ordered = sorted((identity for identity in pending if identity in states),
                          key=lambda identity: (-remaining_import_bytes(states[identity]), identity))
+        group_of = {identity: _destination_group(prepared, states[identity]) for identity in ordered}
         chosen = ordered[:1]
         if chosen:
-            first_group = _destination_group(prepared, states[chosen[0]])
-            other = next((identity for identity in ordered[1:]
-                          if _destination_group(prepared, states[identity]) != first_group), None)
+            other = next((identity for identity in ordered[1:] if group_of[identity] != group_of[chosen[0]]),
+                         None)
             chosen += [other] if other is not None else ordered[1:2]
-        for identity in chosen:
-            state = states[identity]
-            imports["samples"].append({"request_id": identity, "logical_bytes": state["logical_bytes"],
-                "remaining_bytes_at_cutoff": remaining_import_bytes(state),
-                "destination_group": _destination_group(prepared, state),
-                "concurrent": run("pd_import", roles["pd_import"], (prefix,), first, "pd-" + identity,
-                                  (executor, [identity]))})
+        sets = [[identity] for identity in chosen]
+        # A group starts all the imports landing in one step at the same
+        # boundary, so they run together: for every busiest-group count k > 1
+        # of the measured steps, two sets of k imports also run together.
+        # The step stalls until such a set is written, so the set runs beside
+        # all calibration layers: it finishes inside the window and its joint
+        # extra is its measured later end, not a slope extrapolation.
+        schedule = _group_refill_schedule(*refill_inputs(runtime, prepared))
+        counts = schedule["busiest_landings"]
+        if pd_concurrency_envelope:
+            counts = (max(counts, default=1),)
+        for count in counts:
+            if count > 1:
+                sets += _concurrent_sets(ordered, group_of, count)
+        for identities in sets:
+            rows = [states[identity] for identity in identities]
+            imports["samples"].append({"request_ids": identities,
+                "logical_bytes": sum(state["logical_bytes"] for state in rows),
+                "remaining_bytes_at_cutoff": sum(remaining_import_bytes(state) for state in rows),
+                "destination_group": group_of[identities[0]],
+                "concurrent": run("pd_import", roles["pd_import" if len(identities) == 1 else "calibration"],
+                                  (prefix,), first, "pd-" + "+".join(identities), (executor, identities))})
     return {"schema": "native-stationary-samples/v1", "runs": runs, "pd_imports": imports,
-            "layers": {"calibration": calibration, "holdout": holdout}, "layer_count": count,
+            "layers": {role: len(roles[role]) for role in ("calibration", "holdout")}, "layer_count": count,
             "holdout_shift_ns": holdout_shift_ns, "wall_seconds": time.perf_counter() - started,
             "physical_state_advanced": False, "source_kernel_modified": False}
+
+
+def _concurrent_sets(ordered, group_of, count):
+    """Two disjoint sets of ``count`` in-flight imports of one destination group each.
+
+    Groups are taken in the order of their import with the most remaining
+    bytes. The first set is the first group holding ``count``; the second,
+    the next such group's, else the same group's next ``count``. Fewer sets
+    when the pool does not hold them.
+    """
+    members = defaultdict(list)
+    for identity in ordered:
+        members[group_of[identity]].append(identity)
+    groups = [group for group in members if len(members[group]) >= count]
+    if not groups:
+        return []
+    sets = [members[groups[0]][:count]]
+    if len(groups) > 1:
+        sets.append(members[groups[1]][:count])
+    elif len(members[groups[0]]) >= 2 * count:
+        sets.append(members[groups[0]][count:2 * count])
+    return sets
 
 
 def _hull(values, widen):
@@ -564,47 +696,76 @@ def _step_service(prepared, samples):
 
 
 def _import_extra(samples):
-    """Extra quiet-work delay e per fresh import and its span T.
+    """Joint quiet-work delay E(k) of k fresh imports run together, and their span T(k).
 
-    An import finished inside the window gives e directly as the later end
-    of the same work, scaled from the bytes written in the window to the
-    whole import. Otherwise the post-entry layer slope gives the slowdown s
-    and the observed write rate the span, with e = T*s/(1+s).
+    Each sample continues one set of in-flight imports (k = 1: one import
+    alone). A set finished inside the window gives E(k) directly as the
+    later end of the same work, scaled from the bytes written in the window
+    to the set's whole imports. Otherwise the post-entry layer slope gives
+    the slowdown s and the set's observed write rate the span, with
+    E(k) = T(k)*s/(1+s). Every sampled k needs two sets; returns
+    {k: {"extra_ns": (lo, hi), "span_ns": (lo, hi)}} and the sample rows.
     """
     quiet = samples["runs"]["calibration"]
     rows = []
     for sample in samples["pd_imports"]["samples"]:
-        identity, total, busy = sample["request_id"], sample["logical_bytes"], sample["concurrent"]
+        identities, total, busy = sample["request_ids"], sample["logical_bytes"], sample["concurrent"]
         observed = busy["concurrent_imports"]
-        written = observed["written_bytes_by_request"][identity]
+        written = sum(observed["written_bytes_by_request"][identity] for identity in identities)
         layers = busy["layer_ids"]
         if len(layers) < 2 or layers != quiet["layer_ids"][:len(layers)] or written <= 0:
             raise ValueError("native_stationary_PD_sample_invalid")
         # The busy run ends with its last layer; the quiet run reached the
         # same layer at its completion.
         q, c = _completions(quiet, layers), _completions(busy, layers)
-        span = observed["import_spans_ns"].get(identity)
-        complete = span is not None and span[1] <= busy["end_ns"]
-        rate = written / ((span[1] if complete else busy["end_ns"]) - busy["start_ns"])
+        spans = [observed["import_spans_ns"].get(identity) for identity in identities]
+        complete = all(span is not None and span[1] <= busy["end_ns"] for span in spans)
+        rate = written / ((max(span[1] for span in spans) if complete else busy["end_ns"]) - busy["start_ns"])
         imported = total / rate
-        row = {"request_id": identity, "write_rate_bytes_per_ns": rate, "span_ns": imported,
+        row = {"request_ids": identities, "concurrent_imports": len(identities),
+               "write_rate_bytes_per_ns": rate, "span_ns": imported,
                "written_bytes_in_window": written, "logical_bytes": total}
         if complete:
             row.update(mode="complete_import_in_window",
                        extra_ns=max(0., (c[-1] - q[-1]) * total / written))
         else:
-            if observed["write_phases_by_request"][identity] < 2:
+            if min(observed["write_phases_by_request"][identity] for identity in identities) < 2:
                 raise ValueError("native_stationary_PD_window_has_too_few_import_writes")
             slowdown = (c[-1] - c[0]) / (q[-1] - q[0]) - 1.
             row.update(mode="post_entry_layer_slope", slowdown=slowdown,
                        extra_ns=max(0., imported * slowdown / (1. + slowdown)))
         rows.append(row)
-    if len(rows) < 2:
+    terms = {}
+    for count in sorted({row["concurrent_imports"] for row in rows}):
+        sets = [row for row in rows if row["concurrent_imports"] == count]
+        if len(sets) < 2:
+            continue
+        extras, spans = [row["extra_ns"] for row in sets], [row["span_ns"] for row in sets]
+        extra_lo, extra_hi = _hull(extras, max(extras) - min(extras))
+        span_lo, span_hi = _hull(spans, max(spans) - min(spans))
+        terms[count] = {"extra_ns": (max(0., extra_lo), extra_hi), "span_ns": (max(0., span_lo), span_hi)}
+    if 1 not in terms:
         raise ValueError("native_stationary_requires_two_in_flight_PD_imports")
-    extras, spans = [row["extra_ns"] for row in rows], [row["span_ns"] for row in rows]
-    extra_lo, extra_hi = _hull(extras, max(extras) - min(extras))
-    span_lo, span_hi = _hull(spans, max(spans) - min(spans))
-    return max(0., extra_lo), extra_hi, max(0., span_lo), span_hi, rows
+    return terms, rows
+
+
+def _monotone_import_envelope(terms, counts):
+    """Bound unsampled intermediate k by measured k=1 and k_max endpoints.
+
+    Each endpoint must already have two samples. No endpoint is invented,
+    no extrapolation is made, and endpoint measurements are left unchanged.
+    These conditional bounds assume both E(k) and T(k) are nondecreasing.
+    """
+    maximum = max(counts, default=1)
+    missing = sorted(count for count in counts if 1 < count < maximum and count not in terms)
+    if not missing or 1 not in terms or maximum not in terms:
+        return terms
+    envelope = {key: (terms[1][key][0], terms[maximum][key][1])
+                for key in ("extra_ns", "span_ns")}
+    if any(lower > upper for lower, upper in envelope.values()):
+        raise ValueError("native_stationary_PD_monotonicity_inconsistent")
+    return {count: terms[count] if count in terms else dict(envelope)
+            for count in sorted(set(terms) | set(missing))}
 
 
 def _refill_schedule(ages, output, pool, warmup, measured):
@@ -663,6 +824,13 @@ def _group_refill_schedule(ages_by_group, output, pool, warmup, measured):
     are synchronous across groups, so a step is delayed by the group with the
     most landing imports, ``sum_s max_g k_g(s) / sum_s sum_g k_g(s)``. It is
     exactly 1 for a single group.
+
+    The imports landing in step s all start at the boundary before it, so a
+    group's k_g(s) imports run together. ``busiest_landings`` counts the
+    measured steps by their busiest group's k = max_g k_g(s) (k > 0), and
+    ``fewest_landing_steps`` is the shortest distance between two landing
+    steps of one group: the imports started at one boundary run alone only
+    while they finish within that many steps.
     """
     first, last = warmup + 2, warmup + measured + 1
     rows, waits, landings = [], [], []
@@ -673,13 +841,49 @@ def _group_refill_schedule(ages_by_group, output, pool, warmup, measured):
         rows.append({"requests": len(ages), "pool": pool, "most_admissions_per_step": most,
                      "fewest_import_steps": lag, "complete_fresh_requests": len(group_waits)})
     peak = total = 0
+    busiest = defaultdict(int)
     for step in range(first, last + 1):
         counts = [landed.get(step, 0) for landed in landings]
         peak += max(counts)
         total += sum(counts)
+        if max(counts):
+            busiest[max(counts)] += 1
+    gap = min((after - before for landed in landings
+               for before, after in zip(sorted(landed), sorted(landed)[1:])), default=math.inf)
     return {"waits": waits, "most": max(row["most_admissions_per_step"] for row in rows),
             "lag": min(row["fewest_import_steps"] for row in rows), "groups": rows,
-            "rho": peak / total if total else 1., "peak_group_landings": peak, "total_landings": total}
+            "rho": peak / total if total else 1., "peak_group_landings": peak, "total_landings": total,
+            "busiest_landings": dict(sorted(busiest.items())), "fewest_landing_steps": gap}
+
+
+def _required_group_pool(ages_by_group, output, pool, warmup, measured, lead):
+    """Smallest per-group pool above ``pool`` (found too small) whose refill keeps every
+    admission ``lead`` steps behind its import start.
+
+    ``lead`` is the measured import span upper bound in lower-bound steps,
+    plus one step so the re-sampled span and step of the re-run still fit.
+    A larger pool consumes each prepared import later and admits no more per
+    boundary, so both checks are monotone in the pool and a bisection finds
+    the smallest. None when no pool can: the first refills take imports that
+    started at boundary 0, whose lead the seeds' ages fix.
+    """
+    def fits(size):
+        schedule = _group_refill_schedule(ages_by_group, output, size, warmup, measured)
+        return schedule["most"] <= size and schedule["lag"] >= lead
+
+    # One prepared import per admission in the window is the most a pool
+    # can use; beyond it the lead no longer grows.
+    high = max(len(ages) for ages in ages_by_group) * ((warmup + measured + 1) // output + 2)
+    if high <= pool or not fits(high):
+        return None
+    low = pool
+    while high - low > 1:
+        middle = (low + high) // 2
+        if fits(middle):
+            high = middle
+        else:
+            low = middle
+    return high
 
 
 def kv_requests_held(runtime, prepared):
@@ -692,6 +896,46 @@ def kv_requests_held(runtime, prepared):
     for request_id in prepared["context"]:
         held[0 if len(held) == 1 else runtime.states[request_id].ep_group] += 1
     return held
+
+
+def _preloaded_seed_admission(runtime, diagnostics):
+    """Reject a proven seed-capacity shortfall before lowering any cohort.
+
+    A future arrival, non-preloaded ingress, or a different seed/output
+    contract must still follow ordinary admission and the existing guards.
+    The caller runs this check once, immediately after the first preload.
+    """
+    if not runtime._external_ingress.get("preload_warmup_seed_kv", False):
+        return
+    batch = runtime.plan.scheduler.max_num_seqs
+    if runtime._external_preloaded_requests >= batch:
+        return
+    seeds, outputs = [], set()
+    for state in runtime._state_values:
+        if state.spec.metadata.get("warmup_seed", False):
+            seeds.append(state)
+        else:
+            outputs.add(state.spec.output_tokens)
+    if (len(seeds) != batch or len(outputs) != 1
+            or any(state.spec.arrival_ns > runtime.now for state in seeds)):
+        return
+    held = [0] * runtime._ep_degree
+    for state in seeds:
+        if state.spec.request_id not in runtime._external_initialized:
+            # Pre-admission rejection or another state is not proof that
+            # preload attempted allocation and found insufficient capacity.
+            if state.status != RequestStatus.WAITING:
+                return
+            continue
+        group = state.ep_group
+        # An invalid assignment is not evidence of a capacity limit; leave
+        # it to the existing cohort/group guard rather than relabeling it.
+        if type(group) is not int or not 0 <= group < len(held):
+            return
+        held[group] += 1
+    diagnostics.update(physical_admission_cutoff_ns=runtime.now,
+                       kv_requests_held_by_group=held)
+    raise NativeLayerSamplingGuardError("native_stationary_first_cohort_not_a_full_batch")
 
 
 def admission_reasons(runtime, prepared):
@@ -712,19 +956,36 @@ def admission_reasons(runtime, prepared):
     return []
 
 
+def refill_inputs(runtime, prepared):
+    """Seed ages per ep group, the fresh output length, the per-group pool and
+    the warmup/measured steps of an admitted stationary boundary's refill, in
+    ``_group_refill_schedule``'s argument order."""
+    ingress = runtime._external_ingress
+    groups = prepared["ep_groups"]
+    degree = groups["degree"]
+    (output,) = {state.spec.output_tokens for state in runtime._state_values
+                 if not state.spec.metadata.get("warmup_seed", False)}
+    ages_by_group = [[] for _ in range(degree)]
+    for state in runtime._state_values:
+        spec = state.spec
+        if not spec.metadata.get("warmup_seed", False):
+            continue
+        owner = 0 if degree == 1 else groups["group_of"].get(spec.request_id)
+        if owner is None:
+            raise NativeLayerSamplingGuardError("native_stationary_ep_groups_unbalanced")
+        ages_by_group[owner].append(output - spec.output_tokens)
+    return (ages_by_group, output, ingress.get("max_inflight_requests", 2) // degree,
+            ingress["warmup_decode_cohorts"], ingress["measurement_decode_cohorts"])
+
+
 def evaluate_stationary(runtime, prepared, samples, options):
     """Compose the stationary window metrics and their error budget."""
     plan = runtime.plan
     target = options.target_relative_error
     limit = target / (2 + target)
-    ingress = runtime._external_ingress
-    batch, pool = plan.scheduler.max_num_seqs, ingress.get("max_inflight_requests", 2)
+    batch, pool = plan.scheduler.max_num_seqs, runtime._external_ingress.get("max_inflight_requests", 2)
     groups = prepared["ep_groups"]
     degree = groups["degree"]
-    group_pool = pool // degree
-    seeds = [state.spec for state in runtime._state_values if state.spec.metadata.get("warmup_seed", False)]
-    outputs = {state.spec.output_tokens for state in runtime._state_values
-               if not state.spec.metadata.get("warmup_seed", False)}
     result = {"accepted": False, "reasons": admission_reasons(runtime, prepared), "metrics": {},
               "metric_bounds": {}, "error_budget": {"target_relative_error": target,
                                                     "effective_independent_target": limit,
@@ -732,36 +993,52 @@ def evaluate_stationary(runtime, prepared, samples, options):
     reasons = result["reasons"]
     if reasons:
         return result
-    output = outputs.pop()
     try:
         step_lo, step_hi, step = _step_service(prepared, samples)
-        extra_lo, extra_hi, span_lo, span_hi, imports = _import_extra(samples)
+        terms, imports = _import_extra(samples)
+        ages_by_group, output, group_pool, warmup, measured = refill_inputs(runtime, prepared)
     except ValueError as error:
         reasons.append(str(error))
         return result
-    warmup, measured = ingress["warmup_decode_cohorts"], ingress["measurement_decode_cohorts"]
-    ages_by_group = [[] for _ in range(degree)]
-    for spec in seeds:
-        owner = 0 if degree == 1 else groups["group_of"].get(spec.request_id)
-        if owner is None:
-            reasons.append("native_stationary_ep_groups_unbalanced")
-            return result
-        ages_by_group[owner].append(output - spec.output_tokens)
     schedule = _group_refill_schedule(ages_by_group, output, group_pool, warmup, measured)
     waits, most, lag, rho = schedule["waits"], schedule["most"], schedule["lag"], schedule["rho"]
-    # Each running request finishes after ``output`` steps; one import per
-    # finish adds B*e/output to every step, scaled by the busiest ep group's
-    # share of the landings (exactly 1 for one group).
-    tpot_lo = step_lo + batch * extra_lo * rho / output
-    tpot_hi = step_hi + batch * extra_hi * rho / output
-    concurrency = batch / (output * tpot_lo) * span_hi
-    if concurrency > 1.:
-        # Overlapping imports share the PD link; the single-import extra no
-        # longer adds per import.
+    busiest, total = schedule["busiest_landings"], schedule["total_landings"]
+    enveloped = []
+    if options.pd_concurrency_envelope:
+        measured_counts = set(terms)
+        try:
+            terms = _monotone_import_envelope(terms, busiest)
+        except ValueError as error:
+            reasons.append(str(error))
+            return result
+        enveloped = sorted(set(terms) - measured_counts)
+    if set(busiest) - set(terms):
+        reasons.append("native_stationary_concurrent_PD_imports_not_sampled")
+        return result
+    # Each running request finishes after ``output`` steps, so B/output
+    # imports land per step. The k imports a group starts at one boundary
+    # run together and add their joint E(k) to the next step; layers are
+    # synchronous across ep groups, so a step waits for its busiest group.
+    # With n_k measured steps whose busiest group lands k of all ``total``
+    # landings, every step grows by B/output * sum_k E(k) n_k/total; with
+    # single imports only that is B*e*rho/output.
+    shares = {count: steps / total for count, steps in busiest.items()} if total else {1: 1.}
+    tpot_lo = step_lo + sum(batch * terms[count]["extra_ns"][0] * share / output for count, share in shares.items())
+    tpot_hi = step_hi + sum(batch * terms[count]["extra_ns"][1] * share / output for count, share in shares.items())
+    span_lo = min(terms[count]["span_ns"][0] for count in shares)
+    span_hi = max(terms[count]["span_ns"][1] for count in shares)
+    gap = schedule["fewest_landing_steps"]
+    if span_hi > gap * tpot_lo:
+        # Imports a group started at one boundary would still run when it
+        # starts the next ones: no sampled E(k) covers that overlap.
         reasons.append("native_stationary_import_concurrency_exceeds_model")
     if most > group_pool or lag * tpot_lo < span_hi:
-        # A freed slot would wait for an unfinished import.
+        # A freed slot would wait for an unfinished import. The pool this
+        # measured span needs lets the runner re-run the batch once.
         reasons.append("native_stationary_refill_not_always_ready")
+        required = _required_group_pool(ages_by_group, output, group_pool, warmup, measured,
+                                        math.ceil(span_hi / tpot_lo) + 1)
+        result["error_budget"]["import_pool_required"] = None if required is None else required * degree
     complete = len(waits)
     if not complete:
         reasons.append("native_stationary_window_holds_no_complete_fresh_request")
@@ -781,21 +1058,37 @@ def evaluate_stationary(runtime, prepared, samples, options):
                 "measurement_visible_output_tokens": tokens, "complete_fresh_requests": complete,
                 "forecast_only": True},
         error_budget={**result["error_budget"], "step_service_ns": {"lower": step_lo, "upper": step_hi},
-            "step": step, "pd_import_extra_ns": {"lower": extra_lo, "upper": extra_hi},
+            "step": step, "pd_import_extra_ns": {"lower": terms[1]["extra_ns"][0], "upper": terms[1]["extra_ns"][1]},
             "pd_import_span_ns": {"lower": span_lo, "upper": span_hi}, "pd_imports": imports,
-            "import_pool": pool, "import_concurrency_upper": concurrency,
+            "pd_import_terms": [{"concurrent_imports": count, "measured_steps": busiest.get(count, 0),
+                                 "share_of_landings": shares.get(count, 0.),
+                                 "extra_ns": {"lower": row["extra_ns"][0], "upper": row["extra_ns"][1]},
+                                 "span_ns": {"lower": row["span_ns"][0], "upper": row["span_ns"][1]}}
+                                for count, row in terms.items()],
+            "import_pool": pool,
+            "import_overlap": {"fewest_landing_steps": None if gap == math.inf else gap,
+                               "span_upper_steps": span_hi / tpot_lo},
             "refill_schedule": {"most_admissions_per_step": most, "fewest_import_steps": lag,
                                 "mean_ingress_wait_steps": wait, "groups": schedule["groups"]},
             "pd_import_group_factor": {"rho": rho, "peak_group_landings": schedule["peak_group_landings"],
-                                       "total_landings": schedule["total_landings"]},
+                                       "total_landings": total, "busiest_landings": busiest},
             "ep_groups": {"degree": degree, "requests": groups["requests"],
                           "mean_context_tokens": groups["mean_context_tokens"],
                           "rank_ids": groups["rank_ids"], "pool_per_group": group_pool,
                           "import_pool_occupancy": prepared["import_pool_occupancy_by_group"]},
             "basis": "stationary_continuous_refill_step; calibration_holdout_layer_hull_widened_by_drift; "
                      "in_situ_step_ends_two_origins; boundary_first_access_row_state_bounds; "
-                     "measured_single_PD_import_extra",
+                     "measured_joint_PD_import_extra_per_concurrent_count",
             "assumptions": [SAME_CLASS_ADDRESS_ASSUMPTION]})
+    if enveloped:
+        result["error_budget"]["pd_concurrency_envelope"] = {
+            "sampled_endpoints": [1, max(busiest)], "enveloped_counts": enveloped,
+            "basis": "E(k) and import span T(k) are nondecreasing with concurrent import count; "
+                     "intermediate bounds use the k=1 lower and k_max upper endpoints"}
+        result["error_budget"]["assumptions"].append(
+            "Joint PD import extra E(k) and span T(k) are nondecreasing in k; "
+            "intermediate concurrency counts use a conditional endpoint envelope, not measured windows.")
+        result["error_budget"]["basis"] += "; monotone_PD_concurrency_endpoint_envelope"
     if not reasons:
         result.update(accepted=True, metrics={
             "cluster_tokens_per_second": bounds["cluster_tokens_per_second"]["estimate"],
@@ -845,6 +1138,10 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
         "physical_runtime_resumable_from_forecast": False,
         "sampled_decode_cohorts": 0, "sampled_visible_output_tokens": 0,
         "predicted_decode_cohorts": 0, "rejection_reasons": [], "fallback_reasons": []}
+    # Only the enabled concurrency approximation adds diagnostic fields;
+    # the full-sampling result retains its established representation.
+    if not options.pd_concurrency_envelope:
+        diagnostics["sampling_options"].pop("pd_concurrency_envelope")
 
     sample_control = deadline_control(control, deadline)
     records, prepared, samples, runtime = [], {}, {}, None
@@ -871,19 +1168,22 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
                 raise _NativeLayerSamplingCutoff()
 
             runtime._native_layer_sampler = sampler
+            runtime._native_preload_admission_guard = lambda active: _preloaded_seed_admission(active, diagnostics)
             try:
                 runtime.run_until_decode_steps(1, strict_cohort_cutoff=True)
             except _NativeLayerSamplingCutoff:
                 pass
             else:
                 raise RuntimeError("native stationary sampling unexpectedly committed an ordinary cohort")
+            prepared["tp_symmetry"] = (scenario, options.tp_rank_symmetry)
             diagnostics["physical_admission_cutoff_ns"] = runtime.now
             diagnostics["kv_requests_held_by_group"] = kv_requests_held(runtime, prepared)
             admission = admission_reasons(runtime, prepared)
             if admission:
                 budget = {"accepted": False, "reasons": admission}
             else:
-                samples = sample_stationary(runtime, prepared, sample_control, layers, records)
+                samples = sample_stationary(runtime, prepared, sample_control, layers, records,
+                    pd_concurrency_envelope=options.pd_concurrency_envelope)
                 budget = _checked_budget(evaluate_stationary(runtime, prepared, samples, options))
         except NativeFastWallBudgetError:
             budget = {"accepted": False, "reasons": ["native_stationary_sample_wall_budget_exhausted"]}

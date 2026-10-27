@@ -7,6 +7,7 @@ their reads.  The typed loops preserve each conversion/publication phase.
 from __future__ import annotations
 
 import numpy as np
+from heapq import heapify, heappop, heappush
 
 try:
     import cython
@@ -151,6 +152,215 @@ class HBMResourceAccumulator:
             byte_count[rid] = byte_count.get(rid, 0) + value
         for rid, value in metrics.get("resource_busy_ns", {}).items():
             busy[rid] = busy.get(rid, 0.0) + value
+
+
+class HBMAdmission:
+    """Batch-local device credits with read-only O(log n) eligibility.
+
+    Keep insertion order separately from completion order. Only successful
+    requests prune credits, and publishing restores the exact public list.
+    """
+
+    def __init__(self, core):
+        self.core = core
+        self.active = dict(enumerate(core._inflight))
+        self.heap = [(end, index) for index, end in self.active.items()]
+        heapify(self.heap)
+        self.next_index = len(self.active)
+        self.expired = []
+        self.published = False
+
+    def admit(self, request):
+        ready = max(request.arrival_ns, self.core._acceptance_ns, 0.0)
+        self.expired = []
+        while self.heap and self.heap[0][0] <= ready:
+            self.expired.append(heappop(self.heap)[1])
+        if len(self.heap) >= self.core.config.max_outstanding_requests:
+            ready = max(ready, self.heap[0][0])
+        return ready
+
+    def record(self, completion, ready):
+        for index in self.expired:
+            del self.active[index]
+        self.expired = []
+        while self.heap and self.heap[0][0] <= ready:
+            _end, index = heappop(self.heap)
+            del self.active[index]
+        self.active[self.next_index] = completion
+        heappush(self.heap, (completion, self.next_index))
+        self.next_index += 1
+
+    def publish(self):
+        if not self.published:
+            self.core._inflight = list(self.active.values())
+            self.published = True
+
+
+class HBMResourceBatch:
+    """Retain numeric resources inside one closed, owned submission batch.
+
+    Public dictionaries are published once. The task bill still subtracts
+    and adds once per request, with the original dictionary insertion order.
+    """
+
+    def __init__(self, packed, accumulator):
+        self.packed = packed
+        self.accumulator = accumulator
+        lookup = packed._resource_lookup
+        timeline = packed.core.timeline
+        self.busy_order = {rid: None for rid in timeline.busy_ns if rid in lookup}
+        self.byte_order = {rid: None for rid in timeline.bytes_moved if rid in lookup}
+        self.pending = {}
+        size = len(packed.ids)
+        self.seen = np.zeros(size, dtype=np.uint8)
+        self.busy_totals = np.zeros(size, dtype=np.float64)
+        self.last_values = np.zeros((size, 2), dtype=np.float64)
+        self.has_busy = np.zeros(size, dtype=np.uint8)
+        self.has_bytes = np.zeros(size, dtype=np.uint8)
+        self.has_last = np.zeros(size, dtype=np.uint8)
+        self.changed_busy = np.zeros(size, dtype=np.uint8)
+        self.changed_bytes = np.zeros(size, dtype=np.uint8)
+        self.changed_last = np.zeros(size, dtype=np.uint8)
+        self.before_moved = packed.arrays[9].copy()
+        self.bill_busy_order = {rid: lookup[rid] for rid in accumulator.resource_busy_ns if rid in lookup}
+        self.bill_byte_order = {rid: lookup[rid] for rid in accumulator.resource_bytes if rid in lookup}
+        self.bill_last_order = {rid: lookup[rid] for rid in accumulator.resource_last_intervals if rid in lookup}
+        for rid, index in self.bill_busy_order.items():
+            self.busy_totals[index] = accumulator.resource_busy_ns[rid]
+            self.has_busy[index] = 1
+        for index in self.bill_byte_order.values():
+            self.has_bytes[index] = 1
+        for rid, index in self.bill_last_order.items():
+            self.last_values[index] = accumulator.resource_last_intervals[rid]
+            self.has_last[index] = 1
+
+    def consume(self, before_resources, before_moved, positions):
+        packed = self.packed
+        timeline = packed.core.timeline
+        indices = np.flatnonzero(packed.arrays[11])
+        selected: cython.Py_ssize_t[::1] = indices
+        pending: dict = self.pending
+        busy_order: dict = self.busy_order
+        byte_order: dict = self.byte_order
+        lookup: dict = packed._resource_lookup
+        current: cython.double[:, ::1] = packed.arrays[8]
+        previous: cython.double[:, ::1] = before_resources
+        moved: cython.longlong[::1] = packed.arrays[9]
+        previous_moved: cython.longlong[::1] = before_moved
+        totals: cython.double[::1] = self.busy_totals
+        last_values: cython.double[:, ::1] = self.last_values
+        seen: cython.uchar[::1] = self.seen
+        has_busy: cython.uchar[::1] = self.has_busy
+        has_bytes: cython.uchar[::1] = self.has_bytes
+        has_last: cython.uchar[::1] = self.has_last
+        changed_busy: cython.uchar[::1] = self.changed_busy
+        changed_bytes: cython.uchar[::1] = self.changed_bytes
+        changed_last: cython.uchar[::1] = self.changed_last
+        fresh_busy: set = set()
+        fresh_bytes: set = set()
+        fresh_last: set = set()
+        rid: object
+        index: cython.Py_ssize_t
+        before_index: cython.Py_ssize_t
+        position: cython.Py_ssize_t
+        data_begin: cython.Py_ssize_t = 2 * len(packed.channel_keys)
+        value: cython.double
+        before_value: cython.double
+        total: cython.double
+        start: cython.double
+        end: cython.double
+        for position in range(len(indices)):
+            index = selected[position]
+            rid = packed.ids[index]
+            if not seen[index]:
+                pending[rid] = index
+                busy_order[rid] = None
+                if index >= data_begin:
+                    byte_order[rid] = None
+                seen[index] = 1
+            start = float(current[index, 2])
+            end = float(current[index, 3])
+            if (not has_last[index] or end > last_values[index, 1]
+                    or (end == last_values[index, 1] and start > last_values[index, 0])):
+                if not has_last[index]:
+                    fresh_last.add(rid)
+                    has_last[index] = 1
+                last_values[index, 0] = start
+                last_values[index, 1] = end
+                changed_last[index] = 1
+            before_index = index if positions is None else positions[index]
+            if index >= data_begin and moved[index] != previous_moved[before_index]:
+                if not has_bytes[index]:
+                    fresh_bytes.add(rid)
+                    has_bytes[index] = 1
+                changed_bytes[index] = 1
+            value = float(current[index, 1])
+            before_value = float(previous[before_index, 1])
+            if value != before_value:
+                total = float(totals[index])
+                # Preserve every subtraction and addition in request order.
+                totals[index] = total + (value - before_value)
+                changed_busy[index] = 1
+                if not has_busy[index]:
+                    fresh_busy.add(rid)
+                    has_busy[index] = 1
+        if fresh_last:
+            # Public interval keys follow the complete request's touched set,
+            # including resources already present in the task bill.
+            for rid in set(packed._id_objects[indices].tolist()):
+                if rid in fresh_last:
+                    self.bill_last_order[rid] = lookup[rid]
+        if fresh_bytes:
+            for rid in byte_order:
+                if rid in fresh_bytes:
+                    self.bill_byte_order[rid] = lookup[rid]
+        if fresh_busy:
+            for rid in busy_order:
+                if rid in fresh_busy:
+                    self.bill_busy_order[rid] = lookup[rid]
+        timeline._intervals_truncated = True
+
+    def publish(self):
+        if not self.pending:
+            return
+        packed = self.packed
+        timeline = packed.core.timeline
+        # Publication order is first touch across requests, rather than a
+        # sorted union; new public keys retain their original insertion order.
+        indices = np.fromiter(self.pending.values(), dtype=np.intp)
+        timeline._remember_resources(tuple(self.pending))
+        publish_resource_columns(packed.ids, packed.arrays[8], packed.arrays[9], indices,
+            timeline.lane_available, timeline.ready_ns, timeline.busy_ns,
+            timeline.last_intervals, timeline.bytes_moved, timeline.directions,
+            timeline.lane_directions, set(), len(packed.channel_keys), "")
+        index: cython.Py_ssize_t
+        data_begin: cython.Py_ssize_t = 2 * len(packed.channel_keys)
+        totals: cython.double[::1] = self.busy_totals
+        last_values: cython.double[:, ::1] = self.last_values
+        moved: cython.longlong[::1] = packed.arrays[9]
+        previous_moved: cython.longlong[::1] = self.before_moved
+        directions: cython.char[::1] = packed.arrays[10]
+        rid: object
+        for rid, index in self.pending.items():
+            if index >= data_begin:
+                timeline.directions[rid] = "read" if directions[index] == 1 else "write"
+        busy: dict = self.accumulator.resource_busy_ns
+        byte_count: dict = self.accumulator.resource_bytes
+        last: dict = self.accumulator.resource_last_intervals
+        for rid, index in self.bill_busy_order.items():
+            if self.changed_busy[index]:
+                busy[rid] = float(totals[index])
+        for rid, index in self.bill_byte_order.items():
+            if self.changed_bytes[index]:
+                byte_count[rid] = byte_count.get(rid, 0) + (int(moved[index]) - int(previous_moved[index]))
+        for rid, index in self.bill_last_order.items():
+            if self.changed_last[index]:
+                last[rid] = (float(last_values[index, 0]), float(last_values[index, 1]))
+        # A failed executor has reset the recorder; a checkpoint failure has
+        # not. Restore exactly that recorder boundary, never the batch union.
+        if timeline._intervals_truncated:
+            timeline._touched.update(packed._id_objects[np.flatnonzero(packed.arrays[11])].tolist())
+        self.pending.clear()
 
 
 def can_capture_resource_columns(timeline, ids):

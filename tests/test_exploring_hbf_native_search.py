@@ -14,6 +14,12 @@ TP8 = {"dp": 1, "tp": 8, "pp": 1, "ep": 1}
 DP2_TP4 = {"dp": 2, "tp": 4, "pp": 1, "ep": 1}
 
 
+def test_search_modes_are_fixed_and_default_to_max_batch():
+    assert search.DEFAULT_SEARCH_MODE == "max_batch_under_slo"
+    assert search.search_policy("throughput").objective == "per_gpu_throughput"
+    assert search.search_policy().objective == "maximum_batch_under_slo"
+
+
 def entry(layout=TP8, candidate=1555, line=(11.4e6, .0448e6), capacity=None):
     return {"layout": layout, "quantum": layout["ep"], "bypass": {"candidate_batch": candidate,
             "capacity_max_batch": capacity or candidate, "tpot_ns": 81e6, "per_gpu_tokens_s": 2399.,
@@ -50,12 +56,12 @@ def native(tpot, wall, too_big=lambda batch: None, gpus=8, factor=1, peak=None, 
     return rows, execute
 
 
-def drive(entries, layouts, cap=1800., memory=None):
+def drive(entries, layouts, cap=1800., memory=None, policy=search.THROUGHPUT_POLICY):
     runs = []
     while True:
         plan = search.plan_case(entries, [rows.get for rows, _ in layouts], SLO, cap,
                                 [entry["layout"]["tp"] * entry["layout"]["ep"] for entry in entries],
-                                memory_budget_bytes=memory)
+                                memory_budget_bytes=memory, policy=policy)
         if not plan["next"]:
             return plan, runs
         for layout, batch in plan["next"]:
@@ -113,6 +119,18 @@ def test_a_too_big_first_point_is_halved():
     assert all(batch < 400 for batch in batches[1:])
     assert plan["layouts"][0]["outcome"]["kind"] == "limited"
     assert plan["layouts"][0]["outcome"]["reason"] == "native_wall_limited"
+
+
+@pytest.mark.parametrize("reason", ["native_stationary_refill_not_always_ready",
+                                   "native_pipeline_refill_not_always_ready"])
+def test_refill_not_ready_is_too_big_and_marks_import_limit(reason):
+    row = {"status": "forecast_rejected", "rejection_reason": reason}
+    assert search.classify(row) == "too_big"
+    runs = [{"batch": 512, "kind": "too_big", "status": row["status"], "reason": reason, "capacity": None}]
+    points = [{"batch": 256, "tpot_upper_ns": 40e6, "tpot_ns": 39e6,
+               "native_wall_seconds": 100., "peak_memory_bytes": None}]
+    limit, label = search._limit(entry(), runs, points, (1800., None), lambda value: int(value))
+    assert limit == 511 and label == "native_import_limited"
 
 
 def test_capacity_rejection_bisects_below_the_rejected_batch():
@@ -182,14 +200,87 @@ def test_screen_hands_native_the_two_best_layouts_it_can_run():
                 "screen_tpot_seconds": .09, "screen_per_gpu_tokens_s": rate,
                 "trials": [{"batch_size": 1, "tpot_seconds": .01}, {"batch_size": 64, "tpot_seconds": .09}]}
 
-    rows = [row(1, 4, 2, 1, micro=2), row(1, 4, 2, 1), row(1, 1, 1, 8), row(1, 8, 1, 1), row(2, 4, 1, 1),
+    rows = [row(1, 1, 1, 8), row(1, 4, 2, 1, micro=2), row(1, 4, 2, 1), row(1, 8, 1, 1), row(2, 4, 1, 1),
             row(1, 2, 1, 4)]
     chosen, skipped = search.screen_layouts(rows, lambda layout, quantum: "experts" if layout["ep"] == 8 else None)
-    assert [item["layout"] for item in chosen] == [TP8, DP2_TP4]
-    assert skipped == [{"layout": {"dp": 1, "tp": 4, "pp": 2, "ep": 1},
-                        "reason": "native_stationary_does_not_compose_pipeline_stages"},
-                       {"layout": {"dp": 1, "tp": 1, "pp": 1, "ep": 8}, "reason": "experts"}]
+    assert [item["layout"] for item in chosen] == [
+        {"dp": 1, "tp": 4, "pp": 2, "ep": 1, "microbatches": 2},
+        {"dp": 1, "tp": 4, "pp": 2, "ep": 1}]
+    assert [item["quantum"] for item in chosen] == [2, 1]
+    assert skipped == [{"layout": {"dp": 1, "tp": 1, "pp": 1, "ep": 8}, "reason": "experts"}]
     assert chosen[0]["bypass"]["tpot_line_ns"] == pytest.approx((10e6 - 80e6 / 63, 80e6 / 63))
+
+
+def test_pp_only_screen_excludes_historical_pp1_layouts():
+    def row(dp, tp, pp, ep, micro=1, rate=1.):
+        return {"parallelism": {"dp": dp, "tp": tp, "pp": pp, "ep": ep, "microbatches": micro},
+                "status": "screened_candidate", "batch_quantum": ep * micro,
+                "candidate_batch": 64, "capacity_max_batch": 128,
+                "screen_tpot_seconds": .09, "screen_per_gpu_tokens_s": rate,
+                "trials": [{"batch_size": 1, "tpot_seconds": .01}, {"batch_size": 64, "tpot_seconds": .09}]}
+
+    rows = [row(1, 8, 1, 1), row(1, 4, 2, 1, micro=2), row(1, 4, 2, 1),
+            row(2, 2, 2, 1), row(1, 8, 1, 1, micro=2)]
+    chosen, _skipped = search.screen_layouts(rows, lambda _layout, _quantum: None, pp_only=True)
+    assert all(search.is_pipeline_layout(item["layout"]) for item in chosen)
+    assert [item["layout"] for item in chosen] == [
+        {"dp": 1, "tp": 4, "pp": 2, "ep": 1, "microbatches": 2},
+        {"dp": 1, "tp": 4, "pp": 2, "ep": 1}]
+
+
+def test_expanded_scope_keeps_existing_layouts_and_adds_pipeline(tmp_path):
+    case = run.case_matrix()[0]
+    rows = [{"parallelism": {"dp": 1, "tp": 8, "pp": 1, "ep": 1, "microbatches": 1},
+             "status": "screened_candidate", "batch_quantum": 1, "candidate_batch": 64,
+             "capacity_max_batch": 128, "screen_tpot_seconds": .09, "screen_per_gpu_tokens_s": 1.,
+             "trials": [{"batch_size": 1, "tpot_seconds": .01}, {"batch_size": 64, "tpot_seconds": .09}]},
+            {"parallelism": {"dp": 1, "tp": 4, "pp": 2, "ep": 1, "microbatches": 1},
+             "status": "screened_candidate", "batch_quantum": 1, "candidate_batch": 64,
+             "capacity_max_batch": 128, "screen_tpot_seconds": .09, "screen_per_gpu_tokens_s": 1.,
+             "trials": [{"batch_size": 1, "tpot_seconds": .01}, {"batch_size": 64, "tpot_seconds": .09}]}]
+    run.case_screen(tmp_path, case, screen=lambda _case: rows, layout_scope="all")
+    expanded = run.case_screen(tmp_path, case, screen=lambda _case: rows, layout_scope="expanded")
+    layouts = [item["layout"] for item in expanded["layouts"]]
+    assert any(layout["pp"] == 1 for layout in layouts)
+    assert any(layout["pp"] > 1 for layout in layouts)
+
+
+def test_pipeline_search_ignores_point_and_attempt_caps_until_physical_limit():
+    pipeline = {"dp": 1, "tp": 4, "pp": 2, "ep": 1}
+    rows, execute = native(lambda _batch: 10e6, lambda batch: .000001 * batch,
+                           too_big=lambda batch: ("capacity_rejected", None) if batch > (1 << 20) else None,
+                           gpus=8, capacity=1 << 20)
+    plan, runs = drive([entry(pipeline, candidate=1 << 20, capacity=1 << 20)], [(rows, execute)],
+                       policy=search.MAX_BATCH_POLICY)
+    assert len(runs) > search.MAX_RUNS
+    assert len(plan["layouts"][0]["points"]) > search.MAX_POINTS
+    assert plan["layouts"][0]["outcome"]["reason"] == "native_capacity_limited"
+
+
+def test_max_batch_policy_ignores_caps_for_non_pipeline_layout():
+    rows, execute = native(lambda _batch: 10e6, lambda batch: .000001 * batch,
+                           too_big=lambda batch: ("capacity_rejected", None) if batch > (1 << 20) else None,
+                           gpus=8, capacity=1 << 20)
+    plan, runs = drive([entry(TP8, candidate=1 << 20, capacity=1 << 20)], [(rows, execute)],
+                       policy=search.MAX_BATCH_POLICY)
+    assert len(runs) > search.MAX_RUNS
+    assert len(plan["layouts"][0]["points"]) > search.MAX_POINTS
+
+
+def test_pipeline_search_selects_largest_batch_before_throughput():
+    first = {"dp": 1, "tp": 4, "pp": 2, "ep": 1}
+    second = {"dp": 1, "tp": 2, "pp": 4, "ep": 1}
+    first_rows, first_execute = native(lambda _batch: 50e6, lambda batch: .0001 * batch,
+                                       gpus=8, capacity=1000)
+    second_rows, second_execute = native(lambda _batch: 1e6, lambda batch: .0001 * batch,
+                                         gpus=8, capacity=900)
+    plan, _runs = drive([entry(first, candidate=1000, capacity=1000),
+                         entry(second, candidate=900, capacity=900)],
+                        [(first_rows, first_execute), (second_rows, second_execute)],
+                        policy=search.MAX_BATCH_POLICY)
+    assert plan["acceptance"]["layout"] == first
+    assert plan["acceptance"]["batch"] == plan["layouts"][0]["outcome"]["batch"]
+    assert plan["layouts"][0]["outcome"]["batch"] > plan["layouts"][1]["outcome"]["batch"]
 
 
 def test_a_case_selection_runs_only_those_cases_in_matrix_order(tmp_path, monkeypatch):

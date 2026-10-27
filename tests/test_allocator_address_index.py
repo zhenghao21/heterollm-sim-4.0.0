@@ -136,6 +136,8 @@ def test_free_extent_first_fit_matches_original_scan_through_fragmentation_and_r
             reference._restore_allocations(saved)
             reference._free_extents = None
         assert fast.snapshot() == reference.snapshot()
+        assert fast._fit_extents == [(start, end) for start, end in fast._free_extents
+                                     if -(-start // 64) * 64 < end]
 
 
 def test_aliases_never_create_holes_and_growth_consumes_adjacent_free_bytes():
@@ -150,3 +152,162 @@ def test_aliases_never_create_holes_and_growth_consumes_adjacent_free_bytes():
     allocator.release("after-growth")
     allocator.release("base")
     assert allocator._free_extents == [(0, 4096)]
+
+
+class _FullMapSave:
+    def __init__(self):
+        self.allocations = None
+
+
+class _FullMapAllocator(PhysicalAddressAllocator):
+    """Test oracle: the pre-journal full-map checkpoint algorithm."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._unchanged = None
+
+    def begin_transaction(self):
+        save = _FullMapSave()
+        self._open_saves.append(save)
+        return save
+
+    def _current_copy(self):
+        if self._unchanged is None:
+            self._unchanged = dict(self._allocations)
+        return self._unchanged
+
+    def _before_mutation(self, key):
+        if self._open_saves and self._open_saves[-1].allocations is None:
+            current = self._current_copy()
+            for save in reversed(self._open_saves):
+                if save.allocations is not None:
+                    break
+                save.allocations = current
+        self._unchanged = None
+
+    def _close(self, save):
+        for index in range(len(self._open_saves) - 1, -1, -1):
+            if self._open_saves[index] is save:
+                for closed in self._open_saves[index:]:
+                    if closed.allocations is None:
+                        closed.allocations = self._current_copy()
+                del self._open_saves[index:]
+                return
+
+    def _restore_allocations(self, allocations):
+        self._before_mutation(None)
+        super()._restore_allocations(allocations)
+
+    def rollback_transaction(self, save):
+        self._close(save)
+        if save.allocations is not self._unchanged:
+            self._restore_allocations(save.allocations)
+            self._unchanged = save.allocations
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_journal_matches_full_map_transactions_through_random_branches(seed):
+    import copy
+    import random
+    from heterollm_sim.memory_allocator import AllocationError
+
+    rng = random.Random(seed)
+    pair = [cls(32768, 64, workspace_capacity_bytes=8192)
+            for cls in (PhysicalAddressAllocator, _FullMapAllocator)]
+    saves = [[], []]
+    snapshots = [[], []]
+    counts = dict.fromkeys(("begin", "commit", "rollback", "copy", "snapshot", "restore", "from_snapshot"), 0)
+    for step in range(600):
+        action = rng.randrange(12)
+        if action < 2:
+            counts["begin"] += 1
+            for allocator, checkpoints in zip(pair, saves):
+                checkpoints.append(allocator.begin_transaction())
+        elif action < 4 and saves[0]:
+            index = rng.randrange(len(saves[0]))
+            method = "commit_transaction" if action == 2 else "rollback_transaction"
+            counts["commit" if action == 2 else "rollback"] += 1
+            for allocator, checkpoints in zip(pair, saves):
+                getattr(allocator, method)(checkpoints[index])
+            # Keep closed saves, and visit them again after branch edits.
+        elif action == 4:
+            counts["copy"] += 1
+            pair, saves, snapshots = copy.deepcopy((pair, saves, snapshots))
+        elif action == 5:
+            counts["snapshot"] += 1
+            for allocator, stored in zip(pair, snapshots):
+                stored.append(copy.deepcopy(allocator.snapshot()))
+        elif action == 6 and snapshots[0]:
+            index = rng.randrange(len(snapshots[0]))
+            counts["restore"] += 1
+            for allocator, stored in zip(pair, snapshots):
+                restored = type(allocator).from_snapshot(stored[index])
+                allocator._restore_allocations(dict(restored._allocations))
+        elif action == 7 and snapshots[0]:
+            counts["from_snapshot"] += 1
+            index = rng.randrange(len(snapshots[0]))
+            pair = [type(allocator).from_snapshot(stored[index])
+                    for allocator, stored in zip(pair, snapshots)]
+            saves = [[], []]
+        else:
+            generation = rng.randrange(2)
+            key = "item" + str(rng.randrange(28))
+            size = rng.randrange(1, 10) * 31
+            alias = rng.choice(pair[0].allocations()) if pair[0]._allocations and rng.random() < .2 else None
+            release = rng.random() < .4
+            answers = []
+            for allocator in pair:
+                try:
+                    if release:
+                        answer = allocator.release(key, generation)
+                    elif alias is not None:
+                        answer = allocator.allocate(key, 1, generation, alias_of=alias.buffer_id,
+                                                    alias_generation=alias.generation)
+                    else:
+                        answer = allocator.allocate(key, size, generation, inferred=True)
+                    answers.append(answer)
+                except AllocationError as error:
+                    answers.append((type(error), str(error)))
+            assert answers[0] == answers[1], (seed, step)
+        assert pair[0].snapshot() == pair[1].snapshot(), (seed, step)
+        assert list(pair[0]._allocations) == list(pair[1]._allocations), (seed, step)
+        assert pair[0]._address_keys == pair[1]._address_keys
+        assert pair[0]._free_extents == pair[1]._free_extents
+        assert pair[0]._fit_extents == pair[1]._fit_extents
+        assert pair[0]._aliases_by_target == pair[1]._aliases_by_target
+    assert all(counts.values()), counts
+
+
+def test_closed_unchanged_nested_saves_are_reusable_after_copy_and_other_rollbacks():
+    import copy
+    allocator = PhysicalAddressAllocator(4096)
+    allocator.allocate("first", 64)
+    outer = allocator.begin_transaction()
+    inner = allocator.begin_transaction()
+    allocator.commit_transaction(outer)  # Also closes the unchanged inner.
+    allocator.release("first")
+    allocator.allocate("second", 128)
+    cloned, saved = copy.deepcopy((allocator, inner))
+    for current, checkpoint in ((allocator, inner), (cloned, saved)):
+        current.rollback_transaction(checkpoint)
+        assert [row.buffer_id for row in current.allocations()] == ["first"]
+        current.release("first")
+        current.allocate("third", 192)
+        current.rollback_transaction(checkpoint)
+        assert current.allocate("next", 64).base_address == 64
+
+
+def test_pickled_allocator_and_closed_checkpoints_keep_their_weak_registry():
+    import pickle
+    allocator = PhysicalAddressAllocator(4096)
+    allocator.allocate("first", 64)
+    outer = allocator.begin_transaction()
+    allocator.allocate("second", 128)
+    inner = allocator.begin_transaction()
+    allocator.commit_transaction(outer)
+    restored, first, second = pickle.loads(pickle.dumps((allocator, outer, inner)))
+    restored.release("first")
+    restored.allocate("third", 192)
+    restored.rollback_transaction(second)
+    assert [row.buffer_id for row in restored.allocations()] == ["first", "second"]
+    restored.rollback_transaction(first)
+    assert [row.buffer_id for row in restored.allocations()] == ["first"]

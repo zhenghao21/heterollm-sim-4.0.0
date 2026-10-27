@@ -75,12 +75,35 @@ def test_mixed_bulk_partial_hits_erase_and_direction_calendars(independent, full
         ("read", 0, PAGE, 2.),
     ]
     for index, (operation, address, count, arrival) in enumerate(operations):
-        native = count >= 128 * PAGE and not address % PAGE and not count % PAGE and operation != "erase"
+        # Reads and RMW writes run compiled over any span of 128 pages.
+        native = operation != "erase" and (address + count - 1) // PAGE - address // PAGE >= 127
         submit_pair(pair, AccessRequest(str(index), operation, address, count, arrival), native=native)
     timeline = pair[0].timeline
     if full_duplex:
         assert any(name.endswith(":read") for name in timeline.bytes_moved)
         assert any(name.endswith(":write") for name in timeline.bytes_moved)
+
+
+@pytest.mark.parametrize("granularity", [PAGE, 1024, 256])
+@pytest.mark.parametrize("host_channels", [1, 2])
+def test_unaligned_reads_run_compiled_with_scalar_boundary_host_spans(granularity, host_channels):
+    pair = cores(config(host_granularity_bytes=granularity, host_channels=host_channels,
+                        internal_transfer_bytes=3072))
+    operations = [
+        ("read", 0, 200 * PAGE - 256, 0.),        # token-major KV: full first, partial last page
+        ("read", 3 * PAGE + 700, 150 * PAGE, .2),  # partial first and last page
+        ("read", 3 * PAGE + 700, 150 * PAGE, .2),  # boundary pages hit the two-slot cache
+        ("write", 64 * PAGE, 128 * PAGE, .5),      # invalidates part of what was read
+        ("read", 60 * PAGE + 1, 127 * PAGE + 1, .7),
+        ("read", 500 * PAGE + 4000, 127 * PAGE + 200, 1.),  # 129 pages from a 3-byte head
+        ("read", 0, 127 * PAGE + 1, 1.),           # 128 pages, one-byte tail
+        ("read", 7, 126 * PAGE, 1.),               # 127 pages: scalar
+    ]
+    for index, (operation, address, count, arrival) in enumerate(operations):
+        span = (address + count - 1) // PAGE - address // PAGE + 1
+        result = submit_pair(pair, AccessRequest(str(index), operation, address, count, arrival),
+                             native=span >= 128)
+        assert result.counters["page_count"] == span
 
 
 def test_two_slot_overwrite_waits_for_reader_after_write_invalidation():
@@ -196,6 +219,34 @@ def test_actual_112_channel_25_bank_pd_chunks_keep_exact_native_results_and_cont
         if count == 256*PAGE:
             assert pages == 256
             assert fast._nand_numeric_state is not None
+        assert replace(actual, counters=counters) == expected
+    assert_state(fast, scalar)
+
+
+@pytest.mark.parametrize("granularity", [PAGE, 256])
+def test_resident_controller_runs_short_unaligned_spans_compiled_with_scalar_results(granularity):
+    settings = config(channels=112, targets_per_channel=1, dies_per_target=1, planes_per_lun=25,
+                      planes_independent=True, host_granularity_bytes=granularity, max_expanded_segments=100000)
+    contexts = [PhysicalRuntimeContext(config=settings, physical_owner="dev", capture_details=False)
+                for _ in range(2)]
+    fast, scalar = [context.runtimes["dev"].core for context in contexts]
+    scalar._execute_accepted = lambda request: scalar._execute_detailed_accepted(request)
+    requests = [("read", 0, 256 * PAGE, True),           # creates the resident controller
+                ("read", 300 * PAGE, 116 * PAGE + 256, True),  # token-major KV of one request
+                ("read", 300 * PAGE, 116 * PAGE + 256, True),  # the same pages hit the two slots
+                ("write", 310 * PAGE + 512, 256, False),  # one-token KV append: scalar handoff
+                ("read", 305 * PAGE + 9, 2 * PAGE, True),  # three pages, partial ends
+                ("read", 9000 * PAGE + 4095, 2, True),     # two pages, one byte each
+                ("read", 9000 * PAGE + 7, 100, False),     # one page: scalar
+                ("write", 9100 * PAGE, 3 * PAGE + 5, True),   # read-modify-write tail page
+                ("write", 9200 * PAGE + 100, 2 * PAGE, True),  # partial head and tail pages
+                ("read", 9100 * PAGE, 3 * PAGE + 5, True),
+                ("read", 9200 * PAGE, 3 * PAGE, True)]
+    for index, (operation, address, count, native) in enumerate(requests):
+        request = AccessRequest(str(index), operation, address, count, index * .05)
+        actual, expected = fast.submit(request), scalar.submit(request)
+        counters = dict(actual.counters)
+        assert bool(counters.pop("native_fullpage_pages", None)) == native
         assert replace(actual, counters=counters) == expected
     assert_state(fast, scalar)
 

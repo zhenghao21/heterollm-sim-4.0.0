@@ -2339,11 +2339,16 @@ class ParallelSpec:
     collective_algorithm: str = "auto"
     routing_policy: str = "lowest_latency"
     allow_padding: bool = True
+    # Split independent request owners into pipeline microbatches. Scheduler
+    # token ubatches may subdivide each one further; a Prefill chunk keeps its
+    # request identity and causal state dependencies through both partitions.
+    pipeline_microbatches: int = 1
 
     def __post_init__(self) -> None:
         _require_int(self.tp_degree, "tp_degree", minimum=1)
         _require_int(self.pp_degree, "pp_degree", minimum=1)
         _require_int(self.ep_degree, "ep_degree", minimum=1)
+        _require_int(self.pipeline_microbatches, "pipeline_microbatches", minimum=1)
         _require_tuple(self.rank_mapping, "rank_mapping")
         _require_mapping(self.layer_to_stage, "layer_to_stage")
         _require_name(self.collective_algorithm, "collective_algorithm")

@@ -10,6 +10,8 @@ simulation.  Overlap is accepted only through an explicit alias declaration.
 from __future__ import annotations
 
 from bisect import bisect_left
+from copy import deepcopy
+from weakref import WeakSet
 
 from dataclasses import dataclass, replace
 from typing import Dict, Iterable, Optional, Tuple
@@ -50,13 +52,40 @@ class PhysicalAllocation:
         return self
 
 
+_NATIVE_ALLOCATION_COPY_CONTRACT = (
+    PhysicalAllocation, PhysicalAllocation.__mro__, PhysicalAllocation.__deepcopy__,
+    PhysicalAllocation.__deepcopy__.__code__, PhysicalAllocation.__deepcopy__.__defaults__,
+    PhysicalAllocation.__deepcopy__.__kwdefaults__, vars(PhysicalAllocation)["__dict__"])
+
+
 class _AllocationSave:
-    """The allocation map one transaction rolls back to."""
+    """Before-images of changed keys, retained as long as the caller needs them."""
 
-    __slots__ = ("allocations",)
+    __slots__ = ("entries", "allocator", "_native_born", "__weakref__")
 
-    def __init__(self):
-        self.allocations = None
+    def __init__(self, allocator):
+        self._native_born = True
+        self.entries = {}
+        self.allocator = allocator
+
+    def __deepcopy__(self, memo):
+        result = type(self).__new__(type(self))
+        memo[id(self)] = result
+        result._native_born = False
+        result.allocator = deepcopy(self.allocator, memo)
+        result.entries = deepcopy(self.entries, memo)
+        result.allocator._saves.add(result)
+        return result
+
+    def __getstate__(self):
+        return self.allocator, self.entries
+
+    def __setstate__(self, state):
+        self._native_born = False
+        self.allocator, self.entries = state
+        if "_saves" not in vars(self.allocator):
+            self.allocator._saves = WeakSet()
+        self.allocator._saves.add(self)
 
 
 class PhysicalAddressAllocator:
@@ -81,32 +110,79 @@ class PhysicalAddressAllocator:
         self.alignment_bytes = alignment_bytes
         self.workspace_capacity_bytes = workspace_capacity_bytes
         self._allocations: Dict[Tuple[str, int], PhysicalAllocation] = {}
+        self._native_allocation_keys = True
         self._address_keys = []
         self._address_rows = []
         self._largest_allocation = 0
         self._aliases_by_target = {}
         self._free_extents = [(0, capacity_bytes)]
-        # Open transactions, innermost last. A save holds None until the map
-        # first changes; the saves filled then share one copy.
+        # The free extents whose first aligned address lies inside them. An
+        # unaligned allocation leaves a sub-alignment gap before the next
+        # aligned base; such gaps can never satisfy a fit, and first fit
+        # scanning them made seed KV preload quadratic in allocations.
+        self._fit_extents = [(0, capacity_bytes)]
+        # Ordinals restore insertion order too (including imported NaN
+        # address keys whose stable sort depends on that order).
+        self._allocation_order = {}
+        self._next_order = 0
         self._open_saves = []
-        # A copy of the current map that nothing mutates, shared by every save
-        # filled before the next change; None once the map has changed.
-        self._unchanged = None
+        # Closed checkpoints remain restorable. Weak ownership discards their
+        # undo logs immediately when the caller releases the checkpoint.
+        self._saves = WeakSet()
+
+    def __deepcopy__(self, memo):
+        result = type(self).__new__(type(self))
+        memo[id(self)] = result
+        result._saves = WeakSet()
+        # These indexes contain immutable extents, scalar keys/ordinals and
+        # tuples of scalars. Only their outer containers are mutable. Use the
+        # same memo for all fields so external aliases still bind to the copy.
+        maps = {"_allocations", "_allocation_order"}
+        lists = {"_address_keys", "_address_rows", "_free_extents", "_fit_extents"}
+        replaced_key_roots = False
+        for name, value in vars(self).items():
+            if name == "_saves":
+                continue
+            if id(value) in memo:
+                if name in maps or name == "_next_order":
+                    replaced_key_roots = True
+                cloned = memo[id(value)]
+            elif (name in maps and type(value) is dict) or (name in lists and type(value) is list):
+                cloned = value.copy()
+                memo[id(value)] = cloned
+            else:
+                cloned = deepcopy(value, memo)
+            setattr(result, name, cloned)
+        if (replaced_key_roots or self._native_allocation_keys is not True
+                or result._native_allocation_keys is not True):
+            result._native_allocation_keys = False
+        return result
+
+    def __getstate__(self):
+        return {name: value for name, value in vars(self).items() if name != "_saves"}
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        if "_saves" not in vars(self):
+            self._saves = WeakSet()
+        self._saves.update(self._open_saves)
 
     def begin_transaction(self) -> "_AllocationSave":
-        save = _AllocationSave()
+        save = _AllocationSave(self)
         self._open_saves.append(save)
+        self._saves.add(save)
         return save
 
     def _close(self, save):
+        # Copied/imported journals may call author code before their first
+        # key lookup, including items() and nested before-image unpacking.
+        if type(save) is not _AllocationSave or save._native_born is not True:
+            self._native_allocation_keys = False
         saves = self._open_saves
         for index in range(len(saves) - 1, -1, -1):
             if saves[index] is save:
-                # A finished transaction stays restorable, so every save that
-                # saw no change takes the shared copy of the current map.
-                for closed in saves[index:]:
-                    if closed.allocations is None:
-                        closed.allocations = self._current_copy()
+                # Keep closed saves in the weak registry: callers may restore
+                # them after a commit, or after closing an outer transaction.
                 del saves[index:]
                 return
 
@@ -115,25 +191,52 @@ class PhysicalAddressAllocator:
 
     def rollback_transaction(self, save: "_AllocationSave") -> None:
         self._close(save)
-        if save.allocations is not self._unchanged:
-            self._restore_allocations(save.allocations)
-            self._unchanged = save.allocations
+        changed = False
+        restore_existing = False
+        for key, (previous, order) in save.entries.items():
+            if (self._allocations.get(key) is previous
+                    and self._allocation_order.get(key) == order):
+                continue
+            self._before_mutation(key)
+            changed = True
+            if previous is None:
+                restore_existing = restore_existing or order is not None
+                self._allocations.pop(key, None)
+                self._allocation_order.pop(key, None)
+            else:
+                restore_existing = True
+                self._allocations[key] = previous
+                self._allocation_order[key] = order
+        if changed:
+            self._next_order = max(self._next_order, max(self._allocation_order.values(), default=-1) + 1)
+            # Removing only new keys leaves every surviving insertion and
+            # ordinal in place. Old allocations/ordinals need the full sort.
+            if restore_existing or self._native_allocation_keys is not True:
+                ordered = sorted(self._allocations, key=self._allocation_order.__getitem__)
+                allocations = [(key, self._allocations[key]) for key in ordered]
+                self._allocations.clear()
+                self._allocations.update(allocations)
+            self._rebuild_indexes()
 
-    def _current_copy(self):
-        if self._unchanged is None:
-            self._unchanged = dict(self._allocations)
-        return self._unchanged
+    def _before_mutation(self, key):
+        if self._saves:
+            previous = self._allocations.get(key), self._allocation_order.get(key)
+            for save in self._saves:
+                save.entries.setdefault(key, previous)
 
-    def _before_mutation(self):
-        saves = self._open_saves
-        if saves and saves[-1].allocations is None:
-            # Unfilled saves are the innermost ones and saw no change yet.
-            current = self._current_copy()
-            for save in reversed(saves):
-                if save.allocations is not None:
-                    break
-                save.allocations = current
-        self._unchanged = None
+    def _pop_gap(self, position):
+        gap = self._free_extents.pop(position)
+        if self._align(gap[0], self.alignment_bytes) < gap[1]:
+            fits = self._fit_extents
+            fits.pop(bisect_left(fits, gap))
+        return gap
+
+    def _insert_gaps(self, position, new_gaps):
+        self._free_extents[position:position] = new_gaps
+        fits = self._fit_extents
+        for gap in new_gaps:
+            if self._align(gap[0], self.alignment_bytes) < gap[1]:
+                fits.insert(bisect_left(fits, gap), gap)
 
     def _free_extent(self, base, end):
         """Merge a retired root; aliases never reserve an extra extent."""
@@ -144,10 +247,10 @@ class PhysicalAddressAllocator:
         if position and gaps[position - 1][1] >= base:
             position -= 1
             base = min(base, gaps[position][0])
-            end = max(end, gaps.pop(position)[1])
+            end = max(end, self._pop_gap(position)[1])
         while position < len(gaps) and gaps[position][0] <= end:
-            end = max(end, gaps.pop(position)[1])
-        gaps.insert(position, (base, end))
+            end = max(end, self._pop_gap(position)[1])
+        self._insert_gaps(position, [(base, end)])
 
     def _occupy_extent(self, allocation):
         gaps = self._free_extents
@@ -164,15 +267,19 @@ class PhysicalAddressAllocator:
             # order dataclass extents. Preserve their original scan semantics.
             self._free_extents = None
             return
-        start, stop = gaps[position]
-        gaps[position:position + 1] = ([(start, base)] if start < base else []) + (
-            [(end, stop)] if end < stop else [])
+        start, stop = self._pop_gap(position)
+        self._insert_gaps(position, ([(start, base)] if start < base else []) + (
+            [(end, stop)] if end < stop else []))
 
     def _store_allocation(self, key, allocation):
+        # Establish the key contract before any lookup can call its hash.
+        if self._native_allocation_keys is True and not (type(key) is tuple and len(key) == 2
+                and type(key[0]) is str and type(key[1]) is int):
+            self._native_allocation_keys = False
         previous = self._allocations.get(key)
         if previous is allocation:
             return
-        self._before_mutation()
+        self._before_mutation(key)
         if previous is not None:
             if previous.alias_of is None:
                 self._free_extent(previous.base_address, previous.base_address + previous.size_bytes)
@@ -187,6 +294,9 @@ class PhysicalAddressAllocator:
         self._address_rows.insert(position, allocation)
         self._largest_allocation = max(self._largest_allocation, allocation.size_bytes)
         self._allocations[key] = allocation
+        if key not in self._allocation_order:
+            self._allocation_order[key] = self._next_order
+            self._next_order += 1
         self._occupy_extent(allocation)
         if allocation.alias_of is not None:
             target = (allocation.alias_of, allocation.alias_generation)
@@ -202,9 +312,22 @@ class PhysicalAddressAllocator:
 
     def _restore_allocations(self, allocations):
         """Rebuild the address index at the existing rollback boundary."""
-        self._before_mutation()
+        # Imported mappings may call author code during keys/update, even
+        # before enumeration. Keep their original reordering path sticky.
+        self._native_allocation_keys = False
+        # Public snapshots may be restored inside an open transaction. Every
+        # changed key needs a before-image in all still-retained checkpoints.
+        if self._saves:
+            for key in self._allocations.keys() | allocations.keys():
+                self._before_mutation(key)
         self._allocations.clear()
         self._allocations.update(allocations)
+        self._allocation_order = {key: index for index, key in enumerate(allocations)}
+        self._next_order = len(allocations)
+        self._rebuild_indexes()
+
+    def _rebuild_indexes(self):
+        allocations = self._allocations
         self._address_rows = sorted(allocations.values(),
             key=lambda item: (item.base_address, item.buffer_id, item.generation))
         self._address_keys = [(item.base_address, item.buffer_id, item.generation)
@@ -212,6 +335,7 @@ class PhysicalAddressAllocator:
         self._largest_allocation = max((item.size_bytes for item in self._address_rows), default=0)
         self._aliases_by_target = {}
         self._free_extents = [(0, self.capacity_bytes)]
+        self._fit_extents = [(0, self.capacity_bytes)]
         for key, allocation in allocations.items():
             self._occupy_extent(allocation)
             if allocation.alias_of is not None:
@@ -269,8 +393,8 @@ class PhysicalAddressAllocator:
 
     def _find_first_fit(self, size: int, generation: int = 0, allocation_arena: Optional[str] = None) -> int:
         lower, upper = self._arena(generation, allocation_arena)
-        gaps = self._free_extents
-        if gaps is not None:
+        if self._free_extents is not None:
+            gaps = self._fit_extents
             position = max(0, bisect_left(gaps, (lower + 1,)) - 1)
             for index in range(position, len(gaps)):
                 start, end = gaps[index]
@@ -493,8 +617,9 @@ class PhysicalAddressAllocator:
         # weight/KV allocations, or all the chains, once per physical task.
         if self._aliases_by_target.get(key):
             raise AllocationError("cannot release allocation {} generation {} with live aliases".format(*key))
-        self._before_mutation()
+        self._before_mutation(key)
         previous = self._allocations.pop(key)
+        del self._allocation_order[key]
         if previous.alias_of is None:
             self._free_extent(previous.base_address, previous.base_address + previous.size_bytes)
         self._remove_alias(key, previous)

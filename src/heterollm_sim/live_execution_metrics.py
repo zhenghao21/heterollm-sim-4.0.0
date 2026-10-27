@@ -111,6 +111,16 @@ class LiveCohortMetrics:
         observe_live_metrics(self, event, _better_path, _extend_path,
                              TaskExecutionRecord, compact_execution_metadata)
 
+    def layer_completion_ns(self) -> Mapping[str, float]:
+        """Latest observed native task completion of each authored layer."""
+        completions = {}
+        for record in self._records:
+            layer = record.metadata.get("layer_id")
+            if layer is not None:
+                layer = str(layer)
+                completions[layer] = max(completions.get(layer, record.end_ns), record.end_ns)
+        return completions
+
     def summary(self) -> ScheduleCostResult:
         if self._summary_cache is not None:
             return self._summary_cache

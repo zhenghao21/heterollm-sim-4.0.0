@@ -15,12 +15,14 @@ def _analytical_toy_hardware(scenario, gpu_ghz):
         if raw is not None and not isinstance(raw, DramConfig):
             raw = parse_execution_physical_config(raw)
         if isinstance(raw, DramConfig):
-            component = replace(component, capacity_bytes=8*1024**2, metadata={**component.metadata,
+            # The PD source keeps the staging capacity of its import pool.
+            capacity = raw.capacity_bytes if component.component_id == "pd_host" else 8*1024**2
+            component = replace(component, capacity_bytes=capacity, metadata={**component.metadata,
                 "physical_memory_config": replace(raw, control_mode="analytical",
                     refresh_policy="disabled", channels=1, pseudo_channels_per_channel=1,
                     subchannels_per_channel=1, stacks=1, dies_per_stack=1, ranks_per_channel=1,
-                    bank_groups_per_rank=1, banks_per_group=1, rows_per_bank=8192,
-                    data_lanes=1, row_bytes=1024, capacity_bytes=8*1024**2,
+                    bank_groups_per_rank=1, banks_per_group=1, rows_per_bank=capacity // 1024,
+                    data_lanes=1, row_bytes=1024, capacity_bytes=capacity,
                     metadata={**raw.metadata,
                         "control_status": "synthetic_analytical",
                         "geometry_status": "explicit_assumption"})})
@@ -133,6 +135,13 @@ def maverick_pattern_scenario(layer_count=8, *, batch_size=1, output=3, warmup=2
     return build_native_comparison_scenario("llama4_maverick", "HBF", "SHORT", tp=tp, ep=ep,
         batch_size=batch_size, model_override=model, prompt_override=20, output_override=output,
         warmup_override=warmup, measurement_override=measurement)
+
+
+def slow_pd_ingress(scenario, bandwidth_gbps):
+    """The same deployment with slower PD ingress links, so imports outlast steps."""
+    return replace(scenario, hardware=replace(scenario.hardware, links=tuple(
+        replace(link, bandwidth_gbps=bandwidth_gbps) if link.link_id.startswith("pd-ingress-") else link
+        for link in scenario.hardware.links)))
 
 
 def stationary_and_full_window(scenario, calibration, holdout):

@@ -12,7 +12,9 @@ from heterollm_sim.web import scenario_to_payload
 from test_current_report_callers import browser_check
 
 
-@pytest.mark.parametrize("options", [{}, {"mode": "detailed"}, {
+@pytest.mark.parametrize("options", [{}, {"mode": "detailed"},
+    {"mode": "fast", "native_window": {}},
+    {"mode": "fast", "native_window": {"pd_concurrency_envelope": False}}, {
     "mode": "fast", "fast_decode": {
         "warmup_tokens": 0, "calibration_tokens": 4, "validation_tokens": 2,
         "max_sample_tokens": 12, "target_relative_error": .05,

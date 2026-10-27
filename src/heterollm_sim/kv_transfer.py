@@ -10,13 +10,15 @@ reservation reversible until the pool commits its capacity ledger.
 from __future__ import annotations
 
 import copy
+import heapq
 import math
 from contextlib import contextmanager
 from dataclasses import dataclass
-from types import SimpleNamespace
+from types import MethodType as _MethodType, SimpleNamespace
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from .data_motion import AccessKind, PhysicalRuntimeContext, PhysicalService, resolve_service
+from .data_motion import (AccessKind, PhysicalRuntimeContext, PhysicalService, resolve_service,
+                          _NATIVE_TIMELINE_HISTORY_SNAPSHOT)
 from .ir import ComponentSpec
 from .memory_allocator import PhysicalAddressAllocator, PhysicalAllocation
 from .memory_types import DramConfig, NandConfig, SramConfig
@@ -638,16 +640,25 @@ class PhysicalKVTransferExecutor:
                                 arrival_ns: float) -> KvPoolTransferPlan:
         """Stream external historical KV into the native lowerer's declared buffers.
 
-        Only the current source/read, link, or target/write phase is submitted.
-        Consumers may publish the imported context only after final completion
-        and commit. The finite source buffer is reused for every chunk; external
-        Prefill production is outside this Decode-node runtime, never a free
-        destination-memory initialization.
+        The destination ranges split into one stream per target component
+        (a rank's own KV store behind its own PD link); the streams advance
+        concurrently. ``buffer_bytes`` is this request's own source staging
+        buffer, cut into ``chunk_bytes`` slots dealt round-robin to the
+        streams, at least one each. A chunk holds its slot from its source
+        read until its target write completes, as an RDMA source buffer stays
+        valid until the remote write is acknowledged, so a stream keeps at
+        most its slot count in flight while the reads, links and writes of
+        adjacent chunks overlap on the native resource timelines. Every
+        submitted action after preparation is one plan phase. Consumers may
+        publish the imported context only after every stream's last write
+        completes and commit. External Prefill production is outside this
+        Decode-node runtime, never a free destination-memory initialization.
         """
         if (type(buffer_bytes) is not int or type(chunk_bytes) is not int
                 or min(buffer_bytes, chunk_bytes) <= 0 or not request_id):
             raise KvPoolError("external KV requires positive finite buffer/chunk sizes and a request id")
         rows = []
+        streams = {}
         for item in destinations:
             row = dict(item)
             if (not row.get("component_id") or not row.get("buffer_id")
@@ -660,17 +671,25 @@ class PhysicalKVTransferExecutor:
             # Validate exact owner-scoped bounds before reserving any I/O.
             self._allocator(service.physical_owner).address(row["buffer_id"], row["offset_bytes"],
                 row["size_bytes"], row["generation"])
+            streams.setdefault(str(row["component_id"]), []).append(len(rows))
             rows.append(row)
         if not rows:
             raise KvPoolError("external KV import requires at least one nonempty destination")
-        snapshot = self.snapshot()
+        slots = buffer_bytes // chunk_bytes
+        if slots < len(streams):
+            raise KvPoolError("external KV source buffer must hold one chunk slot per target stream")
+        snapshot_method = self.snapshot
+        snapshot = (snapshot_method(_immutable_timeline=True)
+            if type(snapshot_method) is _MethodType
+            and snapshot_method.__func__ is _IMMUTABLE_EXECUTOR_SNAPSHOT else snapshot_method())
         source = self._ensure_service(source_component)
-        size = min(buffer_bytes, chunk_bytes)
+        size = slots * chunk_bytes
         identity = self.namespace + ":external:" + request_id
-        allocation = self._allocator(source.physical_owner).allocate(identity, size, 0,
-            allocation_arena="workspace")
-        relays = []
+        start = self._arrival(None, arrival_ns)
         try:
+            allocation = self._allocator(source.physical_owner).allocate(identity, size, 0,
+                allocation_arena="workspace")
+            relays = []
             for component in self.relay_components:
                 owner = self._ensure_service(component).physical_owner
                 allocated = self._allocator(owner).allocate(identity + ":relay:" + component,
@@ -678,45 +697,80 @@ class PhysicalKVTransferExecutor:
                 relays.append((component, owner, allocated))
             plan_id = self._next_async_plan_id
             self._next_async_plan_id += 1
+            # A stream is [destination row indices, row cursor, byte offset,
+            # free slots]; a chunk is [stream, slot, actions, next action].
             state = {"plan_id": plan_id, "done": False, "phase": 0,
                 "request_id": request_id, "source_component": source_component,
                 "source_owner": source.physical_owner, "source_allocation": allocation,
-                "relays": tuple(relays), "destinations": tuple(rows), "row": 0, "offset": 0,
-                "chunk_bytes": size, "actions": (), "action": 0, "logical_bytes": sum(r["size_bytes"] for r in rows),
-                "start_ns": self._arrival(None, arrival_ns), "completion_ns": self._arrival(None, arrival_ns),
+                "relays": tuple(relays), "destinations": tuple(rows),
+                "streams": [[tuple(indices), 0, 0, list(range(index, slots, len(streams)))]
+                            for index, indices in enumerate(streams.values())],
+                "chunk_bytes": chunk_bytes, "slot_count": slots, "chunks": {}, "events": [],
+                "next_chunk_id": 0, "submitted_actions": 0, "submitted_write_bytes": 0,
+                "last_write": None, "logical_bytes": sum(r["size_bytes"] for r in rows),
+                "start_ns": start, "completion_ns": start, "submitted_until_ns": start,
                 "rollback_snapshot": snapshot}
             self._async_plan_states[plan_id] = state
-            return self._submit_external_phase(state, state["start_ns"])
+            # Fill every stream's slots round-robin, so all target ranks start
+            # together and share the source in arrival order.
+            changed, progressed = [], True
+            while progressed:
+                progressed = False
+                for index, stream in enumerate(state["streams"]):
+                    if stream[3] and stream[1] < len(stream[0]):
+                        changed.append(self._start_external_chunk(state, index, stream[3][0], start))
+                        stream[3].pop(0)
+                        progressed = True
+            return self._external_plan(state, state, None if None in changed
+                else tuple(dict.fromkeys(resource for value in changed for resource in value)))
         except BaseException:
             self.restore(snapshot)
             raise
 
-    def _external_chunk_actions(self, state):
-        row = state["destinations"][state["row"]]
-        amount = min(state["chunk_bytes"], row["size_bytes"] - state["offset"])
+    def _external_chunk_actions(self, state, row, offset, amount, slot):
+        base = slot * state["chunk_bytes"]
         actions = [("memory", state["source_component"], "read",
-                    state["source_allocation"].base_address, amount)]
+                    state["source_allocation"].address(base, amount), amount)]
         previous = state["source_component"]
         for component, _owner, allocation in state["relays"]:
             actions.extend(("link", hop, amount) for hop in self._route(previous, component, amount)
                            if not hop.service_ref)
-            actions.extend((("memory", component, "write", allocation.base_address, amount),
-                            ("memory", component, "read", allocation.base_address, amount)))
+            address = allocation.address(base, amount)
+            actions.extend((("memory", component, "write", address, amount),
+                            ("memory", component, "read", address, amount)))
             previous = component
         actions.extend(("link", hop, amount) for hop in self._route(previous, row["component_id"], amount)
                        if not hop.service_ref)
         address = self._allocator(row["physical_owner"]).address(row["buffer_id"],
-            row["offset_bytes"] + state["offset"], amount, row["generation"])
+            row["offset_bytes"] + offset, amount, row["generation"])
         actions.append(("memory", row["component_id"], "write", address, amount))
-        state.update(actions=tuple(actions), action=0, amount=amount)
+        return tuple(actions)
 
-    def _submit_external_phase(self, callback_state, now):
-        state = self._transfer_state(callback_state)
-        if state["done"]:
-            raise KvPoolError("external KV import is no longer active")
-        if not state["actions"]:
-            self._external_chunk_actions(state)
-        action = state["actions"][state["action"]]
+    def _start_external_chunk(self, state, stream_index, slot, now):
+        """Submit the next chunk of a stream into ``slot``; returns its changed lanes.
+
+        The cursor moves only after the source read was submitted, so a
+        rejected submission leaves the plan state unchanged.
+        """
+        stream = state["streams"][stream_index]
+        row = state["destinations"][stream[0][stream[1]]]
+        offset = stream[2]
+        amount = min(state["chunk_bytes"], row["size_bytes"] - offset)
+        actions = self._external_chunk_actions(state, row, offset, amount, slot)
+        changed, completion = self._submit_external_action(state, actions[0], now)
+        if offset + amount == row["size_bytes"]:
+            stream[1] += 1
+            stream[2] = 0
+        else:
+            stream[2] = offset + amount
+        chunk_id = state["next_chunk_id"]
+        state["next_chunk_id"] += 1
+        state["chunks"][chunk_id] = [stream_index, slot, actions, 1]
+        heapq.heappush(state["events"], (completion, chunk_id))
+        return changed
+
+    def _submit_external_action(self, state, action, now):
+        """Submit one source/relay/target memory or link action at ``now``."""
         changed_resources = None
         if action[0] == "memory":
             _, component, operation, address, amount = action
@@ -750,10 +804,15 @@ class PhysicalKVTransferExecutor:
             bill = self._submit_link_phase(hop, amount, now)
             completion = bill["completion_ns"]
             changed_resources = _native_external_link_resources(self, hop, bill)
-        state["action"] += 1
-        last_chunk_action = state["action"] == len(state["actions"])
-        last_row_chunk = state["offset"] + state["amount"] == state["destinations"][state["row"]]["size_bytes"]
-        final = last_chunk_action and last_row_chunk and state["row"] + 1 == len(state["destinations"])
+        state["submitted_actions"] += 1
+        state["submitted_until_ns"] = max(state["submitted_until_ns"], completion)
+        return changed_resources, completion
+
+    def _external_plan(self, state, callback_state, changed_resources):
+        # The next phase is the earliest completion that submits further
+        # work. With none left, the import ends when its last write does.
+        final = not state["events"]
+        completion = state["submitted_until_ns"] if final else state["events"][0][0]
         token = self._new_phase_token()
         state.update(completion_ns=completion, phase_token=token, final=final)
         phase = state["phase"]
@@ -766,26 +825,52 @@ class PhysicalKVTransferExecutor:
             rollback=lambda: self._rollback_external_import(callback_state, token, phase))
 
     def _advance_external_phase(self, callback_state, token):
+        """Handle the earliest completed action: at most one new submission.
+
+        A completed source read, relay access or link submits its chunk's next
+        action. A completed target write frees its slot, which at once starts
+        the stream's next chunk. Plan state changes only after the submission
+        succeeded, so a rejected phase leaves the import exactly as it was.
+        """
         state = self._transfer_state(callback_state)
         self._check_phase_token(state, token)
+        if state["done"]:
+            raise KvPoolError("external KV import is no longer active")
         if state["final"]:
             raise KvPoolError("external KV import has no unsubmitted phases")
-        saved_state = dict(state)
-        try:
-            now = state["completion_ns"]
-            if state["action"] == len(state["actions"]):
-                state["offset"] += state["amount"]
-                if state["offset"] == state["destinations"][state["row"]]["size_bytes"]:
-                    state["row"] += 1
-                    state["offset"] = 0
-                state["actions"] = ()
-            state["phase"] += 1
-            state.pop("rollback_snapshot", None)
-            return self._submit_external_phase(callback_state, now)
-        except BaseException:
-            state.clear()
-            state.update(saved_state)
-            raise
+        now, chunk_id = state["events"][0]
+        chunk = state["chunks"][chunk_id]
+        stream_index, slot, actions, position = chunk
+        stream = state["streams"][stream_index]
+        unstarted = stream[1] < len(stream[0])
+        write = None
+        if position < len(actions):
+            action = actions[position]
+            changed, completion = self._submit_external_action(state, action, now)
+            heapq.heappop(state["events"])
+            chunk[3] = position + 1
+            if position + 1 < len(actions) or unstarted:
+                # Only a write whose slot release can start another chunk
+                # needs its completion as a phase.
+                heapq.heappush(state["events"], (completion, chunk_id))
+            else:
+                del state["chunks"][chunk_id]
+            if position + 1 == len(actions):
+                write = (completion, action[4])
+                state["submitted_write_bytes"] += action[4]
+        else:
+            changed = (self._start_external_chunk(state, stream_index, slot, now)
+                       if unstarted else ())
+            if not unstarted:
+                stream[3].append(slot)
+            # A started chunk pushed a later (completion, id) than this
+            # minimum, so the released phase is still at the heap's top.
+            heapq.heappop(state["events"])
+            del state["chunks"][chunk_id]
+        state["phase"] += 1
+        state["last_write"] = write
+        state.pop("rollback_snapshot", None)
+        return self._external_plan(state, callback_state, changed)
 
     def _finish_external_import(self, callback_state, token, *, cancelled):
         with self._finalization_transaction(callback_state):
@@ -800,10 +885,14 @@ class PhysicalKVTransferExecutor:
             self._release_allocation(state["source_owner"], state["source_allocation"].buffer_id, 0)
             for _component, owner, allocation in state["relays"]:
                 self._release_allocation(owner, allocation.buffer_id, 0)
+            # A cancelled import still drains every action already submitted;
+            # the caller waits for that before the buffers can be reused.
             billed = {"kind": "external_kv_cancelled" if cancelled else "external_kv_import",
                 "request_id": state["request_id"], "logical_bytes": state["logical_bytes"],
-                "start_ns": state["start_ns"], "completion_ns": state["completion_ns"],
-                "submitted_phases": state["phase"] + 1, "buffer_bytes": state["source_allocation"].size_bytes}
+                "start_ns": state["start_ns"], "completion_ns": state["submitted_until_ns"],
+                "submitted_phases": state["submitted_actions"],
+                "buffer_bytes": state["source_allocation"].size_bytes,
+                "slot_count": state["slot_count"], "stream_count": len(state["streams"])}
             self.events.append(billed)
             counter = "cancelled_transfer_count" if cancelled else "transfer_count"
             self.counters[counter] = self.counters.get(counter, 0) + 1
@@ -1208,8 +1297,12 @@ class PhysicalKVTransferExecutor:
     def __call__(self, request: KvPoolTransferRequest) -> KvPoolTransferPlan:
         return self._transfer(request)
 
-    def snapshot(self) -> dict[str, Any]:
-        return {"runtime": self.runtime.snapshot(), "bindings": copy.deepcopy(self._bindings),
+    def snapshot(self, *, _immutable_timeline: bool = False) -> dict[str, Any]:
+        runtime_method = self.runtime.snapshot
+        runtime_snapshot = (runtime_method(_immutable_timeline=True)
+            if _immutable_timeline and type(runtime_method) is _MethodType
+            and runtime_method.__func__ is _NATIVE_TIMELINE_HISTORY_SNAPSHOT else runtime_method())
+        return {"runtime": runtime_snapshot, "bindings": copy.deepcopy(self._bindings),
                 "cache_states": self._snapshot_caches(),
                 "events": copy.deepcopy(self.events), "counters": copy.deepcopy(self.counters),
                 "cost_phases": tuple(self._cost_phases),
@@ -1235,6 +1328,63 @@ class PhysicalKVTransferExecutor:
         return {**self.counters, "events": len(self.events)}
 
 
+_IMMUTABLE_EXECUTOR_SNAPSHOT = PhysicalKVTransferExecutor.snapshot
+
+
+_PLAN_COPY_ATOMS = (str, int, float, bool, type(None))
+_PLAN_COPY_DEEPCOPY = copy.deepcopy
+_PLAN_COPY_DISPATCH = copy._deepcopy_dispatch
+_PLAN_COPY_KEEP_ALIVE = copy._keep_alive
+_PLAN_COPY_HANDLERS = tuple((kind, copy._deepcopy_dispatch[kind])
+                           for kind in (*_PLAN_COPY_ATOMS, dict, tuple))
+
+
+def _copy_plan_destinations(value, memo):
+    """Copy ordinary destination rows without dispatching each scalar.
+
+    The memo belongs to the complete plan-state snapshot, not this field.
+    Unknown containers/values keep deepcopy's callbacks, recursion and order.
+    """
+    if (type(value) is not tuple
+            or (id(memo) in memo and type(memo[id(memo)]) is not list)
+            or copy.deepcopy is not _PLAN_COPY_DEEPCOPY
+            or copy._deepcopy_dispatch is not _PLAN_COPY_DISPATCH
+            or copy._keep_alive is not _PLAN_COPY_KEEP_ALIVE
+            or any(_PLAN_COPY_DISPATCH.get(kind) is not handler
+                   for kind, handler in _PLAN_COPY_HANDLERS)):
+        return copy.deepcopy(value, memo)
+    if id(value) in memo:
+        return memo[id(value)]
+    result = []
+    changed = False
+    for row in value:
+        if id(row) in memo:
+            previous = memo[id(row)]
+        else:
+            # A custom earlier field can seed even scalar entries in memo.
+            # Such rows must retain deepcopy's lookup of both values and keys.
+            if (type(row) is not dict or any(
+                    type(key) is not str or not (type(item) is str or type(item) is int
+                        or type(item) is float or type(item) is bool or item is None)
+                    or id(key) in memo or id(item) in memo
+                    for key, item in row.items())):
+                # Already copied rows are in memo exactly where deepcopy
+                # would have put them. Falling back neither repeats callbacks
+                # nor changes aliases, including tuple/list cycles.
+                return copy.deepcopy(value, memo)
+            previous = row.copy()
+            memo[id(row)] = previous
+            _PLAN_COPY_KEEP_ALIVE(row, memo)
+        result.append(previous)
+        changed |= previous is not row
+    if not changed:
+        return value
+    result = tuple(result)
+    memo[id(value)] = result
+    _PLAN_COPY_KEEP_ALIVE(value, memo)
+    return result
+
+
 def _copy_plan_states(states):
     """Copy in-flight plan states, sharing their rollback snapshots.
 
@@ -1243,7 +1393,9 @@ def _copy_plan_states(states):
     every later snapshot, so each import cost grew with the batch.
     """
     memo = {}
-    return {plan_id: {key: value if key == "rollback_snapshot" else copy.deepcopy(value, memo)
+    return {plan_id: {key: value if key == "rollback_snapshot" else
+                      _copy_plan_destinations(value, memo)
+                      if type(key) is str and key == "destinations" else copy.deepcopy(value, memo)
                       for key, value in state.items()}
             for plan_id, state in states.items()}
 
@@ -1304,7 +1456,8 @@ def _native_external_link_resources(executor, hop, bill):
 
 
 _NATIVE_EXTERNAL_PUBLICATION_METHODS = tuple((name, getattr(PhysicalKVTransferExecutor, name)) for name in (
-    "prepare_external_import", "_submit_external_phase", "_advance_external_phase", "_external_chunk_actions",
+    "prepare_external_import", "_start_external_chunk", "_submit_external_action", "_external_plan",
+    "_advance_external_phase", "_external_chunk_actions",
     "_native_compact_cost_writer", "_io_transaction", "_price_chunks", "_record_memory_cost", "_retain_cost_phase",
     "_sum_counters", "_submit_link_phase", "_ensure_service", "_allocator", "_route"))
 _NATIVE_EXTERNAL_RUNTIME_METHODS = tuple((name, getattr(PhysicalRuntimeContext, name)) for name in (

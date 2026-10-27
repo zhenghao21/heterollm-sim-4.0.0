@@ -421,9 +421,12 @@ class DramCore:
         return ready
 
     def _submit_validated(self, request: AccessRequest, *, execute=None,
-                          _resource_accumulator=None, _metrics_capture=None) -> TransactionResult:
-        effective_arrival = self._admission_time(request)
-        inflight = [end for end in self._inflight if end > effective_arrival]
+                          _resource_accumulator=None, _metrics_capture=None,
+                          _admission=None) -> TransactionResult:
+        effective_arrival = (self._admission_time(request) if _admission is None
+                             else _admission.admit(request))
+        inflight = ([end for end in self._inflight if end > effective_arrival]
+                    if _admission is None and self.config.queue_scope == "device" else None)
         footprint = None
         if (_metrics_capture is None and self.timeline._owned_transactions
                 and self.config.control_mode != "jedec_hbm"):
@@ -463,7 +466,9 @@ class DramCore:
             })
         result = replace(result, arrival_ns=request.arrival_ns, counters=counters)
         self._acceptance_ns = effective_arrival
-        if self.config.queue_scope == "device":
+        if _admission is not None:
+            _admission.record(result.completion_ns, effective_arrival)
+        elif self.config.queue_scope == "device":
             self._inflight = [*inflight, result.completion_ns]
         else:
             for channel in dram_request_channels(self.config, request):

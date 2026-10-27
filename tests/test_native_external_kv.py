@@ -63,7 +63,8 @@ def test_import_is_not_admitted_or_given_free_output_before_target_completion():
     assert all(metric.status is RequestStatus.FINISHED and metric.visible_output_tokens == 4
                for metric in result.request_metrics.values())
     assert result.external_kv_ingress_metrics["imported_logical_bytes"] == 2*6*2*2*256
-    assert result.external_kv_ingress_metrics["source_buffer_peak_bytes"] <= 4096
+    # Each of the two in-flight imports owns its own 4096-byte source buffer.
+    assert result.external_kv_ingress_metrics["source_buffer_peak_bytes"] == 2*4096
     assert result.external_kv_ingress_metrics["counters"]["read_bytes"] == result.external_kv_ingress_metrics["counters"]["write_bytes"]
 
 
@@ -281,7 +282,11 @@ def test_unknown_external_price_failure_protects_other_owners_and_preserves_sour
     executor = runtime._external_executor
     plan = executor._async_plan_states[next(iter(executor._async_plan_states))]
     transfer = runtime._external_pending["r0"]["plan"]
-    while plan["actions"][plan["action"]][0] != "memory":
+    def next_action():
+        _stream, _slot, actions, position = plan["chunks"][plan["events"][0][1]]
+        return actions[position] if position < len(actions) else None
+    # Advance to a phase whose submission is a chunk's target write.
+    while next_action() is None or next_action()[0] != "memory":
         transfer = transfer.advance()
     before = executor.runtime.snapshot()
     counters = dict(executor.counters)

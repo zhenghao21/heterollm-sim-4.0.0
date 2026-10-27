@@ -126,3 +126,80 @@ def test_real_media_and_collective_events_match_original_native_steps(native_pre
     assert seen == expected
     assert record["physical_task_count"] > 0
     assert any(row.metadata.get("event_kind") == "collective_transfer" for row in selected)
+
+
+def test_window_copies_share_no_mutable_state_with_boundary_or_next_window(native_prepared):
+    from copy import deepcopy
+    from dataclasses import is_dataclass
+    from enum import Enum
+    from test_token_owned_history import compare_physical_state
+
+    runtime = native_prepared["runtime"]
+    source = runtime._execution_resource_kernel
+    # Include repeated references to the optimized maps, sets and allocator
+    # indexes: the common memo must preserve aliases within each new kernel.
+    allocator = next(item for item in source.physical_runtime.allocators.values() if item._allocations)
+    source._copy_test_aliases = [source._request_buffer_holders,
+        source._request_physical_buffers, allocator._allocations, allocator._address_rows]
+    first, _ = layer._independent_kernel(source)
+    second, _ = layer._independent_kernel(source)
+    reference = deepcopy(source, {id(source.resource_owners): source.resource_owners})
+
+    def mutable_ids(root):
+        visited, mutable, pending = set(), set(), [root]
+        while pending:
+            value = pending.pop()
+            if id(value) in visited or value is source.resource_owners or isinstance(value, Enum):
+                continue
+            visited.add(id(value))
+            if isinstance(value, dict):
+                mutable.add(id(value))
+                pending.extend(value.keys())
+                pending.extend(value.values())
+            elif isinstance(value, (list, set)):
+                mutable.add(id(value))
+                pending.extend(value)
+            elif isinstance(value, (tuple, frozenset)):
+                pending.extend(value)
+            elif type(value).__module__.startswith("heterollm_sim") and hasattr(value, "__dict__"):
+                params = getattr(type(value), "__dataclass_params__", None)
+                if not is_dataclass(value) or not params.frozen:
+                    mutable.add(id(value))
+                    pending.append(vars(value))
+                else:
+                    # Frozen records may share their immutable fields, but
+                    # nested metadata containers still require isolation.
+                    pending.extend(vars(value).values())
+        return mutable
+
+    sets = [mutable_ids(kernel) for kernel in (source, first, second)]
+    assert not sets[0] & sets[1]
+    assert not sets[0] & sets[2]
+    assert not sets[1] & sets[2]
+    for copied in (first, second):
+        assert copied._copy_test_aliases[0] is copied._request_buffer_holders
+        assert copied._copy_test_aliases[1] is copied._request_physical_buffers
+        target = next(item for item in copied.physical_runtime.allocators.values() if item._allocations)
+        assert copied._copy_test_aliases[2] is target._allocations
+        assert copied._copy_test_aliases[3] is target._address_rows
+
+    origin = max(runtime.now, native_prepared["ready"], source.makespan_ns)
+    specs, _ = runtime._stage_task_specs(native_prepared["stages"],
+        {stage.stage_id: origin for stage in native_prepared["stages"]}, "isolated")
+    selected = tuple(row for row in specs if row.metadata.get("layer_id") == "dense0")
+    wanted = {row.task_id for row in selected}
+    selected = tuple(replace(row, dependencies=tuple(key for key in row.dependencies if key in wanted),
+                             earliest_start_ns=max(row.earliest_start_ns, origin)) for row in selected)
+    seen = []
+    for copied in (first, second, reference):
+        copied.submit(selected)
+        copied._index_physical_allocation_uses(selected)
+        events = []
+        while (event := copied.step()) is not None:
+            events.append(bits(event))
+        seen.append(events)
+    assert seen[0] == seen[1] == seen[2]
+    pristine, _ = layer._independent_kernel(source)
+    boundary = deepcopy(source, {id(source.resource_owners): source.resource_owners})
+    compare_physical_state(pristine, boundary)
+    assert source.completed_count < first.completed_count

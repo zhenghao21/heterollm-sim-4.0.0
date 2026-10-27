@@ -162,13 +162,20 @@ def test_accelerated_bank_and_batch_allocations_remain_bounded():
     core = DramCore(config, capture_details=False)
     assert config.lane_count * config.bank_count == 65536
     assert core._can_accelerate()
-    # Reject the batch before resource IDs or NumPy buffers are allocated.
-    with patch("heterollm_sim._compiled_dram._resource_ids", side_effect=AssertionError("allocated")):
+    # Eligibility inspects bounded resource IDs, but oversized batches must
+    # still be rejected before allocating any NumPy buffers.
+    with (
+        patch("heterollm_sim._compiled_dram.np.array", side_effect=AssertionError("allocated")),
+        patch("heterollm_sim._compiled_dram.np.full", side_effect=AssertionError("allocated")),
+        patch("heterollm_sim._compiled_dram.np.zeros", side_effect=AssertionError("allocated")),
+    ):
         assert execute_compiled_many(core, (request,) * 128) is None
-        larger = DramCore(replace(config, stacks=17), capture_details=False)
-        assert not larger._can_accelerate()
-        assert execute_compiled(larger, request) is None
-        assert execute_compiled_many(larger, (request, request)) is None
+        # Geometries above the bank limit must not even enumerate resource IDs.
+        with patch("heterollm_sim._compiled_dram._resource_ids", side_effect=AssertionError("allocated")):
+            larger = DramCore(replace(config, stacks=17), capture_details=False)
+            assert not larger._can_accelerate()
+            assert execute_compiled(larger, request) is None
+            assert execute_compiled_many(larger, (request, request)) is None
     assert core._banks == {}
     assert core.timeline.bytes_moved == {}
 

@@ -78,17 +78,149 @@ def test_runs_grow_until_both_step_every_layer_class():
     assert native_prefill._layer_counts(["e", "d", "d"], 2, 2)[0] == 4
 
 
-def test_a_chunked_or_shared_prefill_is_not_a_pass():
+def test_shared_prefill_is_not_a_pass():
     scenario = prefill_toy_scenario(4)
-    chunked = replace(scenario, workload=replace(scenario.workload, scheduler=replace(
-        scenario.workload.scheduler, prefill_chunk_tokens=8, max_num_batched_tokens=8, max_num_ubatch_tokens=8)))
-    result, prefill = _pass(chunked)
-    assert result.approximation["rejection_reasons"] == ["native_prefill_pass_requires_one_whole_prompt_forward"]
-    assert not prefill["accepted"] and not result.layer_window_samples
     request = scenario.workload.requests[0]
     shared = replace(scenario, workload=replace(scenario.workload, request_count=2,
         requests=(request, replace(request, request_id="second"))))
     assert _pass(shared)[0].approximation["rejection_reasons"] == ["native_prefill_pass_requires_one_request"]
+
+
+def _chunked_prefill(*, prompt=20, ep=1, model_chunks=False):
+    scenario = prefill_toy_scenario(8, prompt=prompt, ep=ep)
+    if model_chunks:
+        from heterollm_sim.ir import build_model_graph_from_layer_specs, model_graph_execution_layers
+        model = scenario.model
+        layers = tuple(replace(layer,
+            sequence_mixer="full_attention" if (i + 1) % 4 == 0 else "chunked_attention",
+            attention_chunk_size=0 if (i + 1) % 4 == 0 else 4,
+            use_rope=(i + 1) % 4 != 0)
+            for i, layer in enumerate(model_graph_execution_layers(model.graph)))
+        model = replace(model, graph=build_model_graph_from_layer_specs(model.name, layers,
+            architecture="llama4", vocabulary_size=64, max_sequence_length=256,
+            embedding_weight_bytes=32*64*2, output_weight_bytes=32*64*2, output_head_dtype="bf16"))
+        from exploring_hbf_native_config import build_native_prefill_scenario
+        from native_toy import _analytical_toy_hardware
+        return _analytical_toy_hardware(build_native_prefill_scenario("llama4_maverick", "SHORT", tp=2,
+            ep=ep, model_override=model, prompt_override=prompt), .00001)
+    return replace(scenario, workload=replace(scenario.workload, scheduler=replace(
+        scenario.workload.scheduler, prefill_chunk_tokens=8, max_num_batched_tokens=8, max_num_ubatch_tokens=8)))
+
+
+@pytest.mark.parametrize("ep", [1, 2])
+def test_chunked_full_pass_uses_real_committed_prefix_and_matches_detailed(monkeypatch, ep):
+    scenario = _chunked_prefill(ep=ep)
+    runtime = native_prefill._OnlineRuntime
+    original, observed = runtime._schedule_execution_stages, []
+
+    def schedule(self, cohort, *args, **kwargs):
+        outcome = original(self, cohort, *args, **kwargs)
+        if cohort.kind == "prefill":
+            observed.append(self._live_cohort_metrics.layer_completion_ns())
+        return outcome
+
+    monkeypatch.setattr(runtime, "_schedule_execution_stages", schedule)
+    result, full = _pass(scenario, full_pass=True)
+    native = observed[:]
+    observed.clear()
+    detailed = run_scenario(replace(scenario, simulation=SimulationConfig(mode="detailed")),
+                            retention_policy="aggregate").serving
+    batches = [b for b in detailed.batches if b.kind == "prefill"]
+    assert len(batches) == 3 and full["accepted"]
+    assert native == observed  # All layers of all three chunks, including overlap.
+    assert full["execution_mode"] == "complete_native_chunks"
+    assert full["native_chunk_count"] == 3 and not result.layer_window_samples
+    budget = full["error_budget"]
+    assert budget["prompt_tokens"] == 19
+    assert [(r["context_tokens"], r["prompt_tokens"]) for r in budget["chunks"]] == [(0, 8), (8, 8), (16, 3)]
+    value = observed[-1]["layer-007"] - budget["pass_origin_ns"]
+    assert budget["observed_pass_ns"] == value < batches[-1].end_ns - batches[0].start_ns
+    assert full["metric_bounds"]["prefill_pass_ns"] == {
+        "estimate": value, "lower": value, "upper": value, "relative_error_budget": 0.}
+    assert budget["assumptions"] == []
+
+
+@pytest.mark.parametrize("prompt", [8, 9, 10])
+def test_model_fixed_chunks_keep_ring_boundaries_and_observe_the_whole_prompt(prompt):
+    scenario = _chunked_prefill(prompt=prompt, model_chunks=True)
+    _, full = _pass(scenario, full_pass=True)
+    result, sampled = _pass(scenario)
+    assert sampled["accepted"] and full["accepted"]
+    bounds = sampled["metric_bounds"]["prefill_pass_ns"]
+    assert bounds["lower"] <= full["error_budget"]["observed_pass_ns"] <= bounds["upper"]
+    prefix = ((prompt - 2) // 4) * 4
+    assert sampled["native_chunk_count"] == prefix // 4 + 1
+    assert sampled["error_budget"]["prompt_tokens"] == prompt - 1
+    chunks = sampled["error_budget"]["chunks"]
+    assert [c["context_tokens"] for c in chunks] == list(range(0, prefix + 1, 4))
+    assert chunks[-1]["prompt_tokens"] == prompt - 1 - prefix
+    assert not result.layer_window_samples
+    assert sampled["error_budget"]["assumptions"] == []
+
+
+@pytest.mark.parametrize("tp,ep", [(2, 4), (4, 2), (8, 1)])
+def test_fixed_chunk_prefill_matches_detailed_eight_gpu_layouts(monkeypatch, tp, ep):
+    from pathlib import Path
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from exploring_hbf_native_config import build_native_prefill_scenario
+    from heterollm_sim.ir import LayerSpec, ModelSpec, build_model_graph_from_layer_specs
+    from native_toy import _analytical_toy_hardware
+
+    # Eight heads and KV heads keep every TP layout physically representable.
+    h, layers = 64, []
+    for index in range(8):
+        moe, full = index % 2 == 1, (index + 1) % 4 == 0
+        inter = 64 if moe else 128
+        ffn = 3 * h * inter * (5 if moe else 1) + (h * 4 if moe else 0)
+        layers.append(LayerSpec(f"layer-{index:03d}", "moe" if moe else "dense", h, inter, 8,
+            kv_heads=8, attention_head_dim=8, dtype="bf16", weight_bytes=2 * (4 * h * h + ffn),
+            sequence_mixer="full_attention" if full else "chunked_attention",
+            attention_chunk_size=0 if full else 4, use_rope=not full,
+            num_experts=4 if moe else 1, experts_per_token=1,
+            shared_expert_intermediate_size=inter if moe else 0,
+            metadata={"moe_routing": {"gating": "sigmoid", "normalize_selected_weights": False,
+                "weight_scale": 1.0, "weight_application": "input", "selection_before_gating": True,
+                "load_model": "deterministic_balanced_histogram"}} if moe else {}))
+    name = "native-prefill-eight-gpu-fixed-chunks"
+    model = ModelSpec(name=name, graph=build_model_graph_from_layer_specs(name, layers,
+        architecture="llama4", vocabulary_size=128, max_sequence_length=256,
+        embedding_weight_bytes=h * 128 * 2, output_weight_bytes=h * 128 * 2,
+        output_head_dtype="bf16"))
+    scenario = _analytical_toy_hardware(build_native_prefill_scenario("llama4_maverick", "SHORT",
+        tp=tp, ep=ep, model_override=model, prompt_override=10), .00001)
+    runtime = native_prefill._OnlineRuntime
+    original, observed = runtime._schedule_execution_stages, []
+
+    def schedule(self, cohort, *args, **kwargs):
+        outcome = original(self, cohort, *args, **kwargs)
+        if cohort.kind == "prefill":
+            observed.append(self._live_cohort_metrics.layer_completion_ns())
+        return outcome
+
+    monkeypatch.setattr(runtime, "_schedule_execution_stages", schedule)
+    result, prefill = _pass(scenario)
+    native = observed[:]
+    observed.clear()
+    detailed = run_scenario(replace(scenario, simulation=SimulationConfig(mode="detailed")),
+                            retention_policy="aggregate").serving
+    assert prefill["accepted"] and prefill["execution_mode"] == "complete_native_chunks"
+    assert not result.layer_window_samples
+    assert len(native) == len(observed) == 3
+    assert all(len(ends) == 8 for ends in native + observed)
+    assert [{layer: end.hex() for layer, end in ends.items()} for ends in native] == [
+        {layer: end.hex() for layer, end in ends.items()} for ends in observed]
+    budget = prefill["error_budget"]
+    assert [(chunk["context_tokens"], chunk["prompt_tokens"]) for chunk in budget["chunks"]] == [
+        (0, 4), (4, 4), (8, 1)]
+    last_layer_end = observed[-1]["layer-007"]
+    value = last_layer_end - budget["pass_origin_ns"]
+    assert budget["observed_pass_ns"] == value
+    assert last_layer_end < detailed.batches[-1].end_ns
+    assert prefill["metric_bounds"]["prefill_pass_ns"] == {
+        "estimate": value, "lower": value, "upper": value, "relative_error_budget": 0.}
+    assert budget["assumptions"] == []
 
 
 def test_native_prefill_option_is_its_own_fast_mode():

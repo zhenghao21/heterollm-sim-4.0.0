@@ -7,8 +7,9 @@ substituting a bandwidth-only service or the memory core's example defaults.
 from copy import deepcopy
 from collections import OrderedDict
 from dataclasses import asdict, fields, is_dataclass, replace
-from enum import Enum
+from io import BytesIO
 from math import gcd
+from pickle import Pickler
 from threading import RLock
 from typing import Mapping
 from ._hbm_dependencies import normalize_hbm_dependencies
@@ -16,7 +17,7 @@ from ._hbm_errors import HBMConfigError
 
 from .memory_types import (
     DRAM_BANK_GROUP_TIMING_FIELDS, HBM_CONTROL_TIMING_FIELDS, DRAM_CONTROLLER_FIELDS,
-    DramConfig, NandConfig, SramConfig, Operation, parse_physical_memory_config,
+    DramConfig, NandConfig, SramConfig, MemoryKind, Operation, parse_physical_memory_config,
 )
 
 
@@ -30,23 +31,41 @@ PHYSICAL_MEMORY_COMPONENT_KINDS = DRAM_COMPONENT_KINDS | NAND_COMPONENT_KINDS | 
 
 _PARSED_CONFIGS = OrderedDict()
 _PARSED_CONFIGS_LOCK = RLock()
+_COMPONENT_CONTRACTS = OrderedDict()
+_COMPONENT_CONTRACTS_LOCK = RLock()
 
 
-def _config_key(value):
-    if type(value) in {str, int, float, bool, type(None)} or isinstance(value, Enum):
-        return type(value), value
-    if type(value) is dict:
-        return dict, tuple((_config_key(key), _config_key(item)) for key, item in value.items())
-    if type(value) in {list, tuple}:
-        return type(value), tuple(_config_key(item) for item in value)
-    raise TypeError("custom physical configuration value")
+class _ContractPickler(Pickler):
+    """A C-level content key without executing extension serialization hooks.
+
+    Exact builtin containers/scalars are handled by Pickler itself. Only our
+    plain physical dataclasses and memory-kind enum may use its object path;
+    custom containers and metadata keep the ordinary uncached validation.
+    The bytes are compared directly, never persisted or unpickled. They retain
+    scalar types, float bits, container order, aliases and nested metadata.
+    """
+
+    def reducer_override(self, value):
+        if (type(value) in (DramConfig, NandConfig, SramConfig, MemoryKind)
+                or value is DramConfig or value is NandConfig
+                or value is SramConfig or value is MemoryKind):
+            return NotImplemented
+        raise TypeError("custom physical configuration value")
+
+
+def _physical_content_key(value):
+    stream = BytesIO()
+    try:
+        _ContractPickler(stream, protocol=5).dump(value)
+    except (TypeError, ValueError, RecursionError):
+        return None
+    return stream.getvalue()
 
 
 def _parse_complete_config(raw):
     """Amortize dependency normalization; each caller owns its mutable metadata."""
-    try:
-        key = _config_key(raw)
-    except (TypeError, RecursionError):
+    key = _physical_content_key(raw)
+    if key is None:
         return parse_physical_memory_config(raw)
     with _PARSED_CONFIGS_LOCK:
         cached = _PARSED_CONFIGS.get(key)
@@ -181,8 +200,28 @@ def parse_required_physical_config(component_id, kind, raw):
     return parsed
 
 
-def require_physical_memory_config(component):
-    """Return a validated core config, or identify the incomplete component."""
+def _validated_component_contract(component):
+    """Borrow a private config/caps pair only for unchanged component content.
+
+    Component identity alone is insufficient: frozen IR still contains mutable
+    metadata. Recompute the complete raw-config key on every access, including
+    typed configs' nested metadata, and include every component-level guard.
+    Strong ownership plus the identity check prevents recycled object ids.
+    """
+    metadata = component.metadata
+    key = None if type(metadata) is not dict else _physical_content_key((
+        component.component_id, component.kind, component.normalized_kind,
+        component.capacity_bytes, component.shared_bandwidth_gbps,
+        component.read_bandwidth_gbps, component.write_bandwidth_gbps,
+        "memory_execution_mode" in metadata, metadata.get("physical_memory_config"),
+    ))
+    marker = id(component)
+    if key is not None:
+        with _COMPONENT_CONTRACTS_LOCK:
+            cached = _COMPONENT_CONTRACTS.get(marker)
+            if cached is not None and cached[0] is component and cached[1] == key:
+                _COMPONENT_CONTRACTS.move_to_end(marker)
+                return cached[2], cached[3], True
     prefix = "component {} ({}): ".format(component.component_id, component.kind)
     if "memory_execution_mode" in component.metadata:
         raise ValueError(prefix + "memory_execution_mode is no longer configurable; remove the obsolete setting. All memory execution requires its physical DRAM/NAND core")
@@ -193,8 +232,29 @@ def require_physical_memory_config(component):
     capacity = component.capacity_bytes
     if capacity <= 0 or parsed.capacity_bytes != capacity:
         raise ValueError(prefix + "capacity_bytes must be positive and equal physical_memory_config capacity (component={}, physical={})".format(capacity, parsed.capacity_bytes))
-    physical_memory_bandwidth_caps_gbps(component, physical_config=parsed)
-    return parsed
+    caps = physical_memory_bandwidth_caps_gbps(component, physical_config=parsed)
+    if key is None:
+        return parsed, caps, False
+    # The parser may retain nested authored metadata on a cache miss. No
+    # caller, including public require(), may ever receive that private copy.
+    stored = deepcopy(parsed)
+    with _COMPONENT_CONTRACTS_LOCK:
+        _COMPONENT_CONTRACTS[marker] = (component, key, stored, caps)
+        _COMPONENT_CONTRACTS.move_to_end(marker)
+        if len(_COMPONENT_CONTRACTS) > 256:
+            _COMPONENT_CONTRACTS.popitem(last=False)
+    return stored, caps, True
+
+
+def require_physical_memory_config(component):
+    """Return an independently owned validated config, or identify bad input."""
+    parsed, _caps, private = _validated_component_contract(component)
+    return deepcopy(parsed) if private else parsed
+
+
+def _borrow_physical_memory_config(component):
+    """Read-only internal use; live cores must isolate their mutable metadata."""
+    return _validated_component_contract(component)[0]
 
 
 def physical_memory_bandwidth_caps_gbps(component, *, physical_config=None):
@@ -205,8 +265,9 @@ def physical_memory_bandwidth_caps_gbps(component, *, physical_config=None):
     validated ceilings for effective profiles; they do not retime the core or
     replace its physical interface values in reports.
     """
-    parsed = (require_physical_memory_config(component)
-              if physical_config is None else physical_config)
+    if physical_config is None:
+        return _validated_component_contract(component)[1]
+    parsed = physical_config
     if isinstance(parsed, (DramConfig, SramConfig)):
         caps = (parsed.physical_interface_bandwidth_gb_s,
                 parsed.directional_bandwidth_gb_s(Operation.READ),

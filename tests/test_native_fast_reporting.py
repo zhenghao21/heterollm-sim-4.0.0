@@ -88,11 +88,13 @@ def test_forecast_cannot_claim_a_completed_decode_token_or_cohort():
         replace(value, sampled_visible_output_tokens=1)
 
 
-def test_public_native_result_keeps_manifest_and_sample_scope_separate(monkeypatch):
+@pytest.mark.parametrize("envelope", [True, False])
+def test_public_native_result_keeps_manifest_and_sample_scope_separate(monkeypatch, envelope):
     from heterollm_sim.fast_simulation import FastSimulationOutcome
     from test_native_external_kv import ingress_scenario
 
-    options = NativeWindowFastConfig(calibration_layers=6, holdout_layers=3)
+    options = NativeWindowFastConfig(calibration_layers=6, holdout_layers=3,
+                                    pd_concurrency_envelope=envelope)
     scenario = replace(ingress_scenario(count=1), simulation=SimulationConfig(mode="fast", native_window=options))
     forecast = result(True).native_window_forecast
     samples = (layer_sample(),)
@@ -106,6 +108,10 @@ def test_public_native_result_keeps_manifest_and_sample_scope_separate(monkeypat
     metadata = value.manifest.metadata["native_sampling"]
     assert metadata["model"] == "stationary_continuous_refill"
     assert (metadata["calibration_layers"], metadata["holdout_layers"]) == (6, 3)
+    if envelope:
+        assert metadata["pd_concurrency_envelope"] is True
+    else:
+        assert "pd_concurrency_envelope" not in metadata
     assert "not_complete_cohorts_or_visible_tokens" in metadata["layer_sample_scope"]
     payload = reporting.report_dict(value, include_visualization=False)
     assert payload["result_semantics"]["complete_physical_decode_cohorts_observed"] == 0
@@ -142,8 +148,21 @@ def test_physical_layer_sample_requires_real_complete_window_observations(field,
         replace(layer_sample(), **{field: value})
 
 
-@pytest.mark.parametrize("options", ({"calibration_layers": 1}, {"holdout_layers": 1},
+@pytest.mark.parametrize("options", ({"calibration_layers": 1}, {"calibration_layers": 3}, {"holdout_layers": 1},
+    {"tp_rank_symmetry": "invalid"},
     {"max_wall_seconds": 0.}, {"max_wall_seconds": float("inf")}, {"target_relative_error": .2}))
 def test_stationary_options_keep_the_sampling_and_budget_limits(options):
     with pytest.raises(ValueError):
         NativeWindowFastConfig(**options)
+
+
+def test_decode_defaults_are_class_covering_minimum_counts():
+    options = NativeWindowFastConfig()
+    assert (options.calibration_layers, options.holdout_layers) == (4, 2)
+    from heterollm_sim.native_stationary import _sample_roles
+    inventory = [{"layer_id": str(i), "class_key": ("dense", "chunked", "full")[i % 3]}
+                 for i in range(12)]
+    roles = _sample_roles(inventory, (4, 2))
+    assert [len(roles[key]) for key in ("calibration", "holdout", "pd_import")] == [4, 4, 2]
+    for role in ("calibration", "holdout"):
+        assert {inventory[int(i)]["class_key"] for i in roles[role][1:]} == {"dense", "chunked", "full"}

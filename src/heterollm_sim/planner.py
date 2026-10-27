@@ -3635,6 +3635,7 @@ def _route_resident_memory_demands(demands, metadata):
 
 
 def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
+    is_resident = _resident_physical_buffer_lookup(task.metadata)
     if task.metadata.get("physical_memory_config") is not None:
         # Already-physical/direct kernels bypass the generic descriptor
         # builder. Preserve declared resident ownership on those paths too.
@@ -3645,7 +3646,7 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
                 continue
             updated = []
             for row in rows:
-                if _is_resident_physical_buffer(metadata, row.get("buffer_id")):
+                if is_resident(row.get("buffer_id")):
                     if row.get("allocation_arena") not in (None, "resident"):
                         raise ValueError("resident buffer cannot use a transient allocation arena")
                     row = {**row, "allocation_arena": "resident"}
@@ -3729,7 +3730,7 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
         for row in explicit:
             normalized = dict(row)
             if physical:
-                resident = _is_resident_physical_buffer(task.metadata, normalized["buffer_id"])
+                resident = is_resident(normalized["buffer_id"])
                 side = "weight" if resident else normalized["operation"]
                 raw_generation = normalized.get("allocation_generation")
                 if raw_generation is None or (raw_generation == 0 and generation_identity is not None and not resident):
@@ -3780,11 +3781,28 @@ def _attach_planned_l2(task: TaskSpec) -> TaskSpec:
                               cache_resource=cache_resource, owner=target_id + ".l2", accesses=accesses)
 
 
-def _gddr_non_negative_int(value: object, name: str) -> int:
+def _physical_memory_label(
+    physical_kind: Optional[str] = None,
+    component_id: Optional[str] = None,
+    physical_owner: Optional[str] = None,
+) -> str:
+    label = physical_kind or "Physical memory"
+    if component_id is not None:
+        label += " component={}".format(component_id)
+    if physical_owner is not None:
+        label += " owner={}".format(physical_owner)
+    return label
+
+
+def _gddr_non_negative_int(
+    value: object, name: str, *, physical_kind: Optional[str] = None,
+    component_id: Optional[str] = None, physical_owner: Optional[str] = None,
+) -> int:
     """Parse one physical-memory byte fact without silently coercing it."""
 
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError("GDDR {} must be a non-negative integer".format(name))
+        raise ValueError("{} {} must be a non-negative integer".format(
+            _physical_memory_label(physical_kind, component_id, physical_owner), name))
     return int(value)
 
 
@@ -3795,8 +3813,12 @@ def _gddr_stable_address(
     capacity: int,
     burst: int,
     allocation_size: Optional[int] = None,
+    *,
+    component_id: Optional[str] = None,
+    physical_kind: Optional[str] = None,
+    physical_owner: Optional[str] = None,
 ) -> int:
-    """Map a stable allocation identity to a checked DRAM address.
+    """Map a stable allocation identity to a checked physical-memory address.
 
     The hash is only an address-space allocator for a stable buffer/tensor
     identity. It deliberately never includes task_id: two invocations
@@ -3805,30 +3827,48 @@ def _gddr_stable_address(
     """
 
     if not identity.strip():
-        raise ValueError("GDDR physical access requires a stable buffer/tensor identity")
-    offset = _gddr_non_negative_int(offset, "buffer offset")
-    byte_count = _gddr_non_negative_int(byte_count, "byte_count")
-    capacity = _gddr_non_negative_int(capacity, "capacity")
-    burst = _gddr_non_negative_int(burst, "burst_bytes")
+        raise ValueError("{} access requires a stable buffer/tensor identity".format(
+            _physical_memory_label(physical_kind, component_id, physical_owner)))
+    offset = _gddr_non_negative_int(offset, "buffer offset", physical_kind=physical_kind,
+        component_id=component_id, physical_owner=physical_owner)
+    byte_count = _gddr_non_negative_int(byte_count, "byte_count", physical_kind=physical_kind,
+        component_id=component_id, physical_owner=physical_owner)
+    capacity = _gddr_non_negative_int(capacity, "capacity", physical_kind=physical_kind,
+        component_id=component_id, physical_owner=physical_owner)
+    burst = _gddr_non_negative_int(burst, "burst_bytes", physical_kind=physical_kind,
+        component_id=component_id, physical_owner=physical_owner)
     if byte_count <= 0:
-        raise ValueError("GDDR byte_count must be positive")
+        raise ValueError("{} byte_count must be positive".format(
+            _physical_memory_label(physical_kind, component_id, physical_owner)))
     if capacity <= 0 or burst <= 0:
-        raise ValueError("GDDR capacity and burst_bytes must be positive")
+        raise ValueError("{} capacity and burst_bytes must be positive".format(
+            _physical_memory_label(physical_kind, component_id, physical_owner)))
     if allocation_size is None:
         allocation_size = offset + byte_count
-    allocation_size = _gddr_non_negative_int(allocation_size, "allocation size")
+    allocation_size = _gddr_non_negative_int(allocation_size, "allocation size",
+        physical_kind=physical_kind, component_id=component_id, physical_owner=physical_owner)
     if allocation_size < offset + byte_count:
         raise ValueError(
-            "GDDR access exceeds allocation {}: offset {} + length {}".format(
-                allocation_size, offset, byte_count
+            "{} access exceeds allocation {}: offset {} + length {}".format(
+                _physical_memory_label(physical_kind, component_id, physical_owner),
+                allocation_size, offset, byte_count,
             )
         )
     if allocation_size > capacity:
-        raise ValueError(
-            "GDDR allocation {} exceeds physical capacity {}".format(
-                allocation_size, capacity
-            )
-        )
+        message = "{} allocation {} bytes exceeds physical capacity {} bytes".format(
+            _physical_memory_label(physical_kind, component_id, physical_owner),
+            allocation_size, capacity)
+        raise ScenarioValidationError(message, ({
+            "code": "physical_memory_capacity_exceeded",
+            "stage": "capacity_check",
+            "component_id": component_id,
+            "physical_kind": physical_kind,
+            "physical_owner": physical_owner,
+            "buffer_id": identity,
+            "requested_bytes": allocation_size,
+            "capacity_bytes": capacity,
+            "message_en": message,
+        },))
     max_base = capacity - allocation_size
     digest = hashlib.blake2b(identity.encode("utf-8"), digest_size=16).digest()
     slot_count = max_base // burst + 1
@@ -3836,8 +3876,9 @@ def _gddr_stable_address(
     address = base + offset
     if address < 0 or address + byte_count > capacity:
         raise ValueError(
-            "GDDR physical access range exceeds capacity: address {} + length {} > {}".format(
-                address, byte_count, capacity
+            "{} access range exceeds capacity: address {} + length {} > {}".format(
+                _physical_memory_label(physical_kind, component_id, physical_owner),
+                address, byte_count, capacity,
             )
         )
     return address
@@ -4015,25 +4056,42 @@ def _gddr_stable_identity(
     return "{}:operator={}:ordinal={}".format(side, operator, ordinal)
 
 
-def _is_resident_physical_buffer(metadata, identity):
-    """Use declared storage ownership, not words in a temporary op's name."""
-    if not identity:
-        return False
-    if identity in metadata.get("persistent_buffer_ids", ()):
-        return True
-    # Reserved planner namespace for explicitly lowered norm/bias weights.
-    if identity.startswith("weights:"):
-        return True
-    base = identity.removeprefix("tensor:")
-    for suffix in (":rank=", ":tp_rank=", ":pp_rank=", ":projection_id="):
-        base = base.split(suffix, 1)[0]
-    if any(tensor["name"] == base for tensor in metadata.get("f16_weight_tensors", ())):
-        return True
-    return any(
-        metadata.get(key) is not None and str(metadata[key]).strip() == base
-        for key in ("weight_buffer_id", "weight_tensor_id", "weight_allocation_id",
-                    "tensor_id", "rhs_tensor_id")
-    )
+def _resident_physical_buffer_lookup(metadata):
+    """Index unchanged ownership facts for one task-lowering operation."""
+    persistent = None
+    results = {}
+    indexable = False
+
+    def lookup(identity):
+        nonlocal persistent, indexable
+        if not identity:
+            return False
+        canonical = type(identity) is str
+        if canonical and indexable and identity in results:
+            return results[identity]
+        if persistent is None:
+            declared = metadata.get("persistent_buffer_ids", ())
+            # Only builtin text sequences admit a set without changing custom
+            # containment/equality behavior. No task metadata is modified.
+            indexable = (type(declared) in (tuple, list)
+                         and all(type(value) is str for value in declared))
+            persistent = frozenset(declared) if indexable else declared
+        members = persistent if canonical else metadata.get("persistent_buffer_ids", ())
+        if identity in members or identity.startswith("weights:"):
+            result = True
+        else:
+            base = identity.removeprefix("tensor:")
+            for suffix in (":rank=", ":tp_rank=", ":pp_rank=", ":projection_id="):
+                base = base.split(suffix, 1)[0]
+            result = any(tensor["name"] == base for tensor in metadata.get("f16_weight_tensors", ())) or any(
+                metadata.get(key) is not None and str(metadata[key]).strip() == base
+                for key in ("weight_buffer_id", "weight_tensor_id", "weight_allocation_id",
+                            "tensor_id", "rhs_tensor_id"))
+        if canonical and indexable:
+            results[identity] = result
+        return result
+
+    return lookup
 
 
 def _physical_weight_segments(metadata, byte_count):
@@ -4244,6 +4302,7 @@ def _direct_backing_descriptors(task, scenario, component, direct):
                      "offset_bytes": metadata.get("output_offset_bytes", 0)})
     descriptors, bindings = [], []
     generation_identity = task.request_id
+    persistent_ids, persistent_members = None, None
     for row in rows:
         operation = str(row["operation"])
         side = "weight" if operation == "read" else "write"
@@ -4262,13 +4321,33 @@ def _direct_backing_descriptors(task, scenario, component, direct):
         if dynamic_rhs and side == "weight" and not any(metadata.get(key) is not None
                 for key in ("weight_generation", "allocation_generation")):
             default_generation = _gddr_access_generation(metadata, "read", fallback_identity=generation_identity)
-        if identity in metadata.get("persistent_buffer_ids", ()):
+        declared_persistent = metadata.get("persistent_buffer_ids", ())
+        try:
+            members = declared_persistent
+            # The native KV tuple is immutable. Keep the original per-row
+            # metadata lookup, and only index exact text on both sides.
+            # Lists and authored containment/equality retain their protocol.
+            if type(identity) is str and type(declared_persistent) is tuple:
+                if declared_persistent is not persistent_ids and all(
+                        type(value) is str for value in declared_persistent):
+                    persistent_ids = declared_persistent
+                    persistent_members = frozenset(declared_persistent)
+                if declared_persistent is persistent_ids:
+                    members = persistent_members
+            persistent_member = identity in members
+        finally:
+            # An authored get may return an ephemeral container. Release it
+            # at the original membership boundary, including on exceptions.
+            del members, declared_persistent
+        if persistent_member:
             default_generation = 0
         generation = _gddr_non_negative_int(row.get("allocation_generation", default_generation), "allocation_generation")
         address = row.get("address")
         source = "explicit_physical_address" if address is not None else "stable_buffer_tensor_offset"
         address = (_gddr_non_negative_int(address, "address") if address is not None else
-            _gddr_stable_address(identity, offset, count, config.capacity_bytes, alignment, extent))
+            _gddr_stable_address(identity, offset, count, config.capacity_bytes, alignment, extent,
+                component_id=component.component_id, physical_kind=config.kind.value,
+                physical_owner=str(direct["physical_owner"])))
         if address + count > config.capacity_bytes:
             raise ValueError("direct memory access exceeds physical capacity")
         descriptor = {"operation": operation, "byte_count": count,
@@ -4297,44 +4376,67 @@ def _subtract_direct_buffer_accesses(explicit, remote):
     """Subtract declared remote intervals from a full explicit operand list."""
     if not isinstance(explicit, (tuple, list)) or not all(isinstance(row, Mapping) for row in explicit):
         raise ValueError("buffer_accesses must be a sequence of mappings")
-    local = [dict(row) for row in explicit]
+    # A batched KV operand has distinct K/V buffers per request. Scanning the
+    # whole remaining operand list for every remote range makes lowering
+    # quadratic in batch size. Keep residual pieces in original row slots;
+    # the index selects only rows whose identity/direction can match. Within
+    # each slot the original interval subtraction and piece order are intact.
+    local = [[dict(row)] for row in explicit]
+    by_operand = {}
+    unindexed = []
+    for index, rows in enumerate(local):
+        row = rows[0]
+        identity, operation = row.get("buffer_id"), row.get("operation")
+        if type(identity) is str and type(operation) is str:
+            by_operand.setdefault((identity, operation), []).append(index)
+        else:
+            # Noncanonical values may define equality or be unhashable. They
+            # still participate in the same comparisons and validation order.
+            unindexed.append(index)
     for access in remote:
         start = int(access["offset_bytes"])
         pending = [(start, start + int(access["byte_count"]))]
-        remaining = []
-        for row in local:
-            identity = row.get("buffer_id")
-            if identity != access["buffer_id"] or row.get("operation") != access["operation"]:
-                remaining.append(row)
-                continue
-            generation = row.get("allocation_generation")
-            if generation is not None and int(generation) != int(access["allocation_generation"]):
-                remaining.append(row)
-                continue
-            lo = _gddr_non_negative_int(row.get("offset_bytes", 0), "offset_bytes")
-            hi = lo + _gddr_non_negative_int(row.get("size_bytes"), "size_bytes")
-            pieces = [(lo, hi)]
-            unresolved = []
-            for begin, end in pending:
-                overlap_lo, overlap_hi = max(begin, lo), min(end, hi)
-                if overlap_lo >= overlap_hi:
-                    unresolved.append((begin, end))
+        if type(access["buffer_id"]) is str and type(access["operation"]) is str:
+            indices = by_operand.get((access["buffer_id"], access["operation"]), ())
+            if unindexed:
+                indices = sorted((*indices, *unindexed))
+        else:
+            indices = range(len(local))
+        for index in indices:
+            remaining = []
+            for row in local[index]:
+                identity = row.get("buffer_id")
+                if identity != access["buffer_id"] or row.get("operation") != access["operation"]:
+                    remaining.append(row)
                     continue
-                if begin < overlap_lo:
-                    unresolved.append((begin, overlap_lo))
-                if overlap_hi < end:
-                    unresolved.append((overlap_hi, end))
-                pieces = [(a, b) for left, right in pieces
-                          for a, b in ((left, min(right, overlap_lo)), (max(left, overlap_hi), right)) if a < b]
-            pending = unresolved
-            for begin, end in pieces:
-                residual = {**row, "offset_bytes": begin}
-                residual["size_bytes"] = end - begin
-                remaining.append(residual)
+                generation = row.get("allocation_generation")
+                if generation is not None and int(generation) != int(access["allocation_generation"]):
+                    remaining.append(row)
+                    continue
+                lo = _gddr_non_negative_int(row.get("offset_bytes", 0), "offset_bytes")
+                hi = lo + _gddr_non_negative_int(row.get("size_bytes"), "size_bytes")
+                pieces = [(lo, hi)]
+                unresolved = []
+                for begin, end in pending:
+                    overlap_lo, overlap_hi = max(begin, lo), min(end, hi)
+                    if overlap_lo >= overlap_hi:
+                        unresolved.append((begin, end))
+                        continue
+                    if begin < overlap_lo:
+                        unresolved.append((begin, overlap_lo))
+                    if overlap_hi < end:
+                        unresolved.append((overlap_hi, end))
+                    pieces = [(a, b) for left, right in pieces
+                              for a, b in ((left, min(right, overlap_lo)), (max(left, overlap_hi), right)) if a < b]
+                pending = unresolved
+                for begin, end in pieces:
+                    residual = {**row, "offset_bytes": begin}
+                    residual["size_bytes"] = end - begin
+                    remaining.append(residual)
+            local[index] = remaining
         if pending:
             raise ValueError("direct RHS is not represented by the full buffer_accesses contract")
-        local = remaining
-    return tuple(local)
+    return tuple(row for rows in local for row in rows)
 
 
 def _attach_direct_backing_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Optional[TaskSpec]:
@@ -4437,6 +4539,38 @@ def _physical_backing_candidates(scenario, target_id, target_kind):
         ("physical_backing_candidates", target_id, target_kind), build)
 
 
+def _physical_backing_demand_candidates(scenario, target_id, target_kind, demands):
+    """Match resources once per demand, retaining the topology's owner order.
+
+    The existing candidate table owns immutable resource-id sets. Its reverse
+    index avoids scanning every memory component for every lowered Task. A
+    bit per table row preserves duplicate owners/ambiguity and original order,
+    even when demands appear in another order or repeat a resource alias.
+    """
+    candidates = _physical_backing_candidates(scenario, target_id, target_kind)
+
+    def build():
+        index = {}
+        for position, (_component, _hbf_memory, _owner, resources) in enumerate(candidates):
+            for resource in resources:
+                index[resource] = index.get(resource, 0) | (1 << position)
+        return index
+
+    context = _active_compilation_context(scenario)
+    index = build() if context is None else context.invariant(
+        ("physical_backing_demand_index", target_id, target_kind), build)
+    matched = 0
+    for demand in demands:
+        if demand.bytes_moved > 0:
+            matched |= index.get(str(demand.resource_id), 0)
+    result = []
+    while matched:
+        lowest = matched & -matched
+        result.append(candidates[lowest.bit_length() - 1])
+        matched ^= lowest
+    return result
+
+
 def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
     """Attach physical backing accesses to a lowered compute memory phase.
 
@@ -4463,15 +4597,14 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         _assert_physical_memory_demands(task, scenario)
         return task
     candidates = []
-    for component, hbf_memory, owner, resource_ids in _physical_backing_candidates(
-            scenario, target_id, target_kind):
-        if any(str(d.resource_id) in resource_ids and d.bytes_moved > 0 for d in task.demands):
-            raw_config = (component.metadata["physical_memory_config"] if hbf_memory
-                          else _physical_byte_addressable_config(scenario, component))
-            if raw_config is None:
-                raise ValueError("task {} requires a DRAM backing component: {}".format(task.task_id, component.component_id))
-            _cached_physical_memory_config(component)
-            candidates.append((component, raw_config, owner, resource_ids))
+    for component, hbf_memory, owner, resource_ids in _physical_backing_demand_candidates(
+            scenario, target_id, target_kind, task.demands):
+        raw_config = (component.metadata["physical_memory_config"] if hbf_memory
+                      else _physical_byte_addressable_config(scenario, component))
+        if raw_config is None:
+            raise ValueError("task {} requires a DRAM backing component: {}".format(task.task_id, component.component_id))
+        _cached_physical_memory_config(component)
+        candidates.append((component, raw_config, owner, resource_ids))
     if not candidates:
         _assert_physical_memory_demands(task, scenario)
         return task
@@ -4582,6 +4715,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         read_bytes, write_bytes = _gddr_directional_bytes(task, cost, total_bytes)
     descriptors = []
     address_bindings = []
+    is_resident = _resident_physical_buffer_lookup(metadata)
 
     def append_descriptor(
         operation: str,
@@ -4618,6 +4752,9 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 capacity,
                 burst,
                 allocation_size,
+                component_id=component.component_id,
+                physical_kind=physical.kind.value,
+                physical_owner=owner,
             )
             address_source = source
         if address + byte_count > capacity:
@@ -4639,7 +4776,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         }
         if identity is not None:
             descriptor["buffer_id"] = identity
-        if allocation_arena == "resident" or _is_resident_physical_buffer(metadata, identity):
+        if allocation_arena == "resident" or is_resident(identity):
             descriptor["allocation_arena"] = "resident"
         if allocation_size is not None:
             descriptor["allocation_size_bytes"] = allocation_size
@@ -4701,7 +4838,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
             # a request-scoped generation for transient buffers while
             # keeping resident weight allocations on generation zero.  An
             # explicit non-zero generation remains authoritative.
-            is_static_weight = _is_resident_physical_buffer(metadata, identity)
+            is_static_weight = is_resident(identity)
             if is_static_weight:
                 side = "weight"
             if (
@@ -5037,12 +5174,13 @@ def _attach_hbf_host_staging(task: TaskSpec, scenario: ScenarioConfig) -> TaskSp
     preloaded = set(tuple(key) for key in task.metadata.get("hbf_preloaded_buffers", ()))
     request_buffers = {identity for identities in task.metadata.get("persistent_request_buffers", {}).values()
                        for identity in identities}
+    is_resident = _resident_physical_buffer_lookup(task.metadata)
     if scenario.weights_resident:
         for row in accesses:
             owner = str(row.get("physical_owner") or primary_owner)
             identity = row.get("buffer_id")
             if (owner in active and identity not in request_buffers
-                    and _is_resident_physical_buffer(task.metadata, identity)):
+                    and is_resident(identity)):
                 preloaded.add((owner, identity, int(row.get("allocation_generation", 0))))
     for owner in sorted(active):
         component, physical, host, host_config, capacity, reserve = bindings[owner]
@@ -5203,6 +5341,10 @@ def _apply_planned_graph_launches(tasks):
 class _TaskBuilder:
     def __init__(self, request: RequestSpec) -> None:
         self.request = request
+        # Pipeline invocations temporarily use a request id of their own to
+        # isolate physical activation generations. Their phase namespace
+        # still belongs to the original cohort and must rebind independently.
+        self._cohort_phase_prefix = request.request_id
         self.tasks: List[TaskSpec] = []
         self.previous: Optional[str] = None
         self.counter = 0
@@ -7453,12 +7595,12 @@ def _physical_task_metadata(
         metadata = task.metadata
         accesses = metadata.get("memory_accesses")
         if isinstance(accesses, (tuple, list)):
-            access_rows = tuple(dict(item) for item in accesses)
+            access_rows = [item if type(item) is dict else dict(item) for item in accesses]
         else:
             promoted.append(_physical_allocation_metadata(task.task_id, task.metadata))
             continue
         changed = False
-        for row in access_rows:
+        for index, row in enumerate(access_rows):
             buffer_id = row.get("buffer_id")
             if not buffer_id:
                 continue
@@ -7470,6 +7612,8 @@ def _physical_task_metadata(
             extent = extents.get(key)
             if extent is None or row.get("allocation_size_bytes") is not None:
                 continue
+            row = dict(row)
+            access_rows[index] = row
             row["allocation_size_bytes"] = extent
             # The initial descriptor may have been hashed before the cohort
             # envelope established its final extent.  Stable-address hashing
@@ -9393,7 +9537,8 @@ def _add_transfer_tasks(
             rows = []
             for row in authored:
                 address = _gddr_stable_address(row["buffer_id"], row.get("offset_bytes", 0), row["size_bytes"],
-                    config.capacity_bytes, granularity, row.get("buffer_size_bytes"))
+                    config.capacity_bytes, granularity, row.get("buffer_size_bytes"),
+                    component_id=component_id, physical_kind=config.kind.value)
                 rows.append({**_physical_access_from_cache_access(row), "address": address,
                     "address_source": "stable_buffer_tensor_offset",
                     "allocation_generation": row.get("allocation_generation", 0)})
@@ -9435,7 +9580,8 @@ def _add_transfer_tasks(
                 transfer_metadata, "read", fallback_identity=builder.request.request_id
             )
             address = _gddr_stable_address(identity, 0, byte_count,
-                config.capacity_bytes, config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes)
+                config.capacity_bytes, config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes,
+                component_id=component_id, physical_kind=config.kind.value)
             row = {"address": address, "buffer_id": identity,
                    "byte_count": byte_count, "offset_bytes": 0,
                    "address_source": "stable_buffer_tensor_offset",
@@ -16279,7 +16425,7 @@ def _generic_kv_request_capacities(scenario):
     return build() if context is None else context.invariant(("generic_kv_request_capacities",), build)
 
 
-def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
+def _generic_kv_owner_contract(builder, scenario, plan, layer, *,
                          token_batch, context_tokens, history_tokens,
                          materialized_tokens, includes_current=False):
     """Token-major analytical KV storage, distinct from pinned native layouts.
@@ -16371,8 +16517,37 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
                 "logical_capacity_tokens": logical_extent, "logical_read_ranges": logical_ranges,
                 "absolute_write_positions": absolute_positions,
                 "live_range": layer.attention_live_range(end)} if layer.attention_chunk_size else {}),
-            "id": "kv:{}:{}:rank{}:tp{}:pp{}".format(request_id, layer.layer_id,
-                                                      rank.rank, rank.tp_rank, rank.pp_rank)})
+            "id": "kv:{}:{}".format(request_id, layer.layer_id)})
+    return result
+
+
+def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
+                         token_batch, context_tokens, history_tokens,
+                         materialized_tokens, includes_current=False):
+    """Bind independently owned KV views to one rank, sharing only validation work."""
+    context = _active_compilation_context(scenario)
+    lanes = tuple(getattr(builder, "_attention_invocation_lanes", ()))
+    sources = (context, scenario, plan, layer, lanes)
+    arguments = tuple((type(value), value) for value in (
+        builder.request.request_id, token_batch, context_tokens,
+        history_tokens, materialized_tokens, includes_current))
+    cached = getattr(builder, "_generic_kv_template", None) if context is not None else None
+    if (cached is not None and all(a is b for a, b in zip(sources, cached[0]))
+            and arguments == cached[1]):
+        template = cached[2]
+    else:
+        template = _generic_kv_owner_contract(builder, scenario, plan, layer,
+            token_batch=token_batch, context_tokens=context_tokens,
+            history_tokens=history_tokens, materialized_tokens=materialized_tokens,
+            includes_current=includes_current)
+        if context is not None:
+            # One entry per builder: ranks of the current layer share these
+            # facts, without retaining all previous layers' owner metadata.
+            builder._generic_kv_template = (sources, arguments, template)
+    result = {**template, "owners": [
+        {**owner, "read_ranges": list(owner["read_ranges"]),
+         "id": owner["id"] + ":rank{}:tp{}:pp{}".format(rank.rank, rank.tp_rank, rank.pp_rank)}
+        for owner in template["owners"]]}
     page_table = getattr(builder, "_physical_kv_page_table", None)
     if page_table is not None:
         if plan.world_size != 1:
@@ -16477,7 +16652,13 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
         raise ValueError("native KV ingress history must be a non-negative integer")
     if type(ep_group) is not int:
         raise ValueError("native KV ingress ep_group must be an integer")
-    request = next((row for row in scenario.workload.requests if row.request_id == request_id), None)
+    context = _active_compilation_context(scenario)
+    if context is None:
+        request = next((row for row in scenario.workload.requests if row.request_id == request_id), None)
+    else:
+        requests = context.invariant(("native_kv_ingress_requests",),
+            lambda: {row.request_id: row for row in reversed(scenario.workload.requests)})
+        request = requests.get(request_id)
     if request is None or history_tokens != request.prompt_tokens - 1:
         raise ValueError("native KV ingress requires the request's final-prompt history")
     if (scenario.llama_cpp_config is not None or scenario.workload.mtp is not None
@@ -19640,6 +19821,39 @@ def _add_output_row_selection(
     return last, target_component
 
 
+def _add_pipeline_boundary_transfer(
+    builder, scenario, router, plan, source, target, layer, token_batch,
+    dependencies, *, name, metadata, source_component=None,
+):
+    """Move the replicated hidden edge into its next stage's real input.
+
+    TP residual all-reduces leave a complete hidden vector on every rank.
+    The matching next-stage rank consumes that vector, rather than a TP
+    slice.  Binding both endpoints to model tensor identities lets the
+    ordinary allocator retain the producer through DMA and the destination
+    through its actual input-norm and residual consumers.
+    """
+    following = next(item for item in _execution_layers(scenario)
+                     if plan.stage_for_layer(item) == target.pp_rank)
+    _input, output = _layer_hidden_tensor_ids(scenario, layer)
+    input_id, _output = _layer_hidden_tensor_ids(scenario, following)
+    size = _activation_bytes(layer, token_batch * layer.hidden_size, scenario=scenario)
+    generation = _gddr_access_generation(
+        metadata, "read", fallback_identity=builder.request.request_id)
+    source_access = {**_rank_tensor_access(source, output, size, "read"),
+                     "buffer_size_bytes": size, "allocation_generation": generation}
+    target_access = {**_rank_tensor_access(target, input_id, size, "write"),
+                     "buffer_size_bytes": size, "allocation_generation": generation}
+    return _add_transfer_tasks(
+        builder, router, source_component or source.component_id,
+        target.component_id, size, dependencies, name=name,
+        routing_policy=plan.routing_policy,
+        metadata={**metadata, "source_buffer_accesses": (source_access,),
+                  "target_buffer_accesses": (target_access,),
+                  "pipeline_hidden_layout": "replicated_per_tp_rank"},
+    )
+
+
 def _compile_parallel_iteration(
     builder: _TaskBuilder,
     scenario: ScenarioConfig,
@@ -19670,6 +19884,9 @@ def _compile_parallel_iteration(
     # lowered below.  This is intentionally builder-local: host orchestration
     # and sampling tasks do not get treated as batch graph work.
     builder._cpu_graph_rows = max(1, int(total_rows))
+    pipeline_terminals = getattr(builder, "_pipeline_stage_terminals", None)
+    if pipeline_terminals is not None and 0 in pipeline_terminals:
+        dependencies = (*dependencies, pipeline_terminals[0])
     previous = _add_join(
         builder,
         phase + ".start",
@@ -19708,6 +19925,13 @@ def _compile_parallel_iteration(
         )
     last_layer_id = _execution_layers(scenario)[-1].layer_id
     for stage in range(plan.pp_degree):
+        if pipeline_terminals is not None and stage > 0 and stage in pipeline_terminals:
+            previous = _add_join(
+                builder, "{}.pp{:02d}.fifo".format(phase, stage),
+                (previous, pipeline_terminals[stage]),
+                metadata={"event_kind": "pipeline_stage_fifo", "pipeline_stage": stage,
+                          "phase": phase},
+            )
         layers = tuple(
             layer
             for layer in _execution_layers(scenario)
@@ -19734,23 +19958,14 @@ def _compile_parallel_iteration(
                 phase=phase,
                 dependencies=(stage_end,),
             )
+        if pipeline_terminals is not None:
+            pipeline_terminals[stage] = stage_end
         if stage == plan.pp_degree - 1:
             previous = stage_end
             continue
         boundary_ends: List[str] = []
         last_layer = layers[-1]
         for partition in live:
-            bytes_per_rank = _activation_bytes(
-                last_layer,
-                partition.token_batch
-                * shard_extent(
-                    last_layer.hidden_size,
-                    plan.tp_degree,
-                    0,
-                    allow_padding=plan.allow_padding,
-                ).local_size,
-                scenario=scenario,
-            )
             for tp_rank in range(plan.tp_degree):
                 source = plan.rank_at(tp_rank, stage, partition.ep_rank)
                 target = plan.rank_at(tp_rank, stage + 1, partition.ep_rank)
@@ -19758,13 +19973,10 @@ def _compile_parallel_iteration(
                     builder.rank_value_component((stage_end,), source.rank)
                     or source.component_id
                 )
-                boundary = _add_transfer_tasks(
-                    builder,
-                    router,
-                    source_component,
-                    target.component_id,
-                    bytes_per_rank,
-                    (stage_end,),
+                boundary = _add_pipeline_boundary_transfer(
+                    builder, scenario, router, plan, source, target, last_layer,
+                    partition.token_batch, (stage_end,),
+                    source_component=source_component,
                     name="{}.tp{:02d}".format(
                         _ep_prefix(
                             plan,
@@ -19773,7 +19985,6 @@ def _compile_parallel_iteration(
                         ),
                         tp_rank,
                     ),
-                    routing_policy=plan.routing_policy,
                     metadata={
                         "event_kind": "pipeline_activation",
                         "phase": phase,
@@ -19792,7 +20003,8 @@ def _compile_parallel_iteration(
             builder,
             "{}.pp{:02d}_to_{:02d}.complete".format(phase, stage, stage + 1),
             boundary_ends,
-            metadata={"event_kind": "pipeline_barrier", "phase": phase},
+            metadata={"event_kind": "pipeline_barrier", "phase": phase,
+                      "source_stage": stage, "target_stage": stage + 1},
         )
     return previous
 
@@ -19938,8 +20150,8 @@ def _compile_static_input_projection(
         context, ("static_input_projection_segments",))
     if cache is None:
         return emit()
-    phase_suffix = (phase[len(builder.request.request_id):]
-                    if phase.startswith(builder.request.request_id) else phase)
+    phase_prefix = builder._cohort_phase_prefix
+    phase_suffix = phase[len(phase_prefix):] if phase.startswith(phase_prefix) else phase
     key = (id(layer), rank.rank, rank.tp_rank, rank.pp_rank, rank.component_id,
            rank.memory_component_id, plan.tp_degree, plan.allow_padding,
            token_batch, kv_append_tokens, kv_materialized_tokens,
@@ -20066,6 +20278,20 @@ def _add_tp_residuals(
         if rank.rank not in metadata_by_rank:
             continue
         metadata = metadata_by_rank[rank.rank]
+        if plan.pp_degree > 1:
+            hidden_input, hidden_output = _layer_hidden_tensor_ids(scenario, layer)
+            size = _activation_bytes(layer, elements, scenario=scenario)
+            activation_base = prefix + ".rank{:03d}.activation".format(rank.rank)
+            if kind == "mlp":
+                metadata = {**metadata, "buffer_accesses": (
+                    _rank_tensor_access(rank, activation_base + ".mlp_down", size, "read"),
+                    _rank_tensor_access(rank, activation_base + ".attention_residual", size, "read"),
+                    _rank_tensor_access(rank, hidden_output, size, "write"))}
+            elif kind == "attention":
+                metadata = {**metadata, "buffer_accesses": (
+                    _rank_tensor_access(rank, hidden_input, size, "read"),
+                    _rank_tensor_access(rank, activation_base + ".attention_output", size, "read"),
+                    _rank_tensor_access(rank, activation_base + ".attention_residual", size, "write"))}
         extra = (extra_dependencies or {}).get(rank.rank, ())
         residual, component = _add_rank_primitive(
             builder, scenario, router, plan, rank, OperatorClass.ELEMENTWISE,
@@ -20503,7 +20729,8 @@ def _compile_parallel_attention_group(
         hidden_elements = max(
             1, token_batch * layer.hidden_size
         )
-        bind_input_norm = generic_kv is not None and _rank_uses_hbf_host_staging(scenario, rank)
+        bind_input_norm = generic_kv is not None and (
+            _rank_uses_hbf_host_staging(scenario, rank) or plan.pp_degree > 1)
         if bind_input_norm:
             hidden_input, _hidden_output = _layer_hidden_tensor_ids(scenario, layer)
             input_norm_hidden_bytes = _activation_bytes(layer, hidden_elements, scenario=scenario)
@@ -22022,7 +22249,7 @@ def _compile_parallel_attention_group(
                 **rank_meta,
                 "projection_id": "attention.output",
                 **({"output_buffer_id": generic_base + ".attention_output"}
-                   if _rank_uses_hbf_host_staging(scenario, rank) else {}),
+                   if _rank_uses_hbf_host_staging(scenario, rank) or plan.pp_degree > 1 else {}),
                 **({"input_buffer_id": source_base + (".gated" if attention_execution is not None else ".context")}
                    if source_f32 else {"input_buffer_id": generic_base + ".context"} if generic_kv is not None else {}),
                 **({"output_tensor_id": prefix + ".rank{:03d}.attention_output_value".format(rank.rank)}
@@ -22125,7 +22352,7 @@ def _compile_parallel_attention_group(
                                 _activation_bytes(layer, tail_elements, scenario=scenario), "read"),
                             generic_access("attention_output", _activation_bytes(layer, tail_elements, scenario=scenario), "read"),
                             generic_access("attention_residual", _activation_bytes(layer, tail_elements, scenario=scenario), "write"))}
-                           if _rank_uses_hbf_host_staging(scenario, rank) else {}),
+                           if _rank_uses_hbf_host_staging(scenario, rank) or plan.pp_degree > 1 else {}),
                     },
                 )
             output = _return_rank_value(
@@ -23160,19 +23387,47 @@ def _compile_parallel_dense_mlp(
 
 def _layer_hidden_tensor_ids(scenario: ScenarioConfig, layer: LayerSpec) -> Tuple[str, str]:
     """Resolve the real hidden edge, including expanded repeated layer groups."""
-    view = _execution_view(scenario)
-    instances = view.layer_instances
-    index = next(i for i, item in enumerate(instances) if item.layer_id == layer.layer_id)
-    instance = instances[index]
-    norm = next(op for op in view.operators if op.operator_id == instance.group_operator_id + ".norm1")
-    residual = next(op for op in view.operators if op.operator_id == instance.group_operator_id + ".residual2")
+    context = _active_compilation_context(scenario)
+    resolved = None
+    if context is None:
+        view = _execution_view(scenario)
+        instances = view.layer_instances
+        index = next(i for i, item in enumerate(instances) if item.layer_id == layer.layer_id)
+        instance = instances[index]
+        norm = next(op for op in view.operators if op.operator_id == instance.group_operator_id + ".norm1")
+        residual = next(op for op in view.operators if op.operator_id == instance.group_operator_id + ".residual2")
+    else:
+        def build_index():
+            view = _execution_view(scenario)
+            layer_indices, operators = {}, {}
+            for index, instance in enumerate(view.layer_instances):
+                layer_indices.setdefault(instance.layer_id, index)
+            for operator in view.operators:
+                operators.setdefault(operator.operator_id, operator)
+            return view.layer_instances, layer_indices, operators, {}
+
+        instances, indices, operators, resolved = context.invariant(
+            ("layer_hidden_tensor_index",), build_index)
+        if layer.layer_id in resolved:
+            return resolved[layer.layer_id]
+        try:
+            index = indices[layer.layer_id]
+            instance = instances[index]
+            norm = operators[instance.group_operator_id + ".norm1"]
+            residual = operators[instance.group_operator_id + ".residual2"]
+        except KeyError:
+            # Match the uncached lookup's missing-layer/operator contract.
+            raise StopIteration from None
     output_id = residual.output_tensor_ids[0]
     if index + 1 < len(instances) and instances[index + 1].group_operator_id == instance.group_operator_id:
         output_id += ":layer=" + instance.layer_id
     input_id = norm.input_tensor_ids[0]
     if index and instances[index - 1].group_operator_id == instance.group_operator_id:
         input_id = residual.output_tensor_ids[0] + ":layer=" + instances[index - 1].layer_id
-    return input_id, output_id
+    result = input_id, output_id
+    if resolved is not None:
+        resolved[layer.layer_id] = result
+    return result
 
 
 def _rank_tensor_access(rank, tensor_id, size, operation, *, offset=0, extent=None):
@@ -23212,7 +23467,7 @@ def _compile_parallel_dense_mlp_uncached(
     for rank in ranks:
         activation_bits = _activation_storage_bits(layer, scenario)
         hidden_elements = max(1, token_batch * layer.hidden_size)
-        bind_hidden = _rank_uses_hbf_host_staging(scenario, rank)
+        bind_hidden = _rank_uses_hbf_host_staging(scenario, rank) or plan.pp_degree > 1
         hidden_input, hidden_output = (_layer_hidden_tensor_ids(scenario, layer)
                                        if bind_hidden else ("", ""))
         activation_base = prefix + ".rank{:03d}.activation".format(rank.rank)
@@ -23809,7 +24064,11 @@ def _compile_parallel_moe_route(
             "stage": stage,
             "ffn_path": "routed",
             "coverage_component": "routed_expert",
+            **({"buffer_view_cache_policy": "aggregate_directional_v1"}
+               if plan.pp_degree > 1 else {}),
         }
+        hidden_bytes = _activation_bytes(layer, hidden_elements, scenario=scenario)
+        activation_base = prefix + ".rank{:03d}.activation".format(rank.rank)
         residual_norm_fused, residual_norm_audit = (
             _residual_norm_fusion_decision(
                 scenario, router, rank, layer, hidden_elements
@@ -23827,7 +24086,7 @@ def _compile_parallel_moe_route(
                     operations=5 * hidden_elements,
                     transcendental_operations=max(1, token_batch),
                     read_bytes=hidden_elements * element_bytes * 2,
-                    write_bytes=hidden_elements * element_bytes,
+                    write_bytes=hidden_elements * element_bytes * (2 if plan.pp_degree > 1 else 1),
                     dependency_depth=max(
                         4,
                         int(
@@ -23852,6 +24111,13 @@ def _compile_parallel_moe_route(
                     **residual_norm_audit,
                     "event_kind": "fused_residual_norm",
                     "norm_kind": "rmsnorm",
+                    **({"buffer_accesses": (
+                        _rank_tensor_access(rank, _layer_hidden_tensor_ids(scenario, layer)[0],
+                                            hidden_bytes, "read"),
+                        _rank_tensor_access(rank, activation_base + ".attention_output", hidden_bytes, "read"),
+                        _rank_tensor_access(rank, activation_base + ".attention_residual", hidden_bytes, "write"),
+                        _rank_tensor_access(rank, activation_base + ".post_norm", hidden_bytes, "write"))}
+                       if plan.pp_degree > 1 else {}),
                 },
             )
         else:
@@ -24659,6 +24925,21 @@ def _compile_parallel_moe_tail(
                 "event_kind": "moe_residual",
                 "layer_id": layer.layer_id,
                 "stage": stage,
+                **({"buffer_view_cache_policy": "aggregate_directional_v1"}
+                   if plan.pp_degree > 1 else {}),
+                **({"output_buffer_id": _layer_hidden_tensor_ids(scenario, layer)[1]}
+                   if plan.pp_degree > 1 else {}),
+                **({"buffer_accesses": (
+                    _rank_tensor_access(rank, prefix + ".rank{:03d}.activation.attention_residual".format(rank.rank),
+                                        _activation_bytes(layer, token_batch * layer.hidden_size, scenario=scenario), "read"),
+                    _rank_tensor_access(rank, prefix + ".moe_routed_output",
+                                        _activation_bytes(layer, token_batch * layer.hidden_size, scenario=scenario), "read"),
+                    *((_rank_tensor_access(rank, prefix + ".moe_shared_output",
+                                           _activation_bytes(layer, token_batch * layer.hidden_size, scenario=scenario), "read"),)
+                      if shared_end else ()),
+                    _rank_tensor_access(rank, _layer_hidden_tensor_ids(scenario, layer)[1],
+                                        _activation_bytes(layer, token_batch * layer.hidden_size, scenario=scenario), "write"))}
+                   if plan.pp_degree > 1 else {}),
             },
         )
         residual_ends.append(
@@ -26748,6 +27029,8 @@ class _ServingInvocationGroup:
     nonflash_kv_view: Mapping[str, object] = field(default_factory=dict)
     # Set only on the per-EP-group sub-views from ``ep_partitions``.
     ep_rank: int = 0
+    pipeline_microbatch_index: Optional[int] = None
+    pipeline_predecessor_group_ids: Tuple[str, ...] = ()
 
     @property
     def group_id(self) -> str:
@@ -26926,6 +27209,9 @@ class _ServingInvocationGroup:
             "logit_token_batch": self.logit_token_batch,
             "committed_logit_token_batch": self.committed_logit_token_batch,
             "predecessor_group_id": self.predecessor_group_id,
+            **({"pipeline_microbatch_index": self.pipeline_microbatch_index,
+                "pipeline_predecessor_group_ids": self.pipeline_predecessor_group_ids}
+               if self.pipeline_microbatch_index is not None else {}),
             "batching_semantics": self.batching_semantics,
             **({
                 "llama_cpp_kv_scan_tokens": self.kv_scan_tokens,
@@ -27365,6 +27651,60 @@ def _serving_invocation_groups(
     return tuple(groups)
 
 
+def _pipeline_serving_invocation_groups(
+    scenario: ScenarioConfig,
+    groups: Sequence[_ServingInvocationGroup],
+) -> Tuple[_ServingInvocationGroup, ...]:
+    """Partition independent request owners before applying token ubatches.
+
+    A pipeline microbatch is a group of requests, not a token chunk. The
+    existing physical token limit still bounds every invocation, and repeated
+    pieces of one owner's Prefill chunk keep their complete causal dependency.
+    Each EP owner distributes its requests separately, so a balanced cohort
+    retains balanced microbatches instead of concentrating one EP group first.
+    """
+    parallel = scenario.placement.parallel
+    degree = parallel.pipeline_microbatches
+    groups = tuple(groups)
+    if degree == 1:
+        return groups
+    if (scenario.workload.mtp is not None or scenario.llama_cpp_config is not None
+            or any(layer.is_linear_attention for layer in _execution_layers(scenario))
+            or any(group.kv_scan_tokens or group.q4_mma_view_tokens_lower_bound
+                   or group.nonflash_kv_view for group in groups)):
+        raise ValueError("pipeline microbatches require ordinary independent full-attention requests")
+    lanes = tuple(lane for group in groups for lane in group.lanes)
+    owner_bucket: Dict[str, int] = {}
+    counts = [0] * parallel.ep_degree
+    by_bucket: List[List[_ServingInvocationLane]] = [[] for _ in range(degree)]
+    for lane in lanes:
+        if lane.request_id not in owner_bucket:
+            owner_bucket[lane.request_id] = counts[lane.ep_group] % degree
+            counts[lane.ep_group] += 1
+        by_bucket[owner_bucket[lane.request_id]].append(lane)
+    scheduler = scenario.workload.scheduler
+    token_limit = (scheduler.max_num_ubatch_tokens or scheduler.max_num_batched_tokens
+                   if scheduler is not None else max(1, len(lanes)))
+    result: List[_ServingInvocationGroup] = []
+    last_group_by_request: Dict[str, str] = {}
+    for microbatch_index, bucket in enumerate(by_bucket):
+        for offset in range(0, len(bucket), token_limit):
+            chunk = tuple(bucket[offset:offset + token_limit])
+            request_ids = tuple(dict.fromkeys(lane.request_id for lane in chunk))
+            dependencies = tuple(dict.fromkeys(last_group_by_request[request]
+                for request in request_ids if request in last_group_by_request))
+            group = _ServingInvocationGroup(
+                group_index=len(result), kind=groups[0].kind, lanes=chunk,
+                predecessor_group_id=None, batching_semantics="pipeline_request_microbatch",
+                pipeline_microbatch_index=microbatch_index,
+                pipeline_predecessor_group_ids=dependencies,
+            )
+            result.append(group)
+            for request in request_ids:
+                last_group_by_request[request] = group.group_id
+    return tuple(result)
+
+
 def _tag_serving_invocation_group_tasks(
     builder: _TaskBuilder,
     first_task_index: int,
@@ -27422,6 +27762,8 @@ def _serving_invocation_group_task_metadata(
         "operator_invocation_group_batching_semantics": (
             group.batching_semantics
         ),
+        **({"pipeline_microbatch_index": group.pipeline_microbatch_index}
+           if group.pipeline_microbatch_index is not None else {}),
     }
     runtime = group.linear_state_runtime()
     if group.nonflash_kv_view:
@@ -27620,7 +27962,10 @@ def _compile_or_replay_serving_invocation(
                   if group.nonflash_kv_view.get("applied") is True else 0)
     attention_context_tokens = physical_k or group.kv_scan_tokens or group.context_tokens
     attention_kv_read_tokens = physical_k or max(group.kv_read_tokens, group.kv_scan_tokens)
-    binding = None if getattr(builder, "_physical_kv_page_table", None) is not None else _serving_invocation_segment_binding(
+    # Whole-invocation replay cannot reproduce the cross-microbatch FIFO
+    # dependency side effects. Layer templates remain reusable underneath it.
+    binding = None if (getattr(builder, "_physical_kv_page_table", None) is not None
+                       or getattr(builder, "_pipeline_stage_terminals", None) is not None) else _serving_invocation_segment_binding(
         builder,
         scenario,
         plan,
@@ -27711,6 +28056,9 @@ def _compile_or_replay_serving_invocation(
                 output_selection=selection,
                 output_indices_dependency=output_indices,
             )
+            pipeline_terminals = getattr(builder, "_pipeline_stage_terminals", None)
+            if pipeline_terminals is not None:
+                pipeline_terminals[plan.pp_degree - 1] = group_end
             if group.logit_token_batch > 0 and group.batching_semantics != "explicit_equal_length_stateful_ubatch":
                 group_end = _add_host_visible_logits_sampling_commit(
                     builder,
@@ -30188,6 +30536,98 @@ def _refine_gpu_frontend_wait_stages(
     return result
 
 
+def _split_pipeline_activation_stages(
+    stages: Sequence[Mapping[str, object]],
+) -> List[Mapping[str, object]]:
+    """Separate asynchronous sends from the stage's compute FIFO terminal.
+
+    A producer's next microbatch waits for its compute join, while a
+    consumer waits for the transfer join. Combining both in one envelope
+    would add an implicit blocking-send barrier when tasks are rebound.
+    """
+    transfers: Dict[Tuple[str, int], List[TaskExecutionRecord]] = {}
+    stripped = []
+    for stage in stages:
+        remaining = []
+        for record in stage["execution_tasks"]:
+            metadata = record.metadata
+            if (metadata.get("event_kind") in {"pipeline_activation", "pipeline_barrier"}
+                    and type(metadata.get("source_stage")) is int):
+                transfers.setdefault((str(stage["group_id"]), metadata["source_stage"]), []).append(record)
+            else:
+                remaining.append(record)
+        if len(remaining) != len(stage["execution_tasks"]):
+            ordered, ends, _intervals = _replay_local_record_timeline(remaining)
+            stage = {**stage, "execution_tasks": _ordered_execution_stage_records(ordered),
+                "service_ns": max(ends.values(), default=0.0),
+                "resource_ids": tuple(sorted({demand.resource_id for task in ordered for demand in task.demands})),
+                "observed_span_ns": max((task.end_ns for task in ordered), default=0.0)
+                                    - min((task.start_ns for task in ordered), default=0.0)}
+        stripped.append(stage)
+    result = []
+    for stage in stripped:
+        result.append(stage)
+        records = transfers.pop((str(stage.get("group_id")), stage["stage_index"]), None)
+        if records is None:
+            continue
+        ordered, ends, _intervals = _replay_local_record_timeline(records)
+        source_stage = stage["stage_index"]
+        result.append({
+            "stage_id": "{}.pp{:04d}.activation_transfer".format(stage["group_id"], source_stage),
+            "stage_index": 100_000 + source_stage,
+            "group_id": stage["group_id"], "stage_role": "pipeline_activation_transfer",
+            "component_id": stage["component_id"], "request_ids": stage["request_ids"],
+            "layer_ids": (), "dependencies": (stage["stage_id"],),
+            "execution_tasks": _ordered_execution_stage_records(ordered),
+            "service_ns": max(ends.values(), default=0.0),
+            "resource_ids": tuple(sorted({demand.resource_id for task in ordered for demand in task.demands})),
+            "observed_span_ns": max(task.end_ns for task in ordered) - min(task.start_ns for task in ordered),
+        })
+    if transfers:
+        raise ValueError("pipeline transfer has no corresponding producer stage")
+    return result
+
+
+def _restore_pipeline_stage_dependencies(
+    stages: Sequence[Mapping[str, object]],
+    records: Sequence[TaskExecutionRecord],
+) -> List[Mapping[str, object]]:
+    """Keep authored cross-microbatch edges through stage compaction.
+
+    The serial invocation representation can infer its predecessor from one
+    group id. A pipeline has different predecessors on each stage, plus
+    request-local causal edges, so the original task DAG is authoritative.
+    Omitted zero-service joins are expanded to their represented ancestors.
+    """
+    by_id = {record.task_id: record for record in records}
+    stage_by_task = {task.task_id: str(stage["stage_id"])
+                     for stage in stages for task in stage["execution_tasks"]}
+    ancestors: Dict[str, Tuple[str, ...]] = {}
+
+    def represented(task_id: str) -> Tuple[str, ...]:
+        if task_id in stage_by_task:
+            return (stage_by_task[task_id],)
+        if task_id not in ancestors:
+            task = by_id.get(task_id)
+            if task is None or any(demand.service_ns > 0 for demand in task.demands):
+                raise ValueError("pipeline stage compaction lost a nonzero or unknown task: " + task_id)
+            ancestors[task_id] = tuple(dict.fromkeys(stage_id
+                for dependency in task.dependencies for stage_id in represented(dependency)))
+        return ancestors[task_id]
+
+    result = []
+    for stage in stages:
+        stage_id = str(stage["stage_id"])
+        dependencies = tuple(dict.fromkeys((*stage["dependencies"],
+            *(dependency_stage for task in stage["execution_tasks"]
+              for dependency in task.dependencies for dependency_stage in represented(dependency)
+              if dependency_stage != stage_id))))
+        result.append({**stage, "dependencies": dependencies})
+    # Stage construction groups a complete invocation at a time. Its order
+    # already respects the forward pipeline and earlier microbatch FIFO.
+    return result
+
+
 def _compact_execution_stages(
     scenario: ScenarioConfig,
     records: Sequence[TaskExecutionRecord],
@@ -30389,7 +30829,25 @@ def _compact_execution_stages(
         )
         segments: List[Tuple[str, List[str]]] = []
         segment_starts: List[float] = []
-        if not mixed_layer_ids:
+        parallel_plan = _parallel_plan(scenario)
+        if parallel_plan.pp_degree > 1 and all(
+            _kind(_component(scenario, owner)) == "gpu"
+            for owners in layer_owner_sets.values() for owner in owners
+        ):
+            # TP/EP ranks within a stage execute a parallel DAG. Keep that
+            # DAG together while retaining the explicit PP boundaries: one
+            # envelope for the entire model would turn a stage-local FIFO
+            # edge into a false complete-microbatch barrier.
+            layer_by_id = {layer.layer_id: layer for layer in _execution_layers(scenario)}
+            for pp_stage in range(parallel_plan.pp_degree):
+                stage_layers = [layer_id for layer_id in layer_order
+                    if parallel_plan.stage_for_layer(layer_by_id[layer_id]) == pp_stage]
+                representative = min(rank.component_id
+                    for rank in parallel_plan.ranks_for_stage(pp_stage))
+                segments.append((representative, stage_layers))
+                segment_starts.append(min(local_interval_by_task[record.task_id][0]
+                    for layer_id in stage_layers for record in records_by_layer[layer_id]))
+        elif not mixed_layer_ids:
             for layer_id in layer_order:
                 owner = layer_owner[layer_id]
                 if not segments or segments[-1][0] != owner:
@@ -30807,6 +31265,9 @@ def _compact_execution_stages(
     stages = _refine_gpu_frontend_wait_stages(
         scenario, records, stages, set(frontend_stage_by_task),
     )
+    if any(group.get("pipeline_microbatch_index") is not None for group in group_facts.values()):
+        stages = _split_pipeline_activation_stages(stages)
+        stages = _restore_pipeline_stage_dependencies(stages, records)
     stages = [{**stage, "execution_tasks": _serialize_execution_stage_tasks(
         stage["execution_tasks"], stage["request_ids"], physical_metadata)} for stage in stages]
     prepared_stages = _prepare_execution_stage_rows(stages)
@@ -31344,7 +31805,8 @@ def _lower_serving_cohort(
     token_batch = sum(max(0, int(item.token_count)) for item in items)
     if token_batch <= 0:
         raise ValueError("服务批次的 token_count 必须为正数")
-    invocation_groups = _serving_invocation_groups(scenario, cohort)
+    invocation_groups = _pipeline_serving_invocation_groups(
+        scenario, _serving_invocation_groups(scenario, cohort))
     if not invocation_groups:
         raise ValueError("服务批次没有可执行的 backend invocation group")
     draft_counts = tuple(
@@ -31627,25 +32089,38 @@ def _lower_serving_cohort(
         )
         dependencies = (target_frontend,)
     group_ends: Dict[str, str] = {}
+    pipeline_scheduling = any(group.pipeline_microbatch_index is not None for group in invocation_groups)
+    if pipeline_scheduling:
+        builder._pipeline_stage_terminals = {}
     for group in invocation_groups:
         group_dependencies = dependencies
         if group.predecessor_group_id is not None:
             group_dependencies = (
                 group_ends[group.predecessor_group_id],
             )
+        if group.pipeline_predecessor_group_ids:
+            group_dependencies = tuple(dict.fromkeys((*group_dependencies,
+                *(group_ends[group_id] for group_id in group.pipeline_predecessor_group_ids))))
         group_phase = "{}.{}".format(cohort_id, kind)
         if len(invocation_groups) > 1:
             group_phase += ".group{:04d}".format(group.group_index)
-        group_end = _compile_or_replay_serving_invocation(
-            builder,
-            scenario,
-            plan,
-            router,
-            group,
-            phase=group_phase,
-            dependencies=group_dependencies,
-        )
+        # Every simultaneous physical invocation owns its activation
+        # generation. Canonical hidden tensor names otherwise alias separate
+        # microbatches inside the same cohort and undercount live storage.
+        original_request = builder.request
+        if pipeline_scheduling:
+            builder.request = replace(original_request,
+                request_id=cohort_id + ".pipeline-group{:04d}".format(group.group_index))
+        try:
+            group_end = _compile_or_replay_serving_invocation(
+                builder, scenario, plan, router, group,
+                phase=group_phase, dependencies=group_dependencies,
+            )
+        finally:
+            builder.request = original_request
         group_ends[group.group_id] = group_end
+    if pipeline_scheduling:
+        del builder._pipeline_stage_terminals
     gpu_consumer_frontend = (
         _add_gpu_consumer_frontends(
             builder, scenario, router, plan, invocation_groups, (prepared,),
@@ -32001,6 +32476,8 @@ def _lower_serving_cohort(
             "tp_degree": plan.tp_degree,
             "pp_degree": plan.pp_degree,
             "ep_degree": plan.ep_degree,
+            "pipeline_microbatches": scenario.placement.parallel.pipeline_microbatches,
+            "pipeline_schedule": "cohort_flush_stage_fifo" if pipeline_scheduling else "serial_invocations",
             **({"ep_group_token_counts": tuple(
                 sum(1 for group in invocation_groups for lane in group.lanes
                     if lane.ep_group == ep_rank)

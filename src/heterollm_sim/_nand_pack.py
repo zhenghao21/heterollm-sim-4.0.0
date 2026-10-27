@@ -428,6 +428,31 @@ def can_own_resource_aliases(aliases):
     return True
 
 
+def native_namespace_matches(cls, items):
+    """Compare every original class binding without Python generator frames."""
+    namespace = vars(cls)
+    slotnames = namespace.get("__slotnames__")
+    if (len(namespace) - ("__slotnames__" in namespace) != len(items)
+            or slotnames is not None and (type(slotnames) is not list or slotnames)):
+        return False
+    name: object
+    original: object
+    for name, original in items:
+        if namespace.get(name) is not original:
+            return False
+    return True
+
+
+def native_instance_methods_absent(instance, methods):
+    """Instance overrides may depend on mutable state, even at one identity."""
+    namespace: dict = vars(instance)
+    name: object
+    for name in methods:
+        if name in namespace:
+            return False
+    return True
+
+
 def can_own_timeline(timeline, resource_ids):
     """Reject authored conversion/setter callbacks on this owner's footprint."""
     columns = _native_timeline_columns(timeline)
@@ -661,7 +686,9 @@ def publish_host_admission(queues, acceptances, admission, operations,
 
 def publish_active_timeline(timeline, names, state, moved, directions,
                             lane_values, lane_direction_values, starts, counts,
-                            indexes, active_resources, bus_mask, direction_names, single_lane):
+                            indexes, active_resources, bus_mask, direction_names, single_lane,
+                            native_accounting=False, scope=None, *,
+                            _remember=True, _last_intervals=None, _skip_ready=()):
     """Publish only the native machine's touched columns, in original order.
 
     The page executor, its float64 calculations and the live calendar reads
@@ -676,7 +703,11 @@ def publish_active_timeline(timeline, names, state, moved, directions,
     firsts: cython.longlong[::1] = starts
     sizes: cython.longlong[::1] = counts
     positions: cython.longlong[::1] = indexes
-    timeline._remember_resources(active_resources)
+    if _remember:
+        if native_accounting:
+            remember_generic_resources(timeline, active_resources, scope, names)
+        else:
+            timeline._remember_resources(active_resources)
     lane_map: object = timeline.lane_available
     direction_map: object = timeline.directions
     lane_direction_map: object = timeline.lane_directions
@@ -684,6 +715,10 @@ def publish_active_timeline(timeline, names, state, moved, directions,
     busy_map: object = timeline.busy_ns
     moved_map: object = timeline.bytes_moved
     interval_map: object = timeline.last_intervals
+    # Only the callback-free, packed single-lane batch can skip these
+    # deletions. Its lane counts stay one and no publisher can add a key.
+    skip_empty_directions = (native_accounting and scope is not None
+        and single_lane and type(lane_direction_map) is dict and not lane_direction_map)
     offset: cython.Py_ssize_t
     index: cython.Py_ssize_t
     first: cython.Py_ssize_t
@@ -711,9 +746,11 @@ def publish_active_timeline(timeline, names, state, moved, directions,
                 slots[:] = values
             else:
                 _put(lane_map, name, values)
-        _put(ready_map, name, float(rows[index, 0]))
+        if name not in _skip_ready:
+            _put(ready_map, name, float(rows[index, 0]))
         _put(busy_map, name, float(rows[index, 1]))
-        _put(interval_map, name, (float(rows[index, 2]), float(rows[index, 3])))
+        _put(interval_map, name, (float(rows[index, 2]), float(rows[index, 3]))
+             if _last_intervals is None else _item(_last_intervals, name))
         if bus_mask[index] or name in moved_map:
             _put(moved_map, name, int(byte_counts[index]))
         if direction_values[index]:
@@ -723,12 +760,322 @@ def publish_active_timeline(timeline, names, state, moved, directions,
             for lane in range(first, first + size):
                 values.append(direction_names[lane_directions[lane]])
             _put(lane_direction_map, name, values)
-        elif cython.compiled and type(lane_direction_map) is dict:
-            cython.cast(dict, lane_direction_map).pop(name, None)
+        elif not skip_empty_directions:
+            if cython.compiled and type(lane_direction_map) is dict:
+                cython.cast(dict, lane_direction_map).pop(name, None)
+            else:
+                lane_direction_map.pop(name, None)
+
+
+def remember_generic_resources(timeline, resources, scope=None, names=None):
+    """An owned native undo token needs each resource's preimage only once.
+
+    Request billing uses the packed cumulative counters, so there is no
+    transient accounting token here. Unknown undo writers retain the normal
+    callback order. Replaced recorder roots already are their own preimage.
+    """
+    from .memory_transfer import (_OWNED_TIMELINE_TOKEN_TYPE, _OWNED_TIMELINE_REMEMBER,
+                                  _TIMELINE_MAPS)
+    token: object
+    callback: object
+    active: set = resources
+    tokens: list = timeline._owned_transactions
+    saved: dict
+    fresh: set = set()
+    rid: object
+    for token in tokens:
+        callback = token.remember
+        if (type(token) is not _OWNED_TIMELINE_TOKEN_TYPE
+                or getattr(callback, "__func__", callback) is not _OWNED_TIMELINE_REMEMBER
+                or token.accounting or type(token.roots) is not dict
+                or type(token.entries) is not dict or tuple(token.roots) != _TIMELINE_MAPS
+                or any(type(value) is not dict for value in token.entries.values())):
+            if scope is not None:
+                scope.pop("remembered_layout", None)
+            timeline._remember_resources(resources)
+            return
+    # Small footprints retain the original fresh loop, without per-token
+    # binding checks. Preserve a proof for the next large request, which
+    # will validate every binding again before reusing it.
+    proof_eligible = scope is not None and len(active) >= 64
+    # This proof exists only inside the already qualified submit_many scope.
+    # Retain actual objects so identities cannot be recycled while cached.
+    proof = scope.get("remembered_layout") if proof_eligible else None
+    same = (proof is not None and proof[0] is timeline and proof[1] is names
+        and len(proof[2]) == len(tokens))
+    if same:
+        for token, record in zip(tokens, proof[2]):
+            if (token is not record[0] or token.roots is not record[1]
+                    or token.entries is not record[2]
+                    or any(token.roots.get(name) is not root
+                           or token.entries.get(name) is not entries
+                           for name, root, entries in record[3])):
+                same = False
+                break
+        if same:
+            # Every layout resource already occurs in every token's ready
+            # journal. The original loop below would produce no fresh key.
+            return
+    if proof_eligible:
+        scope.pop("remembered_layout", None)
+    for token in tokens:
+        saved = token.entries["ready_ns"]
+        for rid in active:
+            if rid not in saved:
+                fresh.add(rid)
+    if fresh:
+        # The existing ledger journals all maps in its typed C loop; calling
+        # token.remember once per resource would re-enter Python nine times.
+        timeline._remember_resources(fresh)
+    # Establish proof only after the original remember completed. This
+    # minimal variant attempts it only on a full-layout request, avoiding
+    # added O(layout) work for batches that repeatedly touch a small subset.
+    if proof_eligible and names is not None and tokens and len(active) == len(names):
+        records = []
+        for token in tokens:
+            if (tuple(token.entries) != _TIMELINE_MAPS
+                    or any(type(root) is not dict for root in token.roots.values())
+                    or any(rid not in token.entries["ready_ns"] for rid in names)):
+                return
+            records.append((token, token.roots, token.entries,
+                tuple((name, token.roots[name], token.entries[name]) for name in _TIMELINE_MAPS)))
+        scope["remembered_layout"] = (timeline, names, tuple(records))
+
+
+def publish_generic_controller(core, names, indexes, array_values, buffer_values,
+                               resident, resources, native_accounting=False):
+    """Publish typed array frontiers, retaining original slot/dict ownership."""
+    arrays: cython.double[::1] = array_values
+    buffers: cython.double[::1] = buffer_values
+    positions: cython.longlong[::1] = indexes
+    array_map: object = core.__dict__["_array_ready"]
+    buffer_map: object = core.__dict__["_buffer_ready"]
+    ready_map: object = core.timeline.ready_ns
+    offset: cython.Py_ssize_t
+    unit: cython.Py_ssize_t
+    name: object
+    for offset in range(len(indexes)):
+        unit = positions[offset]
+        name = names[unit]
+        if not resident:
+            core._touch_frontiers(name)
+            _put(array_map, name, float(arrays[unit]))
+            _put(buffer_map, name, float(buffers[unit]))
+        elif name not in array_map:
+            core._touch_frontiers(name)
+            _put(array_map, name, 0.)
+            buffer_map.setdefault(name, 0.)
+        if not native_accounting or name not in resources:
+            core.timeline._remember_resource(name)
+        _put(ready_map, name, float(arrays[unit]))
+
+
+def generic_ordered_metric_touches(timeline, name, values: dict, touched: set,
+                                   published: dict, scope):
+    """Reuse ordinals only inside a callback-free submit_many invocation."""
+    if scope is None:
+        return timeline._ordered_metric_touches(name, values, touched)
+    cached: object = scope.get(name)
+    order: dict
+    rid: object
+    index: cython.Py_ssize_t = 0
+    if cached is None or cached[0] is not values:
+        order = {}
+        for rid in values:
+            order[rid] = index
+            index += 1
+        scope[name] = (values, order, None, None)
+    else:
+        order = cached[1]
+        # Native busy/byte maps only append, in publication order. Equal
+        # lengths prove no key was appended since these ordinals were built.
+        if len(order) == len(values):
+            if cached[2] == touched:
+                # Preserve independent ownership of the returned list.
+                return list(cached[3])
         else:
-            lane_direction_map.pop(name, None)
+            for rid in published:
+                if rid in values and rid not in order:
+                    order[rid] = len(order)
+    ordered = sorted((rid for rid in touched if rid in order), key=order.__getitem__)
+    # Copy the footprint: request recorders normally replace this set, but
+    # keeping a snapshot also avoids aliasing an in-place caller update.
+    scope[name] = (values, order, touched.copy(), tuple(ordered))
+    return ordered
 
 
+def generic_metrics_delta(timeline, names, indexes, previous_busy, previous_moved, scope=None):
+    """Subtract cumulative counters, with the public maps' insertion order.
+
+    Do not sum page durations: subtraction after the same ordered IEEE
+    additions is required for bit-for-bit per-request resource billing.
+    """
+    busy_before: cython.double[::1] = previous_busy
+    moved_before: cython.longlong[::1] = previous_moved
+    positions: cython.longlong[::1] = indexes
+    prior_busy: dict = {}
+    prior_moved: dict = {}
+    busy: dict = {}
+    moved: dict = {}
+    touched: set = timeline._touched
+    busy_values: dict = timeline.busy_ns
+    moved_values: dict = timeline.bytes_moved
+    offset: cython.Py_ssize_t
+    index: cython.Py_ssize_t
+    rid: object
+    value: object
+    for offset in range(len(indexes)):
+        index = positions[offset]
+        rid = names[index]
+        prior_busy[rid] = float(busy_before[index])
+        prior_moved[rid] = int(moved_before[index])
+    if len(touched) * 8 <= len(busy_values):
+        for rid in generic_ordered_metric_touches(timeline, "busy_ns", busy_values, touched, prior_busy, scope):
+            value = busy_values[rid]
+            if value != prior_busy.get(rid, 0.):
+                busy[rid] = value - prior_busy.get(rid, 0.)
+    else:
+        # A dense request can append keys absent from an earlier sparse
+        # ordinal cache. Rebuild lazily if a later request becomes sparse.
+        if scope is not None:
+            scope.pop("busy_ns", None)
+        for rid, value in busy_values.items():
+            if rid in touched and value != prior_busy.get(rid, 0.):
+                busy[rid] = value - prior_busy.get(rid, 0.)
+    if len(touched) * 8 <= len(moved_values):
+        for rid in generic_ordered_metric_touches(timeline, "bytes_moved", moved_values, touched, prior_moved, scope):
+            value = moved_values[rid]
+            if value != prior_moved.get(rid, 0):
+                moved[rid] = value - prior_moved.get(rid, 0)
+    else:
+        # A dense request can append keys absent from an earlier sparse
+        # ordinal cache. Rebuild lazily if a later request becomes sparse.
+        if scope is not None:
+            scope.pop("bytes_moved", None)
+        for rid, value in moved_values.items():
+            if rid in touched and value != prior_moved.get(rid, 0):
+                moved[rid] = value - prior_moved.get(rid, 0)
+    return {"resource_busy_ns": busy, "resource_bytes": moved,
+            "resource_last_intervals": {rid: timeline.last_intervals[rid] for rid in touched},
+            "resource_intervals": {}, "resource_interval_payloads": {},
+            "intervals_truncated": timeline._intervals_truncated}
+
+
+
+def defer_active_timeline(timeline, names, state, indexes, resources, scope):
+    """Retain per-request interval objects and the complete successful union."""
+    rows: cython.double[:, ::1] = state
+    positions: cython.longlong[::1] = indexes
+    deferred: dict = scope["deferred"]
+    seen: cython.uchar[::1] = deferred["seen"].view(np.uint8)
+    intervals: dict = deferred["intervals"]
+    current: dict = {}
+    remember_generic_resources(timeline, resources, scope, names)
+    offset: cython.Py_ssize_t
+    index: cython.Py_ssize_t
+    for offset in range(len(indexes)):
+        index = positions[offset]
+        current[names[index]] = (float(rows[index, 2]), float(rows[index, 3]))
+    # Every key already exists: install completed native publication only
+    # after all per-request interval objects have been built successfully.
+    intervals.update(current)
+    for offset in range(len(indexes)):
+        seen[positions[offset]] = 1
+    deferred["controller_ready_complete"] = False
+    deferred["publication_serial"] += 1
+
+
+def generic_deferred_metrics_delta(timeline, names, state, moved, touched,
+                                   previous_busy, previous_moved, deferred,
+                                   _resource_sink=None):
+    """The original cumulative float subtraction, using private current rows."""
+    if _resource_sink is not None:
+        return _generic_deferred_metrics_to_sink(timeline, names, state, moved, touched,
+            previous_busy, previous_moved, deferred, _resource_sink)
+    rows: cython.double[:, ::1] = state
+    current_moved: cython.longlong[::1] = moved
+    before_busy: cython.double[::1] = previous_busy
+    before_moved: cython.longlong[::1] = previous_moved
+    active: cython.uchar[::1] = touched.view(np.uint8)
+    busy_order: cython.longlong[::1] = deferred["busy_order"]
+    moved_order: cython.longlong[::1] = deferred["moved_order"]
+    busy: dict = {}
+    byte_counts: dict = {}
+    value: object
+    previous: object
+    index: cython.Py_ssize_t
+    offset: cython.Py_ssize_t
+    for offset in range(len(busy_order)):
+        index = busy_order[offset]
+        if active[index]:
+            value, previous = float(rows[index, 1]), float(before_busy[index])
+            if value != previous:
+                busy[names[index]] = value - previous
+    for offset in range(len(moved_order)):
+        index = moved_order[offset]
+        if active[index]:
+            value, previous = int(current_moved[index]), int(before_moved[index])
+            if value != previous:
+                byte_counts[names[index]] = value - previous
+    intervals: dict = deferred["intervals"]
+    return {"resource_busy_ns": busy, "resource_bytes": byte_counts,
+            "resource_last_intervals": {rid: intervals[rid] for rid in timeline._touched},
+            "resource_intervals": {}, "resource_interval_payloads": {},
+            "intervals_truncated": timeline._intervals_truncated}
+
+
+def _generic_deferred_metrics_to_sink(timeline, names, state, moved, touched,
+                                      previous_busy, previous_moved, deferred, sink):
+    """Keep every scalar delta, without allocating its three request maps."""
+    rows: cython.double[:, ::1] = state
+    current_moved: cython.longlong[::1] = moved
+    before_busy: cython.double[::1] = previous_busy
+    before_moved: cython.longlong[::1] = previous_moved
+    active: cython.uchar[::1] = touched.view(np.uint8)
+    busy_order: cython.longlong[::1] = deferred["busy_order"]
+    moved_order: cython.longlong[::1] = deferred["moved_order"]
+    task_busy: dict = sink[0]
+    task_bytes: dict = sink[1]
+    task_last: dict = sink[2]
+    owner_busy: dict = sink[3]
+    owner_bytes: dict = sink[4]
+    owner_last: dict = sink[5]
+    value: object
+    previous: object
+    delta: object
+    rid: object
+    interval: object
+    index: cython.Py_ssize_t
+    offset: cython.Py_ssize_t
+    for offset in range(len(busy_order)):
+        index = busy_order[offset]
+        if active[index]:
+            value, previous = float(rows[index, 1]), float(before_busy[index])
+            if value != previous:
+                delta = value - previous
+                rid = names[index]
+                task_busy[rid] = task_busy.get(rid, 0.0) + delta
+                owner_busy[rid] = owner_busy.get(rid, 0.0) + delta
+    for offset in range(len(moved_order)):
+        index = moved_order[offset]
+        if active[index]:
+            value, previous = int(current_moved[index]), int(before_moved[index])
+            if value != previous:
+                delta = value - previous
+                rid = names[index]
+                task_bytes[rid] = task_bytes.get(rid, 0) + delta
+                owner_bytes[rid] = owner_bytes.get(rid, 0) + delta
+    intervals: dict = deferred["intervals"]
+    for rid in timeline._touched:
+        interval = intervals[rid]
+        previous = task_last.get(rid)
+        if previous is None or (interval[1], interval[0]) > (previous[1], previous[0]):
+            task_last[rid] = interval
+        previous = owner_last.get(rid)
+        if previous is None or (interval[1], interval[0]) > (previous[1], previous[0]):
+            owner_last[rid] = interval
+    return {"resource_intervals": {}, "resource_interval_payloads": {},
+            "intervals_truncated": timeline._intervals_truncated}
 def generic_request_resource_indexes(first_page, count, base_units, planes, independent,
                                      per_channel, host_channels, array_ids, channel_ids, host_ids):
     """Exact potential resource footprint of the unchanged sequential page loop."""

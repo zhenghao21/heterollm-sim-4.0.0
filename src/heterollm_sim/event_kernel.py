@@ -1114,14 +1114,25 @@ class UnifiedEventKernel:
                 contract.get("memory_resource") if isinstance(contract, Mapping) else None
             )
             rows = self._physical_descriptor_rows(task)
+            rows_by_buffer = None
             for request, buffers in declared.items():
                 if (not isinstance(request, str) or not request
                         or not isinstance(buffers, (tuple, list))
                         or any(not isinstance(value, str) or not value for value in buffers)):
                     raise ValueError("persistent_request_buffers requires explicit request and buffer ids")
                 identities = set(buffers)
+                if rows_by_buffer is None:
+                    rows_by_buffer = {}
+                    for index, row in enumerate(rows):
+                        rows_by_buffer.setdefault(row.get("buffer_id"), []).append((index, row))
+                # Selecting each request's buffers used to rescan all B
+                # requests' rows. Retain descriptor order (and duplicates)
+                # while visiting only this request's possible matches.
+                selected = sorted((entry for identity in identities
+                                   for entry in rows_by_buffer.get(identity, ())),
+                                  key=lambda entry: entry[0])
                 keys = []
-                for row in rows:
+                for _index, row in selected:
                     buffer_id = row.get("buffer_id")
                     owner = row.get("physical_owner") or default_owner
                     if buffer_id in identities and owner:
@@ -2544,6 +2555,9 @@ class UnifiedEventKernel:
 
     def _resolve_task_execution(self, task, start_ns, sorted_demands=None):
         from ._token_program import resolve_task_execution
+        mirror = getattr(self, "_native_tp_mirror", None)
+        if mirror is not None:
+            return mirror.resolve(self, task, start_ns, sorted_demands, resolve_task_execution)
         return resolve_task_execution(self, task, start_ns, sorted_demands)
 
     def _account_task_execution(self, task, demands, is_physical, physical_snapshot,

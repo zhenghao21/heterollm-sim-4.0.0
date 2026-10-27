@@ -11,7 +11,8 @@ import numpy as np
 from .memory_types import Operation, TransactionResult
 from .memory_mapping import map_dram_address
 from ._hbm_pack import (refresh_resource_columns, publish_resource_columns,
-                       can_capture_resource_columns, consume_resource_columns)
+                       can_capture_resource_columns, consume_resource_columns,
+                       HBMResourceBatch, HBMAdmission, HBMResourceAccumulator)
 
 
 # Cover the 4 TiB, 64-stack HBM reference without raising the analytical
@@ -628,6 +629,7 @@ class _NumericResourceCapture:
         self.packed = packed
         self.accumulator = accumulator
         self.before = None
+        self.deferred = None
 
     def begin(self):
         timeline = self.packed.core.timeline
@@ -653,10 +655,48 @@ class _NumericResourceCapture:
             else:
                 positions = cached[1]
         timeline = packed.core.timeline
-        consume_resource_columns(self.accumulator, packed._resource_lookup,
-            packed.arrays[8], packed.arrays[9], saved[8], saved[9], positions, timeline)
+        if self.deferred is None:
+            consume_resource_columns(self.accumulator, packed._resource_lookup,
+                packed.arrays[8], packed.arrays[9], saved[8], saved[9], positions, timeline)
+        else:
+            self.deferred.consume(saved[8], saved[9], positions)
         return {"resource_intervals": {}, "resource_interval_payloads": {},
                 "intervals_truncated": timeline._intervals_truncated}
+
+
+def _can_batch_resources(core, packed, accumulator):
+    """Defer public writes only across the complete callback-free owner path."""
+    from .dram_core import DramCore, _OWNED_TIMELINE_DRAM_METHODS
+    from .memory_transfer import (ResourceTimeline, _OWNED_TIMELINE_METHODS,
+                                  _OWNED_TIMELINE_TOKEN_TYPE, _OWNED_TIMELINE_REMEMBER)
+    if (type(core) is not DramCore or type(core.timeline) is not ResourceTimeline
+            or not _has_native_timeline_hooks(packed)
+            or type(accumulator) is not HBMResourceAccumulator
+            or any(type(getattr(accumulator, name)) is not dict for name in (
+                "resource_busy_ns", "resource_bytes", "resource_last_intervals"))):
+        return False
+    # Authored arithmetic and aliases may raise or observe each publication.
+    # Keep those operands on the ordinary per-request accounting path.
+    if (len({id(accumulator.resource_busy_ns), id(accumulator.resource_bytes),
+             id(accumulator.resource_last_intervals)}) != 3
+            or any(type(value) is not float for value in accumulator.resource_busy_ns.values())
+            or any(type(value) is not int for value in accumulator.resource_bytes.values())
+            or any(type(value) is not tuple or len(value) != 2
+                   or any(type(item) is not float or not math.isfinite(item) for item in value)
+                   for value in accumulator.resource_last_intervals.values())):
+        return False
+    for token in core.timeline._owned_transactions:
+        method = token.remember
+        if (type(token) is not _OWNED_TIMELINE_TOKEN_TYPE
+                or getattr(method, "__func__", method) is not _OWNED_TIMELINE_REMEMBER):
+            return False
+    for owner, methods in ((core, _OWNED_TIMELINE_DRAM_METHODS),
+                           (core.timeline, _OWNED_TIMELINE_METHODS)):
+        for name, original in methods:
+            method = getattr(owner, name)
+            if getattr(method, "__func__", method) is not original:
+                return False
+    return True
 
 
 def execute_hbm_numeric_many(core, requests, *, resource_accumulator=None):
@@ -669,43 +709,61 @@ def execute_hbm_numeric_many(core, requests, *, resource_accumulator=None):
     capture = (_NumericResourceCapture(packed, resource_accumulator)
                if resource_accumulator is not None
                and can_capture_resource_columns(core.timeline, packed._refreshed_resource_ids) else None)
+    deferred = admission = None
+    if (len(requests) > 1 and capture is not None
+            and _can_batch_resources(core, packed, resource_accumulator)):
+        deferred = capture.deferred = HBMResourceBatch(packed, resource_accumulator)
+        if (core.config.queue_scope == "device" and type(core._inflight) is list
+                and all(type(end) is float and math.isfinite(end) for end in core._inflight)):
+            admission = HBMAdmission(core)
     def execute(request):
         result = packed.execute(request)
         if result is None:
             raise _NumericDeclined
-        packed.commit_timeline(request)
+        if deferred is None:
+            packed.commit_timeline(request)
         packed._controller_commits += 1
         return result
 
     results = []
-    for index, request in enumerate(requests):
-        # Keep the last successful state, including both PCs and maintenance
-        # on every reached channel.  A failed request cannot discard earlier
-        # accepted requests or expose half of its own controller mutations.
-        before = packed.checkpoint(request)
-        before_commits = packed._controller_commits
-        if capture is not None:
-            capture.before = before
-        try:
-            result = core._submit_validated(request, execute=execute,
-                _resource_accumulator=resource_accumulator, _metrics_capture=capture)
-        except _NumericDeclined:
-            packed.restore_checkpoint(before)
-            packed._controller_commits = before_commits
-            if results and core._hbm_numeric_state is not packed:
-                packed.commit_controller()
-            remaining = (tuple(core.submit(item) for item in requests[index:])
-                         if resource_accumulator is None else tuple(
-                             core._submit_validated(item, _resource_accumulator=resource_accumulator)
-                             for item in requests[index:]))
-            return tuple(results) + remaining
-        except BaseException:
-            packed.restore_checkpoint(before)
-            packed._controller_commits = before_commits
-            if results and core._hbm_numeric_state is not packed:
-                packed.commit_controller()
-            raise
-        results.append(result)
+    try:
+        for index, request in enumerate(requests):
+            # Preserve the successful prefix even if the next checkpoint
+            # allocation fails before entering that request's executor.
+            before = packed.checkpoint(request)
+            before_commits = packed._controller_commits
+            if capture is not None:
+                capture.before = before
+            try:
+                result = core._submit_validated(request, execute=execute,
+                    _resource_accumulator=resource_accumulator, _metrics_capture=capture,
+                    _admission=admission)
+            except _NumericDeclined:
+                packed.restore_checkpoint(before)
+                packed._controller_commits = before_commits
+                if deferred is not None:
+                    deferred.publish()
+                if admission is not None:
+                    admission.publish()
+                if results and core._hbm_numeric_state is not packed:
+                    packed.commit_controller()
+                remaining = (tuple(core.submit(item) for item in requests[index:])
+                             if resource_accumulator is None else tuple(
+                                 core._submit_validated(item, _resource_accumulator=resource_accumulator)
+                                 for item in requests[index:]))
+                return tuple(results) + remaining
+            except BaseException:
+                packed.restore_checkpoint(before)
+                packed._controller_commits = before_commits
+                if results and core._hbm_numeric_state is not packed:
+                    packed.commit_controller()
+                raise
+            results.append(result)
+    finally:
+        if deferred is not None:
+            deferred.publish()
+        if admission is not None:
+            admission.publish()
     if core._hbm_numeric_state is not packed:
         packed.commit_controller()
     return tuple(results)
@@ -717,7 +775,8 @@ def execute_hbm_numeric_many(core, requests, *, resource_accumulator=None):
 _OWNED_TIMELINE_HBM_FUNCTIONS = tuple((name, globals()[name]) for name in (
     "_pack_hbm_numeric", "execute_hbm_numeric", "execute_hbm_numeric_many",
     "_request_array_selection", "can_capture_resource_columns",
-    "refresh_resource_columns", "publish_resource_columns", "consume_resource_columns"))
+    "refresh_resource_columns", "publish_resource_columns", "consume_resource_columns",
+    "_can_batch_resources"))
 _OWNED_TIMELINE_HBM_METHODS = tuple((name, getattr(_HBMNumericState, name)) for name in (
     "validate_aliases", "refresh_resources", "request_selection", "checkpoint",
     "restore_checkpoint", "execute", "commit_controller", "commit_timeline"))
@@ -725,6 +784,10 @@ _OWNED_TIMELINE_HBM_CLASS = _HBMNumericState
 _OWNED_TIMELINE_CAPTURE_METHODS = tuple((name, getattr(_NumericResourceCapture, name))
     for name in ("__init__", "begin", "finish"))
 _OWNED_TIMELINE_CAPTURE_CLASS = _NumericResourceCapture
+_OWNED_TIMELINE_BATCH_CLASSES = (HBMResourceBatch, HBMAdmission, HBMResourceAccumulator)
+_OWNED_TIMELINE_BATCH_METHODS = tuple((cls, name, getattr(cls, name))
+    for cls in _OWNED_TIMELINE_BATCH_CLASSES
+    for name, value in vars(cls).items() if callable(value))
 
 from . import _hbm_numeric as _owned_numeric_module
 from . import _hbm_control as _owned_control_module
@@ -742,9 +805,13 @@ def _has_native_timeline_hooks(packed=None):
     if (_HBMNumericState is not _OWNED_TIMELINE_HBM_CLASS
             or (packed is not None and type(packed) is not _HBMNumericState)
             or _NumericResourceCapture is not _OWNED_TIMELINE_CAPTURE_CLASS
+            or (HBMResourceBatch, HBMAdmission, HBMResourceAccumulator) != _OWNED_TIMELINE_BATCH_CLASSES
             or _owned_control_module.execute_hbm is not _OWNED_TIMELINE_CONTROL_ENTRY
             or _owned_control_module._Controller is not _OWNED_TIMELINE_CONTROL_CLASS):
         return False
+    for cls, name, original in _OWNED_TIMELINE_BATCH_METHODS:
+        if getattr(cls, name) is not original:
+            return False
     for name, original in _OWNED_TIMELINE_HBM_FUNCTIONS:
         if globals()[name] is not original:
             return False

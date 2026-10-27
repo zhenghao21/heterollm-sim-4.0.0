@@ -22,8 +22,7 @@ _TIMELINE_MAPS = ("ready_ns", "directions", "busy_ns", "bytes_moved", "last_inte
 class _TimelineBefore(Mapping):
     """Read the transaction's original lanes without copying unrelated owners."""
 
-    def __init__(self, transaction, name):
-        self.transaction, self.name = transaction, name
+    __init__ = None
 
     def __getitem__(self, key):
         entries = self.transaction.entries[self.name]
@@ -143,6 +142,17 @@ class _OwnedTimelineTransaction:
 
 _OWNED_TIMELINE_TOKEN_TYPE = _OwnedTimelineTransaction
 _OWNED_TIMELINE_REMEMBER = _OwnedTimelineTransaction.remember
+_OWNED_TIMELINE_TOKEN_METHODS = tuple((name, value) for name, value in
+    vars(_OwnedTimelineTransaction).items() if callable(value))
+# Cython cfunc helpers are hidden; Python-mode helpers remain replaceable.
+from . import _resource_ledger as _owned_metric_ledger
+_TimelineBefore.__init__ = _owned_metric_ledger.timeline_before_init
+_OWNED_TIMELINE_BEFORE_METHODS = tuple((name, value) for name, value in
+    vars(_TimelineBefore).items() if callable(value))
+
+_OWNED_METRIC_REDUCERS = tuple((name, getattr(_owned_metric_ledger, name)) for name in (
+    "core_timeline_metrics_delta", "timeline_metrics_delta", "remember_owned_timeline_resources",
+    "_get", "_subtract", "_remember_owned_resource") if hasattr(_owned_metric_ledger, name))
 
 
 def _number(name: str, value: float, *, positive: bool = False) -> float:
@@ -208,6 +218,7 @@ class ResourceTimeline:
     resource_aliases: Mapping[str, str] = field(default_factory=dict, repr=False)
     _metric_key_orders: dict = field(default_factory=dict, init=False, repr=False, compare=False)
     _owned_transactions: list = field(default_factory=list, init=False, repr=False, compare=False)
+    _owned_metric_orders: Optional[dict] = field(default_factory=lambda: None, init=False, repr=False, compare=False)
 
     def _begin_owned_transaction(self, *, accounting=False):
         token = _OwnedTimelineTransaction(self, accounting=accounting)
@@ -366,7 +377,18 @@ class ResourceTimeline:
 
     def metrics_delta(self, before: dict) -> dict:
         from ._resource_ledger import timeline_metrics_delta
-        return timeline_metrics_delta(self, before)
+        scope = self._owned_metric_orders
+        if scope is None:
+            return timeline_metrics_delta(self, before)
+        # Full public reduction observes foreign numeric objects as well as
+        # this owner's footprint. Their comparison/subtraction callbacks may
+        # reorder either dictionary without changing its identity or size.
+        self._owned_metric_orders = None
+        try:
+            return timeline_metrics_delta(self, before)
+        finally:
+            scope.clear()
+            self._owned_metric_orders = scope
 
     def _core_metrics_delta(self, before: dict) -> dict:
         """Reduce reservations made by a Core, whose writers mark touched IDs.
@@ -389,17 +411,51 @@ class ResourceTimeline:
             if token is not None:
                 token.finish()
 
+    def _can_own_metric_orders(self):
+        return (all(getattr(_owned_metric_ledger, name) is original
+                    for name, original in _OWNED_METRIC_REDUCERS)
+                and all(getattr(_TimelineBefore, name) is original
+                        for name, original in _OWNED_TIMELINE_BEFORE_METHODS)
+                and all(type(token) is _OWNED_TIMELINE_TOKEN_TYPE and not token.accounting
+                        and all(getattr(getattr(token, name), "__func__", getattr(token, name)) is original
+                                for name, original in _OWNED_TIMELINE_TOKEN_METHODS)
+                        for token in self._owned_transactions))
+
     def _ordered_metric_touches(self, name, values, touched):
-        # Constructing the key tuple runs in C. Comparing it on every call
-        # also observes public insertions, deletions and same-size reordering;
-        # cached ordinals never hide a caller's changed dictionary order.
-        keys = tuple(values)
+        scope = self._owned_metric_orders
+        if scope is not None:
+            scoped = scope.get(name)
+            if scoped is not None and scoped[0] is values and scoped[1] == len(values):
+                order = scoped[2]
+                return sorted((rid for rid in touched if rid in order), key=order.__getitem__)
+        # A scope miss performs the same complete key check as a public call.
+        # Keep public ordinal maps immutable once published so later tasks can
+        # borrow them; appends/root changes construct a replacement map.
+        self._owned_metric_orders = None
         cached = self._metric_key_orders.get(name)
-        if cached is None or cached[0] != keys:
-            order = {key: index for index, key in enumerate(keys)}
-            self._metric_key_orders[name] = (keys, order)
-        else:
-            order = cached[1]
+        previous_native = cached is None or cached[2]
+        try:
+            keys = tuple(values)
+            if cached is None or cached[0] != keys:
+                order, native_keys = {}, True
+                for index, key in enumerate(keys):
+                    native_keys = native_keys and type(key) is str
+                    order[key] = index
+                self._metric_key_orders[name] = (keys, order, native_keys)
+            else:
+                order, native_keys = cached[1], cached[2]
+        except BaseException:
+            if scope is not None:
+                scope.clear()
+            raise
+        if scope is not None:
+            if previous_native and native_keys:
+                scope[name] = (values, len(values), order)
+                self._owned_metric_orders = scope
+            else:
+                # A public key's hash/equality may have edited other columns.
+                # Complete this task using ordinary public checks.
+                scope.clear()
         return sorted((rid for rid in touched if rid in order), key=order.__getitem__)
 
     def snapshot(self) -> dict[str, float]:

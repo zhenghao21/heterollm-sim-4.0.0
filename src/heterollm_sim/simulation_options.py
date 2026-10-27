@@ -58,15 +58,29 @@ class NativeWindowFastConfig:
     """Native stationary samples with an independently bounded window forecast.
 
     The first continuous-refill cohort boundary is sampled on independent
-    copies: ``calibration_layers`` from the stack's start with the step
-    prefix, ``holdout_layers`` from its end with the step suffix. Samples
+    copies: at least ``calibration_layers`` from the stack's start with the
+    step prefix and ``holdout_layers`` from its end with the step suffix,
+    extended until both runs step every layer class. Samples
     never claim a completed cohort or a visible output Token.
+
+    ``tp_rank_symmetry`` selects complete execution (off), exact physical
+    transition reuse outside PD windows (quiet), or an explicit experimental
+    controller-state symmetry approximation inside PD windows too (all).
+    Unsupported graphs/geometries and unequal dispatch arrivals run in full.
+
+    ``pd_concurrency_envelope`` uses the approved monotone envelope between
+    two measured PD concurrency endpoints (1 and k_max) by default. Set it
+    to False to measure every required concurrency count for comparison.
     """
 
-    max_wall_seconds: float = 1800.
+    max_wall_seconds: float = 3000.
     target_relative_error: float = .10
-    calibration_layers: int = 8
-    holdout_layers: int = 4
+    calibration_layers: int = 4
+    holdout_layers: int = 2
+    tp_rank_symmetry: str = "quiet"
+    pd_concurrency_envelope: bool = True
+    pipeline_sample_decode_cohorts: int = 2
+    pipeline_stage_sampling: bool = True
 
     def __post_init__(self) -> None:
         if (isinstance(self.max_wall_seconds, bool)
@@ -75,8 +89,15 @@ class NativeWindowFastConfig:
                 or not self.max_wall_seconds > 0):
             raise ValueError("simulation.native_window.max_wall_seconds must be finite and positive")
         _bounded_fraction(self.target_relative_error, "simulation.native_window.target_relative_error", .10)
-        _integer(self.calibration_layers, "simulation.native_window.calibration_layers", 2)
+        _integer(self.calibration_layers, "simulation.native_window.calibration_layers", 4)
         _integer(self.holdout_layers, "simulation.native_window.holdout_layers", 2)
+        if type(self.tp_rank_symmetry) is not str or self.tp_rank_symmetry not in ("off", "quiet", "all"):
+            raise ValueError("simulation.native_window.tp_rank_symmetry must be off, quiet or all")
+        if type(self.pd_concurrency_envelope) is not bool:
+            raise ValueError("simulation.native_window.pd_concurrency_envelope must be a boolean")
+        _integer(self.pipeline_sample_decode_cohorts, "simulation.native_window.pipeline_sample_decode_cohorts", 2)
+        if type(self.pipeline_stage_sampling) is not bool:
+            raise ValueError("simulation.native_window.pipeline_stage_sampling must be a boolean")
 
 
 @dataclass(frozen=True)
@@ -88,6 +109,8 @@ class NativePrefillPassConfig:
     the prefix) and ``holdout_layers`` from its end, extended until both runs
     step every layer class, are run on independent copies of the boundary
     and the pass is composed within ``target_relative_error``. Only
+    ``chunked_sampling`` explicitly enables the experimental per-chunk layer
+    forecast, including its declared future-boundary-state approximation. Only
     a full pass may run without a wall limit (``max_wall_seconds`` None),
     like a detailed run. Two layers each way keep a 100K-token 405B pass
     (about 230 s of wall per layer) inside the default 1800 s.
@@ -98,8 +121,13 @@ class NativePrefillPassConfig:
     calibration_layers: int = 2
     holdout_layers: int = 2
     full_pass: bool = False
+    chunked_sampling: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.chunked_sampling) is not bool:
+            raise ValueError("simulation.native_prefill.chunked_sampling must be a boolean")
+        if self.full_pass and self.chunked_sampling:
+            raise ValueError("simulation.native_prefill.chunked_sampling cannot combine with full_pass")
         if type(self.full_pass) is not bool:
             raise ValueError("simulation.native_prefill.full_pass must be a boolean")
         if self.max_wall_seconds is None:

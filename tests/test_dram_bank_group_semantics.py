@@ -258,6 +258,8 @@ def test_window_deadline_rounding_does_not_loop_at_large_timestamps():
 
 
 def test_enabled_summary_and_batch_do_not_use_unadapted_numeric_or_fold_paths():
+    from heterollm_sim._compiled_dram import execute_compiled, execute_compiled_many
+
     geometry = config(column_same_group_ns=7, column_different_group_ns=2,
                       activate_same_group_ns=9, activate_different_group_ns=3,
                       four_activate_window_ns=20, write_to_read_same_group_ns=6,
@@ -268,9 +270,14 @@ def test_enabled_summary_and_batch_do_not_use_unadapted_numeric_or_fold_paths():
     detailed = DramCore(geometry)
     expected = detailed.submit_many(requests)
     summary = DramCore(geometry, capture_details=False)
-    with patch("heterollm_sim._compiled_dram.execute_compiled", side_effect=AssertionError("numeric")), \
-         patch("heterollm_sim._compiled_dram.execute_compiled_many", side_effect=AssertionError("batch")), \
+    # The summary dispatcher may probe the compiled entry, which must decline
+    # before invoking any numeric kernel when bank-group timing is enabled.
+    with patch("heterollm_sim._dram_numeric.run_numeric", side_effect=AssertionError("numeric")), \
+         patch("heterollm_sim._dram_numeric.run_numeric_short", side_effect=AssertionError("short")), \
+         patch("heterollm_sim._dram_numeric.run_numeric_many", side_effect=AssertionError("batch")), \
          patch.object(summary, "_execute_accelerated_accepted", side_effect=AssertionError("fold")):
+        assert execute_compiled(summary, requests[0]) is None
+        assert execute_compiled_many(summary, requests) is None
         actual = summary.submit_many(requests)
     assert [r.completion_ns for r in actual] == [r.completion_ns for r in expected]
     assert summary._banks == detailed._banks

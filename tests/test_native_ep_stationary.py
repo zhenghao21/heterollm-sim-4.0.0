@@ -81,7 +81,8 @@ def test_two_symmetric_groups_halve_the_busiest_group_share():
 
 def _evaluate_fixture(monkeypatch, *, degree, batch=8, output=8, pool=4, warmup=5, measured=14):
     monkeypatch.setattr(stationary, "_step_service", lambda prepared, samples: (100., 110., {}))
-    monkeypatch.setattr(stationary, "_import_extra", lambda samples: (2., 3., 5., 6., []))
+    monkeypatch.setattr(stationary, "_import_extra",
+                        lambda samples: ({1: {"extra_ns": (2., 3.), "span_ns": (5., 6.)}}, []))
     ages = _centered_ages(batch, output)
     states = [SimpleNamespace(spec=SimpleNamespace(request_id=f"seed{index}", output_tokens=output - age,
               metadata={"warmup_seed": True})) for index, age in enumerate(ages)]
@@ -101,7 +102,7 @@ def _evaluate_fixture(monkeypatch, *, degree, batch=8, output=8, pool=4, warmup=
                               "mean_context_tokens": [30.] * degree, "rank_ids": [[0], [1]][:degree],
                               "component_group": {}},
                 "import_pool_occupancy_by_group": [pool // degree] * degree}
-    return runtime, prepared, SimpleNamespace(target_relative_error=.1), ages
+    return runtime, prepared, SimpleNamespace(target_relative_error=.1, pd_concurrency_envelope=False), ages
 
 
 def test_one_group_keeps_the_global_import_term(monkeypatch):
@@ -191,12 +192,26 @@ def test_groups_must_hold_exactly_batch_over_ep_requests():
     assert groups["mean_context_tokens"] == [20., 35.]
     assert groups["rank_ids"] == [[0, 1], [2, 3]]
     assert groups["group_of"] == {"r0": 0, "r1": 1, "r2": 0, "r3": 1}
-    for placement in ([0, 0, 0, 1], [0, 0, 0, 0], [0, 1, 0]):
+    for placement in ([0, 0, 0, 1], [0, 0, 0, 0]):
         with pytest.raises(NativeLayerSamplingGuardError) as error:
             stationary._ep_groups(runtime, _cohort(placement))
         assert str(error.value) == "native_stationary_ep_groups_unbalanced"
     with pytest.raises(NativeLayerSamplingGuardError, match="ep_groups_unbalanced"):
         stationary._ep_groups(runtime, _cohort([0, 1, 2, 1]))
+
+
+def test_a_cohort_short_of_the_batch_is_left_to_the_capacity_admission(monkeypatch):
+    # KV refused the last seed: the groups filled in turn are uneven, but
+    # admission must report the capacity shortfall with per-group holdings.
+    runtime = _plan(2, 4, (0, 0, 1, 1))
+    groups = stationary._ep_groups(runtime, _cohort([0, 1, 0]))
+    assert groups["requests"] == [2, 1] and groups["mean_context_tokens"] == [101., 101.]
+    runtime, prepared, _options, _ages = _evaluate_fixture(monkeypatch, degree=2)
+    runtime.states = {f"seed{index}": SimpleNamespace(ep_group=index % 2) for index in range(8)}
+    del prepared["context"]["seed7"]
+    prepared["import_pool_occupancy_by_group"] = [1, 1]
+    assert stationary.admission_reasons(runtime, prepared) == ["native_stationary_first_cohort_not_a_full_batch"]
+    assert stationary.kv_requests_held(runtime, prepared) == [5, 4]
 
 
 def test_one_group_is_never_unbalanced_and_a_short_cohort_keeps_its_old_reason():
@@ -256,8 +271,9 @@ def _stub_window(monkeypatch):
     return calls
 
 
-def _sampling_fixture(degree, pending):
-    inventory = [{"layer_id": f"L{index}"} for index in range(6)]
+def _sampling_fixture(degree, pending, seed_outputs=(4, 3)):
+    """Seeds of output tokens ``seed_outputs`` (fresh output 4) alternate over the groups."""
+    inventory = [{"layer_id": f"L{index}", "class_key": "dense"} for index in range(6)]
     prepared = {"inventory": inventory, "by_layer": {row["layer_id"]: [row["layer_id"] + ".task"] for row in inventory},
                 "boundary": {"before_first_layer": ["prefix"], "after_last_layer": ["suffix"]},
                 "specs": (), "source": object(), "origin": 0., "context": {"r0": 20, "r1": 40},
@@ -265,12 +281,20 @@ def _sampling_fixture(degree, pending):
                 "ranks": {identity: index % 2 for index, identity in enumerate(
                     ["prefix", "suffix", *(row["layer_id"] + ".task" for row in inventory)])},
                 "cohort": SimpleNamespace(cohort_id="cohort", kind="prefill"),
-                "ep_groups": {"degree": degree, "component_group": {"hbm0": 0, "hbm1": 1}}}
-    states = {index: {"request_id": name, "done": False, "row": 0, "offset": 0, "logical_bytes": size,
+                "ep_groups": {"degree": degree, "component_group": {"hbm0": 0, "hbm1": 1},
+                              "group_of": {f"s{index}": index % degree for index in range(len(seed_outputs))}}}
+    states = {index: {"request_id": name, "done": False, "submitted_write_bytes": 0, "logical_bytes": size,
                       "destinations": [{"component_id": f"hbm{group}", "size_bytes": size}]}
               for index, (name, size, group) in enumerate(pending)}
+    requests = [SimpleNamespace(spec=SimpleNamespace(request_id=f"s{index}", output_tokens=tokens,
+                                                     metadata={"warmup_seed": True}))
+                for index, tokens in enumerate(seed_outputs)]
+    requests.append(SimpleNamespace(spec=SimpleNamespace(request_id="fresh", output_tokens=4, metadata={})))
     runtime = SimpleNamespace(_external_executor=SimpleNamespace(_async_plan_states=states),
-                              _external_pending={name: None for name, _size, _group in pending})
+                              _external_pending={name: None for name, _size, _group in pending},
+                              _state_values=requests,
+                              _external_ingress={"max_inflight_requests": 4 * degree,
+                                                 "warmup_decode_cohorts": 3, "measurement_decode_cohorts": 6})
     return runtime, prepared
 
 
@@ -279,7 +303,7 @@ def test_the_second_sampled_import_comes_from_another_group_when_there_is_one(mo
     runtime, prepared = _sampling_fixture(2, [("a", 300, 0), ("b", 200, 0), ("c", 100, 1)])
     samples = stationary.sample_stationary(runtime, prepared, ExecutionControl(), (2, 2), [])
     rows = samples["pd_imports"]["samples"]
-    assert [(row["request_id"], row["destination_group"]) for row in rows] == [("a", 0), ("c", 1)]
+    assert [(row["request_ids"], row["destination_group"]) for row in rows] == [(["a"], 0), (["c"], 1)]
     assert [row["logical_bytes"] for row in rows] == [300, 100]
 
 
@@ -287,10 +311,31 @@ def test_without_another_group_the_two_largest_imports_are_sampled(monkeypatch):
     _stub_window(monkeypatch)
     runtime, prepared = _sampling_fixture(2, [("a", 300, 0), ("b", 200, 0), ("c", 100, 0)])
     rows = stationary.sample_stationary(runtime, prepared, ExecutionControl(), (2, 2), [])["pd_imports"]["samples"]
-    assert [(row["request_id"], row["destination_group"]) for row in rows] == [("a", 0), ("b", 0)]
+    assert [(row["request_ids"], row["destination_group"]) for row in rows] == [(["a"], 0), (["b"], 0)]
     runtime, prepared = _sampling_fixture(1, [("a", 100, 0), ("b", 300, 1), ("c", 200, 0)])
     rows = stationary.sample_stationary(runtime, prepared, ExecutionControl(), (2, 2), [])["pd_imports"]["samples"]
-    assert [row["request_id"] for row in rows] == ["b", "c"] and {row["destination_group"] for row in rows} == {0}
+    assert [row["request_ids"] for row in rows] == [["b"], ["c"]] and {row["destination_group"] for row in rows} == {0}
+
+
+def test_imports_a_group_starts_together_are_also_sampled_together(monkeypatch):
+    calls = _stub_window(monkeypatch)
+    # Two seeds of one group finish together: the group starts two imports
+    # at each refill boundary, so two disjoint pairs also run together.
+    pending = [("a", 400, 0), ("b", 300, 0), ("c", 200, 0), ("d", 100, 0)]
+    runtime, prepared = _sampling_fixture(1, pending, seed_outputs=(3, 3))
+    rows = stationary.sample_stationary(runtime, prepared, ExecutionControl(), (2, 2), [])["pd_imports"]["samples"]
+    assert [row["request_ids"] for row in rows] == [["a"], ["b"], ["a", "b"], ["c", "d"]]
+    assert [row["logical_bytes"] for row in rows] == [400, 300, 700, 300]
+    assert [name for name, _ids in calls][-2:] == ["stationary-pd-a+b", "stationary-pd-c+d"]
+    # With two groups the second pair comes from the other group.
+    pending = [("a", 400, 0), ("b", 300, 0), ("c", 200, 1), ("d", 100, 1)]
+    runtime, prepared = _sampling_fixture(2, pending, seed_outputs=(3, 3, 3, 3))
+    rows = stationary.sample_stationary(runtime, prepared, ExecutionControl(), (2, 2), [])["pd_imports"]["samples"]
+    assert [(row["request_ids"], row["destination_group"]) for row in rows][2:] == [(["a", "b"], 0), (["c", "d"], 1)]
+    # A pool holding one pair only yields one set: evaluation names it unsampled.
+    runtime, prepared = _sampling_fixture(1, pending[:3], seed_outputs=(3, 3))
+    rows = stationary.sample_stationary(runtime, prepared, ExecutionControl(), (2, 2), [])["pd_imports"]["samples"]
+    assert [row["request_ids"] for row in rows] == [["a"], ["b"], ["a", "b"]]
 
 
 def test_sample_runs_stay_inside_calibration_and_holdout_layers(monkeypatch):
@@ -662,7 +707,8 @@ def test_two_ep_groups_run_through_prepare_and_sample_both_groups(monkeypatch):
 
     monkeypatch.setattr(stationary, "prepare_stationary", prepare)
     monkeypatch.setattr(stationary, "sample_stationary", sample)
-    scenario = native_toy.maverick_pattern_scenario(8, batch_size=4, output=6, warmup=5, measurement=10, ep=2)
+    scenario = native_toy.slow_pd_ingress(native_toy.maverick_pattern_scenario(
+        8, batch_size=4, output=6, warmup=5, measurement=10, ep=2), .1)
     fast = run_scenario(replace(scenario, simulation=SimulationConfig(mode="fast",
         native_window=NativeWindowFastConfig(calibration_layers=4, holdout_layers=4))),
         retention_policy="aggregate")
@@ -675,7 +721,8 @@ def test_two_ep_groups_run_through_prepare_and_sample_both_groups(monkeypatch):
     assert sorted(row["destination_group"] for row in seen["imports"]) == [0, 1]
     assert sorted(row.role for row in fast.layer_window_samples) == [
         "calibration", "entry", "exit", "holdout", "pd_import", "pd_import"]
-    # The Maverick toy's imports outlast a step (as with one group): rejected, not extrapolated.
+    # Over 0.1 Gb/s PD links the Maverick toy's imports outlast a step (as
+    # with one group): rejected, not extrapolated.
     assert fast.native_window_forecast is None
     assert "native_stationary_refill_not_always_ready" in fast.approximation["rejection_reasons"]
 

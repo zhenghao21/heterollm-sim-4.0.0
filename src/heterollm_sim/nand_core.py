@@ -3,12 +3,147 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, replace
+from heapq import heapify, heappop, heappush
 from math import isfinite, sqrt
 from typing import Dict, Iterable, Optional
 
 from .memory_mapping import map_nand_address, split_nand_request, validate_nand_request
 from .memory_transfer import ResourceTimeline
 from .memory_types import AccessRequest, NandConfig, Operation, StageTiming, TransactionResult
+
+
+class _HostList(list):
+    """Logical list operations for state inspection without publishing Core."""
+
+    def __eq__(self, other):
+        if isinstance(other, list):
+            return list(self) == list(other)
+        return NotImplemented
+
+    def __ne__(self, other):
+        equal = self.__eq__(other)
+        return NotImplemented if equal is NotImplemented else not equal
+
+    def __repr__(self):
+        return repr(list(self))
+
+    def __getitem__(self, index):
+        return list(self)[index]
+
+
+class _HostPopulation(_HostList):
+    """Ordered live commands with completion heaps and incremental counts.
+
+    The list protocol is used only by the runtime's existing snapshot copier.
+    Public Core properties publish ordinary, detached lists; controller code
+    never reads those properties. No mutable index is shared with a snapshot.
+    """
+
+    def __init__(self, commands=()):
+        self.commands = dict(enumerate(commands))
+        self.next_id = len(self.commands)
+        self.ends = [(end, index) for index, (end, _) in self.commands.items()]
+        self.write_ends = [(end, index) for index, (end, op) in self.commands.items()
+                           if op is Operation.WRITE]
+        heapify(self.ends)
+        heapify(self.write_ends)
+        self.reads = sum(op is Operation.READ for _, op in self.commands.values())
+        self.writes = len(self.write_ends)
+
+    def __len__(self):
+        return len(self.commands)
+
+    def __iter__(self):
+        return iter(self.commands.values())
+
+    def __deepcopy__(self, memo):
+        result = []
+        memo[id(self)] = result
+        result.extend(deepcopy(command, memo) for command in self)
+        return result
+
+    def preview(self, effective, limit=None, write_limit=None):
+        # Admission must not retire live commands before execution succeeds.
+        # Temporarily pop expired heap entries, then restore them. Each entry
+        # is inspected only when it expires, never on every new submission.
+        expired, expired_writes = [], []
+        reads, writes, count = self.reads, self.writes, len(self.commands)
+        try:
+            while True:
+                while self.ends and self.ends[0][0] <= effective:
+                    item = heappop(self.ends)
+                    expired.append(item)
+                    op = self.commands[item[1]][1]
+                    reads -= op is Operation.READ
+                    writes -= op is Operation.WRITE
+                    count -= 1
+                while self.write_ends and self.write_ends[0][0] <= effective:
+                    expired_writes.append(heappop(self.write_ends))
+                blocked = []
+                if limit is not None and count >= limit:
+                    blocked.append(self.ends[0][0])
+                if write_limit is not None and writes >= write_limit:
+                    blocked.append(self.write_ends[0][0])
+                if not blocked:
+                    return _HostAdmission(self, effective, count, reads, writes)
+                effective = max(effective, max(blocked))
+        finally:
+            for item in expired:
+                heappush(self.ends, item)
+            for item in expired_writes:
+                heappush(self.write_ends, item)
+
+    def record(self, effective, completion, operation):
+        while self.ends and self.ends[0][0] <= effective:
+            _, index = heappop(self.ends)
+            _, op = self.commands.pop(index)
+            self.reads -= op is Operation.READ
+            self.writes -= op is Operation.WRITE
+        while self.write_ends and self.write_ends[0][0] <= effective:
+            heappop(self.write_ends)
+        index = self.next_id
+        self.next_id += 1
+        self.commands[index] = (completion, operation)
+        heappush(self.ends, (completion, index))
+        if operation is Operation.WRITE:
+            heappush(self.write_ends, (completion, index))
+            self.writes += 1
+        elif operation is Operation.READ:
+            self.reads += 1
+
+
+class _HostAdmission:
+    """Immutable counts for one admission, including after queue publication."""
+
+    __slots__ = ("population", "effective", "count", "reads", "writes")
+
+    def __init__(self, population, effective, count, reads, writes):
+        self.population, self.effective = population, effective
+        self.count, self.reads, self.writes = count, reads, writes
+
+    def __len__(self):
+        return self.count
+
+    def __iter__(self):
+        return (command for command in self.population if command[0] > self.effective)
+
+
+class _HostCompletions(_HostList):
+    """Lazy projection for the independently observable completion list."""
+
+    def __init__(self, population):
+        self.population = population
+
+    def __len__(self):
+        return len(self.population)
+
+    def __iter__(self):
+        return (end for end, _ in self.population)
+
+    def __deepcopy__(self, memo):
+        result = list(self)
+        memo[id(self)] = result
+        return result
 
 
 @dataclass
@@ -299,6 +434,9 @@ class NandCore:
             token.materialize_cache(self)
 
     def _nand_publish_numeric(self, *, exposed=False):
+        if "_nand_request_metric_orders" in self.__dict__:
+            from ._nand_acceleration import _flush_deferred_calendar
+            _flush_deferred_calendar(self)
         packed = self.__dict__.get("_nand_numeric_state")
         if exposed:
             self.__dict__["_nand_numeric_enabled"] = False
@@ -433,6 +571,40 @@ class NandCore:
             return "outstanding page commands per host channel sampled at admission, including the admitted command"
         return "outstanding host requests sampled at admission, including the admitted request; not NAND page queues"
 
+    @property
+    def _inflight_operations(self):
+        value = self.__dict__["_inflight_operations"]
+        if type(value) is _HostPopulation:
+            value = self.__dict__["_inflight_operations"] = list(value)
+        return value
+
+    @_inflight_operations.setter
+    def _inflight_operations(self, value):
+        self.__dict__["_inflight_operations"] = value
+
+    @property
+    def _inflight(self):
+        value = self.__dict__["_inflight"]
+        if type(value) is _HostCompletions:
+            value = self.__dict__["_inflight"] = list(value)
+        return value
+
+    @_inflight.setter
+    def _inflight(self, value):
+        self.__dict__["_inflight"] = value
+
+    @property
+    def _host_inflight(self):
+        value = self.__dict__["_host_inflight"]
+        for host, commands in value.items():
+            if type(commands) is _HostPopulation:
+                value[host] = list(commands)
+        return value
+
+    @_host_inflight.setter
+    def _host_inflight(self, value):
+        self.__dict__["_host_inflight"] = value
+
     def _admit_host_request(self, request, mapping=None):
         """Find a free command credit without changing another host's clock."""
         host_channel = None
@@ -440,38 +612,30 @@ class NandCore:
             if mapping is None:
                 mapping = map_nand_address(self.config, request.address)
             host_channel = mapping.channel % self.config.host_channels
-            population = self._host_inflight.get(host_channel, ())
+            population = self.__dict__["_host_inflight"].get(host_channel, ())
             # _acceptance_ns is a device clock only when the caller explicitly
             # advances/drains the core; ordinary host admissions never set it.
             acceptance = max(self._host_acceptance_ns.get(host_channel, 0.), self._acceptance_ns)
         else:
-            population = self._inflight_operations
+            population = self.__dict__["_inflight_operations"]
             acceptance = self._acceptance_ns
         effective = max(request.arrival_ns, acceptance)
-        admitted = [(end, operation) for end, operation in population if end > effective]
-        write_limit = self.config.max_outstanding_write_requests
-        while True:
-            blocked_until = []
-            if len(admitted) >= self.config.max_outstanding_requests:
-                blocked_until.append(min(end for end, _ in admitted))
-            if request.operation is Operation.WRITE and write_limit is not None:
-                writes = [end for end, operation in admitted if operation is Operation.WRITE]
-                if len(writes) >= write_limit:
-                    blocked_until.append(min(writes))
-            if not blocked_until:
-                return effective, admitted, host_channel
-            effective = max(effective, max(blocked_until))
-            admitted = [(end, operation) for end, operation in admitted if end > effective]
+        if type(population) is not _HostPopulation:
+            population = _HostPopulation(population)
+        admitted = population.preview(effective, self.config.max_outstanding_requests,
+            self.config.max_outstanding_write_requests if request.operation is Operation.WRITE else None)
+        return admitted.effective, admitted, host_channel
 
     def _record_host_admission(self, host_channel, effective, admitted, completion, operation):
-        population = [*admitted, (completion, operation)]
+        population = admitted.population
+        population.record(effective, completion, operation)
         if host_channel is None:
             self._acceptance_ns = effective
-            self._inflight_operations = population
-            self._inflight = [end for end, _ in population]
+            self.__dict__["_inflight_operations"] = population
+            self.__dict__["_inflight"] = _HostCompletions(population)
         else:
             self._host_acceptance_ns[host_channel] = effective
-            self._host_inflight[host_channel] = population
+            self.__dict__["_host_inflight"][host_channel] = population
 
     @staticmethod
     def _bank_key(mapping) -> tuple[int, ...]:
@@ -904,14 +1068,85 @@ class NandCore:
             **self._observations(observation_start),
         }
 
-    def submit(self, request: AccessRequest) -> TransactionResult:
+    def submit(self, request: AccessRequest, *, _resource_sink=None) -> TransactionResult:
         depth = len(self.timeline._owned_transactions)
         try:
-            return self._submit_live(request)
+            if _resource_sink is None:
+                return self._submit_live(request)
+            result = self._submit_live(request, _resource_sink=_resource_sink)
+            # A scalar decline is consumed before the next native request,
+            # retaining fast/scalar/fast order inside one submit_many call.
+            fields = ("resource_busy_ns", "resource_bytes", "resource_last_intervals")
+            if any(name in result.counters for name in fields):
+                from ._resource_ledger import consume_task_resource_sink
+                consume_task_resource_sink(_resource_sink, result.counters)
+                counters = dict(result.counters)
+                for name in fields:
+                    counters.pop(name, None)
+                result = replace(result, counters=counters)
+            return result
         finally:
             self.timeline._finish_core_accounting(depth)
 
-    def _submit_live(self, request: AccessRequest) -> TransactionResult:
+    def submit_many(self, requests, *, _resource_sink=None):
+        """Submit in request order, reusing native calendars and metric ordinals.
+
+        The scope ends before returning to the caller: public map edits,
+        reordering, snapshots and undo callbacks retain their normal checks.
+        Admission and all per-request IEEE counter differences stay separate.
+        """
+        from ._nand_acceleration import (_generic_resident_writers,
+            _deferred_batch_qualified, _flush_deferred_calendar)
+
+        requests = tuple(requests)
+        qualified = (len(requests) >= 2 and self._nand_numeric_enabled
+            and all(type(request) is AccessRequest and request.operation is Operation.READ for request in requests)
+            and _generic_resident_writers(self))
+        if not qualified:
+            if _resource_sink is None:
+                return tuple(self.submit(request) for request in requests)
+            return tuple(self.submit(request, _resource_sink=_resource_sink) for request in requests)
+        self.__dict__["_nand_request_metric_orders"] = ({"pack_pages": sum(
+            (request.address + request.byte_count - 1) // 4096 - request.address // 4096 + 1
+            for request in requests)} if len(requests) >= 8 else {})
+        scope = self.__dict__["_nand_request_metric_orders"]
+        try:
+            scope["defer_candidate"] = _deferred_batch_qualified(self, requests)
+            if _resource_sink is None:
+                return tuple(self.submit(request) for request in requests)
+            return tuple(self.submit(request, _resource_sink=_resource_sink) for request in requests)
+        finally:
+            try:
+                _flush_deferred_calendar(self)
+            finally:
+                self.__dict__.pop("_nand_request_metric_orders", None)
+
+    def _submit_live(self, request: AccessRequest, *, _resource_sink=None) -> TransactionResult:
+        # Ordinary native requests can bill the packed cumulative calendars
+        # directly. The outer physical transaction still owns their undo;
+        # an additional per-request timeline transaction is unnecessary.
+        if (self._nand_numeric_enabled and not self._nand_state_exposed
+                and type(request) is AccessRequest
+                and self.config.protocol_mode == "generic_nand"
+                and _generic_bulk_span(request, self.config)
+                and (self._nand_numeric_state is not None
+                     or (request.address + request.byte_count - 1) // 4096 - request.address // 4096 + 1 >= BULK_MIN_PAGES)
+                and not self._write_buffer_pending and not self._write_buffer_occupancy):
+            from ._nand_acceleration import _generic_resident_writers
+            if (_generic_resident_writers(self)
+                    and (self._nand_numeric_state is None
+                         or self._nand_numeric_state.scalar_resource_contract == self._resident_resource_contract())):
+                self._validate_request(request)
+                result = (self._submit_generic_summary(request) if _resource_sink is None else
+                          self._submit_generic_summary(request, _resource_sink=_resource_sink))
+                if result is not None:
+                    return result
+        # A declined native request can enter authored scalar code. No
+        # ordinal assumptions survive that boundary for later batch members.
+        if "_nand_request_metric_orders" in self.__dict__:
+            from ._nand_acceleration import _flush_deferred_calendar
+            _flush_deferred_calendar(self)
+        self.__dict__.pop("_nand_request_metric_orders", None)
         # GC interleaves a scalar read and PROGRAM with bulk page execution.
         # Hand only that bank to the unchanged scalar state machine instead
         # of publishing and repacking all banks for every copied page.
@@ -940,6 +1175,10 @@ class NandCore:
             result = self._submit_ocp_single_page_summary(request)
             if result is not None:
                 return result
+        return self._submit_scalar_request(request)
+
+    def _submit_scalar_request(self, request):
+        """Account a validated request through the ordinary scalar machine."""
         self._observation_events = []
         effective_arrival, admitted, host_channel = self._admit_host_request(request)
         before_metrics = self.timeline._core_metrics_snapshot(
@@ -952,14 +1191,15 @@ class NandCore:
         effective_arrival, write_buffer_bytes, write_buffer_wait_ns, drained = self._admit_write_buffer(
             request, effective_arrival
         )
-        admitted = [(end, operation) for end, operation in admitted if end > effective_arrival]
+        if effective_arrival != admitted.effective:
+            admitted = admitted.population.preview(effective_arrival)
         admission_depths = {
             "host_outstanding_at_admission_peak": len(admitted) + 1,
             "host_read_outstanding_at_admission_peak":
-                sum(operation is Operation.READ for _end, operation in admitted)
+                admitted.reads
                 + int(request.operation is Operation.READ),
             "host_write_outstanding_at_admission_peak":
-                sum(operation is Operation.WRITE for _end, operation in admitted)
+                admitted.writes
                 + int(request.operation is Operation.WRITE),
         }
         result = self._execute_accepted(
@@ -1002,6 +1242,63 @@ class NandCore:
         self._reserve_write_buffer(write_buffer_bytes)
         self._record_host_admission(host_channel, effective_arrival, admitted,
                                     result.completion_ns, request.operation)
+        return result
+
+    def _submit_generic_summary(self, request, *, _resource_sink=None):
+        """Keep host admission exact while billing native calendar deltas."""
+        from ._nand_acceleration import execute_buffered_full_pages
+        from .memory_transfer import _OWNED_TIMELINE_TOKEN_TYPE, _OWNED_TIMELINE_REMEMBER
+
+        # An authored undo callback can observe the normal accounting token
+        # and its per-request lifetime. Keep that protocol for unknown writers.
+        if any(type(token) is not _OWNED_TIMELINE_TOKEN_TYPE or token.accounting
+               or getattr(token.remember, "__func__", token.remember) is not _OWNED_TIMELINE_REMEMBER
+               for token in self.timeline._owned_transactions):
+            return None
+
+        self._observation_events = []
+        effective, admitted, host_channel = self._admit_host_request(request)
+        self.timeline._reset_metric_recorder(0)
+        metrics = {}
+        count = (request.address + request.byte_count - 1) // 4096 - request.address // 4096 + 1
+        effective_request = (request if effective == request.arrival_ns else
+                             replace(request, arrival_ns=effective))
+        if _resource_sink is None:
+            result = execute_buffered_full_pages(self, effective_request, count, _metrics=metrics)
+        else:
+            result = execute_buffered_full_pages(self, effective_request, count,
+                _metrics=metrics, _resource_sink=_resource_sink)
+        if result is None:
+            return None
+        # No write buffer, staged pages, media observations or authored
+        # callbacks qualify for this path. These are the same fields and
+        # insertion order as _submit_live's general request accounting.
+        counters = result.counters
+        result = replace(result, arrival_ns=request.arrival_ns, counters={
+            **counters,
+            "pages_touched": counters["page_count"],
+            "read_operations": counters["pages_read"],
+            "program_operations": counters["pages_programmed"],
+            "rmw_read_operations": counters["pages_read"] if request.operation is Operation.WRITE else 0,
+            "page_access_payload_bytes": request.byte_count,
+            "page_access_capacity_bytes": counters["page_count"] * self.config.page_bytes,
+            "host_admission_samples": 1,
+            "host_outstanding_at_admission_peak": len(admitted) + 1,
+            "host_read_outstanding_at_admission_peak":
+                admitted.reads + int(request.operation is Operation.READ),
+            "host_write_outstanding_at_admission_peak":
+                admitted.writes + int(request.operation is Operation.WRITE),
+            "host_admission_depth_scope": self._admission_depth_scope(),
+            "queue_wait_ns": effective - request.arrival_ns,
+            "write_buffer_wait_ns": 0.0,
+            "write_buffer_bytes": 0,
+            "write_buffer_occupancy_bytes": 0,
+            "write_buffer_peak_bytes": 0,
+            "write_buffer_draining_bytes": 0,
+            "buffered_write_mode": self._buffered_write_mode,
+            **metrics,
+        })
+        self._record_host_admission(host_channel, effective, admitted, result.completion_ns, request.operation)
         return result
 
     def _submit_ocp_page_commands(self, request):
@@ -1093,9 +1390,7 @@ class NandCore:
             from ._nand_acceleration import _generic_resident_writers, has_native_timeline_hooks
             if not has_native_timeline_hooks() or not _generic_resident_writers(self):
                 return False
-            if (request.operation in (Operation.READ, Operation.WRITE)
-                    and not request.address % 4096 and not request.byte_count % 4096
-                    and request.byte_count // 4096 >= 128):
+            if _generic_bulk_span(request, self.config):
                 return False
         elif (request.address // self.config.page_bytes
                 != (request.address + request.byte_count - 1) // self.config.page_bytes):
@@ -1111,9 +1406,7 @@ class NandCore:
         return (type(self) is NandCore and type(request) is AccessRequest
                 and self._nand_numeric_enabled and not self._nand_state_exposed
                 and config.protocol_mode == "generic_nand" and config.page_bytes == 4096
-                and request.operation in (Operation.READ, Operation.WRITE)
-                and not request.address % 4096 and not request.byte_count % 4096
-                and request.byte_count >= 128 * 4096
+                and _generic_bulk_span(request, config)
                 and has_native_timeline_hooks()
                 and _generic_resident_writers(self)
                 and self._nand_numeric_state.scalar_resource_contract == self._resident_resource_contract())
@@ -1247,7 +1540,7 @@ class NandCore:
         self._nand_numeric_state = None
         self._nand_numeric_enabled = False
         try:
-            return self._submit_live(request)
+            return self._submit_scalar_request(request)
         finally:
             self._nand_numeric_state = packed
             self._nand_numeric_enabled = enabled
@@ -1443,9 +1736,9 @@ class NandCore:
                 "page_access_capacity_bytes": config.page_bytes, "host_admission_samples": 1,
                 "host_outstanding_at_admission_peak": len(admitted) + 1,
                 "host_read_outstanding_at_admission_peak":
-                    sum(operation is Operation.READ for _, operation in admitted) + int(request.operation is Operation.READ),
+                    admitted.reads + int(request.operation is Operation.READ),
                 "host_write_outstanding_at_admission_peak":
-                    sum(operation is Operation.WRITE for _, operation in admitted) + int(request.operation is Operation.WRITE),
+                    admitted.writes + int(request.operation is Operation.WRITE),
                 "host_admission_depth_scope": self._admission_depth_scope(),
                 "queue_wait_ns": effective_arrival - request.arrival_ns,
                 "write_buffer_wait_ns": 0., "write_buffer_bytes": 0, "write_buffer_occupancy_bytes": 0,
@@ -1463,7 +1756,8 @@ class NandCore:
         page_count = last_page - first_page + 1
         if (not self.capture_details and not self._observe_media
                 and self.config.protocol_mode == "generic_nand"
-                and self.config.read_cache_pages_per_bank == 2 and page_count >= 128):
+                and self.config.read_cache_pages_per_bank == 2
+                and page_count >= _bulk_min_pages(self, request.operation)):
             from ._nand_acceleration import execute_buffered_full_pages
             result = execute_buffered_full_pages(self, request, page_count)
             if result is not None:
@@ -1821,10 +2115,42 @@ class NandCore:
             default=self._bandwidth_ceiling_gb_s()))
 
 
+# Fewest touched pages the compiled generic page machine takes. Without a
+# resident controller every bulk request packs and publishes all banks, which
+# only pays off for long spans; with one, packing and publication cover the
+# request's own footprint, so any multi-page read or write runs compiled.
+BULK_MIN_PAGES = 128
+RESIDENT_MIN_PAGES = 2
+
+
+def _bulk_min_pages(core, operation):
+    if operation in (Operation.READ, Operation.WRITE) and core._nand_numeric_state is not None:
+        return RESIDENT_MIN_PAGES
+    return BULK_MIN_PAGES
+
+
+def _generic_bulk_span(request, config):
+    """A span the generic two-buffer page machine runs compiled beside a resident controller.
+
+    A READ or WRITE touching at least RESIDENT_MIN_PAGES 4 KiB pages. It may
+    start or end inside a page (its boundary pages move their
+    host-granularity span) unless it writes under the reject partial-page
+    policy, which only the scalar machine raises.
+    """
+    if request.operation not in (Operation.READ, Operation.WRITE) or request.byte_count <= 0:
+        return False
+    aligned = not request.address % 4096 and not request.byte_count % 4096
+    partial = (not 4096 % config.host_granularity_bytes
+               and (request.operation is Operation.READ or config.partial_page_policy == "read_modify_write"))
+    return ((aligned or partial)
+            and (request.address + request.byte_count - 1) // 4096 - request.address // 4096
+            >= RESIDENT_MIN_PAGES - 1)
+
+
 _RESIDENT_SCALAR_METHODS = {name: getattr(NandCore, name) for name in (
     "_validate_request", "_validate_program_order", "_write_buffer_payload_bytes",
     "_resident_scalar_eligible", "_resident_generic_bulk_eligible", "_submit_resident_scalar", "_submit_resident_generic", "_submit_ocp_single_page_summary",
-    "_admit_host_request", "_record_host_admission", "_cache_slot", "_invalidate_cache",
+    "_admit_host_request", "_record_host_admission", "_submit_scalar_request", "_cache_slot", "_invalidate_cache",
     "_array_id", "_array_resource_id", "_channel_id", "_host_id", "_host_bandwidth",
     "_staged_key", "_bank_key", "_block_key", "_set_program_frontier", "_touch_cache_bank",
     "_bandwidth_ceiling_gb_s", "_admission_depth_scope", "_resident_resource_contract")}

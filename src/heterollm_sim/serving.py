@@ -496,10 +496,17 @@ class BatchCost:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
-def _live_task_metadata(metadata, namespace):
+def _live_task_metadata(metadata, namespace, stage_id=None):
     bound = bind_l2_invocation(metadata, namespace)
-    if bound.get("physical_memory_config") is not None:
-        return {**bound, "physical_allocation_scope": "closed_cohort"}
+    physical = bound.get("physical_memory_config") is not None
+    if physical or stage_id is not None:
+        # Add both binding fields in one owned dictionary. Materializing an
+        # intermediate scope-only mapping copied every physical task twice.
+        bound = dict(bound)
+        if physical:
+            bound["physical_allocation_scope"] = "closed_cohort"
+        if stage_id is not None:
+            bound["execution_stage_id"] = stage_id
     return bound
 
 
@@ -611,10 +618,7 @@ class _ExecutionStageReplayLayout:
                         dependencies=dependencies,
                         demands=task.demands,
                         earliest_start_ns=0.0,
-                        metadata={
-                            **_live_task_metadata(task.metadata, namespace),
-                            "execution_stage_id": stage.stage_id,
-                        },
+                        metadata=_live_task_metadata(task.metadata, namespace, stage.stage_id),
                     )
                 )
         compiled_specs = tuple(specs)
@@ -694,10 +698,7 @@ class _ExecutionStageReplayLayout:
                     ),
                     demands=task.demands,
                     earliest_start_ns=ready_by_stage[stage.stage_id],
-                    metadata={
-                        **_live_task_metadata(task.metadata, namespace),
-                        "execution_stage_id": stage.stage_id,
-                    },
+                    metadata=_live_task_metadata(task.metadata, namespace, stage.stage_id),
                 )
             )
         return tuple(specs)
@@ -6186,8 +6187,8 @@ class _OnlineRuntime:
                 raise ValueError("external KV " + key + " must be boolean")
         if any(state.spec.prompt_tokens < 1 or state.spec.output_tokens < 1 for state in self._state_values):
             raise ValueError("external KV requests require a final prompt query and at least one real output")
-        if config.get("buffer_bytes", 64*1024**2) < config.get("max_inflight_requests", 2):
-            raise ValueError("external KV source buffer is smaller than its finite slot count")
+        if config.get("buffer_bytes", 64*1024**2) < config.get("chunk_bytes", 1024**2):
+            raise ValueError("external KV per-request source buffer holds no chunk slot")
         source = self.plan.scenario.hardware.get_component(str(config.get("source_component", "")))
         if source.normalized_kind not in {"host_memory", "ddr", "memory"}:
             raise ValueError("external KV source must be explicit HOST DRAM")
@@ -6290,44 +6291,48 @@ class _OnlineRuntime:
         """
         if self._external_executor is None or not self._external_ingress.get("preload_warmup_seed_kv", False):
             return
-        seed_index = -1
-        for state in self._state_values:
-            request_id = state.spec.request_id
-            if not state.spec.metadata.get("warmup_seed", False):
-                continue
-            # The k-th seed in request order belongs to EP group k % ep_degree
-            # so every group holds the full spread of staggered ages.
-            seed_index += 1
-            if state.status != RequestStatus.WAITING or request_id in self._external_initialized:
-                continue
-            placed_here = state.ep_group is None
-            if placed_here:
-                self._assign_ep_group(state, seed_index % self._ep_degree)
-            pages = self.ledger.pages_for_tokens(_max_live_kv_tokens(state.spec.prompt_tokens, state.spec.output_tokens))
-            if not self.ledger.can_resize(state, pages):
+        from .planner import _compilation_scope
+        # Seed admission does not change the scenario's layers, placement or
+        # request budgets. Share their ordinary inventory caches for this loop.
+        with _compilation_scope(self.plan.scenario):
+            seed_index = -1
+            for state in self._state_values:
+                request_id = state.spec.request_id
+                if not state.spec.metadata.get("warmup_seed", False):
+                    continue
+                # The k-th seed in request order belongs to EP group k % ep_degree
+                # so every group holds the full spread of staggered ages.
+                seed_index += 1
+                if state.status != RequestStatus.WAITING or request_id in self._external_initialized:
+                    continue
+                placed_here = state.ep_group is None
                 if placed_here:
-                    self._release_ep_group(state)
-                continue
-            previous = state.kv_pages
-            try:
-                if not self.ledger.resize(state, pages):
+                    self._assign_ep_group(state, seed_index % self._ep_degree)
+                pages = self.ledger.pages_for_tokens(_max_live_kv_tokens(state.spec.prompt_tokens, state.spec.output_tokens))
+                if not self.ledger.can_resize(state, pages):
                     if placed_here:
                         self._release_ep_group(state)
                     continue
-                size = sum(row["size_bytes"] for row in self._external_destination_ranges(state))
-            except BaseException:
-                self._execution_resource_kernel.forget_request_physical_buffers(request_id)
-                self.ledger.resize(state, previous)
-                if placed_here:
-                    self._release_ep_group(state)
-                raise
-            state.prefill_cursor = state.spec.prompt_tokens-1
-            self._external_ready.add(request_id)
-            self._external_initialized.add(request_id)
-            self._external_preloaded_requests += 1
-            self._external_preloaded_bytes += size
-            self.events.append(ServingEvent(self.now, "external_kv_preloaded", request_id,
-                details={"logical_bytes": size, "history_tokens": state.spec.prompt_tokens-1, "paid": False}))
+                previous = state.kv_pages
+                try:
+                    if not self.ledger.resize(state, pages):
+                        if placed_here:
+                            self._release_ep_group(state)
+                        continue
+                    size = sum(row["size_bytes"] for row in self._external_destination_ranges(state))
+                except BaseException:
+                    self._execution_resource_kernel.forget_request_physical_buffers(request_id)
+                    self.ledger.resize(state, previous)
+                    if placed_here:
+                        self._release_ep_group(state)
+                    raise
+                state.prefill_cursor = state.spec.prompt_tokens-1
+                self._external_ready.add(request_id)
+                self._external_initialized.add(request_id)
+                self._external_preloaded_requests += 1
+                self._external_preloaded_bytes += size
+                self.events.append(ServingEvent(self.now, "external_kv_preloaded", request_id,
+                    details={"logical_bytes": size, "history_tokens": state.spec.prompt_tokens-1, "paid": False}))
 
     def _start_external_imports(self):
         if self._external_executor is None:
@@ -6374,13 +6379,15 @@ class _OnlineRuntime:
                     self._external_initialized.add(request_id)
                     inflight[state.ep_group] += 1
                     continue
+                # Every in-flight import owns its own source staging buffer.
+                buffer_bytes, chunk_bytes = config.get("buffer_bytes", 64*1024**2), config.get("chunk_bytes", 1024**2)
                 plan = self._external_executor.prepare_external_import(source_component=config["source_component"],
-                    destinations=destinations, buffer_bytes=config.get("buffer_bytes", 64*1024**2)//limit,
-                    chunk_bytes=config.get("chunk_bytes", 1024**2), request_id=request_id, arrival_ns=self.now)
+                    destinations=destinations, buffer_bytes=buffer_bytes,
+                    chunk_bytes=chunk_bytes, request_id=request_id, arrival_ns=self.now)
                 self._external_pending[request_id] = {"plan": plan, "bytes": size}
                 inflight[state.ep_group] += 1
                 self._external_buffer_peak_bytes = max(self._external_buffer_peak_bytes,
-                    len(self._external_pending)*min(config.get("chunk_bytes", 1024**2), config.get("buffer_bytes",64*1024**2)//limit))
+                    len(self._external_pending)*(buffer_bytes//chunk_bytes)*chunk_bytes)
                 self.events.append(ServingEvent(self.now, "external_kv_import_start", request_id,
                     details={"logical_bytes": size, "history_tokens": state.spec.prompt_tokens-1}))
                 self._publish_prefetch_resource_availability(plan=plan, executor=self._external_executor)
@@ -6425,11 +6432,12 @@ class _OnlineRuntime:
 
     def _cancel_external_imports(self):
         for request_id, entry in tuple(self._external_pending.items()):
-            plan = entry["plan"]
-            self.now = max(self.now, plan.completion_ns)
+            # Wait for every chunk action already submitted, not only the
+            # next phase, before the import's buffers are released.
+            billed = entry["plan"].cancel()
+            self.now = max(self.now, billed["completion_ns"])
             self._execution_resource_kernel.makespan_ns = max(
                 self._execution_resource_kernel.makespan_ns, self.now)
-            plan.cancel()
             self.ledger.resize(self.states[request_id], 0)
             self._execution_resource_kernel.release_request_physical_allocations(request_id)
             self._release_ep_group(self.states[request_id])
@@ -10937,6 +10945,10 @@ class _OnlineRuntime:
             self._process_agent_events()
             self._arrive()
             self._preload_warmup_seed_kv()
+            preload_guard = getattr(self, "_native_preload_admission_guard", None)
+            if preload_guard is not None:
+                self._native_preload_admission_guard = None
+                preload_guard(self)
             self._priority_preempt()
             self._fill_slots()
             self._start_external_imports()
@@ -11167,6 +11179,12 @@ class _OnlineRuntime:
             phase_ready = min((value for value in (phase_ready, external) if value is not None), default=None)
             if phase_ready is None or phase_ready > float(ready[0]):
                 return
+            mirror = getattr(kernel, "_native_tp_mirror", None)
+            if mirror is not None:
+                # Imports write controllers outside ordinary task dispatch.
+                # Publish lazy copies before that writer and discard the
+                # transition proof rather than assuming PD state symmetry.
+                mirror.invalidate(kernel)
             self._advance_prefetches_until(phase_ready)
             self._advance_external_imports_until(phase_ready)
 
@@ -11336,6 +11354,28 @@ class _OnlineRuntime:
                 # and rebuild the priority ordering before consuming a slot.
                 return
             candidates.sort(key=self._service_rank)
+            # Preloaded native requests already own their KV and EP group.
+            # With no swap, pressure preemption or prompt/linear-state work,
+            # a successful admission changes only that request and consumes
+            # a slot: remaining ranks and blocked groups cannot become ready.
+            ordered_admission = (
+                self._external_executor is not None
+                and self._external_ingress.get("preload_warmup_seed_kv", False)
+                and not self.plan.scheduler.preemption_enabled
+                and not self.prompt_cache.enabled
+                and self.plan.linear_state_policy.bytes_per_request <= 0
+                and all(
+                    state.status == RequestStatus.WAITING
+                    and state.linear_state_swapped_bytes <= 0
+                    and (state.spec.request_id not in self._external_initialized
+                         or (state.ep_group is not None
+                             and (self.plan.kv_policy.allocation_policy != "eager"
+                                  or (state.kv_pages >= self.ledger.pages_for_tokens(
+                                      _max_live_kv_tokens(state.spec.prompt_tokens,
+                                                          state.spec.output_tokens))
+                                      and self.ledger.can_resize(state, state.kv_pages)))))
+                    for state in candidates)
+            )
             admitted = False
             for state in candidates:
                 if (self._external_executor is not None
@@ -11356,8 +11396,17 @@ class _OnlineRuntime:
                 elif not self._free_slot_ids_by_group[state.ep_group]:
                     continue
                 if self._admit_candidate(state):
+                    if ordered_admission and self.now == before_save_ns:
+                        if (self._running_count >= self.plan.scheduler.max_num_seqs
+                                or not any(self._free_slot_ids_by_group)):
+                            return
+                        continue
                     admitted = True
                     break
+                # A failed attempt may have reclaimed resources. Finish the
+                # original pass, then retry earlier failures after the next
+                # success, exactly as the rebuilding loop does.
+                ordered_admission = False
                 if placed_here:
                     self._release_ep_group(state)
             if not admitted:
@@ -14207,10 +14256,7 @@ class _OnlineRuntime:
                         dependencies=dependencies,
                         demands=task.demands,
                         earliest_start_ns=ready_by_stage[stage.stage_id],
-                        metadata={
-                            **_live_task_metadata(task.metadata, namespace),
-                            "execution_stage_id": stage.stage_id,
-                        },
+                        metadata=_live_task_metadata(task.metadata, namespace, stage.stage_id),
                     )
                 )
                 source_by_id[task_id] = (stage.stage_id, task)
@@ -14298,6 +14344,24 @@ class _OnlineRuntime:
         completed_ids: List[str] = []
         live_metrics = self._live_cohort_metrics
         control = self.execution_control
+        mirror = None
+        scenario = self.plan.scenario
+        options = scenario.simulation.native_window
+        parallel = scenario.placement.parallel
+        if (scenario.simulation.mode == "fast" and options is not None
+                and options.tp_rank_symmetry != "off"
+                # PP stages have distinct frontend arrivals and controller
+                # histories.  The exact TP mirror is only a win for a single
+                # pipeline stage; enabling it here adds a per-task proof and
+                # transaction path while nearly every PP task falls back.
+                and parallel.pp_degree == 1 and parallel.tp_degree > 1
+                and getattr(kernel, "_native_tp_mirror", None) is None):
+            from .execution_control import native_callback_free_control
+            if native_callback_free_control(control):
+                from .native_layer_sampling import _TPRankMirror
+                mirror = _TPRankMirror(kernel, specs, scenario, allow_ep_groups=True)
+                if mirror.pairs:
+                    kernel._native_tp_mirror = mirror
 
         def submitted():
             control.raise_if_cancelled()
@@ -14325,16 +14389,28 @@ class _OnlineRuntime:
                     if frame is not None:
                         frame.invalidate_frontiers()
 
-        kernel._drain_prevalidated_compiled(
-            specs, program.compiled, validate_tasks=False,
-            event_observer=observe,
-            index_physical_allocations=live_metrics is not None,
-            on_submitted=submitted,
-            seen_namespace=(namespace + ".", program.suffixes),
-            owned_physical_frontiers=True,
-            before_step=(self._advance_prefetches_before_kernel_step
-                         if self._pending_prefetches or self._external_pending else None),
-        )
+        try:
+            kernel._drain_prevalidated_compiled(
+                specs, program.compiled, validate_tasks=False,
+                event_observer=observe,
+                index_physical_allocations=live_metrics is not None,
+                on_submitted=submitted,
+                seen_namespace=(namespace + ".", program.suffixes),
+                owned_physical_frontiers=True,
+                before_step=(self._advance_prefetches_before_kernel_step
+                             if self._pending_prefetches or self._external_pending else None),
+            )
+        finally:
+            if mirror is not None:
+                try:
+                    mirror.materialize(kernel)
+                finally:
+                    if getattr(kernel, "_native_tp_mirror", None) is mirror:
+                        del kernel._native_tp_mirror
+                    history = getattr(self, "_native_pipeline_tp_reuse", None)
+                    if history is None:
+                        history = self._native_pipeline_tp_reuse = []
+                    history.append(dict(mirror.stats))
         for task_id in completed_ids:
             kernel.release_completed(task_id)
         return {
@@ -16277,8 +16353,10 @@ class _OnlineRuntime:
             )
         layer_sampler = getattr(self, "_native_layer_sampler", None)
         if layer_sampler is not None:
-            layer_sampler(self, cohort, cost, stages, request_ready_ns)
-            raise RuntimeError("native layer sampler must stop without committing its partial cohort")
+            # Only an explicit opt-out lets a complete native cohort run.
+            # Partial samples must still stop before the ordinary commit.
+            if layer_sampler(self, cohort, cost, stages, request_ready_ns) is not False:
+                raise RuntimeError("native layer sampler must stop without committing its partial cohort")
         realized_stages: Tuple[Mapping[str, Any], ...] = ()
         self.execution_control.report("cohort_execution", len(self.batches),
             simulated_time_ns=self.now, message="正在执行原生物理任务")
@@ -16303,6 +16381,9 @@ class _OnlineRuntime:
                 planning_duration_ns,
             )
             if self._live_cohort_metrics is not None:
+                prefill_completed = getattr(self, "_native_prefill_cohort_completed", None)
+                if prefill_completed is not None:
+                    prefill_completed(self, cohort, self._live_cohort_metrics)
                 cost = BatchCost(
                     max(1.0e-9, isolated_duration_ns), {**cost.metadata, **self._live_cohort_metrics.metadata(),
                      "physical_execution_scope": "persistent_live_kernel",

@@ -455,6 +455,10 @@ class _MappingRunContext:
     parallel_plan: ParallelPlan
     deadline: float
     load_policy_targets: Mapping[str, str] = field(default_factory=dict)
+    # Candidate enumeration reads one unchanged scenario. Reuse profile
+    # conversion/guards across operators, but never across mapping runs.
+    gpu_profile_pairs: Dict[Tuple[str, Optional[str]], Tuple[GPUProfile, HBMProfile]] = field(
+        default_factory=dict, compare=False, repr=False)
 
 
 class _MappingDeadlineExceeded(RuntimeError):
@@ -3677,7 +3681,13 @@ def _operator_cost(
         # surrogate must not silently replace a selected tier with nearby HBM.
         from .planner import _gpu_profiles
 
-        return _gpu_profiles(scenario, gpu_component_id, memory_component_id)
+        key = (gpu_component_id, memory_component_id)
+        cached = None if run_context is None else run_context.gpu_profile_pairs.get(key)
+        if cached is None:
+            cached = _gpu_profiles(scenario, gpu_component_id, memory_component_id)
+            if run_context is not None:
+                run_context.gpu_profile_pairs[key] = cached
+        return cached
 
     def typed_workload(m: int) -> Union[ElementwiseWorkload, ReductionWorkload, MemoryWorkload]:
         activation_bits = _activation_bits(layer)

@@ -444,6 +444,71 @@ def _idle_refresh(lane, arrival, g, t, rows, bf, addresses, pc, pc_seen,
 
 
 @njit(cache=True, nogil=True, fastmath=False)
+def _idle_refresh_commands(lane, arrival, g, t, rows, bf, addresses, pc, pc_seen,
+                           channel, resources, touched, counts):
+    """Keep each non-dyadic command/addition; publish closed-bank state once."""
+    ch, clock, interval, cycle = lane // 2, t[0], t[20], t[21]
+    due = channel[ch, 1]
+    if (not math.isfinite(clock) or clock / 2 <= 0 or due < 0 or cycle < 0
+            or interval < cycle + 2 * clock):
+        return False
+    half = clock / 2
+    # Exclude all clock-index exceptions before the first state mutation.
+    for value in (arrival, due, interval, cycle, channel[ch, 0]):
+        if not math.isfinite(value) or abs(value / half) >= 2. ** 49:
+            return False
+    cutoff = arrival - cycle - 2 * clock
+    if due + interval > cutoff or t[2] != (1. if g[7] else .5):
+        return False
+    row_id, column_id = ch, g[0] // 2 + ch
+    if not (resources[row_id, 0] <= due and resources[column_id, 0] <= due):
+        return False
+    for pseudo in range(2):
+        if not pc[ch * 2 + pseudo, 1] <= due:
+            return False
+    for bank in range(ch * 2 * g[1], (ch + 1) * 2 * g[1]):
+        if addresses[bank] >= 0 and (rows[bank] >= 0 or not bf[bank, 1] <= due):
+            return False
+    if channel[ch, 0] >= 0 and _after(channel[ch, 0], 2 * clock, half) > due:
+        return False
+    # Non-grid delays always take clock_after's ordinary IEEE addition.
+    # The scope proof above already excludes clock-index exceptions.
+    cycle_off_grid = cycle != round(cycle / half) * half
+    interval_off_grid = interval != round(interval / half) * half
+    blocked0 = blocked1 = 0.
+    while due <= cutoff:
+        for pseudo in range(2):
+            earliest = max(due, resources[column_id, 0]) if g[7] else due
+            start, _ = _command(ch, 0, earliest, t[2], True, g, t,
+                                resources, touched, counts)
+            if g[7]:
+                _command(ch, 1, start, 1., True, g, t, resources, touched, counts)
+            blocked = start + cycle if cycle_off_grid else _after(start, cycle, half)
+            if pseudo == 0:
+                blocked0 = blocked
+            else:
+                blocked1 = blocked
+            counts[4] += 1
+        next_due = due + interval if interval_off_grid else _after(due, interval, half)
+        channel[ch, 1] = next_due
+        # Preserve this successful epoch, then let the full controller handle
+        # overlap. Returning False here would replay commands and busy time.
+        if (blocked0 > next_due or blocked1 > next_due
+                or resources[row_id, 0] > next_due or resources[column_id, 0] > next_due):
+            break
+        due = next_due
+    for pseudo in range(2):
+        target = ch * 2 + pseudo
+        pc_seen[target] = True
+        pc[target, 1] = blocked0 if pseudo == 0 else blocked1
+        for bank in range(target * g[1], (target + 1) * g[1]):
+            if addresses[bank] >= 0:
+                bf[bank, 1] = pc[target, 1]
+                bf[bank, 5] = pc[target, 1]
+    return True
+
+
+@njit(cache=True, nogil=True, fastmath=False)
 def _refresh_until(lane, horizon, arrival, g, t, rows, bf, addresses, pc, pc_seen,
                    channel, channel_int, resources, touched, counts):
     if not g[8]:
@@ -453,8 +518,10 @@ def _refresh_until(lane, horizon, arrival, g, t, rows, bf, addresses, pc, pc_see
         channel[ch, 1] = max(t[20], math.floor(arrival / t[20]) * t[20])
     refreshed = False
     while channel[ch, 1] <= horizon:
-        if _idle_refresh(lane, arrival, g, t, rows, bf, addresses, pc, pc_seen,
-                         channel, resources, touched, counts):
+        if (_idle_refresh(lane, arrival, g, t, rows, bf, addresses, pc, pc_seen,
+                          channel, resources, touched, counts)
+                or _idle_refresh_commands(lane, arrival, g, t, rows, bf, addresses, pc, pc_seen,
+                                          channel, resources, touched, counts)):
             refreshed = True
             continue
         due = channel[ch, 1]
@@ -593,19 +660,27 @@ def _lookahead_depth(g, t):
 
 
 @njit(cache=True, nogil=True, fastmath=False, inline="always")
-def _channel_index(cursor, lane_span, period):
+def _channel_index(cursor, lane_span, period, span_shift, period_shift):
     """Position of a cursor among its physical channel's bursts."""
+    if span_shift >= 0:
+        # P is a multiple of 2L. Arithmetic shifts and low-bit masks are
+        # floor division/modulo by positive powers of two, including negatives.
+        return ((cursor >> period_shift) << (span_shift + 1)) + (cursor & (2 * lane_span - 1))
     return (cursor // period) * 2 * lane_span + (cursor % period) % (2 * lane_span)
 
 
 @njit(cache=True, nogil=True, fastmath=False, inline="always")
-def _channel_cursor(index, ch, lane_span, period):
+def _channel_cursor(index, ch, lane_span, period, span_shift, period_shift):
+    if span_shift >= 0:
+        return (((index >> (span_shift + 1)) << period_shift)
+                + (ch << (span_shift + 1)) + (index & (2 * lane_span - 1)))
     return (index // (2 * lane_span)) * period + ch * 2 * lane_span + index % (2 * lane_span)
 
 
 @njit(cache=True, nogil=True, fastmath=False)
 def _precharge_ahead(target, served, ch, arrival, g, t, binary_mapping, lane_shift, bank_shift,
-                     interleave_shift, row_shift, lane_span, period, rows, bf, addresses, pc,
+                     interleave_shift, row_shift, lane_span, period, span_shift, period_shift,
+                     rows, bf, addresses, pc,
                      pc_seen, channel, channel_int, resources, touched, counts, active_deadlines,
                      ring_tags, ring_banks, stale):
     """_Controller.precharge_ahead; returns the precharged bank or -1.
@@ -614,7 +689,7 @@ def _precharge_ahead(target, served, ch, arrival, g, t, binary_mapping, lane_shi
     The bank is a pure function of the position, so a matching tag is exact.
     """
     ring = ring_tags.shape[1]
-    lane, bank_within, row, _ = _burst_location(_channel_cursor(target, ch, lane_span, period), g,
+    lane, bank_within, row, _ = _burst_location(_channel_cursor(target, ch, lane_span, period, span_shift, period_shift), g,
         binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift)
     bank = lane * g[1] + bank_within
     slot = target % ring
@@ -624,7 +699,7 @@ def _precharge_ahead(target, served, ch, arrival, g, t, binary_mapping, lane_shi
     for index in range(served, target):
         slot = index % ring
         if ring_tags[ch, slot] != index:
-            other_lane, other_bank, _, _ = _burst_location(_channel_cursor(index, ch, lane_span, period), g,
+            other_lane, other_bank, _, _ = _burst_location(_channel_cursor(index, ch, lane_span, period, span_shift, period_shift), g,
                 binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift)
             ring_tags[ch, slot], ring_banks[ch, slot] = index, other_lane * g[1] + other_bank
         if ring_banks[ch, slot] == bank:
@@ -892,6 +967,16 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
     group_shift, history_shift = _binary_shift(g[4]), _binary_shift(g[10])
     binary_mapping = min(lane_shift, bank_shift, interleave_shift, row_shift,
                          group_shift, history_shift) >= 0
+    # Prove positive, representable P and 2L once. Do not reinterpret overflowed
+    # or non-binary geometry in the per-burst cursor helpers. Row-local uses
+    # an entire row/bank lane stripe; ordinary mapping uses its interleave.
+    span_shift = row_shift + bank_shift if g[11] else interleave_shift
+    period_shift = span_shift + lane_shift
+    if (not binary_mapping or not 0 <= span_shift < 62
+            or not span_shift + 1 <= period_shift < 63):
+        span_shift, period_shift = -1, -1
+    elif lane_span != 1 << span_shift or period != 1 << period_shift:
+        span_shift, period_shift = -1, -1
     while stripe_start < stop:
         if fold_mode:
             cycle_span = g[0] * g[1] * g[2]
@@ -939,13 +1024,13 @@ def _run_hbm_channel_range(first, stop, arrival, read, g, t, rows, bf, addresses
                 group, history_entry = bank_within // g[4], bank_within // g[10]
             bank = lane * g[1] + bank_within
             ch = lane // 2
-            served = _channel_index(cursor, lane_span, period)
+            served = _channel_index(cursor, lane_span, period, span_shift, period_shift)
             if look[ch] < 0:
                 look[ch] = served
             while (look[ch] <= served + depth
-                   and _channel_cursor(look[ch], ch, lane_span, period) < stop):
+                   and _channel_cursor(look[ch], ch, lane_span, period, span_shift, period_shift) < stop):
                 early = _precharge_ahead(look[ch], served, ch, arrival, g, t, binary_mapping,
-                    lane_shift, bank_shift, interleave_shift, row_shift, lane_span, period,
+                    lane_shift, bank_shift, interleave_shift, row_shift, lane_span, period, span_shift, period_shift,
                     rows, bf, addresses, pc, pc_seen, channel, channel_int, resources, touched,
                     counts, active_deadlines, ring_tags, ring_banks, stale)
                 if early >= 0:

@@ -42,6 +42,7 @@ class TokenFrame:
     completed: list
     owned_physical_frontiers: object
     frontiers_initialized: object
+    shared_physical_transaction: object
 
     def __init__(self, kernel, chunk, layout, phases, index_physical_allocations,
                  prepared_seen=None, owned_physical_frontiers=False):
@@ -62,6 +63,11 @@ class TokenFrame:
         self.completed = [False] * len(chunk)
         self.owned_physical_frontiers = owned_physical_frontiers
         self.frontiers_initialized = False
+        # A closed native cohort is already protected by the serving-level
+        # rollback snapshot.  The drain may install one physical transaction
+        # for the whole graph and expose a lightweight per-task view below;
+        # this removes one allocator/timeline snapshot and commit per task.
+        self.shared_physical_transaction = None
 
         # Submission remains atomic: validation has finished before any live
         # state changes. An open dynamic submission owns a different lifetime.
@@ -265,33 +271,59 @@ def drain_token_program(kernel, chunk, layout, *, validate_tasks=True,
             _validate_task_time(task)
             _validate_aggregate_metadata(task)
         phases.append(_validated_phase_sequence(task))
-    frame = TokenFrame(kernel, chunk, layout, tuple(phases), index_physical_allocations,
-                       prepared_seen, owned_physical_frontiers)
-    kernel._token_frame = frame
-    if not frame.remaining:
-        frame.publish_scheduler()
-        kernel._token_frame = None
-    if on_submitted is not None:
-        on_submitted()
-    events = []
-    while frame.remaining:
-        if before_step is not None:
-            try:
-                before_step(kernel)
-            finally:
-                frame.invalidate_frontiers()
-        # A callback may open the graph through the incremental public API.
-        event = frame.step() if kernel._token_frame is frame else kernel.step()
-        if event is None:
-            kernel.assert_drained()
-            raise ValueError("schedule contains a dependency cycle")
-        if kernel._token_frame is not frame and frame.remaining:
-            frame.remaining -= 1
-        if event_observer is None:
-            events.append(event)
-        else:
-            event_observer(event)
-    return tuple(events)
+    shared_snapshot = None
+    # External/prefetch callbacks and TP mirroring can write the physical
+    # calendar between tasks, so retain their original per-task transactions.
+    # A closed physical graph without those writers can safely use one
+    # transaction because the serving cohort already has an outer rollback
+    # boundary.
+    if owned_physical_frontiers and before_step is None and getattr(kernel, "_native_tp_mirror", None) is None:
+        from .data_motion import is_physical_task, physical_task_transaction_owners
+        owners = set()
+        has_physical = False
+        for task in chunk:
+            if is_physical_task(task):
+                has_physical = True
+                owners.update(physical_task_transaction_owners(task))
+        if has_physical and owners:
+            shared_snapshot = kernel.physical_runtime.begin_transaction(
+                owners=owners, _owned_timeline=True)
+    try:
+        frame = TokenFrame(kernel, chunk, layout, tuple(phases), index_physical_allocations,
+                           prepared_seen, owned_physical_frontiers)
+        frame.shared_physical_transaction = shared_snapshot
+        kernel._token_frame = frame
+        if not frame.remaining:
+            frame.publish_scheduler()
+            kernel._token_frame = None
+        if on_submitted is not None:
+            on_submitted()
+        events = []
+        while frame.remaining:
+            if before_step is not None:
+                try:
+                    before_step(kernel)
+                finally:
+                    frame.invalidate_frontiers()
+            # A callback may open the graph through the incremental public API.
+            event = frame.step() if kernel._token_frame is frame else kernel.step()
+            if event is None:
+                kernel.assert_drained()
+                raise ValueError("schedule contains a dependency cycle")
+            if kernel._token_frame is not frame and frame.remaining:
+                frame.remaining -= 1
+            if event_observer is None:
+                events.append(event)
+            else:
+                event_observer(event)
+        if shared_snapshot is not None:
+            kernel.physical_runtime.commit_transaction(shared_snapshot)
+            shared_snapshot = None
+        return tuple(events)
+    except BaseException:
+        if shared_snapshot is not None:
+            kernel.physical_runtime.restore(shared_snapshot)
+        raise
 
 
 def resolve_task_execution(self, task, start_ns, sorted_demands=None):
@@ -307,14 +339,33 @@ def resolve_task_execution(self, task, start_ns, sorted_demands=None):
     l2_transaction = None
     l2_owner = None
     physical_snapshot = None
+    shared_physical = False
     if is_physical:
         try:
             from .data_motion import physical_task_transaction_owners
             frame = getattr(self, "_token_frame", None)
             owned_physical = frame is not None and frame.owned_physical_frontiers
-            physical_snapshot = self.physical_runtime.begin_transaction(
-                owners=physical_task_transaction_owners(task) if owned_physical else None,
-                _owned_timeline=owned_physical)
+            shared = (getattr(frame, "shared_physical_transaction", None)
+                      if owned_physical else None)
+            if shared is not None:
+                from .data_motion import physical_task_demands
+                resource_ids = {demand.resource_id for demand in physical_task_demands(task)}
+                resource_ids.update(task.metadata.get("physical_resource_last_intervals", {}))
+                physical_snapshot = {
+                    "_owned_native_writers": shared.get("_owned_native_writers", False),
+                    "timeline": {
+                        "_owned_transaction": shared["timeline"].get("_owned_transaction"),
+                        "lane_available": {
+                            resource_id: tuple(self.physical_runtime.timeline.lane_available.get(resource_id, ()))
+                            for resource_id in resource_ids
+                        },
+                    },
+                }
+                shared_physical = True
+            else:
+                physical_snapshot = self.physical_runtime.begin_transaction(
+                    owners=physical_task_transaction_owners(task) if owned_physical else None,
+                    _owned_timeline=owned_physical)
             # Local import avoids making the planner/data-motion module
             # part of the kernel import cycle; it also keeps the physical
             # adapter optional for analytical-only users.
@@ -339,10 +390,31 @@ def resolve_task_execution(self, task, start_ns, sorted_demands=None):
                 backing_offset_ns = task.metadata.get("l2_execution", {}).get(
                     "backing_arrival_offset_ns", 0.0
                 )
-                task = resolve_physical_task(
-                    task, self.physical_runtime, start_ns + backing_offset_ns,
-                    _caller_managed_transaction=True,
-                )
+                from . import data_motion
+                timeline = self.physical_runtime.timeline
+                previous_orders = timeline._owned_metric_orders
+                # This scope ends before imports, observers, TP mirroring or
+                # physical rollback can edit public dictionaries directly.
+                timeline._owned_metric_orders = None
+                accesses = task.metadata.get("memory_accesses") if type(task.metadata) is dict else None
+                if (owned_physical and type(accesses) in (tuple, list) and len(accesses) > 1
+                        and physical_snapshot.get("_owned_native_writers", False)
+                        and physical_snapshot["timeline"].get("_owned_transaction") is not None
+                        and all(getattr(data_motion, name) is original
+                                for name, original in data_motion._NATIVE_METRIC_DISPATCH)
+                        and timeline._can_own_metric_orders()):
+                    timeline._owned_metric_orders = {}
+                try:
+                    task = resolve_physical_task(
+                        task, self.physical_runtime, start_ns + backing_offset_ns,
+                        _caller_managed_transaction=True,
+                    )
+                finally:
+                    # A nested dispatch may have changed the outer task's
+                    # roots/order; resume it with no retained ordinals.
+                    if previous_orders is not None:
+                        previous_orders.clear()
+                    timeline._owned_metric_orders = previous_orders
                 contract = task.metadata.get("stateful_l2")
                 if contract is not None:
                     completion_span = float(task.metadata["physical_completion_ns"]) - float(start_ns)
@@ -376,14 +448,14 @@ def resolve_task_execution(self, task, start_ns, sorted_demands=None):
                     self._l2_states[owner] = previous
                 if l2_transaction is not None:
                     previous[1].rollback_transaction(l2_transaction)
-            if physical_snapshot is not None:
+            if physical_snapshot is not None and not shared_physical:
                 self.physical_runtime.restore(physical_snapshot)
             raise
         else:
             if l2_transaction is not None:
                 cache = self._l2_states[l2_owner][1]
                 cache.commit_transaction(l2_transaction)
-            if physical_snapshot is not None:
+            if physical_snapshot is not None and not shared_physical:
                 self.physical_runtime.commit_transaction(physical_snapshot)
         demands = tuple(sorted(task.demands, key=lambda d: d.resource_id))
         # Even a zero-duration reservation can advance a resource's

@@ -36,7 +36,12 @@ def same(contexts):
 
 def submit(contexts, request):
     actual, expected = [context.runtimes["flash"].core.submit(request) for context in contexts]
-    assert bits(actual) == bits(expected)
+    # The compiled page machine marks its own requests; nothing else differs.
+    def unmarked(result):
+        counters = dict(result.counters)
+        counters.pop("native_fullpage_pages", None)
+        return bits(replace(result, counters=counters))
+    assert unmarked(actual) == unmarked(expected)
     same(contexts)
     return actual
 
@@ -58,8 +63,8 @@ def test_bulk_and_original_single_page_machine_retain_private_arrays(independent
             ("read", 256 * PAGE, 384 * PAGE))):
         submit(contexts, AccessRequest(str(index), operation, address, count, 10000.125 + index))
         assert core._nand_numeric_state is packed
-    # A short unaligned span uses the unchanged detailed path against only
-    # its addressed banks, keeping the remaining controller private.
+    # A short unaligned span runs the compiled page machine (read-modify-write
+    # on both partial pages) against the resident arrays.
     submit(contexts, AccessRequest("boundary", "write", PAGE - 7, 16, 20000.25))
     assert core._nand_numeric_state is packed
     submit(contexts, AccessRequest("bulk-again", "read", 0, 384 * PAGE, 30000.25))

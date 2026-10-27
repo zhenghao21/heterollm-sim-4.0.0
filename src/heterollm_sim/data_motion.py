@@ -22,6 +22,7 @@ from .ir import ComponentSpec, LinkSpec, OFFLOAD_STORAGE_COMPONENT_KINDS, defaul
 from .memory_service import (realtime_memory_metrics, DRAM_CONTROL_COUNT_FIELDS,
                              DRAM_CONTROL_TIME_FIELDS, DRAM_OPTIONAL_COUNTER_FIELDS)
 from .nand_core import _copy_nand_read_cache
+from . import _resource_ledger
 
 
 # Ordered request batching retains individual DRAM admission, accesses
@@ -66,18 +67,6 @@ _PHYSICAL_PEAK_COUNTERS = frozenset((
     "write_buffer_peak_bytes", "host_outstanding_at_admission_peak",
     "host_read_outstanding_at_admission_peak", "host_write_outstanding_at_admission_peak",
 ))
-
-
-def _execution_config_cache_key(value):
-    """Include value types so e.g. True cannot reuse a validated integer 1."""
-    if type(value) in {str, int, float, bool, type(None)} or isinstance(value, Enum):
-        return type(value), value
-    if type(value) is dict:
-        return dict, tuple((_execution_config_cache_key(key), _execution_config_cache_key(item))
-                           for key, item in value.items())
-    if type(value) in {list, tuple}:
-        return type(value), tuple(_execution_config_cache_key(item) for item in value)
-    raise TypeError("custom configuration values are parsed without caching")
 
 
 class _OverlapCompletionIndex:
@@ -253,27 +242,22 @@ class PhysicalRuntimeContext:
 
     def parse_config(self, raw: Any) -> Any:
         """Reuse complete serialized contracts while detecting mutable edits."""
-        from .physical_contract import parse_execution_physical_config
+        from .physical_contract import parse_execution_physical_config, _physical_content_key
         if type(raw) is not dict:
             return parse_execution_physical_config(raw)
-        try:
-            key = _execution_config_cache_key(raw)
-        except (TypeError, RecursionError):
+        key = _physical_content_key(raw)
+        if key is None:
             return parse_execution_physical_config(raw)
         cached = self._execution_config_cache.get(key)
         if cached is not None:
             parsed, parsed_key = cached
-            try:
-                if _execution_config_cache_key(vars(parsed)) == parsed_key:
-                    return parsed
-            except (TypeError, RecursionError):
-                pass
+            if _physical_content_key(vars(parsed)) == parsed_key:
+                return parsed
         # A cached result must not share caller-owned mutable metadata. On a
         # later hit its saved value key detects edits to the returned object.
         parsed = copy.deepcopy(parse_execution_physical_config(raw))
-        try:
-            parsed_key = _execution_config_cache_key(vars(parsed))
-        except (TypeError, RecursionError):
+        parsed_key = _physical_content_key(vars(parsed))
+        if parsed_key is None:
             return parsed
         if len(self._execution_config_cache) >= 16:
             self._execution_config_cache.clear()
@@ -307,7 +291,9 @@ class PhysicalRuntimeContext:
         if cached is not None and config == cached[0]:
             return cached[1]
         authored_config = copy.deepcopy(config)
-        metadata = dict(config.metadata)
+        # This owner cache may receive a borrowed validated contract. Its
+        # bound config (also used by previews) must own nested metadata too.
+        metadata = copy.deepcopy(dict(config.metadata))
         if isinstance(config, DramConfig):
             metadata.setdefault("bank_resource_prefix", f"{owner}:dram:bank")
             metadata.setdefault("command_resource_prefix", f"{owner}:dram:command")
@@ -405,7 +391,8 @@ class PhysicalRuntimeContext:
 
     def snapshot(self, *, transactional: bool = False,
                  owners: Optional[Iterable[str]] = None,
-                 _owned_timeline: bool = False) -> dict[str, Any]:
+                 _owned_timeline: bool = False,
+                 _immutable_timeline: bool = False) -> dict[str, Any]:
         """Capture a transaction-local rollback point without copying history.
 
         Physical tasks are submitted one at a time.  The old implementation
@@ -516,8 +503,8 @@ class PhysicalRuntimeContext:
                 "hbm_transaction": hbm_transaction,
                 "nand_transaction": nand_transaction,
             }
-        # A transaction copies an allocation map only if it mutates it; a
-        # public snapshot may outlive transactions and keeps its own copy.
+        # Transactions journal changed allocation keys; a public snapshot
+        # may outlive them and keeps its independent full allocation map.
         allocator_state = {
             owner: (allocator.begin_transaction() if transactional else dict(allocator._allocations))
             for owner, allocator in self.allocators.items()
@@ -561,7 +548,10 @@ class PhysicalRuntimeContext:
                 for resource, directions in timeline.lane_directions.items()
             },
         })
-        return {
+        if _immutable_timeline and timeline_token is None:
+            from ._timeline_history import _freeze_timeline_columns
+            _freeze_timeline_columns(timeline_state)
+        snapshot = {
             "runtimes": dict(self.runtimes),
             "runtime_state": runtime_state,
             "allocators": dict(self.allocators),
@@ -574,6 +564,10 @@ class PhysicalRuntimeContext:
             "committed_owners": set(self._committed_owners),
             "hbf_staging": snapshot_staging(self.hbf_staging, transactional=transactional),
         }
+        if _immutable_timeline and not transactional:
+            from ._timeline_history import _freeze_allocation_state
+            _freeze_allocation_state(snapshot["allocator_state"], snapshot["allocators"])
+        return snapshot
 
     def _can_own_timeline(self, owners, *, _hooks_checked=False, _native_footprints=None) -> bool:
         """Only closed native writers use sparse timeline undo."""
@@ -675,12 +669,12 @@ class PhysicalRuntimeContext:
             if core_type in (NandCore, SramCore):
                 try:
                     if core_type is NandCore:
-                        from ._nand_acceleration import owned_resource_footprint
+                        from ._nand_acceleration import owned_resource_footprint as native_nand_footprint
                         if any(type(core.config.metadata.get(name, "")) is not str for name in (
                                 "array_resource_prefix", "parallel_resource_prefix",
                                 "channel_resource_prefix", "host_resource_id")):
                             return False
-                        resources = owned_resource_footprint(core)
+                        resources = native_nand_footprint(core)
                     else:
                         prefix = core.config.metadata.get("port_resource_prefix", "sram:port")
                         if type(prefix) is not str or core.config.ports > 65536:
@@ -753,6 +747,8 @@ class PhysicalRuntimeContext:
             active.core.timeline = self.timeline
         for owner, allocations in snapshot["allocator_state"].items():
             allocator = self.allocators[owner]
+            if type(allocations) is _ImmutableAllocationColumn:
+                allocations = allocations._plain()
             if type(allocations) is dict:
                 allocator._restore_allocations(allocations)
             else:
@@ -789,6 +785,10 @@ class PhysicalRuntimeContext:
         self.hbf_staging = restore(snapshot["hbf_staging"])
 
 
+_NATIVE_TIMELINE_HISTORY_SNAPSHOT = PhysicalRuntimeContext.snapshot
+from ._timeline_history import _ImmutableAllocationColumn
+
+
 def _physical_runtime(
     config: Any,
     owner: str,
@@ -822,6 +822,10 @@ def _owner_physical_config(metadata: Mapping[str, Any], owner: str, primary: Any
     return runtime.parse_config(raw) if runtime is not None else parse_execution_physical_config(raw)
 
 
+_OBSOLETE_ACCESS_FIELDS = frozenset({"generation", "size_bytes", "offset", "tensor_id", "buffer_size_bytes", "physical_resource_id"})
+_OBSOLETE_ALLOCATION_FIELDS = frozenset({"allocation_generation", "buffer_size_bytes", "allocation_size_bytes", "base_address"})
+
+
 def _memory_accesses(metadata):
     if "memory_access" in metadata:
         raise ValueError("memory_access is no longer supported; use a memory_accesses sequence")
@@ -829,10 +833,10 @@ def _memory_accesses(metadata):
     if accesses is not None and not isinstance(accesses, (tuple, list)):
         raise ValueError("memory_accesses must be a sequence of access mappings")
     for access in accesses or ():
-        if not isinstance(access, Mapping):
+        if not isinstance(access, dict) and not isinstance(access, Mapping):
             raise ValueError("physical memory_accesses entries must be mappings")
-        obsolete = {"generation", "size_bytes", "offset", "tensor_id", "buffer_size_bytes", "physical_resource_id"}.intersection(access)
-        if obsolete:
+        if not _OBSOLETE_ACCESS_FIELDS.isdisjoint(access):
+            obsolete = _OBSOLETE_ACCESS_FIELDS.intersection(access)
             raise ValueError("memory_accesses uses byte_count, offset_bytes, buffer_id, allocation_generation and allocation_size_bytes; unsupported fields: " + ", ".join(sorted(obsolete)))
     return accesses
 
@@ -842,10 +846,10 @@ def _physical_allocations(metadata):
     if not isinstance(declarations, (tuple, list)):
         raise ValueError("physical_allocations must be a sequence")
     for declaration in declarations:
-        if not isinstance(declaration, Mapping):
+        if not isinstance(declaration, dict) and not isinstance(declaration, Mapping):
             raise ValueError("physical allocation entries must be mappings")
-        obsolete = {"allocation_generation", "buffer_size_bytes", "allocation_size_bytes", "base_address"}.intersection(declaration)
-        if obsolete:
+        if not _OBSOLETE_ALLOCATION_FIELDS.isdisjoint(declaration):
+            obsolete = _OBSOLETE_ALLOCATION_FIELDS.intersection(declaration)
             raise ValueError("physical_allocations uses size_bytes, generation and address; unsupported fields: " + ", ".join(sorted(obsolete)))
     return declarations
 
@@ -1006,6 +1010,8 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
     )
     # One parsed geometry per owner for this unchanged task metadata.
     owner_configs = {}
+    bound_owners = set()
+    external_allocations = []
     while pending:
         deferred = []
         progress = 0
@@ -1035,6 +1041,7 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
             try:
                 _register_physical_allocation(
                     declaration, metadata, runtime, owner_configs[owner],
+                    bound_owners, external_allocations,
                 )
                 progress += 1
             except ValueError:
@@ -1046,7 +1053,8 @@ def register_physical_allocations(task: TaskSpec, runtime: PhysicalRuntimeContex
         pending = deferred
 
 
-def _register_physical_allocation(declaration, metadata, runtime, raw_config):
+def _register_physical_allocation(declaration, metadata, runtime, raw_config,
+                                  bound_owners, external_allocations):
     """Register one declaration after its optional alias target exists."""
     if not isinstance(declaration, Mapping):
         raise ValueError("physical allocation entries must be mappings")
@@ -1059,14 +1067,19 @@ def _register_physical_allocation(declaration, metadata, runtime, raw_config):
     size_bytes = declaration.get("size_bytes")
     if isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes <= 0:
         raise ValueError("physical allocation requires positive size_bytes")
-    runtime.runtime(raw_config, owner)
+    # Geometry is unchanged within this registration call; validate/bind it
+    # once per owner, after the same declaration field checks as before.
+    if owner not in bound_owners:
+        runtime.runtime(raw_config, owner)
+        bound_owners.add(owner)
     allocator = runtime.allocators.get(owner)
     if allocator is None:
         raise ValueError("physical owner has no address allocator: {}".format(owner))
     generation = _descriptor_non_negative_int(
         declaration.get("generation", 0), "generation")
-    external = (owner, str(buffer_id), generation) in {
-        tuple(key) for key in metadata.get("physical_external_allocations", ())}
+    if not external_allocations:
+        external_allocations.append({tuple(key) for key in metadata.get("physical_external_allocations", ())})
+    external = (owner, str(buffer_id), generation) in external_allocations[0]
     allocation_arena = declaration.get("allocation_arena")
     if external:
         if allocation_arena not in (None, "resident"):
@@ -1113,10 +1126,7 @@ def resolve_physical_task(
 def _merge_latest_resource_intervals(target, incoming):
     # Scheduled results retain input order, which need not be execution order.
     # Select by interval time so a prior row hit cannot replace the final use.
-    for resource_id, interval in incoming.items():
-        previous = target.get(resource_id)
-        if previous is None or (interval[1], interval[0]) > (previous[1], previous[0]):
-            target[resource_id] = interval
+    _resource_ledger.merge_latest_intervals(target, incoming)
 
 
 def _resolve_physical_task(
@@ -1149,7 +1159,13 @@ def prepare_physical_task(
     task transaction. The returned instructions are valid for this dispatch,
     and must not be cached across allocation generations or external edits.
     """
-    metadata = dict(task.metadata)
+    # Keep the authored mapping borrowed while validating the descriptor.  The
+    # old path copied the complete (often very large) task metadata before any
+    # work, then copied it again when publishing the resolved physical result.
+    # Physical resolution only appends result fields at the end, so deferring
+    # the writable copy preserves the same isolation while removing one full
+    # metadata clone per native task.
+    metadata = task.metadata
     raw_config = metadata.get("physical_memory_config")
     accesses = _memory_accesses(metadata)
     if raw_config is None or not isinstance(accesses, (tuple, list)) or not accesses:
@@ -1243,7 +1259,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     The caller must retain the transaction and HBF task scope around both
     preparation and execution, as ``resolve_physical_task`` does.
     """
-    from .memory_types import AccessRequest, DramConfig, Operation
+    from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
     from ._physical_task import PhysicalTaskLedger
 
     metadata, owners = prepared.metadata, prepared.owners
@@ -1282,6 +1298,13 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     physical_results, staging_stats = ledger.records, ledger.staging_stats
     staging_sessions = {}
     resolved_accesses = []
+    task_resource_sink = (({}, {}, {})
+        if type(owners) is set and len(owners) > 1
+        and type(validated) in (list, tuple)
+        and any(type(item) is tuple and len(item) == 6 and type(item[5]) is NandConfig
+                for item in validated)
+        and _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns) else None)
+    owner_resource_sinks = {}
     resource_accumulator = None
     if (len(owners) == 1 and not staging_bindings and not runtime.capture_details
             and all(isinstance(item[5], DramConfig)
@@ -1330,6 +1353,15 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
                         or next_op not in (Operation.READ, Operation.WRITE)):
                     break
                 stop += 1
+        elif (not runtime.capture_details and isinstance(active.core.config, NandConfig)
+                and operation is Operation.READ):
+            # Read/read spans have no intra-group completion dependencies.
+            # Keep owner order and let NAND retain admission for each access.
+            while stop < min(len(validated), index + 1024):
+                _a, next_op, _addr, _count, next_owner, next_config = validated[stop]
+                if next_owner != owner or next_config != access_config or next_op is not Operation.READ:
+                    break
+                stop += 1
         elif (_USE_COMPILED_DRAM_BATCH and not runtime.capture_details
                 and isinstance(active.core.config, DramConfig)
                 and operation in (Operation.READ, Operation.WRITE)):
@@ -1355,7 +1387,19 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
                 prior = all_completion[owner] if op is Operation.WRITE else write_completion[owner]
                 access_arrival = max(access_arrival, prior.query(addr, count))
             requests.append(AccessRequest(f"{task.request_id or task.task_id}:{position}", op, addr, count, access_arrival))
-        if resource_accumulator is not None:
+        owner_resource_sink = None
+        if task_resource_sink is not None:
+            owner_maps = owner_resource_sinks.get(owner)
+            if owner_maps is None:
+                owner_maps = owner_resource_sinks[owner] = ({}, {}, {})
+            owner_resource_sink = task_resource_sink + owner_maps
+        if owner_resource_sink is not None and isinstance(active.core.config, NandConfig):
+            if len(requests) >= 2:
+                group_results = active.core.submit_many(requests, _resource_sink=owner_resource_sink)
+            else:
+                group_results = tuple(active.core.submit(request, _resource_sink=owner_resource_sink)
+                                      for request in requests)
+        elif resource_accumulator is not None:
             if scheduled_batch or len(requests) >= 2:
                 group_results = active.core.submit_many(
                     requests, _resource_accumulator=resource_accumulator)
@@ -1371,6 +1415,10 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             active.clock_ns = max(active.clock_ns, result.completion_ns)
             ledger.accept(result.operation, result.completion_ns)
             physical_results.append((op, owner, access_config, result))
+            if owner_resource_sink is not None:
+                # Native NAND already consumed its maps in submit(). Other
+                # Core results retain their original input order and maps.
+                _resource_ledger.consume_task_resource_sink(owner_resource_sink, result.counters)
             if track_overlaps:
                 all_completion[owner].update(addr, count, result.completion_ns)
                 if op is Operation.WRITE:
@@ -1383,8 +1431,8 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     # preserves independent public ownership without repeating every lookup.
     sole_physical_owner = physical_results[0][1]
     single_physical_owner = all(item[1] == sole_physical_owner for item in physical_results)
-    resource_busy, resource_bytes, resource_last = {}, {}, {}
-    if not single_physical_owner:
+    resource_busy, resource_bytes, resource_last = ({}, {}, {}) if task_resource_sink is None else task_resource_sink
+    if task_resource_sink is None and not single_physical_owner:
         first_counters = physical_results[0][3].counters
         resource_busy = {rid: 0.0 + value for rid, value in first_counters.get("resource_busy_ns", {}).items()}
         resource_bytes = {rid: 0 + value for rid, value in first_counters.get("resource_bytes", {}).items()}
@@ -1403,6 +1451,13 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     execution_by_owner = reduce_physical_results(
         physical_results, arrival_ns, DRAM_OPTIONAL_COUNTER_FIELDS,
         _PHYSICAL_ADDITIVE_COUNTERS, _PHYSICAL_PEAK_COUNTERS, Operation.READ)
+    if task_resource_sink is not None:
+        for owner, (busy, byte_counts, last) in owner_resource_sinks.items():
+            owner_bill = execution_by_owner[owner]
+            owner_bill["resource_busy_ns"] = busy
+            owner_bill["resource_bytes"] = byte_counts
+            owner_bill["resource_last_intervals"] = last
+            owner_bill["resource_owners"] = dict.fromkeys(busy, owner)
     if resource_accumulator is not None:
         owner_bill = execution_by_owner[sole_physical_owner]
         owner_bill["resource_busy_ns"] = resource_accumulator.resource_busy_ns
@@ -1420,6 +1475,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
         resource_busy, resource_bytes, runtime._physical_demand_cache, ResourceDemand)
     if not demands and not ledger.all_erases:
         raise ValueError("physical memory core returned no resource timing for a positive-byte access")
+    metadata = dict(metadata)
     metadata.update({
         "memory_accesses": tuple(resolved_accesses),
         "physical_execution_by_owner": execution_by_owner,
@@ -1445,6 +1501,237 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     metadata["physical_nonmemory_demand_ids"] = tuple(d.resource_id for d in preserved)
     resolved = replace(task, demands=preserved + demands, metadata=metadata)
     return _recost_physical_kernel_envelope(resolved)
+
+
+# The metric-order scope must not cover an authored dispatcher callback.
+_NATIVE_METRIC_DISPATCH = tuple((name, globals()[name]) for name in (
+    "resolve_physical_task", "_resolve_physical_task", "_execute_physical_task",
+    "prepare_physical_task", "execute_prepared_physical_task",
+    "register_physical_allocations", "_register_physical_allocation"))
+
+
+# A task-local sink is available only inside the existing closed native task
+# scope. No sink is stored in a Core, runtime, checkpoint or public result.
+from . import memory_types as _sink_types_module
+from . import memory_transfer as _sink_timeline_module
+from . import physical_contract as _sink_contract_module
+from . import _physical_task as _sink_task_module
+from . import dram_core as _sink_dram_module
+from . import nand_core as _sink_nand_module
+from . import _compiled_hbm as _sink_hbm_module
+from . import _hbm_control as _sink_hbm_control_module
+from . import _hbm_numeric as _sink_hbm_numeric_module
+from . import _hbm_transaction as _sink_hbm_transaction_module
+from . import _nand_acceleration as _sink_nand_acceleration_module
+from . import _nand_pack as _sink_nand_pack_module
+import numpy as _sink_numpy
+
+_SINK_MODULE_CALLBACKS = tuple((module, name, value)
+    for module in (_resource_ledger, _sink_types_module, _sink_timeline_module,
+                   _sink_contract_module, _sink_task_module, _sink_dram_module,
+                   _sink_nand_module, _sink_hbm_module, _sink_hbm_control_module,
+                   _sink_hbm_numeric_module, _sink_hbm_transaction_module, _sink_nand_acceleration_module,
+                   _sink_nand_pack_module, copy, math)
+    for name, value in vars(module).items() if callable(value))
+_SINK_CLASSES = tuple((cls, tuple((name, value) for name, value in vars(cls).items()
+    if name != "__slotnames__")) for cls in (
+        TaskSpec, PhysicalRuntimeContext, _PhysicalRuntime, _sink_task_module.PreparedPhysicalTask,
+        _sink_task_module.PhysicalTaskLedger, _sink_timeline_module.ResourceTimeline,
+        _sink_types_module.AccessRequest, _sink_types_module.TransactionResult,
+        _sink_types_module.StageTiming, _sink_types_module.AddressMapping,
+        _sink_types_module.DramConfig, _sink_types_module.NandConfig,
+        _sink_types_module.Operation, _sink_types_module.MemoryKind,
+        _sink_hbm_transaction_module.HBMTransaction, _sink_hbm_transaction_module._NumericUndo,
+        _sink_hbm_module._HBMNumericState, _sink_dram_module._BankState,
+        _sink_nand_acceleration_module._DEFER_NUMERIC_TYPE,
+        _sink_dram_module.DramCore, _sink_nand_module.NandCore))
+_SINK_RUNTIME_METHODS = tuple((name, value) for name, value in vars(PhysicalRuntimeContext).items()
+                              if callable(value))
+_SINK_COPY_DISPATCH = copy._deepcopy_dispatch
+_SINK_COPY_HANDLERS = tuple(copy._deepcopy_dispatch.items())
+_SINK_MERGE = _merge_latest_resource_intervals
+_SINK_COUNTER_FIELDS = tuple((name, globals()[name]) for name in (
+    "_PHYSICAL_ADDITIVE_COUNTERS", "_PHYSICAL_PEAK_COUNTERS", "DRAM_OPTIONAL_COUNTER_FIELDS"))
+_SINK_COUNTER_FIELDS_NATIVE = all(type(value) in (frozenset, tuple)
+    and all(type(item) is str for item in value) for name, value in _SINK_COUNTER_FIELDS)
+_SINK_TIMELINE_METHOD_NAMES = tuple(name for name, value in vars(_sink_timeline_module.ResourceTimeline).items()
+                                   if callable(value))
+_SINK_HBM_TOKEN_METHOD_NAMES = tuple(name for name, value in vars(_sink_hbm_transaction_module.HBMTransaction).items()
+                                   if callable(value))
+_SINK_HBM_UNDO_METHOD_NAMES = tuple(name for name, value in vars(_sink_hbm_transaction_module._NumericUndo).items()
+                                  if callable(value))
+
+
+def _sink_plain_value(value, ancestors):
+    kind = type(value)
+    if value is None or kind in (str, int, bool):
+        return True
+    if kind is float:
+        return math.isfinite(value)
+    if kind not in (dict, tuple, list) or id(value) in ancestors:
+        return False
+    ancestors.add(id(value))
+    try:
+        if kind is dict:
+            return all(type(key) is str and _sink_plain_value(item, ancestors)
+                       for key, item in value.items())
+        return all(_sink_plain_value(item, ancestors) for item in value)
+    finally:
+        ancestors.remove(id(value))
+
+
+def _sink_plain_config(config):
+    if type(config) not in (_sink_types_module.DramConfig, _sink_types_module.NandConfig):
+        return False
+    try:
+        return (type(config.kind) is _sink_types_module.MemoryKind
+                and all(type(key) is str and (key == "kind" or _sink_plain_value(value, set()))
+                        for key, value in vars(config).items()))
+    except RecursionError:
+        return False
+
+
+def _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns):
+    if (type(task) is not TaskSpec or type(runtime) is not PhysicalRuntimeContext
+            or type(prepared) is not _sink_task_module.PreparedPhysicalTask
+            or type(ledger) is not _sink_task_module.PhysicalTaskLedger
+            or not _SINK_COUNTER_FIELDS_NATIVE
+            or any(globals().get(name) is not original for name, original in _SINK_COUNTER_FIELDS)
+            or any(vars(module).get(name) is not original
+                   for module, name, original in _SINK_MODULE_CALLBACKS)
+            or any(not _sink_nand_acceleration_module._footprint_namespace_matches(cls, values)
+                   for cls, values in _SINK_CLASSES)):
+        return False
+    if (type(task.task_id) is not str
+            or task.request_id is not None and type(task.request_id) is not str
+            or type(runtime.capture_details) is not bool or runtime.capture_details
+            or type(runtime.runtimes) is not dict or type(runtime._owner_config_cache) is not dict
+            or type(runtime.hbf_staging) is not dict or runtime.hbf_staging
+            or type(prepared.staging_bindings) is not dict or prepared.staging_bindings
+            or type(prepared.metadata) is not dict
+            or any(type(key) is not str for key in prepared.metadata)
+            or type(prepared.instructions) not in (list, tuple)
+            or type(arrival_ns) not in (int, float)
+            or type(runtime.timeline) is not _sink_timeline_module.ResourceTimeline
+            or type(runtime.timeline._owned_metric_orders) is not dict
+            or globals()["_merge_latest_resource_intervals"] is not _SINK_MERGE
+            or any(globals().get(name) is not original for name, original in _NATIVE_METRIC_DISPATCH)
+            or copy._deepcopy_dispatch is not _SINK_COPY_DISPATCH
+            or len(_SINK_COPY_DISPATCH) != len(_SINK_COPY_HANDLERS)
+            or any(_SINK_COPY_DISPATCH.get(kind) is not original for kind, original in _SINK_COPY_HANDLERS)
+            or any(getattr(getattr(runtime, name), "__func__", getattr(runtime, name)) is not original
+                   for name, original in _SINK_RUNTIME_METHODS)
+            or any(name in vars(runtime.timeline) for name in _SINK_TIMELINE_METHOD_NAMES)
+            or type(runtime.timeline._owned_transactions) is not list
+            or any(type(token) is not _sink_timeline_module._OWNED_TIMELINE_TOKEN_TYPE
+                   or type(token.accounting) is not bool
+                   for token in runtime.timeline._owned_transactions)
+            or not runtime.timeline._can_own_metric_orders()):
+        return False
+    # Prepared rows are already ordered. Prove their actual containers and
+    # enum/config types before reading a field or entering a global scan.
+    # NAND WRITE cannot use this sink and need not inspect 23k public rows.
+    checked_configs = set()
+    for instruction in prepared.instructions:
+        if type(instruction) is not tuple or len(instruction) != 6:
+            return False
+        access, operation, address, count, owner, config = instruction
+        if (type(access) is not dict or any(type(key) is not str for key in access)
+                or type(owner) is not str or type(address) is not int or type(count) is not int
+                or operation is not _sink_types_module.Operation.READ
+                and operation is not _sink_types_module.Operation.WRITE
+                or type(config) not in (_sink_types_module.DramConfig, _sink_types_module.NandConfig)):
+            return False
+        if type(config) is _sink_types_module.NandConfig and operation is not _sink_types_module.Operation.READ:
+            return False
+        if id(config) not in checked_configs:
+            if not _sink_plain_config(config):
+                return False
+            checked_configs.add(id(config))
+    timeline = runtime.timeline
+    if not _resource_ledger.can_sink_resource_columns(timeline, _sink_timeline_module._TIMELINE_MAPS):
+        return False
+    # The public reducers can read foreign busy/byte/last operands, so their
+    # complete proof above stays. Core calendars read only their native owner
+    # footprints. Revalidate those live values here, after preparation, rather
+    # than trusting the outer transaction's earlier ownership verdict.
+    by_owner = {}
+    footprint = []
+    has_nand = False
+    for instruction in prepared.instructions:
+        access, operation, address, count, owner, config = instruction
+        if owner in by_owner:
+            if (type(by_owner[owner]) is _sink_nand_module.NandCore
+                    and operation is not _sink_types_module.Operation.READ):
+                return False
+            continue
+        active = runtime.runtimes.get(owner)
+        cached = runtime._owner_config_cache.get(owner)
+        if type(active) is not _PhysicalRuntime:
+            return False
+        core = active.core
+        if (type(core) not in (_sink_nand_module.NandCore, _sink_dram_module.DramCore)
+                or not _sink_plain_config(core.config)
+                or type(cached) is not tuple or len(cached) != 2
+                or not all(_sink_plain_config(item) for item in cached)):
+            return False
+        if type(core) is _sink_nand_module.NandCore and operation is not _sink_types_module.Operation.READ:
+            return False
+        if type(core) is _sink_nand_module.NandCore:
+            if (type(core._nand_numeric_enabled) is not bool or not core._nand_numeric_enabled
+                    or not _sink_nand_acceleration_module._generic_resident_writers(core)
+                    or type(core._nand_numeric_state) is not _sink_nand_acceleration_module._DEFER_NUMERIC_TYPE
+                    or type(core._nand_numeric_state.arrays) is not tuple
+                    or not _sink_nand_acceleration_module._deferred_batch_qualified(core, (), _core_only=True)
+                    or any(type(array) is not _sink_numpy.ndarray or array.dtype.hasobject
+                           for array in core._nand_numeric_state.arrays)):
+                return False
+            resources = _sink_nand_acceleration_module.owned_resource_footprint(core)
+            has_nand = True
+        elif type(core) is _sink_dram_module.DramCore:
+            if (core.config.control_mode != "jedec_hbm" or core.config.scheduler != "fcfs"
+                    or type(core.capture_details) is not bool or core.capture_details
+                    or type(core._hbm_numeric_enabled) is not bool or not core._hbm_numeric_enabled
+                    or core._hbm_numeric_state is None
+                    or any(getattr(getattr(core, name), "__func__", getattr(core, name)) is not original
+                           for name, original in _sink_dram_module._OWNED_TIMELINE_DRAM_METHODS)
+                    or not _sink_hbm_module._has_native_timeline_hooks(core._hbm_numeric_state)
+                    or type(core._hbm_numeric_state.arrays) is not tuple
+                    or any(type(array) is not _sink_numpy.ndarray or array.dtype.hasobject
+                           for array in core._hbm_numeric_state.arrays)):
+                return False
+            if type(core._hbm_transactions) is not list:
+                return False
+            for token in core._hbm_transactions:
+                if (type(token) is not _sink_hbm_transaction_module.HBMTransaction
+                        or any(name in vars(token) for name in _SINK_HBM_TOKEN_METHOD_NAMES)):
+                    return False
+                undo = token.numeric
+                if (undo is not None and (type(undo) is not _sink_hbm_transaction_module._NumericUndo
+                        or any(name in vars(undo) for name in _SINK_HBM_UNDO_METHOD_NAMES))):
+                    return False
+            resources = core._hbm_numeric_state.ids
+            # A changed configuration rebuilds the resident pack; a relevant
+            # alias makes HBM use its scalar controller on canonical targets.
+            # Neither path is covered by this resident ids-only footprint.
+            if (type(resources) is not tuple or any(type(resource) is not str for resource in resources)
+                    or not _sink_plain_config(core._hbm_numeric_state._config)
+                    or core._hbm_numeric_state._config != core.config
+                    or not _sink_nand_pack_module.can_own_resource_aliases(timeline.resource_aliases)):
+                return False
+            try:
+                if any(timeline.canonical_resource_id(resource) != resource for resource in resources):
+                    return False
+            except ValueError:
+                return False
+        else:
+            return False
+        if type(resources) is not tuple or any(type(resource) is not str for resource in resources):
+            return False
+        footprint.extend(resources)
+        by_owner[owner] = core
+    return (has_nand and len(by_owner) > 1
+            and _sink_nand_pack_module.can_own_timeline(timeline, tuple(dict.fromkeys(footprint))))
 
 
 def _recost_physical_kernel_envelope(task: TaskSpec) -> TaskSpec:
@@ -1844,10 +2131,12 @@ class PhysicalService:
         summary_only: bool = False,
     ) -> Mapping[str, object]:
         kind = AccessKind(kind)
-        from .physical_contract import require_physical_memory_config
+        from .physical_contract import _borrow_physical_memory_config
         if self.component is None:
             raise ValueError("physical memory service requires an explicitly configured component; aggregate-cost fallback is disabled")
-        config = require_physical_memory_config(self.component)
+        # Pricing only reads this validated contract. PhysicalRuntimeContext
+        # already isolates owner configs before creating a mutable live core.
+        config = _borrow_physical_memory_config(self.component)
         _non_negative_int(byte_count, "byte_count")
         if kind is AccessKind.COPY:
             raise ValueError("COPY must be expanded before billing")

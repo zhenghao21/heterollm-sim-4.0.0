@@ -84,3 +84,38 @@ def test_pipeline_targets_select_the_first_native_rank_of_the_actual_stage(tp):
     assert all(target == f"gpu{tp}" for name, target in targets.items() if name.startswith("dense1."))
     decision = plan_runtime_placement(scenario)
     assert decision.fully_placed, [(item.item_id, item.reason) for item in decision.unplaced]
+
+
+@pytest.mark.parametrize("model,hardware,workload,tp,pp,ep,expected", [
+    ("llama3_405b", "HBM4", "SHORT", 8, 1, 1, "all"),
+    ("llama4_maverick", "HBM4", "SHORT", 8, 1, 1, "quiet"),
+    # Only these two added Maverick layouts select all.
+    ("llama4_maverick", "HBM4", "SHORT", 2, 1, 4, "all"),
+    ("llama4_maverick", "HBM4", "MID", 4, 1, 2, "all"),
+    ("llama4_maverick", "HBM4", "SHORT", 4, 1, 2, "quiet"),
+    ("llama4_maverick", "HBM4", "MID", 2, 1, 4, "quiet"),
+    ("llama4_maverick", "HBM4", "LONG", 2, 1, 4, "quiet"),
+    ("llama4_maverick", "HBM4", "LONG", 4, 1, 2, "quiet"),
+    ("llama4_maverick", "HBM4", "SHORT", 2, 2, 4, "quiet"),
+    ("llama4_maverick", "HBM4", "MID", 4, 2, 2, "quiet"),
+    ("llama4_maverick", "HBF", "SHORT", 2, 1, 4, "quiet"),
+    ("llama4_maverick", "HBF+", "MID", 4, 1, 2, "quiet"),
+    ("llama4_maverick", "CONV", "SHORT", 2, 1, 4, "quiet"),
+    ("llama4_maverick", "CONV+", "MID", 4, 1, 2, "quiet"),
+    ("llama3_405b", "HBF", "SHORT", 8, 1, 1, "quiet"),
+    ("llama3_405b", "HBM4", "MID", 8, 1, 1, "quiet"),
+    ("llama3_405b", "HBM4", "SHORT", 4, 1, 1, "quiet"),
+    ("llama3_405b", "HBM4", "SHORT", 8, 2, 1, "quiet"),
+    ("llama3_405b", "HBM4", "SHORT", 8, 1, 2, "quiet"),
+])
+def test_b4_all_is_scoped_to_the_selected_scenario_layouts(model, hardware, workload, tp, pp, ep, expected):
+    from exploring_hbf_native_config import native_fast_window_options
+    from heterollm_sim.simulation_options import NativeWindowFastConfig
+
+    options = native_fast_window_options(model, hardware, workload,
+        tp=tp, pp=pp, ep=ep, max_wall_seconds=73.)
+    assert options.tp_rank_symmetry == expected
+    assert options.max_wall_seconds == 73.
+    assert options.pd_concurrency_envelope is True
+    assert (options.calibration_layers, options.holdout_layers) == (4, 2)
+    assert NativeWindowFastConfig().tp_rank_symmetry == "quiet"

@@ -10,7 +10,7 @@ from heterollm_sim.data_motion import PhysicalRuntimeContext, resolve_physical_t
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.memory_types import AccessRequest
 from test_dram_controller_policies import config as analytical_config
-from test_hbm_compiled_control import configuration, assert_core_state_equal
+from test_hbm_compiled_control import configuration
 
 
 def _task(config, addresses, ident):
@@ -48,6 +48,14 @@ def _without_execution_marker(results):
                                        if k != "compiled_hbm_float64"}) for row in results)
 
 
+def _assert_execution_state_equal(actual, expected):
+    assert {key: value for key, value in vars(actual).items() if key != "timeline"} == {
+        key: value for key, value in vars(expected).items() if key != "timeline"}
+    # The reducer may warm its derived ordering cache differently on each path.
+    assert {key: value for key, value in vars(actual.timeline).items() if key != "_metric_key_orders"} == {
+        key: value for key, value in vars(expected.timeline).items() if key != "_metric_key_orders"}
+
+
 @pytest.mark.parametrize("scheduler", ["fcfs", "row_hit_first", "read_write_batch"])
 @pytest.mark.parametrize("mapping", ["bank_interleaved", "row_local"])
 @pytest.mark.parametrize("scope", ["device", "channel"])
@@ -70,12 +78,14 @@ def test_tiny_reference_and_large_numeric_requests_share_identical_state(monkeyp
         expected = run(numeric)
     actual = run(direct)
     assert all(row.counters["compiled_hbm_float64"] for row in expected)
-    assert [bool(row.counters.get("compiled_hbm_float64")) for row in actual] == [False] * 4 + [True, False, True]
+    # Cold scalar execution on this 8192-bank device keeps up to 64 bursts
+    # on the reference controller, including the final 1024-byte/32-burst read.
+    assert [bool(row.counters.get("compiled_hbm_float64")) for row in actual] == [False] * 4 + [True, False, False]
     assert _without_execution_marker(actual) == _without_execution_marker(expected)
-    assert_core_state_equal(direct, numeric)
+    _assert_execution_state_equal(direct, numeric)
     following = AccessRequest("after", "read", 0, 4096, 20000.)
     assert direct.submit(following) == numeric.submit(following)
-    assert_core_state_equal(direct, numeric)
+    _assert_execution_state_equal(direct, numeric)
 
 
 def test_tiny_scalar_skips_packing_but_fcfs_batch_packs_once(monkeypatch):
@@ -83,13 +93,14 @@ def test_tiny_scalar_skips_packing_but_fcfs_batch_packs_once(monkeypatch):
     core = DramCore(_large_config(), capture_details=False)
     calls = []
     original = _compiled_hbm._pack_hbm_numeric
-    def observe(*args):
-        calls.append(args[1].request_id)
-        return original(*args)
+    def observe(core, request, *, refresh_requests=None):
+        calls.append((request.request_id, refresh_requests))
+        return original(core, request, refresh_requests=refresh_requests)
     monkeypatch.setattr(_compiled_hbm, "_pack_hbm_numeric", observe)
     core.submit(AccessRequest("scalar", "read", 0, 64))
     assert calls == []
-    result = core.submit_many([AccessRequest("batch-1", "read", 64, 64),
-                               AccessRequest("batch-2", "read", 128, 64)])
-    assert len(calls) == 1
+    requests = (AccessRequest("batch-1", "read", 64, 64),
+                AccessRequest("batch-2", "read", 128, 64))
+    result = core.submit_many(requests)
+    assert calls == [("batch-1", requests)]
     assert all(row.counters["compiled_hbm_float64"] for row in result)

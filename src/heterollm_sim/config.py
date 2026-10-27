@@ -1167,6 +1167,7 @@ def parallel_from_dict(data: Mapping[str, Any]) -> ParallelSpec:
             "tp_degree",
             "pp_degree",
             "ep_degree",
+            "pipeline_microbatches",
             "rank_mapping",
             "layer_to_stage",
             "collective_algorithm",
@@ -1184,6 +1185,7 @@ def parallel_from_dict(data: Mapping[str, Any]) -> ParallelSpec:
         tp_degree=_integer(data.get("tp_degree", 1), "parallel tp_degree"),
         pp_degree=_integer(data.get("pp_degree", 1), "parallel pp_degree"),
         ep_degree=_integer(data.get("ep_degree", 1), "parallel ep_degree"),
+        pipeline_microbatches=_integer(data.get("pipeline_microbatches", 1), "parallel pipeline_microbatches"),
         rank_mapping=rank_mapping,
         layer_to_stage={
             str(layer_id): _integer(stage, "layer_to_stage value")

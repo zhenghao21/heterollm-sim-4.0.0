@@ -13,19 +13,30 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
                            array_ids, channel_ids, host_ids, array_ready, buffer_ready,
                            tags, cache_ready, readers, uses, present, cache_clock,
                            starts, lane_counts, lanes, lane_directions, state, moved,
-                           directions):
+                           directions, head_bytes, head_ns, tail_bytes, tail_ns,
+                           head_rmw, tail_rmw):
     """The ordinary generic page machine, with ordered IEEE additions.
 
     Admission remains one host request in NandCore.submit. Unlike the OCP
     kernel below, generic NAND has neither implicit page-0 erase nor PROGRAM
-    frontier validation. No page or cache transition is skipped here.
+    frontier validation. No page or cache transition is skipped here. The
+    first and last page move ``head_bytes``/``tail_bytes`` over the host
+    (their host-granularity span of a span that starts or ends inside a
+    page); every other page moves a full page. A partially written first or
+    last page (``head_rmw``/``tail_rmw``) first pays the read-modify-write
+    old-page read and its internal transfer, as the scalar machine does.
     """
     base_units, planes, independent, per_channel, host_channels = geometry
-    page_read, page_program, internal_ns, host_ns, internal_bytes = timing
+    page_read, page_program, internal_ns, page_host_ns, internal_bytes = timing
     touched = np.zeros(len(state), dtype=np.bool_)
     arrays_touched = np.zeros(len(array_ready), dtype=np.bool_)
     banks_touched = np.zeros(len(tags), dtype=np.bool_)
-    hits = misses = 0
+    # Short resident requests previously ran scalar. Preserve reserve's
+    # first-touch order, including set collision order in request metrics.
+    resource_order = np.empty(len(state), dtype=np.int64)
+    ordered = np.zeros(len(state), dtype=np.bool_)
+    order_count = 0
+    hits = misses = rmw_reads = 0
     completion = base
     for offset in range(count):
         page_index = first_page + offset
@@ -36,6 +47,11 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
         unit = bank if independent else base_unit
         channel = base_unit // per_channel
         ar, ch, host = array_ids[unit], channel_ids[channel], host_ids[channel % host_channels]
+        host_ns, host_bytes, rmw = page_host_ns, 4096, False
+        if offset == 0:
+            host_ns, host_bytes, rmw = head_ns, head_bytes, head_rmw
+        elif offset == count - 1:
+            host_ns, host_bytes, rmw = tail_ns, tail_bytes, tail_rmw
         if read:
             cache_clock += 1
             slot = -1
@@ -54,7 +70,7 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
             present[bank] = True
             banks_touched[bank] = True
             if hit:
-                end = _reserve(host, max(base, cache_ready[bank, slot]), host_ns, 4096, 1,
+                end = _reserve(host, max(base, cache_ready[bank, slot]), host_ns, host_bytes, 1,
                     starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
                 readers[bank, slot] = max(readers[bank, slot], end)
                 hits += 1
@@ -64,7 +80,7 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
                 internal_end = _reserve(ch, max(read_end, readers[bank, slot]), internal_ns,
                     int(internal_bytes), 1, starts, lane_counts, lanes, lane_directions,
                     state, moved, directions, touched)
-                end = _reserve(host, internal_end, host_ns, 4096, 1,
+                end = _reserve(host, internal_end, host_ns, host_bytes, 1,
                     starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
                 tags[bank, slot], cache_ready[bank, slot] = physical_page, internal_end
                 readers[bank, slot] = end
@@ -78,7 +94,16 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
                     if tags[bank, slot] == physical_page:
                         tags[bank, slot] = -1
                         banks_touched[bank] = True
-            host_end = _reserve(host, base, host_ns, 4096, 2,
+            if rmw:
+                # The old page is read into the page buffer before the new
+                # bytes arrive; the array frontier itself is not advanced.
+                read_end = _reserve(ar, max(base, array_ready[unit], buffer_ready[unit]), page_read, -1, 0,
+                    starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
+                buffer_ready[unit] = _reserve(ch, read_end, internal_ns, int(internal_bytes), 1,
+                    starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
+                arrays_touched[unit] = True
+                rmw_reads += 1
+            host_end = _reserve(host, base, host_ns, host_bytes, 2,
                 starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
             internal_end = _reserve(ch, max(host_end, buffer_ready[unit]), internal_ns,
                 int(internal_bytes), 2, starts, lane_counts, lanes, lane_directions,
@@ -87,8 +112,21 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
                 starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
             array_ready[unit], buffer_ready[unit] = end, end
             arrays_touched[unit] = True
+        if count < 128:
+            if read and hit:
+                first_rid, second_rid, third_rid = host, host, host
+            elif read or rmw:
+                first_rid, second_rid, third_rid = ar, ch, host
+            else:
+                first_rid, second_rid, third_rid = host, ch, ar
+            for rid in (first_rid, second_rid, third_rid):
+                if not ordered[rid]:
+                    ordered[rid] = True
+                    resource_order[order_count] = rid
+                    order_count += 1
         completion = max(completion, end)
-    return completion, hits, misses, cache_clock, touched, arrays_touched, banks_touched
+    return (completion, hits, misses, rmw_reads, cache_clock, touched,
+            arrays_touched, banks_touched, resource_order[:order_count])
 
 
 @njit(cache=True, nogil=True, fastmath=False)
