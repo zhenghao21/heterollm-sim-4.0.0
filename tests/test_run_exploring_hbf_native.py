@@ -180,6 +180,21 @@ def _fast_result(upper=99e6, accepted=True):
         (), "aggregate", native_window_forecast=forecast)
 
 
+def test_pipeline_forecast_result_is_terminal_for_worker_reuse():
+    from dataclasses import replace
+    from heterollm_sim.native_pipeline_forecast import NativePipelineForecast
+    forecast = NativePipelineForecast(0., 1, 3, 0, 8,
+        {"cluster_tokens_per_second": 80., "mean_complete_request_tpot_ns": 95e6},
+        {"cluster_tokens_per_second": {"estimate": 80., "lower": 79., "upper": 81.},
+         "mean_complete_request_tpot_ns": {"estimate": 95e6, "lower": 94e6, "upper": 96e6}},
+        (), (), {"relative_error": .01})
+    result = replace(_fast_result(), approximation={"method": "native_pipeline_stage_forecast/v2"},
+                     native_window_forecast=None, native_pipeline_forecast=forecast)
+    params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1), 4, "fast")
+    row = run.native_fast_result(result, params)
+    assert row["status"] == "completed"
+
+
 PREFILL_LAYOUT = {"tp": 8, "pp": 1, "ep": 1}
 REJECTED_PREFILL = {"prefill_id": "prefill", "status": "rejected", "prefill_pass": {"metric_bounds": {}},
                     "parameters": PREFILL_LAYOUT, "rejection_reasons": ["native_prefill_independent_budget_exceeded"], "wall_seconds": 1.}

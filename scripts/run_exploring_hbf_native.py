@@ -743,6 +743,7 @@ def native_fast_result(result, params):
         target = params["target_relative_error"]
         accepted = upper <= SLO_NS and float(getattr(pipeline_forecast, "error_budget", {}).get("relative_error", 0.0)) <= target
         details = {"approximation": dict(result.approximation),
+            "status": "completed" if accepted else "forecast_rejected",
             "fidelity": "native_pipeline_stage_samples_and_virtual_window_forecast",
             "native_pipeline_forecast": pipeline_forecast.to_metadata() if hasattr(pipeline_forecast, "to_metadata") else dict(pipeline_forecast),
             "physical_prefix": getattr(result, "sampled", None) is not None,
