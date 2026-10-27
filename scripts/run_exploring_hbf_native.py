@@ -1544,7 +1544,17 @@ def _poll_candidate(directory, identity, job, mode):
     Python's perf_counter has the same clock in all processes on this host.
     """
     code = job["process"].poll()
-    if code is not None or mode != "fast":
+    if code is not None:
+        # On Windows the venv launcher can exit while its real interpreter
+        # child is still running.  Do not turn that transient parent exit into
+        # WorkerExit when the worker's progress heartbeat proves the candidate
+        # is still executing.
+        progress = read_json(Path(directory) / "progress" / (identity + ".json"), {})
+        if (progress.get("candidate_id") == identity and progress.get("state") == "running"
+                and pid_alive(progress.get("pid"))):
+            return None
+        return code
+    if mode != "fast":
         return code
     now = time.perf_counter()
     phase = job["watchdog_phase"]

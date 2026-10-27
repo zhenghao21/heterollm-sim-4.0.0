@@ -144,13 +144,25 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
             if not stage_sample_rows:
                 raise NativeLayerSamplingGuardError("native_pipeline_stage_sampling_empty")
             output_tokens = max(2, max((s.spec.output_tokens for s in runtime._state_values), default=2))
-            forecast = compose_pipeline_window(
-                stage_sample_rows, sampled_decode_cohorts=sample_decode,
-                predicted_decode_cohorts=measured, batch_size=plan.scheduler.max_num_seqs,
-                output_tokens=output_tokens, cutoff_ns=runtime.now,
-                target_relative_error=options.target_relative_error,
-                warmup_decode_cohorts=warmup, physical_prefix_decode_cohorts=0,
-                allow_zero_physical_prefix=True)
+            try:
+                forecast = compose_pipeline_window(
+                    stage_sample_rows, sampled_decode_cohorts=sample_decode,
+                    predicted_decode_cohorts=measured, batch_size=plan.scheduler.max_num_seqs,
+                    output_tokens=output_tokens, cutoff_ns=runtime.now,
+                    target_relative_error=options.target_relative_error,
+                    warmup_decode_cohorts=warmup, physical_prefix_decode_cohorts=0,
+                    allow_zero_physical_prefix=True)
+            except (NativeFastWallBudgetError, NativeLayerSamplingGuardError,
+                    PipelineStageSamplingGuardError, ValueError) as error:
+                diagnostics["rejection_reasons"] = [str(error)]
+                diagnostics["fallback_reasons"] = [str(error)]
+                diagnostics["physical_complete_cohort_count"] = len(runtime.batches)
+                diagnostics["physical_visible_output_token_count"] = sum(
+                    e.details.get("visible_tokens", 0) for e in runtime.events
+                    if e.event_type == "tokens_committed")
+                diagnostics["physical_ingress_accounting"] = runtime._external_ingress_report()
+                diagnostics["wall_seconds"] = time.perf_counter()-started
+                return FastSimulationOutcome(diagnostics=diagnostics)
             diagnostics.update(effective_mode="fast", predicted_decode_cohorts=forecast.predicted_decode_cohorts,
                 predicted_visible_output_tokens=forecast.predicted_visible_output_tokens,
                 physical_warmup_decode_cohorts=0,

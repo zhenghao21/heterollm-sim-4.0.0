@@ -59,6 +59,34 @@ def test_pipeline_wall_budget_rejects_without_forecast_or_completed_result():
     assert "原生PP" in format_report(fast, data=payload)
 
 
+def test_pipeline_stage_sample_budget_rejection_is_reported(monkeypatch):
+    """A failed stage-window composition is a forecast rejection, not a crash."""
+    import heterollm_sim.native_pipeline as pipeline
+
+    def reject(*_args, **_kwargs):
+        raise ValueError("native_pipeline_independent_budget_exceeded")
+
+    monkeypatch.setattr(pipeline, "compose_pipeline_window", reject)
+    scenario = pipeline_scenario()
+    fast = run_scenario(replace(scenario, simulation=SimulationConfig(mode="fast",
+        native_window=NativeWindowFastConfig(max_wall_seconds=120))), retention_policy="aggregate")
+    assert fast.detailed is fast.native_window_forecast is None
+    assert fast.approximation["rejection_reasons"] == ["native_pipeline_independent_budget_exceeded"]
+    assert fast.approximation["fallback_reasons"] == ["native_pipeline_independent_budget_exceeded"]
+
+
+def test_single_microbatch_pipeline_transfer_gap_is_reported_without_crash():
+    """Embedded PP transfers must not escape the forecast rejection path."""
+    scenario = pipeline_scenario(microbatches=1)
+    fast = run_scenario(replace(scenario, simulation=SimulationConfig(mode="fast",
+        native_window=NativeWindowFastConfig(max_wall_seconds=120))), retention_policy="aggregate")
+    assert fast.detailed is fast.native_window_forecast is None
+    reasons = fast.approximation["rejection_reasons"]
+    assert reasons
+    assert "native_pipeline_activation_transfer_sample_missing" not in reasons
+    assert "native_pipeline_stage_sampling_transfer_tasks_missing" not in reasons
+
+
 def test_pipeline_prefill_uses_complete_live_forward_including_stage_transfer():
     model = toy_scenario(layer_count=4).model
     from exploring_hbf_native_config import build_native_prefill_scenario

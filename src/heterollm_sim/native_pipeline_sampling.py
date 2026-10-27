@@ -67,6 +67,12 @@ def select_representative_pipeline_tasks(stages, specs):
         raise PipelineStageSamplingGuardError("native_pipeline_stage_sampling_noncontiguous_microbatches")
     selected = []
     descriptors = []
+    # With one pipeline microbatch the planner keeps the activation task in
+    # the consumer stage instead of materializing a separate ``.ppNNNN``
+    # stage.  Keep that authored task in the independent sample and expose a
+    # synthetic transfer descriptor so the FIFO composer still sees the
+    # producer-to-consumer edge.
+    embedded_transfers = {}
     by_stage = {str(stage.stage_id): stage for stage in stages}
     for (group, number), stage in sorted(authored.items()):
         layers = sorted({task.metadata.get("layer_id") for task in stage.execution_tasks
@@ -86,6 +92,34 @@ def select_representative_pipeline_tasks(stages, specs):
                             "layer_ids": tuple(str(layer) for layer in representative_layers),
                             "layer_count": len(layers),
                             "stage_id": stage.stage_id})
+    # A single-microbatch plan keeps the transfer task in the consumer
+    # stage's authored task list in some layouts, while other plans expose it
+    # only in the flattened task specs.  Scan specs directly so both forms
+    # produce the same synthetic producer-to-consumer edge.
+    for spec in specs:
+        metadata = spec.metadata
+        if (metadata.get("event_kind") != "pipeline_activation"
+                or type(metadata.get("source_stage")) is not int
+                or type(metadata.get("target_stage")) is not int):
+            continue
+        stage_id = str(metadata.get("execution_stage_id", ""))
+        match = re.match(r"^operator-invocation-group-(\d+)\.stage(\d+)$", stage_id)
+        if match is None:
+            continue
+        group, target = int(match.group(1)), int(match.group(2))
+        if target != metadata["target_stage"]:
+            continue
+        source = metadata["source_stage"]
+        transfer_id = "operator-invocation-group-{:04d}.pp{:04d}.activation_transfer".format(
+            group, source)
+        transfer_key = (group, source)
+        if transfer_key in embedded_transfers:
+            continue
+        selected.append(spec.task_id)
+        embedded_transfers[transfer_key] = transfer_id
+        descriptors.append({"microbatch": group, "stage": source,
+                            "kind": "pipeline_activation_transfer", "stage_id": transfer_id,
+                            "embedded_task_id": spec.task_id})
     for (group, number), stage in sorted(transfers.items()):
         ids = [task.task_id for task in specs if task.metadata.get("execution_stage_id") == stage.stage_id]
         if not ids:
@@ -117,7 +151,10 @@ def stage_samples_from_window(row: Mapping[str, object], descriptors, *, cohort:
             start = min(float(start) for start, _end in intervals)
             end = start + duration
         else:
-            start, end = stage_start.get(stage_id), stage_end.get(stage_id)
+            transfer_stages = row.get("pipeline_transfer_start_ns") or {}
+            transfer_ends = row.get("pipeline_transfer_completion_ns") or {}
+            start = transfer_stages.get(stage_id, stage_start.get(stage_id))
+            end = transfer_ends.get(stage_id, stage_end.get(stage_id))
             if start is None or end is None or end <= start:
                 raise PipelineStageSamplingGuardError("native_pipeline_stage_sampling_transfer_interval_missing")
             start, end = float(start), float(end)

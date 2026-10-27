@@ -982,6 +982,8 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
     layer_starts = {}
     stage_ends = {}
     stage_starts = {}
+    pipeline_transfer_ends = {}
+    pipeline_transfer_starts = {}
     prefill_terms = {"prefix_tasks": [], "layer_start_ns": {}} if capture_prefill_terms else None
     facts = [] if row_terms is not None else None
     def observe(event):
@@ -1005,6 +1007,18 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
         if stage_id is not None:
             stage_starts[stage_id] = min(stage_starts.get(stage_id, event.start_ns), event.start_ns)
             stage_ends[stage_id] = max(stage_ends.get(stage_id, event.end_ns), event.end_ns)
+        md = event.task.metadata
+        if (md.get("event_kind") == "pipeline_activation"
+                and type(md.get("source_stage")) is int
+                and type(md.get("target_stage")) is int
+                and isinstance(stage_id, str)):
+            group_id = stage_id.rsplit(".stage", 1)[0]
+            transfer_id = "{}.pp{:04d}.activation_transfer".format(
+                group_id, md["source_stage"])
+            pipeline_transfer_starts[transfer_id] = min(
+                pipeline_transfer_starts.get(transfer_id, event.start_ns), event.start_ns)
+            pipeline_transfer_ends[transfer_id] = max(
+                pipeline_transfer_ends.get(transfer_id, event.end_ns), event.end_ns)
         if prefill_terms is not None:
             md = event.task.metadata
             if layer_id is not None:
@@ -1061,6 +1075,8 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
         "concurrent_imports": None if imports is None else imports.observation(first, last),
         "layer_start_ns": layer_starts, "layer_completion_ns": layer_ends,
         "stage_start_ns": stage_starts, "stage_completion_ns": stage_ends,
+        "pipeline_transfer_start_ns": pipeline_transfer_starts,
+        "pipeline_transfer_completion_ns": pipeline_transfer_ends,
         "first_access_ns": row_state,
         "start_ns": first, "first_task_start_ns": first,
         "end_ns": last, "duration_ns": last-first, "boundary_origin_ns": origin_ns,
