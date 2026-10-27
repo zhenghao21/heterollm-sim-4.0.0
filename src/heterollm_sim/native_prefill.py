@@ -89,9 +89,17 @@ def sample_prefill(prepared, control, options, records, *, holdout_shift_ns=HOLD
         if calibration + holdout > len(layer_ids):
             raise NativeLayerSamplingGuardError("native_prefill_stack_too_short_for_disjoint_runs")
         head, tail, second = layer_ids[:calibration], layer_ids[-holdout:], first + holdout_shift_ns
-        runs = {"calibration": run("calibration", head, (prefix,), first, "calibration", True),
-                "holdout": run("holdout", tail, (), second, "holdout", False),
-                "entry_at_holdout_origin": run("entry", head[:1], (prefix,), second, "entry-second", True)}
+        if prepared.get("chunk_separate_prefix"):
+            # Layer service is conditioned independently of preparation;
+            # prefix Tasks are observed separately at both entry origins.
+            runs = {"calibration": run("calibration", head, (), first, "calibration", False),
+                    "holdout": run("holdout", tail, (), second, "holdout", False),
+                    "entry_at_calibration_origin": run("entry", head[:1], (prefix,), first, "entry-first", True),
+                    "entry_at_holdout_origin": run("entry", head[:1], (prefix,), second, "entry-second", True)}
+        else:
+            runs = {"calibration": run("calibration", head, (prefix,), first, "calibration", True),
+                    "holdout": run("holdout", tail, (), second, "holdout", False),
+                    "entry_at_holdout_origin": run("entry", head[:1], (prefix,), second, "entry-second", True)}
     return {"runs": runs, "layer_count": len(layer_ids), "holdout_shift_ns": holdout_shift_ns,
             "layers": {role: len(run["layer_ids"]) for role, run in runs.items()},
             "wall_seconds": time.perf_counter() - started}
@@ -137,7 +145,110 @@ def evaluate_prefill(prepared, samples, options):
     return result
 
 
+
+def sample_prefill_chunks(runtime, cohort, stages, request_ready_ns, control, options, records):
+    """Experimental per-chunk layer forecast; never resumes a sampled kernel."""
+    if options.operator_reuse_sampling:
+        from .native_prefill_operator_reuse import operator_reuse_sample_prefill_chunks
+        return operator_reuse_sample_prefill_chunks(
+            runtime, cohort, stages, request_ready_ns, control, options, records)
+    from .native_prefill_chunk_inputs import iter_prefill_chunk_inputs
+    from .native_prefill_chunk_adapter import build_prefill_chunk_terms
+    from .native_prefill_chunk_composition import compose_prefill_chunks
+    from .native_prefill_chunk_probe import run_chunk_boundary_history_probe
+
+    graphs, chunks, extra_edges, assumptions = [], [], [], []
+    frontier, origin = None, None
+    started = time.perf_counter()
+    for prepared in iter_prefill_chunk_inputs(runtime, cohort, stages, request_ready_ns, control, options):
+        control.raise_if_cancelled()
+        if origin is None:
+            origin = prepared["origin"]
+        # No PD imports exist on the independent Prefill node. Quiet mode
+        # only mirrors native transfers whose arrival/state guards match.
+        prepared["tp_symmetry"] = (runtime.plan.scenario, options.tp_rank_symmetry)
+        prepared["chunk_separate_prefix"] = options.chunk_interval_model == "per_access"
+        sampled = sample_prefill(prepared, control, options, records)
+        if options.chunk_boundary_probe:
+            sampled["boundary_history_probe"] = run_chunk_boundary_history_probe(prepared, sampled, control, records)
+            sampled["layers"]["boundary_history_probe"] = len(sampled["boundary_history_probe"]["layer_ids"])
+        if options.chunk_interval_model == "per_access":
+            from .native_prefill_access_bounds import PER_ACCESS_BOUND_ASSUMPTION
+            assumptions.append(PER_ACCESS_BOUND_ASSUMPTION)
+            for sample in [*sampled["runs"].values(), *([sampled["boundary_history_probe"]]
+                    if "boundary_history_probe" in sampled else [])]:
+                sample["window_first_access_ns"] = sample["first_access_ns"]
+                sample["first_access_ns"] = sample["prefill_terms"]["per_access_row_state_ns"]
+        try:
+            adapted = build_prefill_chunk_terms(prepared, sampled, prepared["chunk_index"], frontier=frontier)
+        except ValueError as error:
+            raise NativeLayerSamplingGuardError(str(error)) from error
+        frontier = adapted["frontier"]
+        graphs.append(adapted["chunk"])
+        extra_edges.extend(adapted["extra_edges"])
+        assumptions.extend(adapted["assumptions"])
+        assumptions.extend(prepared["chunk_input_boundary"]["assumptions"])
+        chunks.append({"context_tokens": prepared["context_tokens"],
+                       "prompt_tokens": prepared["chunk_prompt_tokens"],
+                       "run_layers": sampled["layers"],
+                       "row_state_bound_basis": ("every_contiguous_access" if options.chunk_interval_model == "per_access"
+                                                 else "window_first_bank_with_sampled_history_envelope"),
+                       "prefix_separate_from_class_samples": prepared["chunk_separate_prefix"],
+                       "input_boundary": prepared["chunk_input_boundary"],
+                       "kv_geometry": prepared["kv_geometry"],
+                       "wall_seconds": sampled["wall_seconds"],
+                       "layer_intervals": adapted["layer_intervals"],
+                       "sampled_class_parts": adapted["diagnostics"]["sampled_class_parts"]})
+        control.report("native_prefill_chunk_sample_complete", len(chunks), unit="sampled_chunks",
+            message="分段层样本已完成，未提交完整原生批次",
+            metadata={"chunk_index": prepared["chunk_index"], "context_tokens": prepared["context_tokens"],
+                      "chunk_tokens": prepared["chunk_prompt_tokens"], "full_cohort_committed": False})
+    total = next(iter(runtime.states.values())).spec.prompt_tokens
+    if sum(row["prompt_tokens"] for row in chunks) != total:
+        raise NativeLayerSamplingGuardError("native_prefill_complete_chunk_inputs_not_observed")
+    result = compose_prefill_chunks(graphs, origin_ns=origin,
+        target_relative_error=options.target_relative_error,
+        assumptions=[SAME_CLASS_ADDRESS_ASSUMPTION, *assumptions], extra_edges=extra_edges)
+    result["error_budget"].update(prompt_tokens=total, chunks=chunks, sampled_chunk_count=len(chunks), native_chunk_count=0,
+        conditional_accuracy=True, experimental=True, default_enabled=False,
+        physical_full_cohorts_committed=0, physical_full_prompt_executed=False,
+        sampled_layer_window_count=len(records), sample_wall_seconds=time.perf_counter() - started,
+        algorithm=("per_access_rows_split_prefix_v4_nonnegative_terms" if options.chunk_interval_model == "per_access"
+                   else "chunk_history_envelope_v1"), boundary_history_probe=options.chunk_boundary_probe)
+    return result
+
+
 def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=None,
+                                 residency_manager=None, execution_kernel=None, runtime_origin_ns=0.,
+                                 custom_lowerer=False):
+    """Run Prefill with an optional exact numeric cache; approximation stays explicit."""
+    options = scenario.simulation.native_prefill
+    arguments = dict(batch_lowerer=batch_lowerer, execution_control=execution_control,
+        residency_manager=residency_manager, execution_kernel=execution_kernel,
+        runtime_origin_ns=runtime_origin_ns, custom_lowerer=custom_lowerer)
+    if not options.numeric_transition_cache:
+        return _simulate_native_prefill_pass(scenario, **arguments)
+    from .execution_control import native_callback_free_control
+    from .native_hbm_memo_experiment import hbm_numeric_memo_experiment
+    control = execution_control or ExecutionControl()
+    if options.max_wall_seconds is not None:
+        control = deadline_control(control, time.perf_counter() + options.max_wall_seconds)
+    arguments["execution_control"] = control
+    if not native_callback_free_control(control):
+        outcome = _simulate_native_prefill_pass(scenario, **arguments)
+        outcome.diagnostics["numeric_transition_cache"] = {
+            "enabled": False, "reason": "native_callback_free_control_required"}
+        return outcome
+    with hbm_numeric_memo_experiment(max_bytes=options.numeric_memo_max_bytes,
+            check=control.raise_if_cancelled) as memo:
+        outcome = _simulate_native_prefill_pass(scenario, **arguments)
+    outcome.diagnostics["numeric_transition_cache"] = {
+        "enabled": True, "exact_complete_input_bits": True, "max_bytes": options.numeric_memo_max_bytes,
+        **memo.stats}
+    return outcome
+
+
+def _simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=None,
                                  residency_manager=None, execution_kernel=None, runtime_origin_ns=0.,
                                  custom_lowerer=False):
     """Sample the request's Prefill cohort boundary natively and bound the pass."""
@@ -154,7 +265,7 @@ def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=N
         "accuracy_target_is_guarantee": False, "future_physical_state_advanced": False,
         "rejection_reasons": [], "fallback_reasons": [],
         "prefill_pass": {"accepted": False, "metrics": {}, "metric_bounds": {}, "error_budget": {}}}
-    records, prepared, samples, native_chunks = [], {}, {}, []
+    records, prepared, samples, native_chunks, chunk_seed = [], {}, {}, [], {}
     context = getattr(batch_lowerer, "_compilation_context", None)
     with _compilation_scope(scenario, context):
         sample_control.raise_if_cancelled()
@@ -185,11 +296,14 @@ def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=N
                     native_chunks_mode = (item.token_count < state.spec.prompt_tokens
                                           or scenario.placement.parallel.pp_degree > 1)
                 if native_chunks_mode:
-                    # Sampling a later chunk loses its overlap with earlier
-                    # chunks. PP also contains inter-layer transfers that the
-                    # serial-layer composition cannot represent. Execute both
-                    # cases on the complete live runtime, even for one chunk.
-                    return False
+                    # PP stage transfers and cross-chunk overlap are only
+                    # represented by the live runtime. The older chunked
+                    # sampler remains available for explicit PP=1 experiments.
+                    if scenario.placement.parallel.pp_degree > 1 or options.full_pass or not options.chunked_sampling:
+                        return False
+                    chunk_seed.update(runtime=active, cohort=cohort, stages=stages,
+                                      request_ready_ns=request_ready_ns)
+                    raise _NativeLayerSamplingCutoff()
                 prepared.update(prepare_prefill(active, cohort, stages, request_ready_ns, sample_control))
                 raise _NativeLayerSamplingCutoff()
 
@@ -212,7 +326,9 @@ def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=N
             else:
                 if not native_chunks_mode:
                     raise RuntimeError("native Prefill sampling unexpectedly committed an ordinary cohort")
-            if native_chunks_mode:
+            if chunk_seed:
+                budget = sample_prefill_chunks(**chunk_seed, control=sample_control, options=options, records=records)
+            elif native_chunks_mode:
                 state = next(iter(runtime.states.values()))
                 if (not native_chunks or state.prefill_cursor != state.spec.prompt_tokens
                         or sum(chunk["prompt_tokens"] for chunk in native_chunks) != state.spec.prompt_tokens):
@@ -254,8 +370,9 @@ def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=N
                           "metric_bounds": budget.get("metric_bounds", {}),
                           "error_budget": budget.get("error_budget", {}),
                           "boundary_origin_ns": prepared.get("origin"),
-                          "execution_mode": "complete_native_chunks" if native_chunks else "native_layer_samples",
-                          "native_chunk_count": len(native_chunks),
+                          "execution_mode": ("layer_samples_per_chunk" if chunk_seed else
+                                             "complete_native_chunks" if native_chunks else "native_layer_samples"),
+                          "native_chunk_count": budget.get("error_budget", {}).get("native_chunk_count", len(native_chunks)),
                           "layer_count": samples.get("layer_count"), "run_layers": samples.get("layers"),
                           "sample_wall_seconds": samples.get("wall_seconds")},
             preparation_wall_seconds=prepared.get("preparation_wall_seconds"),

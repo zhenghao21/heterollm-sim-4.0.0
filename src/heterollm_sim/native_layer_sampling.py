@@ -517,6 +517,35 @@ class _TPRankMirror:
         # and pending controller copies cannot overlap between PP/EP groups.
         if (parallel.pp_degree != 1 or parallel.ep_degree != 1) and len(packages) != len(mappings):
             return
+        # A physical prefix task may initialize rank-local state before the
+        # first layer. If that prefix is asymmetric, mirroring it would make
+        # the later PP/TP transition proof unsound; fall back to full work.
+        rank_components = {c.component_id for c in scenario.hardware.components
+                           if c.package_id in packages}
+        by_id = {t.task_id: t for t in tasks}
+        def after_layer(task):
+            pending, seen = list(task.dependencies), set()
+            while pending:
+                identity = pending.pop()
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                parent = by_id.get(identity)
+                if parent is not None:
+                    if parent.metadata.get('layer_id') is not None:
+                        return True
+                    pending.extend(parent.dependencies)
+            return False
+        if self.fast_exact and any(
+                t.metadata.get('layer_id') is None
+                and type(t.metadata.get('rank')) is not int
+                and is_physical_task(t)
+                and not after_layer(t)
+                and any(_owner_resources(o, rank_components)
+                        for o in physical_task_transaction_owners(t) or ())
+                for t in tasks):
+            self.stats['asymmetric_prefix'] = True
+            return
         # Unranked frontend/activation work executes normally. Its real
         # per-owner transitions advance the same exact tokens as layer work;
         # unequal prefixes therefore disable later reuse through state proof,
@@ -696,8 +725,9 @@ class _TPRankMirror:
             # recognizes symmetric collective endpoints that still run in full.
             key = (self.owner_canonical.get(owner, owner), self.tokens.get(owner),
                    task.request_id or task.task_id, float(md['physical_arrival_ns']).hex(),
-                   tuple((str(a['operation']),a['address'],a['byte_count'])
-                         for a in accesses if a.get('physical_owner',md.get('physical_owner')) == owner))
+                   tuple((i, str(a['operation']), a['address'], a['byte_count'])
+                         for i, a in enumerate(accesses)
+                         if a.get('physical_owner', md.get('physical_owner')) == owner))
             token = self.transition_tokens.get(key)
             if token is None:
                 self.serial += 1
@@ -1020,6 +1050,10 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
     row_state = None if facts is None else first_access_ns(
         facts, {owner: active.core.config for owner, active in kernel.physical_runtime.runtimes.items()},
         row_terms)
+    if capture_prefill_terms and facts is not None:
+        from .native_prefill_access_bounds import per_access_ns
+        prefill_terms["per_access_row_state_ns"] = per_access_ns(
+            facts, {owner: active.core.config for owner, active in kernel.physical_runtime.runtimes.items()}, row_terms)
     carry = max(0., max(source.physical_runtime.timeline.ready_ns.values(), default=origin_ns)-origin_ns)
     return {"sample_id": sample_id, "window_id": sample_id,
         **({"prefill_terms": prefill_terms} if prefill_terms is not None else {}),

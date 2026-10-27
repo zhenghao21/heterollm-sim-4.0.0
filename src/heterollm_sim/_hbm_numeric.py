@@ -14,6 +14,7 @@ import numpy as np
 from numba import njit
 from ._hbm_clock import align_clock, clock_after
 from ._dram_numeric import _repeat_add, rotated_bank
+from .native_hbm_memo_experiment import _ACTIVE as _NUMERIC_MEMO_CONTEXT
 
 # A manager running several simulator processes caps each process's channel
 # threads so that together they do not oversubscribe the host cores.
@@ -1277,6 +1278,14 @@ def run_hbm_numeric(first, stop, arrival, read, g, t, *arrays):
         lease = cached
         lease[2] = True
     try:
+        memo = _NUMERIC_MEMO_CONTEXT.get()
+        if memo is not None:
+            from . import _compiled_hbm as memo_bridge
+            policy = (memo_bridge._numeric_memo_execution_policy()
+                      if memo_bridge._numeric_memo_execution_policy is memo_bridge._OWNED_NUMERIC_MEMO_POLICY else None)
+            if policy is not None:
+                return memo.execute(_run_hbm_numeric, first, stop, arrival, read, g, t, arrays, lease[1],
+                                    execution_policy=policy)
         return _run_hbm_numeric(first, stop, arrival, read, g, t, arrays, lease[1])
     finally:
         lease[2] = False

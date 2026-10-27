@@ -65,9 +65,8 @@ PHASES = ("dense_native", "dense_plus", "maverick_native")
 TERMINAL = {"completed", "capacity_rejected", "slo_rejected", "all_candidates_rejected", "failed"}
 CANDIDATE_TERMINAL = {"completed", "capacity_rejected", "slo_rejected", "forecast_rejected", "failed"}
 SLO_NS = 100_000_000.
-# Fast wall caps are multiplied by the configured worker limit K.  The factor
-# is fixed for the run and does not depend on how many workers happen to be
-# live when a candidate starts.
+# Fast wall caps are absolute per-candidate/per-Prefill limits. The worker
+# factor only controls concurrency and HBM channel-thread partitioning.
 FAST_CANDIDATE_WALL_TARGET_SECONDS = 600.
 FAST_CANDIDATE_WALL_BUDGET_SECONDS = 3000.
 # One Prefill pass per model, prompt and layout, outside every
@@ -874,6 +873,12 @@ def prefill_id(expected):
             f"EP{expected['ep']}__{expected['pass']}")
 
 
+def prefill_operator_reuse_enabled(params, expected):
+    """Enable conditional operator reuse only for validated Maverick LONG layouts."""
+    return (params.get("model") == "llama4_maverick" and params.get("workload") == "LONG"
+            and (expected["tp"], expected["pp"], expected["ep"]) in {(2, 1, 4), (4, 1, 2), (8, 1, 1)})
+
+
 @contextlib.contextmanager
 def waiting_lock(path, control):
     """Hold ``path`` exclusively, waiting cancellably while another worker holds it."""
@@ -906,8 +911,8 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
     its final layer's completion directly, excluding the output head; a
     single-cohort PP=1 pass retains layer sampling. PP passes execute every
     layer, and Decode microbatches do not partition this single request.
-    Both use the same independent
-    budget and their own K-scaled wall cap (outside the candidate). Detailed
+    Both use the same independent budget and their own absolute wall cap
+    (outside the candidate). Detailed
     candidates run every cohort and layer natively, without a wall cap like
     the detailed run.
     """
@@ -920,6 +925,7 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
     identity = prefill_id(expected)
     path = directory / "prefill" / (identity + ".json")
     full = expected["pass"] == "full"
+    operator_reuse = (not full) and prefill_operator_reuse_enabled(params, expected)
     capped = params.get("simulation_mode") == "fast"
     cap = PREFILL_WALL_BUDGET_SECONDS
     started = time.perf_counter()
@@ -933,6 +939,10 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
             tp=expected["tp"], pp=expected["pp"], ep=expected["ep"], full_pass=full)
         scenario = replace(scenario, simulation=SimulationConfig(mode="fast", native_prefill=NativePrefillPassConfig(
             full_pass=full, max_wall_seconds=cap if capped else None,
+            chunked_sampling=operator_reuse,
+            operator_reuse_sampling=operator_reuse,
+            numeric_transition_cache=operator_reuse,
+            tp_rank_symmetry="quiet" if operator_reuse else "off",
             **({} if full else {"target_relative_error": expected["target_relative_error"]}))))
         result = (runner or run_scenario)(scenario, retention_policy="aggregate", control=control)
         approximation = result.approximation
@@ -1916,7 +1926,7 @@ def main(argv=None):
     parser.add_argument("--batch-sizes", nargs="+", type=int, default=[1, 8], help="per-replica batch candidates")
     parser.add_argument("--workers", default="auto",
         help=f"worker limit 1..{MAX_WORKERS} or auto; candidates are admitted by predicted peak memory; "
-             f"K is fixed for this run and scales each fast candidate and Prefill wall cap; HBM threads = MAX_WORKERS//K")
+             f"K is fixed for this run for concurrency and HBM threads = MAX_WORKERS//K")
     parser.add_argument("--mode", choices=("detailed", "fast"), default="detailed",
         help="fast candidate and Prefill wall caps are absolute 3000 seconds; the cap covers setup, physical samples and budget")
     parser.add_argument("--search", action="store_true",

@@ -791,10 +791,17 @@ _OWNED_TIMELINE_BATCH_METHODS = tuple((cls, name, getattr(cls, name))
 
 from . import _hbm_numeric as _owned_numeric_module
 from . import _hbm_control as _owned_control_module
+from . import native_hbm_memo_experiment as _owned_memo_module
 
 _OWNED_TIMELINE_NUMERIC_FUNCTIONS = tuple((name, getattr(_owned_numeric_module, name))
-    for name in ("run_hbm_numeric", "_run_hbm_numeric", "_run_hbm_channel_range"))
+    for name in ("run_hbm_numeric", "_run_hbm_numeric", "_run_hbm_channel_range", "_new_channel_scratch"))
 _OWNED_TIMELINE_CONTROL_ENTRY = _owned_control_module.execute_hbm
+_OWNED_NUMERIC_MEMO_CONTEXT = _owned_memo_module._ACTIVE
+_OWNED_NUMERIC_MEMO_VALIDATOR = _owned_memo_module.native_memo_hooks
+_OWNED_NUMERIC_EXECUTOR = _owned_numeric_module._CHANNEL_EXECUTOR
+_OWNED_NUMERIC_EXECUTOR_TYPE = type(_OWNED_NUMERIC_EXECUTOR)
+_OWNED_NUMERIC_EXECUTOR_SUBMIT = _OWNED_NUMERIC_EXECUTOR_TYPE.submit
+_OWNED_NUMERIC_EXECUTOR_NAMESPACE = tuple(vars(_OWNED_NUMERIC_EXECUTOR_TYPE).items())
 _OWNED_TIMELINE_CONTROL_CLASS = _owned_control_module._Controller
 _OWNED_TIMELINE_CONTROL_METHODS = tuple((name, getattr(_OWNED_TIMELINE_CONTROL_CLASS, name))
     for name, value in vars(_OWNED_TIMELINE_CONTROL_CLASS).items() if callable(value))
@@ -809,6 +816,29 @@ def _has_native_timeline_hooks(packed=None):
             or _owned_control_module.execute_hbm is not _OWNED_TIMELINE_CONTROL_ENTRY
             or _owned_control_module._Controller is not _OWNED_TIMELINE_CONTROL_CLASS):
         return False
+    if (_owned_numeric_module._NUMERIC_MEMO_CONTEXT is not _OWNED_NUMERIC_MEMO_CONTEXT
+            or _owned_memo_module._ACTIVE is not _OWNED_NUMERIC_MEMO_CONTEXT
+            or _owned_memo_module.native_memo_hooks is not _OWNED_NUMERIC_MEMO_VALIDATOR
+            or _numeric_memo_execution_policy is not _OWNED_NUMERIC_MEMO_POLICY):
+        return False
+    memo = _OWNED_NUMERIC_MEMO_CONTEXT.get()
+    if memo is not None:
+        if not _OWNED_NUMERIC_MEMO_VALIDATOR(memo):
+            return False
+        executor = _owned_numeric_module._CHANNEL_EXECUTOR
+        executor_class = vars(_OWNED_NUMERIC_EXECUTOR_TYPE)
+        if (executor is not _OWNED_NUMERIC_EXECUTOR or type(executor) is not _OWNED_NUMERIC_EXECUTOR_TYPE
+                or len(executor_class) != len(_OWNED_NUMERIC_EXECUTOR_NAMESPACE)
+                or any(executor_class.get(name) is not original
+                       for name, original in _OWNED_NUMERIC_EXECUTOR_NAMESPACE)):
+            return False
+        executor_fields = vars(executor)
+        if (type(_owned_numeric_module._CHANNEL_WORKERS) is not int or _owned_numeric_module._CHANNEL_WORKERS < 1
+                or type(executor_fields.get("_shutdown")) is not bool or executor_fields["_shutdown"]
+                or type(executor_fields.get("_broken")) is not bool or executor_fields["_broken"]
+                or type(executor_fields.get("_max_workers")) is not int
+                or getattr(executor.submit, "__func__", None) is not _OWNED_NUMERIC_EXECUTOR_SUBMIT):
+            return False
     for cls, name, original in _OWNED_TIMELINE_BATCH_METHODS:
         if getattr(cls, name) is not original:
             return False
@@ -829,3 +859,30 @@ def _has_native_timeline_hooks(packed=None):
         if getattr(_owned_control_module._Controller, name) is not original:
             return False
     return packed is None or packed.run_numeric is _OWNED_TIMELINE_NUMERIC_FUNCTIONS[0][1]
+
+
+_OWNED_NATIVE_TIMELINE_GUARD = _has_native_timeline_hooks
+
+
+def _numeric_memo_execution_policy():
+    """A cache key policy only for the unchanged native numeric execution.
+
+    Channel grouping depends on _CHANNEL_WORKERS and changes floating count
+    reduction order. Include it rather than normalizing arrivals or state.
+    Replaced kernels/executors/guards must execute normally, never reuse a
+    result retained under a different implementation.
+    """
+    if (_has_native_timeline_hooks is not _OWNED_NATIVE_TIMELINE_GUARD
+            or not _OWNED_NATIVE_TIMELINE_GUARD()):
+        return None
+    workers = _owned_numeric_module._CHANNEL_WORKERS
+    executor = _owned_numeric_module._CHANNEL_EXECUTOR
+    if (type(workers) is not int or workers < 1
+            or executor is not _OWNED_NUMERIC_EXECUTOR or type(executor) is not _OWNED_NUMERIC_EXECUTOR_TYPE
+            or getattr(executor.submit, "__func__", None) is not _OWNED_NUMERIC_EXECUTOR_SUBMIT
+            or executor._shutdown or executor._broken or type(executor._max_workers) is not int):
+        return None
+    return ("native_channel_partitions_and_ordered_counts_v1", workers, executor._max_workers)
+
+
+_OWNED_NUMERIC_MEMO_POLICY = _numeric_memo_execution_policy
