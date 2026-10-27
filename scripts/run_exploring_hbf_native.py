@@ -52,7 +52,7 @@ FAST_CONTRACT = "native_stationary_layout_fast_v21"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # use the conditional chunk forecast; detailed passes retain the complete
 # native prompt forward.
-PREFILL_CONTRACT = "native_prefill_layer_forecast_v3"
+PREFILL_CONTRACT = "native_prefill_complete_prompt_pass_v2"
 # PP changes native execution even with one microbatch. Keep its cache
 # identity distinct while the established PP=1/M=1 contracts remain intact.
 PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
@@ -1195,7 +1195,8 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
             expected = parameters(case, layout, batch, mode)
             row = read_candidate(directory, candidate_id(case, layout, batch))
             if row is not None:
-                if row.get("parameters") != expected or row.get("backend") != BACKEND:
+                if (not parameters_compatible(row.get("parameters"), expected)
+                        or row.get("backend") != BACKEND):
                     row = {"parameters": expected, "candidate_id": candidate_id(case, layout, batch),
                            "status": "failed", "metrics": None, "error": {
                                "message": "foreign or mismatched candidate excluded from native metrics"}}
