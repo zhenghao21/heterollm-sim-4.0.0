@@ -27,3 +27,10 @@ artifacts/exploring_hbf_native_*/summaries/
 
 # Bundled presentation build dependencies are local build products.
 docs/presentations/**/.build/
+
+# Scan manager runtime markers and duplicate continuation snapshot.
+artifacts/exploring_hbf_native_*/manager.*
+artifacts/exploring_hbf_native_*/stop.request
+artifacts/exploring_hbf_native_*/repair.manager.*
+artifacts/exploring_hbf_native_*/repair_manager.*
+artifacts/exploring_hbf_native_20261026_v21_continue3/
