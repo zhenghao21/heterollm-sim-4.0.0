@@ -1,0 +1,1 @@
+请求先通过队列 credit 准入，再按页拆分、映射并查找对应 plane 的两个 slot。缓存未命中时，先在 plane 阵列执行 PAGE_READ，再通过内部通道执行 INTERNAL_TRANSFER，将数据填到 slot，最后 HOST_TRANSFER 返回数据。每段分别预约资源，同资源排队，独立资源可以在依赖允许时重叠。缓存命中会跳过阵列读取与内部搬运，但仍要等待 slot 填充就绪和 host 资源。请求完成时间取各页完成时间最大值，延迟从原始到达算起，因此包含准入等待。见 src/heterollm_sim/nand_core.py:537、549、553、1900、1919、1923、1937。

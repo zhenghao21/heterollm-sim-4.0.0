@@ -1,0 +1,154 @@
+{
+  "schema": "ppt-master.svg-quality-report.v1",
+  "stage": "first-page",
+  "target": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026",
+  "source_fingerprint": {
+    "algorithm": "sha256",
+    "digest": "059053d746b52f6363bd8442825fbcbee8f030122259d2db2bb1fae1bac3c22d",
+    "file_count": 1,
+    "files": [
+      {
+        "file": "01_overview.svg",
+        "sha256": "b71142132711075fa492b100e3728a185e84fb6dc3ffaf1a6eb3db1ae9e2e523"
+      }
+    ]
+  },
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "warnings": 0,
+    "errors": 0
+  },
+  "issue_types": {},
+  "categories": {
+    "blocking": {
+      "count": 0,
+      "issues": []
+    },
+    "introduced": {
+      "count": 0,
+      "issues": []
+    },
+    "inherited": {
+      "count": 0,
+      "issues": []
+    },
+    "source-import": {
+      "count": 0,
+      "summary": {
+        "warning_count": 0,
+        "by_code": {}
+      }
+    }
+  },
+  "drift": {
+    "colors": {},
+    "fonts": {},
+    "sizes": {}
+  },
+  "carrier_receipt": {
+    "scope": "informational-not-a-quota",
+    "pages": 1,
+    "totals": {
+      "text_elements": 17,
+      "image_placements": 1,
+      "icons": 0,
+      "svg_geometry_elements": 2,
+      "preset_shapes": 0,
+      "page_frame_elements": 1,
+      "marker_uses": 0
+    },
+    "pages_with": {
+      "images": 1,
+      "icons": 0,
+      "presets": 0,
+      "charts": 0,
+      "tables": 0,
+      "formulas": 0
+    },
+    "geometry_elements": {
+      "circle": 0,
+      "ellipse": 0,
+      "line": 0,
+      "path": 0,
+      "polygon": 0,
+      "polyline": 0,
+      "rect": 2
+    },
+    "preset_names": {},
+    "native_objects": {
+      "chart": 0,
+      "formula_block": 0,
+      "formula_inline": 0,
+      "other": 0,
+      "table": 0
+    },
+    "image_page_max_frame_share_range": [
+      0.2971,
+      0.2971
+    ]
+  },
+  "project_issues": {
+    "template": [],
+    "animation": [],
+    "illustration": [],
+    "communication_trace": [],
+    "pptx_structure": []
+  },
+  "files": [
+    {
+      "file": "01_overview.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026\\svg_output\\01_overview.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 17,
+          "images": {
+            "placements": 1,
+            "files": [
+              "warehouse_metaphor.png"
+            ],
+            "max_frame_share": 0.2971
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 2,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 17,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "b71142132711075fa492b100e3728a185e84fb6dc3ffaf1a6eb3db1ae9e2e523"
+    }
+  ]
+}

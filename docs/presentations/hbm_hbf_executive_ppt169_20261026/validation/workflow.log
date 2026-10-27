@@ -1,0 +1,319 @@
+
+=== 2026-10-26T09:19:52.050Z NOTE id=887ce3aa3488 ===
+Project initialized: profile=default; canvas=ppt169; path=F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026
+
+=== 2026-10-26T09:21:12.671Z PYTHON run=62892d2f2d6f ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\project_manager.py", "validate", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [WARN]
+  [OK] Project structure is valid, with warnings.
+=== 2026-10-26T09:21:13.341Z END run=62892d2f2d6f elapsed_ms=671 output_lines=5 retained=2 omitted=3 ===
+
+=== 2026-10-26T09:25:11.860Z PYTHON run=78298b1c4f5e ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "first-page", "--json"]
+stdout:
+  [WARN] 01_overview.svg - Passed (with warnings)
+     [WARN] Detected 1 paragraph-like line run(s) split across sibling <text> elements (<g id="inputs"> x=78.0, y=478.0..518.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy="0". Keep semantically independent text frames separate.
+  [SUMMARY] Check Summary
+  Total files: 1
+    [OK] Fully passed: 0 (0%)
+    [WARN] With warnings: 1 (100%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 1        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 1 | text: 23 | images: 0 | icons: 0
+    Geometry: SVG elements 12 | native presets 0 | page-frame elements 1 | marker uses 2
+  [OK] spec_lock anchor comparison: no additional contextual colors/fonts or out-of-band font sizes
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_first_page_report.json
+=== 2026-10-26T09:25:12.753Z END run=78298b1c4f5e elapsed_ms=889 output_lines=29 retained=17 omitted=12 ===
+
+=== 2026-10-26T09:27:32.151Z PYTHON run=34af4d6f67dc ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "final", "--json"]
+stdout:
+  [WARN] 01_overview.svg - Passed (with warnings)
+     [WARN] Detected 1 paragraph-like line run(s) split across sibling <text> elements (<g id="inputs"> x=78.0, y=478.0..518.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy="0". Keep semantically independent text frames separate.
+  [OK] 02_mechanisms.svg - Passed
+  [WARN] 03_value.svg - Passed (with warnings)
+     [WARN] <text> (x=140, y=420; text='模型 / 批量 / 上下文') exceeds <g id="ab-experiment"> data-pptx-bounds on the horizontal axis: content (37.7, 401.3)-(242.3, 427.7), container (56.0, 222.0)-(822.0, 590.0), overflow horizontal 2.4%, vertical 0.0%; expand the root module bounds into available non-overlapping space; otherwise reflow the text
+  [SUMMARY] Check Summary
+  Total files: 3
+    [OK] Fully passed: 1 (33%)
+    [WARN] With warnings: 2 (66%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 2        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 3 | text: 67 | images: 0 | icons: 0
+    Geometry: SVG elements 46 | native presets 0 | page-frame elements 3 | marker uses 6
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_report.json
+=== 2026-10-26T09:27:33.087Z END run=34af4d6f67dc elapsed_ms=936 output_lines=34 retained=19 omitted=15 ===
+
+=== 2026-10-26T09:32:41.279Z PYTHON run=a16c0e3285af ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\analyze_images.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026\\images"]
+stdout:
+  [REPORT] Image analysis CSV: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\analysis\image_analysis.csv
+=== 2026-10-26T09:32:41.501Z END run=a16c0e3285af elapsed_ms=218 output_lines=14 retained=1 omitted=13 ===
+
+=== 2026-10-26T09:37:17.921Z PYTHON run=91ece652260c ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\project_manager.py", "validate", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [OK] Project structure is complete.
+=== 2026-10-26T09:37:18.615Z END run=91ece652260c elapsed_ms=687 output_lines=3 retained=1 omitted=2 ===
+
+=== 2026-10-26T09:37:18.794Z PYTHON run=065d89408d48 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "first-page", "--json"]
+stdout:
+  [OK] 01_overview.svg - Passed
+  [SUMMARY] Check Summary
+  Total files: 1
+    [OK] Fully passed: 1 (100%)
+    [WARN] With warnings: 0 (0%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 0        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 1 | text: 17 | images: 1 | icons: 0
+    Geometry: SVG elements 2 | native presets 0 | page-frame elements 1 | marker uses 0
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_first_page_report.json
+=== 2026-10-26T09:37:19.652Z END run=065d89408d48 elapsed_ms=843 output_lines=23 retained=15 omitted=8 ===
+
+=== 2026-10-26T09:38:45.678Z PYTHON run=8152e3165d51 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "final", "--json"]
+stdout:
+  [OK] 01_overview.svg - Passed
+  [WARN] 03_hbf.svg - Passed (with warnings)
+     [WARN] <text> (x=644, y=412; text='每个 plane 两槽读缓冲') exceeds <g id="miss-path"> data-pptx-bounds on the vertical axis: content (644.0, 393.3)-(866.2, 419.7), container (56.0, 204.0)-(1224.0, 415.0), overflow horizontal 0.0%, vertical 2.2%; expand the root module bounds into available non-overlapping space; otherwise reflow the text
+  [SUMMARY] Check Summary
+  Total files: 5
+    [OK] Fully passed: 4 (80%)
+    [WARN] With warnings: 1 (20%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 1        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 5 | text: 114 | images: 1 | icons: 0
+    Geometry: SVG elements 41 | native presets 0 | page-frame elements 5 | marker uses 0
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_report.json
+=== 2026-10-26T09:38:46.569Z END run=8152e3165d51 elapsed_ms=890 output_lines=38 retained=17 omitted=21 ===
+
+=== 2026-10-26T09:40:41.418Z PYTHON run=0a12c8ffda17 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "final", "--json"]
+stdout:
+  [OK] 01_overview.svg - Passed
+  [SUMMARY] Check Summary
+  Total files: 5
+    [OK] Fully passed: 5 (100%)
+    [WARN] With warnings: 0 (0%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 0        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 5 | text: 114 | images: 1 | icons: 0
+    Geometry: SVG elements 41 | native presets 0 | page-frame elements 5 | marker uses 0
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_report.json
+=== 2026-10-26T09:40:42.334Z END run=0a12c8ffda17 elapsed_ms=921 output_lines=31 retained=15 omitted=16 ===
+
+=== 2026-10-26T09:40:49.277Z PYTHON run=21bca3a25ce5 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\total_md_split.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [OK] SVG files and notes have one-to-one correspondence
+  [Done] Successfully generated 5/5 file(s)
+  [Done] Notes splitting complete
+=== 2026-10-26T09:40:49.281Z END run=21bca3a25ce5 elapsed_ms=14 output_lines=14 retained=3 omitted=11 ===
+
+=== 2026-10-26T09:40:53.886Z PYTHON run=7badae8be0b4 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\finalize_svg.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [OK] Done!
+=== 2026-10-26T09:40:59.689Z END run=7badae8be0b4 elapsed_ms=5812 output_lines=12 retained=1 omitted=11 ===
+
+=== 2026-10-26T09:41:05.578Z PYTHON run=c97121b28f72 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["C:\\Users\\A\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_to_pptx.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [Done] Saved: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\exports\hbm_hbf_executive_20261026_024106.pptx
+    [POSTFLIGHT] status=passed quality_gate=passed slides=5 warning_categories=0
+    [PPTX] F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\exports\hbm_hbf_executive_20261026_024106.pptx
+    [REPORT] F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\hbm_hbf_executive_20261026_024106.report.json
+=== 2026-10-26T09:41:07.151Z END run=c97121b28f72 elapsed_ms=1563 output_lines=32 retained=4 omitted=28 ===
+
+=== 2026-10-26T09:42:05.448Z PYTHON run=70a0f6f9ab61 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "final", "--json"]
+stdout:
+  [OK] 01_overview.svg - Passed
+  [SUMMARY] Check Summary
+  Total files: 5
+    [OK] Fully passed: 5 (100%)
+    [WARN] With warnings: 0 (0%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 0        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 5 | text: 114 | images: 1 | icons: 0
+    Geometry: SVG elements 41 | native presets 0 | page-frame elements 5 | marker uses 0
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_report.json
+=== 2026-10-26T09:42:06.370Z END run=70a0f6f9ab61 elapsed_ms=922 output_lines=31 retained=15 omitted=16 ===
+
+=== 2026-10-26T09:42:17.179Z PYTHON run=82763755bdfe ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\total_md_split.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [OK] SVG files and notes have one-to-one correspondence
+  [Done] Successfully generated 5/5 file(s)
+  [Done] Notes splitting complete
+=== 2026-10-26T09:42:17.190Z END run=82763755bdfe elapsed_ms=15 output_lines=14 retained=3 omitted=11 ===
+
+=== 2026-10-26T09:42:17.659Z PYTHON run=05363813071f ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\finalize_svg.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [OK] Done!
+=== 2026-10-26T09:42:23.408Z END run=05363813071f elapsed_ms=5750 output_lines=12 retained=1 omitted=11 ===
+
+=== 2026-10-26T09:42:23.937Z PYTHON run=ee2cd253ee5e ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["C:\\Users\\A\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_to_pptx.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [Done] Saved: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\exports\hbm_hbf_executive_20261026_024224.pptx
+    [POSTFLIGHT] status=passed quality_gate=passed slides=5 warning_categories=0
+    [PPTX] F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\exports\hbm_hbf_executive_20261026_024224.pptx
+    [REPORT] F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\hbm_hbf_executive_20261026_024224.report.json
+=== 2026-10-26T09:42:25.295Z END run=ee2cd253ee5e elapsed_ms=1359 output_lines=32 retained=4 omitted=28 ===
+
+=== 2026-10-26T12:09:55.098Z PYTHON run=a7e6567642a8 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "final", "--json"]
+stdout:
+  [OK] 01_overview.svg - Passed
+  [WARN] 03_hbf.svg - Passed (with warnings)
+     [WARN] <text> (x=702, y=442; text='内部搬完后，该槽才 ready') exceeds <g id="internal-transfer-and-read-slots"> data-pptx-bounds on the vertical axis: content (593.5, 426.7)-(810.5, 448.3), container (430.0, 250.0)-(860.0, 446.0), overflow horizontal 0.0%, vertical 1.2%; expand the root module bounds into available non-overlapping space; otherwise reflow the text
+  [SUMMARY] Check Summary
+  Total files: 5
+    [OK] Fully passed: 4 (80%)
+    [WARN] With warnings: 1 (20%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 1        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 5 | text: 119 | images: 1 | icons: 0
+    Geometry: SVG elements 63 | native presets 0 | page-frame elements 5 | marker uses 6
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_report.json
+=== 2026-10-26T12:09:56.360Z END run=a7e6567642a8 elapsed_ms=1266 output_lines=38 retained=17 omitted=21 ===
+
+=== 2026-10-26T12:11:37.875Z PYTHON run=e08ce7616c75 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "final", "--json"]
+stdout:
+  [OK] 01_overview.svg - Passed
+  [SUMMARY] Check Summary
+  Total files: 5
+    [OK] Fully passed: 5 (100%)
+    [WARN] With warnings: 0 (0%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 0        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 5 | text: 119 | images: 1 | icons: 0
+    Geometry: SVG elements 63 | native presets 0 | page-frame elements 5 | marker uses 6
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_report.json
+=== 2026-10-26T12:11:39.070Z END run=e08ce7616c75 elapsed_ms=1187 output_lines=31 retained=15 omitted=16 ===
+
+=== 2026-10-26T12:11:54.268Z PYTHON run=84a1aebd3a5b ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\total_md_split.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [OK] SVG files and notes have one-to-one correspondence
+  [Done] Successfully generated 5/5 file(s)
+  [Done] Notes splitting complete
+=== 2026-10-26T12:11:54.283Z END run=84a1aebd3a5b elapsed_ms=14 output_lines=14 retained=3 omitted=11 ===
+
+=== 2026-10-26T12:11:54.926Z PYTHON run=3ea63c0c30a6 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\finalize_svg.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [OK] Done!
+=== 2026-10-26T12:12:01.402Z END run=3ea63c0c30a6 elapsed_ms=6468 output_lines=12 retained=1 omitted=11 ===
+
+=== 2026-10-26T12:12:02.218Z PYTHON run=1415e9e1ba1c ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["C:\\Users\\A\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_to_pptx.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [Done] Saved: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\exports\hbm_hbf_executive_20261026_051203.pptx
+    [POSTFLIGHT] status=passed quality_gate=passed slides=5 warning_categories=0
+    [PPTX] F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\exports\hbm_hbf_executive_20261026_051203.pptx
+    [REPORT] F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\hbm_hbf_executive_20261026_051203.report.json
+=== 2026-10-26T12:12:04.426Z END run=1415e9e1ba1c elapsed_ms=2203 output_lines=32 retained=4 omitted=28 ===
+
+=== 2026-10-26T12:13:53.959Z PYTHON run=354b4cb5ca31 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_quality_checker.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026", "--stage", "final", "--json"]
+stdout:
+  [OK] 01_overview.svg - Passed
+  [SUMMARY] Check Summary
+  Total files: 5
+    [OK] Fully passed: 5 (100%)
+    [WARN] With warnings: 0 (0%)
+    [ERROR] With errors: 0 (0%)
+  Provenance categories:
+    blocking: 0          hard findings; gate also requires exit 0
+    introduced: 0        advisory; new or changed
+    inherited: 0         informational; prototype-identical
+    source-import: 0     informational; source-conversion loss
+  [CARRIERS] Actual-use receipt (informational; not a quota)
+    Pages: 5 | text: 119 | images: 1 | icons: 0
+    Geometry: SVG elements 69 | native presets 0 | page-frame elements 5 | marker uses 8
+  [REPORT] JSON quality report exported: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\svg_quality_report.json
+=== 2026-10-26T12:13:55.245Z END run=354b4cb5ca31 elapsed_ms=1282 output_lines=31 retained=15 omitted=16 ===
+
+=== 2026-10-26T12:14:08.160Z PYTHON run=3827098e16ec ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["E:\\anaconda\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\finalize_svg.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [OK] Done!
+=== 2026-10-26T12:14:14.478Z END run=3827098e16ec elapsed_ms=6312 output_lines=12 retained=1 omitted=11 ===
+
+=== 2026-10-26T12:14:15.201Z PYTHON run=02525fcf4424 ===
+cwd: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0
+argv: ["C:\\Users\\A\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe", "C:\\Users\\A\\.codex\\skills\\ppt-master\\scripts\\svg_to_pptx.py", "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026"]
+stdout:
+  [Done] Saved: F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\exports\hbm_hbf_executive_20261026_051416.pptx
+    [POSTFLIGHT] status=passed quality_gate=passed slides=5 warning_categories=0
+    [PPTX] F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\exports\hbm_hbf_executive_20261026_051416.pptx
+    [REPORT] F:\codex_project\37_LLMsim\heterollm-sim-4.0.0\docs\presentations\hbm_hbf_executive_ppt169_20261026\validation\hbm_hbf_executive_20261026_051416.report.json
+=== 2026-10-26T12:14:17.108Z END run=02525fcf4424 elapsed_ms=1907 output_lines=32 retained=4 omitted=28 ===

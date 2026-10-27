@@ -1,0 +1,1 @@
+完整链路分六步。模型、批量、上下文和并行配置决定权重、KV 与激活访问；planner 再组织任务、放置和依赖。分配器将缓冲区与偏移解析成物理 owner 和地址范围。任务真正到达时，运行上下文调用保持状态的物理 Core，而不是直接接受规划时的预览延迟。Core 返回完成时间和资源需求后，事件内核推进后继任务，reporting 汇总流量、资源忙碌与 Token 指标。对应源码是 src/heterollm_sim/planner.py:8975、16306、19067，data_motion.py:1151、1330–1496，event_kernel.py:685，以及 reporting.py:632、780。

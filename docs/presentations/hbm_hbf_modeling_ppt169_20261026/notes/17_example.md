@@ -1,0 +1,1 @@
+这一页只列项目输入，未展示本次测量结果。hardware_catalog 的 HBM4 配置每 GPU 八堆 HBM，读写接口预算都是十二点八 TB 每秒。HBF 配置每 GPU 七堆 HBF 加一堆 HBM，HBF 聚合读带宽十一点二 TB 每秒，写带宽一百一十二 GB 每秒；每堆十六 die、二十五 plane，读页一微秒、program 一百微秒。输入有来源层次。HBM4 的 tRRD 同异组与 tFAW 借用 HBM3E 参考，分别为四、六、二十纳秒。NAND 的二百五十六页每 block、两毫秒 erase、每 die 通道一百 GB 每秒，属于显式本地研究选择。它们不是已校准的厂商实测参数，聚合峰值也不是持续吞吐。见 scripts/exploring_hbf_paper_config.py:144–156、207–258、272–327。

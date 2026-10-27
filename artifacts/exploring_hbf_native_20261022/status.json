@@ -1,0 +1,105 @@
+{
+  "state": "paused",
+  "updated_at": "2026-10-24T10:12:23.846730+00:00",
+  "manager_pid": 40472,
+  "current_phase": "dense_native",
+  "total_cases": 30,
+  "total_candidates": 69,
+  "counts": {
+    "completed": 3,
+    "all_candidates_rejected": 6,
+    "paused": 4,
+    "running": 17
+  },
+  "candidate_counts": {
+    "completed": 7,
+    "forecast_rejected": 17,
+    "slo_rejected": 7,
+    "paused": 4
+  },
+  "running": [],
+  "layouts": [
+    {
+      "dp": 1,
+      "tp": 8,
+      "pp": 1,
+      "ep": 1
+    },
+    {
+      "dp": 2,
+      "tp": 4,
+      "pp": 1,
+      "ep": 1
+    },
+    {
+      "dp": 4,
+      "tp": 2,
+      "pp": 1,
+      "ep": 1
+    },
+    {
+      "dp": 1,
+      "tp": 2,
+      "pp": 1,
+      "ep": 4
+    },
+    {
+      "dp": 1,
+      "tp": 1,
+      "pp": 1,
+      "ep": 8
+    },
+    {
+      "dp": 1,
+      "tp": 4,
+      "pp": 1,
+      "ep": 2
+    }
+  ],
+  "batch_sizes": [
+    1,
+    2,
+    9,
+    11,
+    12,
+    17,
+    23,
+    30,
+    35,
+    46,
+    52,
+    65,
+    76,
+    94,
+    101,
+    102,
+    103,
+    105,
+    122,
+    123,
+    124,
+    132,
+    134,
+    165,
+    176,
+    230,
+    233,
+    295,
+    319,
+    322,
+    323,
+    353,
+    377,
+    380,
+    427,
+    432,
+    444,
+    512
+  ],
+  "backend": "native_serving_physical",
+  "runner_contract": "native_stationary_layout_fast_v16",
+  "simulation_mode": "fast",
+  "deployment_search": true,
+  "stop_requested": true,
+  "error": null
+}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">张量访问到物理地址</text><text x="64" y="146" font-size="24" fill="#526479">每条访问都要说明：在哪个端点、访问哪些字节、何时到达</text>
+<g id="address-resolution" data-pptx-bounds="64 205 1152 422">
+<text x="64" y="248" font-size="26" font-weight="700" fill="#11243A">权重读取</text><text x="64" y="295" font-size="26" font-weight="700" fill="#11243A">KV 历史读 / 新 token 写</text><text x="64" y="342" font-size="26" font-weight="700" fill="#11243A">激活与中间结果读写</text>
+<text x="396" y="295" font-size="32" fill="#526479">→</text>
+<rect x="466" y="210" width="750" height="172" fill="#FFFFFF" stroke="#CCD6DF"/><text x="494" y="252" font-size="26" fill="#11243A">operation　physical_owner　byte_count</text><text x="494" y="303" font-size="26" fill="#11243A">address　或　buffer_id + offset_bytes</text><text x="494" y="350" font-size="22" fill="#526479">分配器解析地址，同时校验容量、分配代次与访问范围</text>
+<line x1="840" y1="385" x2="840" y2="425" stroke="#526479" stroke-width="3"/>
+<rect x="466" y="428" width="334" height="105" fill="#E4F2FA"/><text x="494" y="469" font-size="26" font-weight="700" fill="#007FBA">HBM：拆成 burst</text><text x="494" y="508" font-size="22" fill="#11243A">映射 lane / bank / row</text>
+<rect x="852" y="428" width="364" height="105" fill="#FBECDD"/><text x="880" y="469" font-size="26" font-weight="700" fill="#B96628">HBF：拆成 page</text><text x="880" y="508" font-size="22" fill="#11243A">映射 channel / plane / page</text>
+<text x="64" y="592" font-size="26" fill="#11243A">逻辑字节 ≠ 物理流量</text><text x="466" y="592" font-size="24" fill="#526479">对齐、整 burst、页传输与 RMW 都可能放大流量</text>
+</g>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：data_motion.py:1151 · memory_mapping.py:172,212 · memory_allocator.py</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">05 / 18</text></g></svg>

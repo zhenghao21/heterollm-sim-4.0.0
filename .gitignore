@@ -12,3 +12,18 @@ __pycache__/
 
 # Temporary source backups and rendered reference pages.
 tmp/
+
+# Large local simulation traces are regenerated from the scan manifests.
+artifacts/exploring_hbf_native_*/actual_runtime_profile/
+artifacts/exploring_hbf_native_*/candidates/
+artifacts/exploring_hbf_native_*/configurations/
+artifacts/exploring_hbf_native_*/logs/
+artifacts/exploring_hbf_native_*/points/
+artifacts/exploring_hbf_native_*/prefill/
+artifacts/exploring_hbf_native_*/progress/
+artifacts/exploring_hbf_native_*/repair_workers/
+artifacts/exploring_hbf_native_*/screen/
+artifacts/exploring_hbf_native_*/summaries/
+
+# Bundled presentation build dependencies are local build products.
+docs/presentations/**/.build/

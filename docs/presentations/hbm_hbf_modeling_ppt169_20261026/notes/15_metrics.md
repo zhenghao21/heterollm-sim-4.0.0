@@ -1,0 +1,1 @@
+Core 同时输出完成时间、逻辑与物理流量、等待和各资源占用。HBM 关注行命中、冲突和 ACT、PRE、RD、WR、REF 次数，以及命令总线和数据总线忙碌。HBF 关注缓存命中、实际读页与 program 次数，以及 array、internal 和 host 三种资源。系统层再统计整体 makespan、吞吐以及边界一致的 TTFT 和 TPOT。请求延迟等于完成减到达，有效带宽是逻辑字节除以相应时间窗。service_ns 累加各任务各 owner 的服务跨度，这些跨度可能重叠，不能当整体耗时或总线忙碌；资源忙碌应读 resource_totals。见 src/heterollm_sim/memory_types.py:899、911，memory_service.py:26–84，reporting.py:632、2113、2174–2246。

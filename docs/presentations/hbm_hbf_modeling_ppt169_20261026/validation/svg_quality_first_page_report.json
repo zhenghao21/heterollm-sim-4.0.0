@@ -1,0 +1,156 @@
+{
+  "schema": "ppt-master.svg-quality-report.v1",
+  "stage": "first-page",
+  "target": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026",
+  "source_fingerprint": {
+    "algorithm": "sha256",
+    "digest": "e14fc91485db912c002f11d0bd72cf517d0bebf5d873ba69de25c29fadea6f27",
+    "file_count": 1,
+    "files": [
+      {
+        "file": "01_cover.svg",
+        "sha256": "c6a6dec8ea10f5745c558788b6dc9084e3418064fa38a5d865e0299aee75d75d"
+      }
+    ]
+  },
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "warnings": 1,
+    "errors": 0
+  },
+  "issue_types": {},
+  "categories": {
+    "blocking": {
+      "count": 0,
+      "issues": []
+    },
+    "introduced": {
+      "count": 1,
+      "issues": [
+        {
+          "file": "01_cover.svg",
+          "message": "Cannot verify root viewBox bounds for visible text with unsupported or unresolved geometry: <text> (x=68, y=480; text='地址、介质状态与资源竞争怎样共同决定完成…'); use supported explicit text positioning when page fit matters"
+        }
+      ]
+    },
+    "inherited": {
+      "count": 0,
+      "issues": []
+    },
+    "source-import": {
+      "count": 0,
+      "summary": {
+        "warning_count": 0,
+        "by_code": {}
+      }
+    }
+  },
+  "drift": {
+    "colors": {},
+    "fonts": {},
+    "sizes": {}
+  },
+  "carrier_receipt": {
+    "scope": "informational-not-a-quota",
+    "pages": 1,
+    "totals": {
+      "text_elements": 13,
+      "image_placements": 0,
+      "icons": 0,
+      "svg_geometry_elements": 7,
+      "preset_shapes": 0,
+      "page_frame_elements": 1,
+      "marker_uses": 0
+    },
+    "pages_with": {
+      "images": 0,
+      "icons": 0,
+      "presets": 0,
+      "charts": 0,
+      "tables": 0,
+      "formulas": 0
+    },
+    "geometry_elements": {
+      "circle": 0,
+      "ellipse": 0,
+      "line": 0,
+      "path": 2,
+      "polygon": 0,
+      "polyline": 0,
+      "rect": 5
+    },
+    "preset_names": {},
+    "native_objects": {
+      "chart": 0,
+      "formula_block": 0,
+      "formula_inline": 0,
+      "other": 0,
+      "table": 0
+    },
+    "image_page_max_frame_share_range": []
+  },
+  "project_issues": {
+    "template": [],
+    "animation": [],
+    "illustration": [],
+    "communication_trace": [],
+    "pptx_structure": []
+  },
+  "files": [
+    {
+      "file": "01_cover.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\01_cover.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "Cannot verify root viewBox bounds for visible text with unsupported or unresolved geometry: <text> (x=68, y=480; text='地址、介质状态与资源竞争怎样共同决定完成…'); use supported explicit text positioning when page fit matters"
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 13,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 5,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 2
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 13,
+        "tspan_elements": 1
+      },
+      "passed": true,
+      "source_sha256": "c6a6dec8ea10f5745c558788b6dc9084e3418064fa38a5d865e0299aee75d75d"
+    }
+  ]
+}

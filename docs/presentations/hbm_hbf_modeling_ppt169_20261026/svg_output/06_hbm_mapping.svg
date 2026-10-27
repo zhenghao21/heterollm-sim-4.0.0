@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">HBM 地址映射与并行度</text><text x="64" y="146" font-size="24" fill="#526479">地址落在哪个 lane、bank 与 row，决定并行机会和冲突位置</text>
+<g id="hbm-hierarchy" data-pptx-bounds="64 205 1152 210">
+<rect x="64" y="218" width="190" height="126" fill="#007FBA"/><text x="159" y="267" text-anchor="middle" font-size="26" fill="#FFFFFF">Stack</text><text x="159" y="309" text-anchor="middle" font-size="22" fill="#FFFFFF">HBM 堆</text>
+<text x="278" y="285" font-size="32" fill="#007FBA">→</text>
+<rect x="336" y="218" width="230" height="126" fill="#E4F2FA"/><text x="451" y="267" text-anchor="middle" font-size="26" fill="#11243A">Channel × 32</text><text x="451" y="309" text-anchor="middle" font-size="22" fill="#526479">HBM4 每堆</text>
+<text x="586" y="285" font-size="32" fill="#007FBA">→</text>
+<rect x="642" y="218" width="232" height="126" fill="#E4F2FA"/><text x="758" y="267" text-anchor="middle" font-size="26" fill="#11243A">PC × 2</text><text x="758" y="309" text-anchor="middle" font-size="22" fill="#526479">每个物理 channel</text>
+<text x="894" y="285" font-size="32" fill="#007FBA">→</text>
+<rect x="950" y="218" width="266" height="126" fill="#E4F2FA"/><text x="1083" y="267" text-anchor="middle" font-size="26" fill="#11243A">Bank → Row</text><text x="1083" y="309" text-anchor="middle" font-size="22" fill="#526479">含 SID / bank group</text>
+<text x="64" y="393" font-size="22" fill="#526479">SID 已体现在 bank 地址中，容量计算不再重复乘一遍 die 数</text>
+</g>
+<g id="bank-rotation" data-pptx-bounds="64 438 1152 185">
+<text x="64" y="475" font-size="26" font-weight="700" fill="#007FBA">bank_interleaved</text><text x="456" y="475" font-size="26" fill="#11243A">先分散 lane → bank → column → row</text>
+<text x="64" y="534" font-size="24" fill="#526479">同 SID 内轮换 bank group</text><text x="456" y="534" font-size="32" fill="#007FBA">0 → 8 → 1 → 9 → 2 → 10 → …</text>
+<text x="456" y="587" font-size="22" fill="#526479">示意：每组 8 个 bank；持续访问不再一直落在同组</text>
+</g>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：hbm_geometry.py:102,137 · memory_mapping.py:18,47 · _hbm_control.py:60</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">06 / 18</text></g></svg>

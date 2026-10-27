@@ -1,0 +1,36 @@
+{
+  "schema": "selected-long-prefill-repair/v1",
+  "state": "running",
+  "manager_pid": 27264,
+  "updated_at": "2026-10-26T15:08:54.085497+00:00",
+  "source_directory": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_native_20261026_v21_recovery1",
+  "prefill_contract": "native_prefill_complete_prompt_pass_v2",
+  "prefill_wall_cap_seconds": 14400.0,
+  "worker_process_cap_seconds": 17280.0,
+  "hbm_channel_threads": 4,
+  "accepted_prefill_count": 0,
+  "jobs": [
+    {
+      "job_id": "prefill__llama4_maverick__LONG__TP4PP1EP2__sampled",
+      "state": "running",
+      "launcher_pid": 58468,
+      "elapsed_seconds": 158.1409999999887,
+      "process_hard_cap_seconds": 17280.0
+    },
+    {
+      "job_id": "prefill__llama4_maverick__LONG__TP2PP1EP4__sampled",
+      "state": "running",
+      "launcher_pid": 38532,
+      "elapsed_seconds": 158.125,
+      "process_hard_cap_seconds": 17280.0
+    },
+    {
+      "job_id": "prefill__llama4_maverick__LONG__TP8PP1EP1__sampled",
+      "state": "running",
+      "launcher_pid": 33268,
+      "elapsed_seconds": 158.125,
+      "process_hard_cap_seconds": 17280.0
+    }
+  ],
+  "error": null
+}

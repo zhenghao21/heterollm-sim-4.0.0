@@ -1,0 +1,1 @@
+完整页写入依次经历 host 传输、内部传输、阵列 program，最后一个阶段结束才算完成。部分页写按配置拒绝，或者执行付费 read-modify-write，也就是先读旧页并内部搬运，再执行新页编程。显式 erase 按物理 block 去重并占用阵列资源。当前论文原生基线使用 generic_nand，是直接地址页服务，没有默认 FTL、垃圾回收和自动擦除。NandCore 也支持 OCP 模式，但 OCP 的 page 零自动 erase、顺序 program 等约束不能混进 generic 基线。见 src/heterollm_sim/nand_core.py:1861、1958、1964、1982，memory_mapping.py:216，memory_types.py:739。

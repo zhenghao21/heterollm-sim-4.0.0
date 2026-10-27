@@ -1,0 +1,3 @@
+HBM 的关键不是只知道传了多少字节，还要知道目标行是否已经打开。本项目的 jedec_hbm 路径把请求拆成三十二字节 burst，再按地址映射到 channel、pseudo-channel，也就是 PC，以及 bank 和 row。行命中时直接发 RD，经过读流水延迟 RL，再进行 DQ 数据传输。bank 关闭时，要先 ACT 开行，等待 tRCD，再读。行冲突时，先 PRE 关闭旧行，等 tRP，再 ACT 打开新行，因此多付开关行和等待成本。图只表示顺序，不按时间比例，也省略 ACT 在具体时钟边沿上的精细锚点。
+
+这些命令还需要满足 tCCD 列间隔、tRRD 与四激活窗口 tFAW、读写方向切换和刷新约束，写对应 WR 与 WL。请求完成取所有 burst 数据结束时间最大值，完整延迟含到达之后的等待。analytical 是另一种简化模式，不应把本页当成所有模式共同的精度承诺。源码是 src/heterollm_sim/memory_mapping.py:18、47、172，_hbm_control.py:121、145、183、206、279、490、547、584，以及 dram_core.py:90、483。

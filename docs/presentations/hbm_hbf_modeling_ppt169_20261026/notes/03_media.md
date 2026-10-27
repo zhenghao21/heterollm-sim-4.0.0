@@ -1,0 +1,1 @@
+HBM 由 DramConfig 配置、DramCore 执行，JEDEC HBM 路径按三十二字节 burst 服务，关键状态是打开的行、命令总线、数据总线以及刷新。HBF 使用 NandConfig 和 NandCore，当前论文原生配置按四 KiB 页服务，关键状态是 plane 阵列、读缓冲和各段传输。两条路径共同接收操作、地址、字节数和到达时间，最终返回完成时间。三十二字节属于 JEDEC HBM 模式，四 KiB 属于这里举例的论文原生配置，不能扩展成所有配置的固定要求。见 src/heterollm_sim/memory_types.py:243、404、659，memory_mapping.py:172、212。

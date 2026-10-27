@@ -1,0 +1,3343 @@
+{
+  "status": {
+    "state": "failed",
+    "updated_at": "2026-10-26T10:12:23.984687+00:00",
+    "manager_pid": 21892,
+    "current_phase": null,
+    "total_cases": 30,
+    "total_candidates": 0,
+    "counts": {
+      "running": 30
+    },
+    "candidate_counts": {},
+    "running": [],
+    "layouts": [],
+    "batch_sizes": [],
+    "backend": "native_serving_physical",
+    "runner_contract": "native_stationary_layout_fast_v21",
+    "simulation_mode": "fast",
+    "deployment_search": true,
+    "stop_requested": true,
+    "error": {
+      "type": "PermissionError",
+      "message": "[Errno 13] Permission denied: 'artifacts\\\\exploring_hbf_native_20261026_v21\\\\progress\\\\native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B180.json'",
+      "traceback": "Traceback (most recent call last):\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 1759, in main\n    return run_search_manager(directory, workers=args.workers, case_ids=args.cases)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 1660, in run_search_manager\n    code = _poll_candidate(directory, identity, job, mode)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 1389, in _poll_candidate\n    observed = read_json(progress_path, {})\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 134, in read_json\n    return json.loads(Path(path).read_text(encoding=\"utf-8\"))\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\A\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\Lib\\pathlib.py\", line 1027, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\A\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\Lib\\pathlib.py\", line 1013, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nPermissionError: [Errno 13] Permission denied: 'artifacts\\\\exploring_hbf_native_20261026_v21\\\\progress\\\\native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B180.json'\n"
+    },
+    "worker_limit": 8,
+    "wall_factor": 8,
+    "hbm_channel_threads": 4
+  },
+  "cases": [
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBM4__SHORT__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBM4__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBM4__SHORT__G8__DP1_TP8_PP1_EP1__B512",
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B176",
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B353",
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B322"
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B176",
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B353",
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B322"
+      ],
+      "candidate_statuses": {
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B176": "completed",
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B353": "forecast_rejected",
+        "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B322": "completed"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.485267+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 1555,
+              "capacity_max_batch": 1555,
+              "tpot_ns": 81009742.58867285,
+              "per_gpu_tokens_s": 2399.402760565967,
+              "tpot_line_ns": [
+                9526316.285993785,
+                45673.5840381531
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 353,
+              "capacity_max_batch": 353,
+              "tpot_ns": 40696969.93552911,
+              "per_gpu_tokens_s": 2168.4661079142484,
+              "tpot_line_ns": [
+                19165161.77628854,
+                60975.95349903301
+              ]
+            },
+            "runs": [
+              {
+                "batch": 176,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              },
+              {
+                "batch": 353,
+                "kind": "too_big",
+                "status": "forecast_rejected",
+                "reason": "native_stationary_first_cohort_not_a_full_batch",
+                "capacity": 322
+              },
+              {
+                "batch": 322,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              }
+            ],
+            "points": [
+              {
+                "batch": 176,
+                "tpot_upper_ns": 47712238.99695262,
+                "tpot_ns": 47503837.22110203,
+                "status": "completed",
+                "native_wall_seconds": 221.32111090001126,
+                "peak_memory_bytes": 2112663552
+              },
+              {
+                "batch": 322,
+                "tpot_upper_ns": 65950199.674666665,
+                "tpot_ns": 65812502.91131155,
+                "status": "completed",
+                "native_wall_seconds": 351.77622490000795,
+                "peak_memory_bytes": 3181772800
+              }
+            ],
+            "outcome": {
+              "kind": "limited",
+              "reason": "native_capacity_limited",
+              "batch": 322
+            },
+            "next": null
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBM4__MID__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBM4__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B233",
+        "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B467",
+        "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B449",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B52",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B105",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B101"
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B233",
+        "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B467",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B52",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B105",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B101"
+      ],
+      "candidate_statuses": {
+        "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B233": "completed",
+        "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B467": "forecast_rejected",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B52": "completed",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B105": "forecast_rejected",
+        "native__llama3_405b__HBM4__MID__G8__DP2_TP4_PP1_EP1__B101": "completed"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.491268+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 467,
+              "capacity_max_batch": 467,
+              "tpot_ns": 40840242.210886635,
+              "per_gpu_tokens_s": 1429.3499950017238,
+              "tpot_line_ns": [
+                11389009.752110377,
+                63046.238506091424
+              ]
+            },
+            "runs": [
+              {
+                "batch": 233,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              },
+              {
+                "batch": 467,
+                "kind": "too_big",
+                "status": "forecast_rejected",
+                "reason": "native_stationary_first_cohort_not_a_full_batch",
+                "capacity": 449
+              }
+            ],
+            "points": null,
+            "outcome": null,
+            "next": 449
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 105,
+              "capacity_max_batch": 105,
+              "tpot_ns": 30856041.29755748,
+              "per_gpu_tokens_s": 850.7248142060891,
+              "tpot_line_ns": [
+                19211307.740849234,
+                110883.84763089193
+              ]
+            },
+            "runs": [
+              {
+                "batch": 52,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              },
+              {
+                "batch": 105,
+                "kind": "too_big",
+                "status": "forecast_rejected",
+                "reason": "native_stationary_first_cohort_not_a_full_batch",
+                "capacity": 101
+              },
+              {
+                "batch": 101,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              }
+            ],
+            "points": [
+              {
+                "batch": 52,
+                "tpot_upper_ns": 36128441.02762537,
+                "tpot_ns": 35801491.48363507,
+                "status": "completed",
+                "native_wall_seconds": 148.5118225000042,
+                "peak_memory_bytes": 1123581952
+              },
+              {
+                "batch": 101,
+                "tpot_upper_ns": 44670052.726096965,
+                "tpot_ns": 44490908.6897146,
+                "status": "completed",
+                "native_wall_seconds": 223.06531759999052,
+                "peak_memory_bytes": 1508655104
+              }
+            ],
+            "outcome": {
+              "kind": "limited",
+              "reason": "native_capacity_limited",
+              "batch": 101
+            },
+            "next": null
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBM4__LONG__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBM4",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBM4__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B12",
+        "native__llama3_405b__HBM4__LONG__G8__DP2_TP4_PP1_EP1__B2"
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__HBM4__LONG__G8__DP2_TP4_PP1_EP1__B2"
+      ],
+      "candidate_statuses": {
+        "native__llama3_405b__HBM4__LONG__G8__DP2_TP4_PP1_EP1__B2": "forecast_rejected"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.493267+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 25,
+              "capacity_max_batch": 25,
+              "tpot_ns": 27262229.326559637,
+              "per_gpu_tokens_s": 114.6274562717267,
+              "tpot_line_ns": [
+                11434478.884756908,
+                633092.2338264957
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 12
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 4,
+              "capacity_max_batch": 4,
+              "tpot_ns": 24217036.88262425,
+              "per_gpu_tokens_s": 41.29324346520284,
+              "tpot_line_ns": [
+                19205443.43533503,
+                1253043.4994223036
+              ]
+            },
+            "runs": [
+              {
+                "batch": 2,
+                "kind": "too_big",
+                "status": "forecast_rejected",
+                "reason": "native_stationary_import_pool_not_full_at_cutoff",
+                "capacity": 0
+              }
+            ],
+            "points": [],
+            "outcome": {
+              "kind": "no_native_measurement",
+              "reason": "native_stationary_import_pool_not_full_at_cutoff"
+            },
+            "next": null
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 2,
+              "ep": 1
+            },
+            "reason": "native_stationary_does_not_compose_pipeline_stages"
+          }
+        ],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV__SHORT__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "CONV",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B319",
+        "native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B200",
+        "native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B180",
+        "native__llama3_405b__CONV__SHORT__G8__DP2_TP4_PP1_EP1__B46",
+        "native__llama3_405b__CONV__SHORT__G8__DP2_TP4_PP1_EP1__B1"
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B319",
+        "native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B200",
+        "native__llama3_405b__CONV__SHORT__G8__DP2_TP4_PP1_EP1__B46",
+        "native__llama3_405b__CONV__SHORT__G8__DP2_TP4_PP1_EP1__B1"
+      ],
+      "candidate_statuses": {
+        "native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B319": "slo_rejected",
+        "native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B200": "slo_rejected",
+        "native__llama3_405b__CONV__SHORT__G8__DP2_TP4_PP1_EP1__B46": "slo_rejected",
+        "native__llama3_405b__CONV__SHORT__G8__DP2_TP4_PP1_EP1__B1": "slo_rejected"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.499775+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 639,
+              "capacity_max_batch": 29092,
+              "tpot_ns": 99962716.96915694,
+              "per_gpu_tokens_s": 799.047909278467,
+              "tpot_line_ns": [
+                31822798.47984171,
+                104959.92240049333
+              ]
+            },
+            "runs": [
+              {
+                "batch": 319,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              },
+              {
+                "batch": 200,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              }
+            ],
+            "points": null,
+            "outcome": null,
+            "next": 180
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 93,
+              "capacity_max_batch": 14122,
+              "tpot_ns": 99933738.3713758,
+              "per_gpu_tokens_s": 232.6541604357667,
+              "tpot_line_ns": [
+                78104375.87660635,
+                171163.81828203634
+              ]
+            },
+            "runs": [
+              {
+                "batch": 46,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              },
+              {
+                "batch": 1,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              }
+            ],
+            "points": [
+              {
+                "batch": 46,
+                "tpot_upper_ns": 111915793.76860297,
+                "tpot_ns": 111739877.68681304,
+                "status": "slo_rejected",
+                "native_wall_seconds": 69.48079100000905,
+                "peak_memory_bytes": 1137471488
+              },
+              {
+                "batch": 1,
+                "tpot_upper_ns": 102345640.00886834,
+                "tpot_ns": 102267401.88850066,
+                "status": "slo_rejected",
+                "native_wall_seconds": 53.263753799998085,
+                "peak_memory_bytes": 771170304
+              }
+            ],
+            "outcome": {
+              "kind": "slo_unreachable",
+              "batch": 1
+            },
+            "next": null
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV__MID__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "CONV",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__CONV__MID__G8__DP1_TP8_PP1_EP1__B134",
+        "native__llama3_405b__CONV__MID__G8__DP1_TP8_PP1_EP1__B92",
+        "native__llama3_405b__CONV__MID__G8__DP2_TP4_PP1_EP1__B17",
+        "native__llama3_405b__CONV__MID__G8__DP2_TP4_PP1_EP1__B1",
+        "native__llama3_405b__CONV__MID__G8__DP1_TP8_PP1_EP1__B110"
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__CONV__MID__G8__DP1_TP8_PP1_EP1__B134",
+        "native__llama3_405b__CONV__MID__G8__DP1_TP8_PP1_EP1__B92",
+        "native__llama3_405b__CONV__MID__G8__DP2_TP4_PP1_EP1__B17",
+        "native__llama3_405b__CONV__MID__G8__DP2_TP4_PP1_EP1__B1"
+      ],
+      "candidate_statuses": {
+        "native__llama3_405b__CONV__MID__G8__DP1_TP8_PP1_EP1__B134": "slo_rejected",
+        "native__llama3_405b__CONV__MID__G8__DP1_TP8_PP1_EP1__B92": "completed",
+        "native__llama3_405b__CONV__MID__G8__DP2_TP4_PP1_EP1__B17": "slo_rejected",
+        "native__llama3_405b__CONV__MID__G8__DP2_TP4_PP1_EP1__B1": "slo_rejected"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.505085+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 269,
+              "capacity_max_batch": 8742,
+              "tpot_ns": 99966120.36492847,
+              "per_gpu_tokens_s": 336.3639588817813,
+              "tpot_line_ns": [
+                42432264.3314836,
+                211493.30435602882
+              ]
+            },
+            "runs": [
+              {
+                "batch": 134,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              },
+              {
+                "batch": 92,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              }
+            ],
+            "points": [
+              {
+                "batch": 134,
+                "tpot_upper_ns": 114037858.6618066,
+                "tpot_ns": 113842683.88943781,
+                "status": "slo_rejected",
+                "native_wall_seconds": 229.50358550000237,
+                "peak_memory_bytes": 4177244160
+              },
+              {
+                "batch": 92,
+                "tpot_upper_ns": 88887076.83288494,
+                "tpot_ns": 88868858.9015701,
+                "status": "completed",
+                "native_wall_seconds": 206.14501269999892,
+                "peak_memory_bytes": 3522027520
+              }
+            ],
+            "outcome": {
+              "kind": "interpolated",
+              "batch": 110,
+              "bracket": [
+                92,
+                134
+              ],
+              "predicted_tpot_ns": 99571926.7535134
+            },
+            "next": null
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 34,
+              "capacity_max_batch": 4243,
+              "tpot_ns": 99736159.99019437,
+              "per_gpu_tokens_s": 85.22485727178271,
+              "tpot_line_ns": [
+                85603060.91407958,
+                377223.5330070918
+              ]
+            },
+            "runs": [
+              {
+                "batch": 17,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              },
+              {
+                "batch": 1,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              }
+            ],
+            "points": [
+              {
+                "batch": 17,
+                "tpot_upper_ns": 110399951.4144804,
+                "tpot_ns": 110264020.29799525,
+                "status": "slo_rejected",
+                "native_wall_seconds": 67.29550360000576,
+                "peak_memory_bytes": 886423552
+              },
+              {
+                "batch": 1,
+                "tpot_upper_ns": 102546567.84109583,
+                "tpot_ns": 102535373.77076232,
+                "status": "slo_rejected",
+                "native_wall_seconds": 57.10232499999984,
+                "peak_memory_bytes": 771465216
+              }
+            ],
+            "outcome": {
+              "kind": "slo_unreachable",
+              "batch": 1
+            },
+            "next": null
+          }
+        ],
+        "acceptance": {
+          "layout": {
+            "dp": 1,
+            "tp": 8,
+            "pp": 1,
+            "ep": 1
+          },
+          "batch": 110,
+          "kind": "interpolated",
+          "reason": null,
+          "predicted_tokens_per_second_per_gpu": 138.0911311883882
+        },
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV__LONG__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "CONV",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__CONV__LONG__G8__DP1_TP8_PP1_EP1__B9",
+        "native__llama3_405b__CONV__LONG__G8__DP2_TP4_PP1_EP1__B1"
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__CONV__LONG__G8__DP2_TP4_PP1_EP1__B1"
+      ],
+      "candidate_statuses": {
+        "native__llama3_405b__CONV__LONG__G8__DP2_TP4_PP1_EP1__B1": "forecast_rejected"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.507084+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 18,
+              "capacity_max_batch": 516,
+              "tpot_ns": 97320416.77137287,
+              "per_gpu_tokens_s": 23.119506416477297,
+              "tpot_line_ns": [
+                47186811.0094285,
+                2785163.811423019
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 9
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 2,
+              "capacity_max_batch": 249,
+              "tpot_ns": 98506329.1208503,
+              "per_gpu_tokens_s": 5.075815985250919,
+              "tpot_line_ns": [
+                87427164.62662068,
+                5539976.74931135
+              ]
+            },
+            "runs": [
+              {
+                "batch": 1,
+                "kind": "too_big",
+                "status": "forecast_rejected",
+                "reason": "native_stationary_import_pool_not_full_at_cutoff",
+                "capacity": 0
+              }
+            ],
+            "points": [],
+            "outcome": {
+              "kind": "no_native_measurement",
+              "reason": "native_stationary_import_pool_not_full_at_cutoff"
+            },
+            "next": null
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF__SHORT__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBF",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B230",
+        "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B264",
+        "native__llama3_405b__HBF__SHORT__G8__DP2_TP4_PP1_EP1__B444",
+        "native__llama3_405b__HBF__SHORT__G8__DP2_TP4_PP1_EP1__B399"
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B230",
+        "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B264",
+        "native__llama3_405b__HBF__SHORT__G8__DP2_TP4_PP1_EP1__B444"
+      ],
+      "candidate_statuses": {
+        "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B230": "completed",
+        "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B264": "completed",
+        "native__llama3_405b__HBF__SHORT__G8__DP2_TP4_PP1_EP1__B444": "slo_rejected"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.512084+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 4,
+              "tp": 2,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 460,
+              "capacity_max_batch": 6636,
+              "tpot_ns": 99908155.78188019,
+              "per_gpu_tokens_s": 2302.1143589331864,
+              "tpot_line_ns": [
+                17447711.42062813,
+                181041.8395136626
+              ]
+            },
+            "runs": [
+              {
+                "batch": 230,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              },
+              {
+                "batch": 264,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              }
+            ],
+            "points": [
+              {
+                "batch": 230,
+                "tpot_upper_ns": 90385520.23707224,
+                "tpot_ns": 90370902.12551819,
+                "status": "completed",
+                "native_wall_seconds": 62.61676809999335,
+                "peak_memory_bytes": 1349894144
+              },
+              {
+                "batch": 264,
+                "tpot_upper_ns": 96200632.04252593,
+                "tpot_ns": 96074021.66183554,
+                "status": "completed",
+                "native_wall_seconds": 66.60701110000082,
+                "peak_memory_bytes": 1484972032
+              }
+            ],
+            "outcome": {
+              "kind": "limited",
+              "reason": "native_wall_limited",
+              "batch": 264
+            },
+            "next": null
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 889,
+              "capacity_max_batch": 14122,
+              "tpot_ns": 99896284.06812628,
+              "per_gpu_tokens_s": 2224.8074798100815,
+              "tpot_line_ns": [
+                5524124.528616726,
+                108122.5816629672
+              ]
+            },
+            "runs": [
+              {
+                "batch": 444,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              }
+            ],
+            "points": null,
+            "outcome": null,
+            "next": 399
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF__MID__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBF",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B295",
+        "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B84",
+        "native__llama3_405b__HBF__MID__G8__DP4_TP2_PP1_EP1__B132"
+      ],
+      "candidate_ids": [
+        "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B295",
+        "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B84"
+      ],
+      "candidate_statuses": {
+        "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B295": "slo_rejected",
+        "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B84": "completed"
+      },
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.516594+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 590,
+              "capacity_max_batch": 4243,
+              "tpot_ns": 99876373.6835111,
+              "per_gpu_tokens_s": 1476.825745269837,
+              "tpot_line_ns": [
+                10078718.664009303,
+                154578.36067089997
+              ]
+            },
+            "runs": [
+              {
+                "batch": 295,
+                "kind": "measured",
+                "status": "slo_rejected",
+                "reason": "mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms",
+                "capacity": null
+              },
+              {
+                "batch": 84,
+                "kind": "measured",
+                "status": "completed",
+                "reason": null,
+                "capacity": null
+              }
+            ],
+            "points": [
+              {
+                "batch": 295,
+                "tpot_upper_ns": 241272860.87374,
+                "tpot_ns": 241220225.91562393,
+                "status": "slo_rejected",
+                "native_wall_seconds": 147.8671112000011,
+                "peak_memory_bytes": 3235954688
+              },
+              {
+                "batch": 84,
+                "tpot_upper_ns": 78282311.20559905,
+                "tpot_ns": 78079880.22898956,
+                "status": "completed",
+                "native_wall_seconds": 90.47459629998775,
+                "peak_memory_bytes": 1453219840
+              }
+            ],
+            "outcome": {
+              "kind": "interpolated",
+              "batch": 112,
+              "bracket": [
+                84,
+                295
+              ],
+              "predicted_tpot_ns": 99728836.05470407
+            },
+            "next": null
+          },
+          {
+            "layout": {
+              "dp": 4,
+              "tp": 2,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 264,
+              "capacity_max_batch": 1993,
+              "tpot_ns": 99946379.39223264,
+              "per_gpu_tokens_s": 1320.7081717485248,
+              "tpot_line_ns": [
+                32738259.19616902,
+                256154.16175207155
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 132
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF__LONG__G8",
+        "phase": "dense_native",
+        "model": "llama3_405b",
+        "hardware": "HBF",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBF__LONG__G8__DP1_TP8_PP1_EP1__B65",
+        "native__llama3_405b__HBF__LONG__G8__DP2_TP4_PP1_EP1__B30"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.518014+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 131,
+              "capacity_max_batch": 516,
+              "tpot_ns": 99646392.0917523,
+              "per_gpu_tokens_s": 164.33108772189408,
+              "tpot_line_ns": [
+                12983739.753121987,
+                662721.8629434322
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 65
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 61,
+              "capacity_max_batch": 249,
+              "tpot_ns": 99403245.68283084,
+              "per_gpu_tokens_s": 153.41551370121928,
+              "tpot_line_ns": [
+                20558954.283291563,
+                1294632.8303875895
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 30
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV_plus__SHORT__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "CONV+",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV_plus__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__CONV_plus__SHORT__G8__DP1_TP8_PP1_EP1__B377",
+        "native__llama3_405b__CONV_plus__SHORT__G8__DP2_TP4_PP1_EP1__B94"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.519167+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 754,
+              "capacity_max_batch": 2467,
+              "tpot_ns": 99985885.96736747,
+              "per_gpu_tokens_s": 942.6330435353696,
+              "tpot_line_ns": [
+                42023284.69916129,
+                76963.51367976132
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 377
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 188,
+              "capacity_max_batch": 1651,
+              "tpot_ns": 99893654.66371696,
+              "per_gpu_tokens_s": 470.50035518493434,
+              "tpot_line_ns": [
+                75278399.48716375,
+                132927.00636189262
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 94
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV_plus__MID__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "CONV+",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV_plus__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__CONV_plus__MID__G8__DP1_TP8_PP1_EP1__B165",
+        "native__llama3_405b__CONV_plus__MID__G8__DP2_TP4_PP1_EP1__B35"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.520166+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 331,
+              "capacity_max_batch": 2467,
+              "tpot_ns": 99951155.04699257,
+              "per_gpu_tokens_s": 413.9521947550013,
+              "tpot_line_ns": [
+                41510168.45567772,
+                177045.81095308912
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 165
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 71,
+              "capacity_max_batch": 1651,
+              "tpot_ns": 99758189.63100563,
+              "per_gpu_tokens_s": 177.9302538032743,
+              "tpot_line_ns": [
+                76255944.72825691,
+                331027.6420927546
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 35
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__CONV_plus__LONG__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "CONV+",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__CONV_plus__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__CONV_plus__LONG__G8__DP1_TP8_PP1_EP1__B11",
+        "native__llama3_405b__CONV_plus__LONG__G8__DP2_TP4_PP1_EP1__B2"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.521672+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 23,
+              "capacity_max_batch": 592,
+              "tpot_ns": 98633752.61966535,
+              "per_gpu_tokens_s": 29.14823702476458,
+              "tpot_line_ns": [
+                42487427.60940015,
+                2438421.320610833
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 11
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 4,
+              "capacity_max_batch": 287,
+              "tpot_ns": 97147729.92445335,
+              "per_gpu_tokens_s": 10.293601309857133,
+              "tpot_line_ns": [
+                77751200.27122065,
+                4844037.42881754
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 2
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF_plus__SHORT__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF_plus__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBF_plus__SHORT__G8__DP4_TP2_PP1_EP1__B323",
+        "native__llama3_405b__HBF_plus__SHORT__G8__DP2_TP4_PP1_EP1__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.522678+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 4,
+              "tp": 2,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 647,
+              "capacity_max_batch": 993,
+              "tpot_ns": 99904192.64016826,
+              "per_gpu_tokens_s": 3238.1023403609493,
+              "tpot_line_ns": [
+                33422461.471861184,
+                103706.18504690668
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 323
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 1192,
+              "capacity_max_batch": 1651,
+              "tpot_ns": 99963359.7051044,
+              "per_gpu_tokens_s": 2981.0922810028696,
+              "tpot_line_ns": [
+                17194729.31743653,
+                69076.26622631229
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF_plus__MID__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF_plus__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBF_plus__MID__G8__DP2_TP4_PP1_EP1__B380",
+        "native__llama3_405b__HBF_plus__MID__G8__DP1_TP8_PP1_EP1__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.523679+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 761,
+              "capacity_max_batch": 1651,
+              "tpot_ns": 99951674.07126182,
+              "per_gpu_tokens_s": 1903.4198453180368,
+              "tpot_line_ns": [
+                17635752.711887643,
+                107920.48415353689
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 380
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 1375,
+              "capacity_max_batch": 2467,
+              "tpot_ns": 99945571.40588517,
+              "per_gpu_tokens_s": 1719.6860009134869,
+              "tpot_line_ns": [
+                12747080.756154075,
+                63655.80155881221
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama3_405b__HBF_plus__LONG__G8",
+        "phase": "dense_plus",
+        "model": "llama3_405b",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama3_405b__HBF_plus__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama3_405b__HBF_plus__LONG__G8__DP1_TP8_PP1_EP1__B76",
+        "native__llama3_405b__HBF_plus__LONG__G8__DP2_TP4_PP1_EP1__B35"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.524679+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 152,
+              "capacity_max_batch": 592,
+              "tpot_ns": 99872273.59330304,
+              "per_gpu_tokens_s": 190.2429905358042,
+              "tpot_line_ns": [
+                12735185.455347717,
+                574836.1286539332
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 76
+          },
+          {
+            "layout": {
+              "dp": 2,
+              "tp": 4,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 70,
+              "capacity_max_batch": 287,
+              "tpot_ns": 99060603.34343055,
+              "per_gpu_tokens_s": 176.65953375359243,
+              "tpot_line_ns": [
+                18765542.711279064,
+                1147155.3028721309
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 35
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBM4__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBM4",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBM4__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBM4__SHORT__G8__DP1_TP2_PP1_EP4__B512",
+        "native__llama4_maverick__HBM4__SHORT__G8__DP1_TP1_PP1_EP8__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.525679+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 3872,
+              "capacity_max_batch": 3872,
+              "tpot_ns": 29995352.31524608,
+              "per_gpu_tokens_s": 16135.833142189558,
+              "tpot_line_ns": [
+                3623045.090856716,
+                6929.124438302593
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 1,
+              "pp": 1,
+              "ep": 8
+            },
+            "quantum": 8,
+            "bypass": {
+              "candidate_batch": 3560,
+              "capacity_max_batch": 3560,
+              "tpot_ns": 28199673.773103766,
+              "per_gpu_tokens_s": 15780.324395966285,
+              "tpot_line_ns": [
+                5041691.658351932,
+                6657.374072749471
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBM4__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBM4",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBM4__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBM4__MID__G8__DP1_TP4_PP1_EP2__B512",
+        "native__llama4_maverick__HBM4__MID__G8__DP1_TP2_PP1_EP4__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.527680+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 1212,
+              "capacity_max_batch": 1212,
+              "tpot_ns": 27689150.27641999,
+              "per_gpu_tokens_s": 5471.457176821241,
+              "tpot_line_ns": [
+                3170288.2163557485,
+                20642.88842187532
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 1160,
+              "capacity_max_batch": 1160,
+              "tpot_ns": 26723193.069584258,
+              "per_gpu_tokens_s": 5425.99829378308,
+              "tpot_line_ns": [
+                3659321.033278063,
+                20373.21869038306
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBM4__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBM4",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBM4__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBM4__LONG__G8__DP1_TP4_PP1_EP2__B122",
+        "native__llama4_maverick__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B124"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.528678+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 244,
+              "capacity_max_batch": 244,
+              "tpot_ns": 24816529.243476942,
+              "per_gpu_tokens_s": 1229.019565982095,
+              "tpot_line_ns": [
+                2015825.2868618444,
+                94959.5686509396
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 122
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 249,
+              "capacity_max_batch": 249,
+              "tpot_ns": 25505601.230711304,
+              "per_gpu_tokens_s": 1220.3201845139167,
+              "tpot_line_ns": [
+                2101070.956520509,
+                95330.87978949591
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 124
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__CONV__SHORT__G8__DP1_TP2_PP1_EP4__B512",
+        "native__llama4_maverick__CONV__SHORT__G8__DP1_TP4_PP1_EP2__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.529803+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 2648,
+              "capacity_max_batch": 76164,
+              "tpot_ns": 99920993.79371676,
+              "per_gpu_tokens_s": 3312.6171731571985,
+              "tpot_line_ns": [
+                41367311.08371624,
+                20838.066939193446
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 2630,
+              "capacity_max_batch": 76320,
+              "tpot_ns": 99964562.94174139,
+              "per_gpu_tokens_s": 3288.665406275953,
+              "tpot_line_ns": [
+                39512924.513078064,
+                21824.91049618532
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__CONV__MID__G8__DP1_TP4_PP1_EP2__B432",
+        "native__llama4_maverick__CONV__MID__G8__DP1_TP8_PP1_EP1__B427"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.530803+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 864,
+              "capacity_max_batch": 22936,
+              "tpot_ns": 99886675.10711083,
+              "per_gpu_tokens_s": 1081.2252974101807,
+              "tpot_line_ns": [
+                40026839.78085974,
+                65403.001702024085
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 432
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 855,
+              "capacity_max_batch": 22961,
+              "tpot_ns": 99962532.90360828,
+              "per_gpu_tokens_s": 1069.1505796782608,
+              "tpot_line_ns": [
+                39468641.05162528,
+                67229.88789790928
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 427
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__CONV__LONG__G8__DP1_TP8_PP1_EP1__B103",
+        "native__llama4_maverick__CONV__LONG__G8__DP1_TP4_PP1_EP2__B102"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.531802+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 207,
+              "capacity_max_batch": 4665,
+              "tpot_ns": 99649222.25293528,
+              "per_gpu_tokens_s": 259.66083241796525,
+              "tpot_line_ns": [
+                31641267.71947652,
+                316773.282625643
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 103
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 206,
+              "capacity_max_batch": 4660,
+              "tpot_ns": 99880850.09118165,
+              "per_gpu_tokens_s": 257.8071770163421,
+              "tpot_line_ns": [
+                32046700.917373925,
+                315088.61208923033
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 102
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBF__SHORT__G8__DP1_TP1_PP1_EP8__B512",
+        "native__llama4_maverick__HBF__SHORT__G8__DP1_TP2_PP1_EP4__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.533665+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 1,
+              "pp": 1,
+              "ep": 8
+            },
+            "quantum": 8,
+            "bypass": {
+              "candidate_batch": 15144,
+              "capacity_max_batch": 75848,
+              "tpot_ns": 99979417.52822536,
+              "per_gpu_tokens_s": 18933.89706401904,
+              "tpot_line_ns": [
+                7966188.403210536,
+                6054.462876846813
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 14036,
+              "capacity_max_batch": 76164,
+              "tpot_ns": 99988674.65020208,
+              "per_gpu_tokens_s": 17546.987257685927,
+              "tpot_line_ns": [
+                8111783.508135736,
+                6522.8969402180255
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBF__MID__G8__DP1_TP1_PP1_EP8__B512",
+        "native__llama4_maverick__HBF__MID__G8__DP1_TP2_PP1_EP4__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.534706+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 1,
+              "pp": 1,
+              "ep": 8
+            },
+            "quantum": 8,
+            "bypass": {
+              "candidate_batch": 5768,
+              "capacity_max_batch": 22792,
+              "tpot_ns": 99893875.89573097,
+              "per_gpu_tokens_s": 7217.659676681064,
+              "tpot_line_ns": [
+                7012506.683469087,
+                16015.761581542976
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 5604,
+              "capacity_max_batch": 22888,
+              "tpot_ns": 99987580.29779744,
+              "per_gpu_tokens_s": 7005.870108204137,
+              "tpot_line_ns": [
+                7684839.72798647,
+                16437.945663115705
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBF__LONG__G8__DP1_TP2_PP1_EP4__B512",
+        "native__llama4_maverick__HBF__LONG__G8__DP1_TP1_PP1_EP8__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.536118+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 1268,
+              "capacity_max_batch": 4648,
+              "tpot_ns": 99890927.88393308,
+              "per_gpu_tokens_s": 1586.730680729755,
+              "tpot_line_ns": [
+                7072403.95301725,
+                72755.3771024002
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 1,
+              "pp": 1,
+              "ep": 8
+            },
+            "quantum": 8,
+            "bypass": {
+              "candidate_batch": 1256,
+              "capacity_max_batch": 4624,
+              "tpot_ns": 99542444.20609361,
+              "per_gpu_tokens_s": 1577.2166461469012,
+              "tpot_line_ns": [
+                7428819.810061902,
+                72684.0757140225
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV_plus__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV+",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV_plus__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__CONV_plus__SHORT__G8__DP1_TP2_PP1_EP4__B512",
+        "native__llama4_maverick__CONV_plus__SHORT__G8__DP1_TP4_PP1_EP2__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.536118+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 3012,
+              "capacity_max_batch": 3012,
+              "tpot_ns": 94285938.2190865,
+              "per_gpu_tokens_s": 3993.1723341942024,
+              "tpot_line_ns": [
+                15377511.090450913,
+                26881.26903894147
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 2876,
+              "capacity_max_batch": 2876,
+              "tpot_ns": 91764126.09991436,
+              "per_gpu_tokens_s": 3917.6529574157357,
+              "tpot_line_ns": [
+                13184723.668157183,
+                27964.714315571015
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV_plus__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV+",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV_plus__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__CONV_plus__MID__G8__DP1_TP4_PP1_EP2__B512",
+        "native__llama4_maverick__CONV_plus__MID__G8__DP1_TP8_PP1_EP1__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.536118+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 1080,
+              "capacity_max_batch": 2876,
+              "tpot_ns": 99891983.82937312,
+              "per_gpu_tokens_s": 1351.4597951182486,
+              "tpot_line_ns": [
+                11923003.99022545,
+                80084.64146580102
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 1070,
+              "capacity_max_batch": 2633,
+              "tpot_ns": 99942455.12599659,
+              "per_gpu_tokens_s": 1338.2701058462346,
+              "tpot_line_ns": [
+                11198198.29390505,
+                82617.63628193706
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__CONV_plus__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "CONV+",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__CONV_plus__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__CONV_plus__LONG__G8__DP1_TP8_PP1_EP1__B123",
+        "native__llama4_maverick__CONV_plus__LONG__G8__DP1_TP4_PP1_EP2__B122"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.536118+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 8,
+              "pp": 1,
+              "ep": 1
+            },
+            "quantum": 1,
+            "bypass": {
+              "candidate_batch": 246,
+              "capacity_max_batch": 2633,
+              "tpot_ns": 99988801.52112082,
+              "per_gpu_tokens_s": 307.5344391792177,
+              "tpot_line_ns": [
+                27274687.15630746,
+                283299.3958205705
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 123
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 244,
+              "capacity_max_batch": 2876,
+              "tpot_ns": 99866156.98218323,
+              "per_gpu_tokens_s": 305.40876831218606,
+              "tpot_line_ns": [
+                28366791.875160918,
+                280512.10838589276
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 122
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF_plus__SHORT__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "SHORT",
+        "input_tokens": 1660,
+        "output_tokens": 373,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF_plus__SHORT__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBF_plus__SHORT__G8__DP1_TP1_PP1_EP8__B512",
+        "native__llama4_maverick__HBF_plus__SHORT__G8__DP1_TP2_PP1_EP4__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.541178+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 1,
+              "pp": 1,
+              "ep": 8
+            },
+            "quantum": 8,
+            "bypass": {
+              "candidate_batch": 3088,
+              "capacity_max_batch": 3088,
+              "tpot_ns": 24212418.916365784,
+              "per_gpu_tokens_s": 15942.232014625059,
+              "tpot_line_ns": [
+                6544064.868389204,
+                5843.703126219341
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 3012,
+              "capacity_max_batch": 3012,
+              "tpot_ns": 23786387.335045777,
+              "per_gpu_tokens_s": 15828.380943132212,
+              "tpot_line_ns": [
+                6135714.810297769,
+                5942.056750870531
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF_plus__MID__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "MID",
+        "input_tokens": 5900,
+        "output_tokens": 499,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF_plus__MID__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBF_plus__MID__G8__DP1_TP1_PP1_EP8__B512",
+        "native__llama4_maverick__HBF_plus__MID__G8__DP1_TP2_PP1_EP4__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.541178+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 1,
+              "pp": 1,
+              "ep": 8
+            },
+            "quantum": 8,
+            "bypass": {
+              "candidate_batch": 3088,
+              "capacity_max_batch": 3088,
+              "tpot_ns": 50523646.63305907,
+              "per_gpu_tokens_s": 7639.986931335814,
+              "tpot_line_ns": [
+                6490268.554694913,
+                14383.243850306537
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 3012,
+              "capacity_max_batch": 3012,
+              "tpot_ns": 49450429.17243969,
+              "per_gpu_tokens_s": 7613.685185362063,
+              "tpot_line_ns": [
+                6109158.99686911,
+                14472.137160496279
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    },
+    {
+      "case": {
+        "case_id": "native__llama4_maverick__HBF_plus__LONG__G8",
+        "phase": "maverick_native",
+        "model": "llama4_maverick",
+        "hardware": "HBF+",
+        "workload": "LONG",
+        "input_tokens": 103500,
+        "output_tokens": 1100,
+        "gpu_count": 8,
+        "weight_dtype": "bf16",
+        "kv_dtype": "bf16"
+      },
+      "case_id": "native__llama4_maverick__HBF_plus__LONG__G8",
+      "runner_contract": "native_stationary_layout_fast_v21",
+      "backend": "native_serving_physical",
+      "status": "running",
+      "planned_candidate_ids": [
+        "native__llama4_maverick__HBF_plus__LONG__G8__DP1_TP2_PP1_EP4__B512",
+        "native__llama4_maverick__HBF_plus__LONG__G8__DP1_TP4_PP1_EP2__B512"
+      ],
+      "candidate_ids": [],
+      "candidate_statuses": {},
+      "selected": null,
+      "error": null,
+      "updated_at": "2026-10-26T10:12:00.541178+00:00",
+      "selection_scope": "highest conditionally accepted projected per-GPU throughput among the sampled (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch",
+      "search": {
+        "result": null,
+        "layouts": [
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 2,
+              "pp": 1,
+              "ep": 4
+            },
+            "quantum": 4,
+            "bypass": {
+              "candidate_batch": 1480,
+              "capacity_max_batch": 3012,
+              "tpot_ns": 99995796.30859375,
+              "per_gpu_tokens_s": 1850.0777715602921,
+              "tpot_line_ns": [
+                5982332.560093105,
+                63690.85201312389
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          },
+          {
+            "layout": {
+              "dp": 1,
+              "tp": 4,
+              "pp": 1,
+              "ep": 2
+            },
+            "quantum": 2,
+            "bypass": {
+              "candidate_batch": 1472,
+              "capacity_max_batch": 2876,
+              "tpot_ns": 99913889.43941577,
+              "per_gpu_tokens_s": 1841.5857998558954,
+              "tpot_line_ns": [
+                5609408.737547994,
+                63848.3663412951
+              ]
+            },
+            "runs": [],
+            "points": null,
+            "outcome": null,
+            "next": 512
+          }
+        ],
+        "acceptance": null,
+        "skipped_layouts": [],
+        "settings": {
+          "top_layouts": 2,
+          "max_points_per_layout": 3,
+          "max_runs_per_layout": 5,
+          "first_point_max_batch": 512,
+          "wall_fill": 0.9,
+          "min_step": 0.1,
+          "native_layouts": "bypass rows without microbatching and with pp == 1 that the native layout accepts",
+          "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
+          "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+          "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
+          "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
+          "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+          "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"
+        }
+      }
+    }
+  ],
+  "candidates": []
+}

@@ -1,0 +1,1 @@
+仿真器通过减少执行开销来加速。HBM 可使用 Numba 数值路径、数组常驻状态和批量提交，仍执行所选 JEDEC 时序与资源预约。NAND 编译逐页循环，减少对象与明细成本，同时保留每页缓存访问、填充完成和读者覆盖依赖。两者都有适用条件与参考实现，不适用时使用参考执行方式。执行加速不意味着切换到 analytical，也不意味着参数已经与真实硬件测量校准。本页强调的是软件执行和物理模型的区分。见 src/heterollm_sim/dram_core.py:423、527，_compiled_hbm.py:92，_nand_acceleration.py:1、59，以及 tests/test_nand_generic_buffered_acceleration.py:63、109、203。

@@ -1,0 +1,3 @@
+模型除了给 Token 指标，还保留能解释性能的物理观测。HBM 有行命中、冲突和 ACT、PRE、RD、WR、REF 命令；HBF 有缓存命中、实际读页和 program。两者输出完成时间、逻辑和物理字节、队列等待和各资源 busy。任务依赖再把这些结果连接到 Token 吞吐、首 Token 延迟 TTFT 和平均输出间隔 TPOT。TPOT 等于首末可见 Token 之间的时间除以输出数量减一，属于平均值。比较配置要固定负载并保持统计边界一致，不能把访问模式变化误认为介质本身性能变化。
+
+三个时间口径必须分开：service_ns 累加任务和 owner 的服务跨度，跨度可能重叠；resource_totals 描述资源忙碌；makespan 是整体完成窗口。它们不能互相替代。配置还区分标准参考、论文输入和本地研究假设。例如论文原生 HBM4 的 tRRD 与 tFAW 借用 HBM3E 参考；NAND 的块几何、erase、内部带宽等含显式本地选择。因此结果可用于机制分析和配置比较，尚未经目标芯片实测校准。源码是 src/heterollm_sim/memory_types.py:899、911，memory_service.py:26–84，reporting.py:632、2113、2174–2246，以及 scripts/exploring_hbf_paper_config.py:207–258。

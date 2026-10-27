@@ -1,0 +1,1 @@
+理解仿真结果可以始终沿四个抓手检查：请求描述、物理地址、介质状态和资源时间线。HBM 重点看行状态、命令与共享总线；HBF 重点看页、双缓冲与阵列到内部再到 host 的三段传输。出现性能变化时，先确认访问量和放置，再追到地址分布、命中与冲突，最后确认等待落在哪种资源。配置和映射入口为 src/heterollm_sim/memory_types.py 与 memory_mapping.py，HBM 控制器为 _hbm_control.py，HBF 为 nand_core.py，系统连接与统计为 data_motion.py 和 reporting.py。每条解释都应有这条完整因果链支撑。

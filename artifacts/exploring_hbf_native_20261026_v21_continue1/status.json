@@ -1,0 +1,29 @@
+{
+  "state": "failed",
+  "updated_at": "2026-10-26T23:52:48.380398+00:00",
+  "manager_pid": 60904,
+  "current_phase": null,
+  "total_cases": 30,
+  "total_candidates": 0,
+  "counts": {
+    "completed": 29,
+    "all_candidates_rejected": 1
+  },
+  "candidate_counts": {},
+  "running": [],
+  "layouts": [],
+  "batch_sizes": [],
+  "backend": "native_serving_physical",
+  "runner_contract": "native_stationary_layout_fast_v21",
+  "simulation_mode": "fast",
+  "deployment_search": true,
+  "stop_requested": true,
+  "error": {
+    "type": "RuntimeError",
+    "message": "existing native manifest differs; refusing silent parameter changes",
+    "traceback": "Traceback (most recent call last):\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 1823, in main\n    return run_search_manager(directory, workers=args.workers, case_ids=args.cases)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 1698, in run_search_manager\n    raise RuntimeError(\"existing native manifest differs; refusing silent parameter changes\")\nRuntimeError: existing native manifest differs; refusing silent parameter changes\n"
+  },
+  "worker_limit": 32,
+  "wall_factor": 32,
+  "hbm_channel_threads": 1
+}

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">仿真器的完整链路</text><text x="64" y="146" font-size="24" fill="#526479">先生成访问，再让有状态的物理 Core 计算实际完成时间</text>
+<g id="pipeline" data-pptx-bounds="64 195 1152 380">
+<line x1="220" y1="275" x2="1060" y2="275" stroke="#CCD6DF" stroke-width="4"/>
+<line x1="1075" y1="275" x2="1075" y2="475" stroke="#CCD6DF" stroke-width="4"/>
+<line x1="220" y1="475" x2="1060" y2="475" stroke="#CCD6DF" stroke-width="4"/>
+<circle cx="104" cy="228" r="25" fill="#526479"/><text x="104" y="236" text-anchor="middle" font-size="22" fill="#FFFFFF">1</text>
+<rect x="64" y="255" width="320" height="113" fill="#FFFFFF" stroke="#CCD6DF"/><text x="88" y="296" font-size="26" font-weight="700" fill="#11243A">工作负载</text><text x="88" y="337" font-size="22" fill="#526479">模型 / Batch / 上下文 / 并行</text>
+<circle cx="520" cy="228" r="25" fill="#526479"/><text x="520" y="236" text-anchor="middle" font-size="22" fill="#FFFFFF">2</text>
+<rect x="480" y="255" width="320" height="113" fill="#FFFFFF" stroke="#CCD6DF"/><text x="504" y="296" font-size="26" font-weight="700" fill="#11243A">任务与放置</text><text x="504" y="337" font-size="22" fill="#526479">权重 / KV / 激活 → 存储端点</text>
+<circle cx="936" cy="228" r="25" fill="#526479"/><text x="936" y="236" text-anchor="middle" font-size="22" fill="#FFFFFF">3</text>
+<rect x="896" y="255" width="320" height="113" fill="#FFFFFF" stroke="#CCD6DF"/><text x="920" y="296" font-size="26" font-weight="700" fill="#11243A">物理地址绑定</text><text x="920" y="337" font-size="22" fill="#526479">owner + 地址范围 + 生命周期</text>
+<rect x="896" y="429" width="320" height="121" fill="#E4F2FA"/><text x="920" y="470" font-size="26" font-weight="700" fill="#007FBA">4　介质 Core 执行</text><text x="920" y="514" font-size="22" fill="#11243A">HBM 命令 / HBF 页服务</text>
+<rect x="480" y="429" width="320" height="121" fill="#FFFFFF" stroke="#CCD6DF"/><text x="504" y="470" font-size="26" font-weight="700" fill="#11243A">5　事件与资源推进</text><text x="504" y="514" font-size="22" fill="#526479">并行、排队、完成后触发后继</text>
+<rect x="64" y="429" width="320" height="121" fill="#FFFFFF" stroke="#CCD6DF"/><text x="88" y="470" font-size="26" font-weight="700" fill="#11243A">6　结果统计</text><text x="88" y="514" font-size="22" fill="#526479">流量 / 忙碌 / 延迟 / Token 吞吐</text>
+<text x="416" y="297" font-size="32" fill="#526479">→</text><text x="832" y="297" font-size="32" fill="#526479">→</text><text x="832" y="502" font-size="32" fill="#526479">←</text><text x="416" y="502" font-size="32" fill="#526479">←</text>
+</g>
+<text x="64" y="620" font-size="26" fill="#11243A">规划阶段的预览值，会在任务实际到达时由 Core 结果替换</text>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：planner.py · data_motion.py · event_kernel.py · reporting.py</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">02 / 18</text></g></svg>

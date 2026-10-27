@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">HBM 行状态与命令链</text><text x="64" y="146" font-size="24" fill="#526479">同样的读取字节数，可能经历不同命令与等待</text>
+<g id="row-states" data-pptx-bounds="64 207 1152 390">
+<text x="64" y="257" font-size="26" font-weight="700" fill="#007FBA">行命中</text><text x="64" y="294" font-size="22" fill="#526479">目标行已打开</text>
+<rect x="278" y="225" width="112" height="59" fill="#007FBA"/><text x="334" y="264" text-anchor="middle" font-size="24" fill="#FFFFFF">RD</text><text x="413" y="264" font-size="24" fill="#526479">→ RL →</text><rect x="552" y="225" width="206" height="59" fill="#E4F2FA"/><text x="655" y="264" text-anchor="middle" font-size="24" fill="#007FBA">DQ 数据传输</text>
+<line x1="64" y1="326" x2="1216" y2="326" stroke="#CCD6DF"/>
+<text x="64" y="374" font-size="26" font-weight="700" fill="#007FBA">bank 关闭</text><text x="64" y="411" font-size="22" fill="#526479">先打开目标行</text>
+<rect x="278" y="344" width="112" height="59" fill="#007FBA"/><text x="334" y="383" text-anchor="middle" font-size="24" fill="#FFFFFF">ACT</text><text x="407" y="383" font-size="24" fill="#526479">→ tRCD →</text><rect x="574" y="344" width="112" height="59" fill="#007FBA"/><text x="630" y="383" text-anchor="middle" font-size="24" fill="#FFFFFF">RD</text><text x="705" y="383" font-size="24" fill="#526479">→ RL →</text><rect x="844" y="344" width="206" height="59" fill="#E4F2FA"/><text x="947" y="383" text-anchor="middle" font-size="24" fill="#007FBA">DQ 数据传输</text>
+<line x1="64" y1="445" x2="1216" y2="445" stroke="#CCD6DF"/>
+<text x="64" y="494" font-size="26" font-weight="700" fill="#007FBA">行冲突</text><text x="64" y="531" font-size="22" fill="#526479">先关旧行，再开新行</text>
+<rect x="278" y="464" width="94" height="59" fill="#526479"/><text x="325" y="503" text-anchor="middle" font-size="24" fill="#FFFFFF">PRE</text><text x="386" y="503" font-size="22" fill="#526479">→ tRP →</text><rect x="512" y="464" width="94" height="59" fill="#007FBA"/><text x="559" y="503" text-anchor="middle" font-size="24" fill="#FFFFFF">ACT</text><text x="620" y="503" font-size="22" fill="#526479">→ tRCD →</text><rect x="770" y="464" width="90" height="59" fill="#007FBA"/><text x="815" y="503" text-anchor="middle" font-size="24" fill="#FFFFFF">RD</text><text x="874" y="503" font-size="22" fill="#526479">→ RL →</text><rect x="1000" y="464" width="216" height="59" fill="#E4F2FA"/><text x="1108" y="503" text-anchor="middle" font-size="24" fill="#007FBA">DQ 数据传输</text>
+<text x="278" y="585" font-size="22" fill="#526479">写操作对应 WR / WL；请求完成取所有 burst 数据结束时间的最大值</text>
+</g>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：_hbm_control.py:145,183,490,547　｜　概念顺序图，非按时长比例；省略精细时钟锚点</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">08 / 18</text></g></svg>

@@ -1,0 +1,1 @@
+analytical 和 jedec_hbm 是两种不同的控制精度。analytical 使用简化 DRAM 服务规则，不模拟刷新与 tRAS。jedec_hbm 显式执行 ACT、PRE、RD、WR 和全 bank REF，将打开行、共享命令总线、PC 数据总线、列命令间隔、ACT 速率和方向切换都纳入时间线。后面几页解释的是 jedec_hbm。它覆盖正常工作命令，仍不包含训练、自动预充电和完整刷新推迟策略等电路与协议细节。执行加速只替换执行方式，不把 JEDEC 模型偷偷改成 analytical。见 src/heterollm_sim/dram_core.py:90、423、483，以及 _hbm_control.py:1。

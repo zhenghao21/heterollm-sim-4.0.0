@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">HBM 共享资源时间线</text><text x="64" y="146" font-size="24" fill="#526479">同一 channel 的两个 PC 共享命令总线，各自拥有数据总线</text>
+<g id="hbm-lanes" data-pptx-bounds="64 191 1152 340">
+<text x="64" y="244" font-size="24" fill="#11243A">Row CA　共享</text><text x="64" y="309" font-size="24" fill="#11243A">Column CA　共享</text><text x="64" y="374" font-size="24" fill="#007FBA">PC0 DQ　独立</text><text x="64" y="439" font-size="24" fill="#007FBA">PC1 DQ　独立</text>
+<line x1="310" y1="250" x2="1216" y2="250" stroke="#CCD6DF" stroke-width="2"/><line x1="310" y1="315" x2="1216" y2="315" stroke="#CCD6DF" stroke-width="2"/><line x1="310" y1="380" x2="1216" y2="380" stroke="#CCD6DF" stroke-width="2"/><line x1="310" y1="445" x2="1216" y2="445" stroke="#CCD6DF" stroke-width="2"/>
+<rect x="326" y="215" width="109" height="43" fill="#526479"/><text x="380" y="244" text-anchor="middle" font-size="22" fill="#FFFFFF">ACT 0</text><rect x="489" y="215" width="109" height="43" fill="#526479"/><text x="543" y="244" text-anchor="middle" font-size="22" fill="#FFFFFF">ACT 1</text>
+<rect x="566" y="280" width="109" height="43" fill="#007FBA"/><text x="620" y="309" text-anchor="middle" font-size="22" fill="#FFFFFF">RD 0</text><rect x="727" y="280" width="109" height="43" fill="#007FBA"/><text x="781" y="309" text-anchor="middle" font-size="22" fill="#FFFFFF">RD 1</text>
+<rect x="685" y="345" width="220" height="43" fill="#E4F2FA"/><text x="795" y="374" text-anchor="middle" font-size="22" fill="#007FBA">PC0 数据</text><rect x="844" y="410" width="220" height="43" fill="#E4F2FA"/><text x="954" y="439" text-anchor="middle" font-size="22" fill="#007FBA">PC1 数据</text>
+<text x="340" y="505" font-size="24" fill="#526479">时间向右 →　示意共享与重叠，长短不代表数值</text>
+</g>
+<g id="hbm-constraints" data-pptx-bounds="64 543 1152 95"><text x="64" y="573" font-size="26" font-weight="700" fill="#11243A">发射 = 时钟对齐后的 max（请求、bank、总线、时序约束）</text><text x="64" y="620" font-size="22" fill="#526479">tCCD / tRRD / tFAW / 方向切换；前瞻 PRE 与 all_bank 刷新也进入时间线</text></g>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：_hbm_control.py:25,60,121,206,279,569　｜　请求级重排不等于逐命令 FR-FCFS</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">09 / 18</text></g></svg>

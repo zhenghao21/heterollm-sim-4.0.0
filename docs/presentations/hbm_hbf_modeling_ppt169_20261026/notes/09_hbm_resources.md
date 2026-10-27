@@ -1,0 +1,1 @@
+同一个物理 channel 的两个 PC 共享 Row CA 与 Column CA，但各自拥有 DQ，所以两条数据传输可以部分重叠。命令并非到达就能发射，而是综合请求就绪、bank 可用、总线空闲与各项时序约束，再做时钟对齐。约束包括 tCCD、tRRD、四激活窗口 tFAW 和方向切换。当前实现有限前瞻后续 burst，提前 PRE 后续冲突行；all_bank 刷新也占用资源，tRASmax 即使关闭刷新也生效。图没有数值刻度，只展示共享和重叠。submit_many 的 FCFS、行命中优先或读写批处理选择的是整条请求，并不是逐命令 FR-FCFS。见 src/heterollm_sim/_hbm_control.py:25、121、206、279、318、364、458、569，dram_core.py:483。

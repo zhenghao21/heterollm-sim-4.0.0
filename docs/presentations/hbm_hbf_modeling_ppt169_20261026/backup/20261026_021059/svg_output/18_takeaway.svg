@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="ending" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#0C1B2B"/>
+<text x="64" y="103" font-size="42" font-weight="700" fill="#FFFFFF">理解模型的四个抓手</text>
+<g id="four-handles" data-pptx-bounds="64 197 1152 175"><text x="64" y="260" font-size="64" font-weight="700" fill="#FFFFFF">请求 → 地址 → 状态 → 时间</text><text x="64" y="333" font-size="26" fill="#CCD6DF">每个性能变化，都应沿这条链路追溯原因</text></g>
+<g id="media-summary" data-pptx-bounds="64 406 1152 91"><text x="64" y="445" font-size="32" font-weight="700" fill="#FFFFFF">HBM</text><text x="223" y="445" font-size="26" fill="#CCD6DF">行状态、命令与总线</text><text x="696" y="445" font-size="32" font-weight="700" fill="#FFFFFF">HBF</text><text x="834" y="445" font-size="26" fill="#CCD6DF">页、双缓冲与三段传输</text></g>
+<g id="source-map" data-pptx-bounds="64 526 1152 108"><line x1="64" y1="531" x2="1216" y2="531" stroke="#526479" stroke-width="2"/><text x="64" y="574" font-size="22" fill="#CCD6DF">配置与映射：memory_types.py / memory_mapping.py</text><text x="64" y="611" font-size="22" fill="#CCD6DF">介质与系统：_hbm_control.py / nand_core.py / data_motion.py / reporting.py</text></g>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#CCD6DF">HeteroLLM-Sim　｜　基于当前工作区实现，逐页备注附源码定位</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#CCD6DF">18 / 18</text></g></svg>

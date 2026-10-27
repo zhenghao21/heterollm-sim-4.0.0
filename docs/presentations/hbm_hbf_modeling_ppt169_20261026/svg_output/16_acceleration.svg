@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">快速仿真与物理语义</text><text x="64" y="146" font-size="24" fill="#526479">降低模拟器执行开销，保留所选模型的物理时序规则</text>
+<g id="fast-and-reference" data-pptx-bounds="64 214 1152 366">
+<text x="64" y="264" font-size="32" font-weight="700" fill="#007FBA">HBM 数值路径</text><text x="64" y="315" font-size="26" fill="#11243A">Numba、数组状态、批量提交</text><text x="64" y="359" font-size="24" fill="#526479">仍计算命令约束与资源预约</text>
+<text x="64" y="464" font-size="32" font-weight="700" fill="#B96628">NAND 逐页编译路径</text><text x="64" y="515" font-size="26" fill="#11243A">编译页循环，减少对象和明细开销</text><text x="64" y="559" font-size="24" fill="#526479">保留缓存访问、填充与读者寿命</text>
+<path d="M622 307 L686 307 L686 402 L746 402 M622 507 L686 507 L686 402" fill="none" stroke="#526479" stroke-width="3"/>
+<text x="782" y="345" font-size="32" font-weight="700" fill="#11243A">相同的介质模型</text><text x="782" y="399" font-size="26" fill="#11243A">同一组输入与资源约束</text><text x="782" y="448" font-size="24" fill="#526479">有适用条件，配有语义对照测试</text>
+</g>
+<text x="64" y="625" font-size="24" fill="#526479">加速路径不适用时执行参考实现；HBM 不会因此从 jedec_hbm 切换到 analytical</text>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：dram_core.py:423,527 · _compiled_hbm.py:92 · _nand_acceleration.py:1,59</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">16 / 18</text></g></svg>

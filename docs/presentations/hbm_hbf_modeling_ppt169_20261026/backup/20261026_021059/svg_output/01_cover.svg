@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="cover" font-family="Microsoft YaHei, Arial, sans-serif">
+<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><polygon points="0,0 8,4 0,8" fill="#CCD6DF"/></marker></defs>
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#0C1B2B"/>
+<g id="topic" data-pptx-bounds="64 58 630 560">
+<text x="64" y="95" font-size="22" fill="#CCD6DF">HeteroLLM-Sim · 当前工作区实现</text>
+<text x="64" y="245" font-size="64" font-weight="700" fill="#FFFFFF">HBM / HBF</text>
+<text x="64" y="330" font-size="64" font-weight="700" fill="#FFFFFF">建模流程</text>
+<text x="68" y="423" font-size="26" fill="#FFFFFF">同一条访存请求，两套物理规则</text>
+<text x="68" y="480" font-size="24" fill="#CCD6DF">地址、介质状态与资源竞争<tspan x="68" dy="38">怎样共同决定完成时间</tspan></text>
+</g>
+<g id="two-cores" data-pptx-bounds="726 160 490 438">
+<rect x="844" y="174" width="250" height="58" fill="#526479"/><text x="969" y="212" text-anchor="middle" font-size="26" fill="#FFFFFF">张量访问</text>
+<path d="M969 235 L969 263 L828 263 L828 298 M969 263 L1106 263 L1106 298" fill="none" stroke="#CCD6DF" stroke-width="3"/>
+<rect x="738" y="300" width="200" height="120" fill="#007FBA"/><text x="838" y="346" text-anchor="middle" font-size="32" font-weight="700" fill="#FFFFFF">HBM</text><text x="838" y="389" text-anchor="middle" font-size="24" fill="#FFFFFF">DramCore</text>
+<rect x="994" y="300" width="222" height="120" fill="#B96628"/><text x="1105" y="346" text-anchor="middle" font-size="32" font-weight="700" fill="#FFFFFF">HBF</text><text x="1105" y="389" text-anchor="middle" font-size="24" fill="#FFFFFF">NandCore</text>
+<path d="M838 423 L838 459 L969 459 M1105 423 L1105 459 L969 459 L969 487" fill="none" stroke="#CCD6DF" stroke-width="3"/>
+<rect x="798" y="489" width="340" height="75" fill="#FFFFFF"/><text x="968" y="536" text-anchor="middle" font-size="26" fill="#11243A">共享时间线 → 完成事件</text>
+</g>
+<g id="footer" data-pptx-bounds="64 659 1152 38"><text x="64" y="686" font-size="16" fill="#CCD6DF">2026.10.26　｜　流程、结构与时序图解　｜　参数示例均标明配置范围</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#CCD6DF">01 / 18</text></g>
+</svg>

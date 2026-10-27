@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">HBF 几何与资源映射</text><text x="64" y="146" font-size="24" fill="#526479">论文原生配置：资源数由 stack / die / plane 几何产生</text>
+<g id="nand-geometry" data-pptx-bounds="64 204 1152 220">
+<rect x="64" y="216" width="190" height="132" fill="#B96628"/><text x="159" y="266" text-anchor="middle" font-size="26" fill="#FFFFFF">每个 Stack</text><text x="159" y="310" text-anchor="middle" font-size="22" fill="#FFFFFF">一组真实 die</text><text x="278" y="287" font-size="32" fill="#B96628">→</text>
+<rect x="336" y="216" width="230" height="132" fill="#FBECDD"/><text x="451" y="266" text-anchor="middle" font-size="26" fill="#11243A">16 Die</text><text x="451" y="310" text-anchor="middle" font-size="22" fill="#526479">各自映射内部 channel</text><text x="586" y="287" font-size="32" fill="#B96628">→</text>
+<rect x="642" y="216" width="232" height="132" fill="#FBECDD"/><text x="758" y="266" text-anchor="middle" font-size="26" fill="#11243A">25 Plane / Die</text><text x="758" y="310" text-anchor="middle" font-size="22" fill="#526479">独立阵列服务资源</text><text x="894" y="287" font-size="32" fill="#B96628">→</text>
+<rect x="950" y="216" width="266" height="132" fill="#FBECDD"/><text x="1083" y="266" text-anchor="middle" font-size="26" fill="#11243A">Block → Page</text><text x="1083" y="310" text-anchor="middle" font-size="22" fill="#526479">4 KiB 页</text>
+<text x="64" y="401" font-size="24" fill="#526479">连续页先条带到 die 通道，再轮转 plane，之后推进 block 内 page</text>
+</g>
+<g id="geometry-example" data-pptx-bounds="64 462 1152 158">
+<text x="64" y="503" font-size="32" font-weight="700" fill="#B96628">7 堆 HBF 配置</text><text x="456" y="503" font-size="32" fill="#11243A">112 个内部通道</text><text x="870" y="503" font-size="32" fill="#11243A">2,800 个阵列单元</text>
+<text x="456" y="553" font-size="24" fill="#526479">7 × 16</text><text x="870" y="553" font-size="24" fill="#526479">7 × 16 × 25</text>
+<text x="64" y="610" font-size="24" fill="#11243A">传输带宽分别限制内部通道和 host 出口，阵列延迟仍然存在</text>
+</g>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：exploring_hbf_paper_config.py:153,289 · memory_mapping.py:124 · memory_types.py:813</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">10 / 18</text></g></svg>

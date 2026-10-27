@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">每个 plane 的双缓冲</text><text x="64" y="146" font-size="24" fill="#526479">填充完成前不可读；旧读者结束前不可覆盖该槽</text>
+<g id="double-buffer" data-pptx-bounds="64 208 1152 262">
+<rect x="64" y="261" width="230" height="100" fill="#B96628"/><text x="179" y="304" text-anchor="middle" font-size="26" fill="#FFFFFF">阵列与内部通道</text><text x="179" y="342" text-anchor="middle" font-size="22" fill="#FFFFFF">请求触发填充</text>
+<path d="M296 311 L352 311 L352 254 L410 254 M352 311 L352 395 L410 395" fill="none" stroke="#B96628" stroke-width="3"/>
+<rect x="412" y="214" width="398" height="91" fill="#FBECDD" stroke="#B96628" stroke-width="2"/><text x="438" y="252" font-size="26" font-weight="700" fill="#B96628">Slot A</text><text x="438" y="287" font-size="22" fill="#11243A">page 标识 + ready + reader_end</text>
+<rect x="412" y="354" width="398" height="91" fill="#FBECDD" stroke="#B96628" stroke-width="2"/><text x="438" y="392" font-size="26" font-weight="700" fill="#B96628">Slot B</text><text x="438" y="427" font-size="22" fill="#11243A">page 标识 + ready + reader_end</text>
+<path d="M812 254 L873 254 L873 311 L926 311 M812 395 L873 395 L873 311" fill="none" stroke="#B96628" stroke-width="3"/>
+<rect x="928" y="261" width="288" height="100" fill="#11243A"/><text x="1072" y="304" text-anchor="middle" font-size="26" fill="#FFFFFF">HOST_TRANSFER</text><text x="1072" y="342" text-anchor="middle" font-size="22" fill="#FFFFFF">旧读者结束才可覆盖</text>
+</g>
+<g id="buffer-size" data-pptx-bounds="64 492 1152 140"><text x="64" y="529" font-size="32" font-weight="700" fill="#B96628">每堆 3.125 MiB</text><text x="465" y="529" font-size="26" fill="#11243A">16 × 25 × 2 × 4096 = 3,276,800 B</text><text x="64" y="584" font-size="24" fill="#526479">媒体页缓冲与 Plus 的每堆 40 MB 中间 SRAM 分开</text><text x="64" y="624" font-size="22" fill="#526479">填充由读请求驱动；当前基线未建自主预测预取控制器</text></g>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：nand_core.py:647,666,1900,1925 · exploring_hbf_paper_config.py:276,325</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">12 / 18</text></g></svg>

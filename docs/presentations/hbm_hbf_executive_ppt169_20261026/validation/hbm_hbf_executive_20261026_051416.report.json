@@ -1,0 +1,166 @@
+{
+  "schema": "ppt-master.pptx-postflight-report.v1",
+  "status": "passed",
+  "output": {
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026\\exports\\hbm_hbf_executive_20261026_051416.pptx",
+    "bytes": 1368656
+  },
+  "source": {
+    "svg_slide_count": 5,
+    "layout_definition_count": 0,
+    "fingerprint": {
+      "algorithm": "sha256",
+      "digest": "f43d3c953bbb6fe0455339cba69246fec44ea9ba0ab6e335d63ae5309f3893ed",
+      "file_count": 5,
+      "files": [
+        {
+          "file": "01_overview.svg",
+          "sha256": "b71142132711075fa492b100e3728a185e84fb6dc3ffaf1a6eb3db1ae9e2e523"
+        },
+        {
+          "file": "02_hbm.svg",
+          "sha256": "0cccf6a367e3905ad0848a5f8390b406b7dfc640716e25894306184ccd07314f"
+        },
+        {
+          "file": "03_hbf.svg",
+          "sha256": "2bdb66f2e7ffeffcdf87c1e1339a0685d109bed902e2a6700e1f80bb55f4cecb"
+        },
+        {
+          "file": "04_timeline.svg",
+          "sha256": "9d469810d9666a60e7aaf15493aa86fcd3dfc1df3ea9e4dcfb36682f2b8631bb"
+        },
+        {
+          "file": "05_outputs.svg",
+          "sha256": "1380e66350e88de5cce9cacfb94519e509f360c6031918279fe08d37ed41116f"
+        }
+      ]
+    }
+  },
+  "package": {
+    "zip_integrity": "passed",
+    "corrupt_member": null,
+    "slides": 5,
+    "notes": 5,
+    "masters": 1,
+    "layouts": 1
+  },
+  "checks": {
+    "zip_integrity": "passed",
+    "slide_count": "passed",
+    "internal_relationships": "enforced-at-build",
+    "structured_package": "not-applicable",
+    "transitions": "enforced-at-build",
+    "animations": "enforced-at-build",
+    "quality_gate": "passed",
+    "quality_warnings": "passed",
+    "template_tokens": "passed",
+    "external_images": "passed",
+    "font_portability": "passed"
+  },
+  "quality": {
+    "status": "loaded",
+    "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026\\validation\\svg_quality_report.json",
+    "schema": "ppt-master.svg-quality-report.v1",
+    "stage": "final",
+    "source_match": "passed",
+    "source_fingerprint": {
+      "algorithm": "sha256",
+      "digest": "f43d3c953bbb6fe0455339cba69246fec44ea9ba0ab6e335d63ae5309f3893ed",
+      "file_count": 5,
+      "files": [
+        {
+          "file": "01_overview.svg",
+          "sha256": "b71142132711075fa492b100e3728a185e84fb6dc3ffaf1a6eb3db1ae9e2e523"
+        },
+        {
+          "file": "02_hbm.svg",
+          "sha256": "0cccf6a367e3905ad0848a5f8390b406b7dfc640716e25894306184ccd07314f"
+        },
+        {
+          "file": "03_hbf.svg",
+          "sha256": "2bdb66f2e7ffeffcdf87c1e1339a0685d109bed902e2a6700e1f80bb55f4cecb"
+        },
+        {
+          "file": "04_timeline.svg",
+          "sha256": "9d469810d9666a60e7aaf15493aa86fcd3dfc1df3ea9e4dcfb36682f2b8631bb"
+        },
+        {
+          "file": "05_outputs.svg",
+          "sha256": "1380e66350e88de5cce9cacfb94519e509f360c6031918279fe08d37ed41116f"
+        }
+      ]
+    },
+    "summary": {
+      "total": 5,
+      "passed": 5,
+      "warnings": 0,
+      "errors": 0
+    },
+    "categories": {
+      "blocking": {
+        "count": 0,
+        "issues": []
+      },
+      "introduced": {
+        "count": 0,
+        "issues": []
+      },
+      "inherited": {
+        "count": 0,
+        "issues": []
+      },
+      "source-import": {
+        "count": 0,
+        "summary": {
+          "warning_count": 0,
+          "by_code": {}
+        }
+      }
+    }
+  },
+  "resources": {
+    "unresolved_template_tokens": [],
+    "fonts": {
+      "stacks": [
+        "Microsoft YaHei, Arial, sans-serif"
+      ],
+      "generic_only_stacks": [],
+      "unsafe_exported_faces": []
+    },
+    "images": {
+      "data_uri": 0,
+      "local": 1,
+      "external": 0,
+      "external_references": []
+    }
+  },
+  "deck_motion": {
+    "transition": {
+      "effect": "fade",
+      "effect_options": {},
+      "duration": 0.4,
+      "auto_advance": null,
+      "sound": null
+    },
+    "animation": {
+      "effect": "none",
+      "effect_request": null,
+      "duration": 0.4,
+      "stagger": 0.5,
+      "trigger": "after-previous"
+    },
+    "cli_overrides": {
+      "transition": false,
+      "transition_duration": false,
+      "auto_advance": false,
+      "transition_sound": false,
+      "animation": false,
+      "animation_duration": false,
+      "animation_stagger": false,
+      "animation_trigger": false
+    },
+    "narration_timings": false
+  },
+  "backup_path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_executive_ppt169_20261026\\backup\\20261026_051416\\svg_output",
+  "conversion_trace_path": null
+}

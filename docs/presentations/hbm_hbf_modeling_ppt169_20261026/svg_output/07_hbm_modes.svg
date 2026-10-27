@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">HBM 的两种控制模式</text><text x="64" y="146" font-size="24" fill="#526479">模式决定建模精度；执行加速不会自动改变控制模式</text>
+<g id="analytical-mode" data-pptx-bounds="64 210 1152 170">
+<text x="64" y="250" font-size="32" font-weight="700" fill="#526479">analytical</text><text x="64" y="298" font-size="24" fill="#526479">简化 DRAM 服务模型</text>
+<rect x="448" y="218" width="768" height="128" fill="#FFFFFF" stroke="#CCD6DF"/><text x="480" y="264" font-size="26" fill="#11243A">访问 → 简化行状态 / 传输约束 → 完成</text><text x="480" y="314" font-size="24" fill="#526479">不模拟刷新与 tRAS；不能套用完整命令时序解释</text>
+</g>
+<g id="jedec-mode" data-pptx-bounds="64 397 1152 202">
+<text x="64" y="437" font-size="32" font-weight="700" fill="#007FBA">jedec_hbm</text><text x="64" y="485" font-size="24" fill="#007FBA">显式正常工作命令控制器</text>
+<rect x="448" y="405" width="768" height="172" fill="#E4F2FA"/><text x="480" y="450" font-size="26" fill="#11243A">访问 → ACT / PRE / RD / WR / REF → 完成</text><text x="480" y="499" font-size="24" fill="#11243A">行状态、共享命令总线、PC 数据总线</text><text x="480" y="546" font-size="24" fill="#526479">列间隔、ACT 速率、刷新、读写方向切换</text>
+</g>
+<text x="64" y="626" font-size="24" fill="#526479">后续 HBM 时序图解释 jedec_hbm 路径；范围为正常工作命令，保留模型抽象</text>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：dram_core.py:90,423,483 · _hbm_control.py:1</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">07 / 18</text></g></svg>

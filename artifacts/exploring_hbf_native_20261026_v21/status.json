@@ -1,0 +1,28 @@
+{
+  "state": "failed",
+  "updated_at": "2026-10-26T10:12:23.984687+00:00",
+  "manager_pid": 21892,
+  "current_phase": null,
+  "total_cases": 30,
+  "total_candidates": 0,
+  "counts": {
+    "running": 30
+  },
+  "candidate_counts": {},
+  "running": [],
+  "layouts": [],
+  "batch_sizes": [],
+  "backend": "native_serving_physical",
+  "runner_contract": "native_stationary_layout_fast_v21",
+  "simulation_mode": "fast",
+  "deployment_search": true,
+  "stop_requested": true,
+  "error": {
+    "type": "PermissionError",
+    "message": "[Errno 13] Permission denied: 'artifacts\\\\exploring_hbf_native_20261026_v21\\\\progress\\\\native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B180.json'",
+    "traceback": "Traceback (most recent call last):\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 1759, in main\n    return run_search_manager(directory, workers=args.workers, case_ids=args.cases)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 1660, in run_search_manager\n    code = _poll_candidate(directory, identity, job, mode)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 1389, in _poll_candidate\n    observed = read_json(progress_path, {})\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\scripts\\run_exploring_hbf_native.py\", line 134, in read_json\n    return json.loads(Path(path).read_text(encoding=\"utf-8\"))\n                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\A\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\Lib\\pathlib.py\", line 1027, in read_text\n    with self.open(mode='r', encoding=encoding, errors=errors) as f:\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\A\\AppData\\Roaming\\uv\\python\\cpython-3.12-windows-x86_64-none\\Lib\\pathlib.py\", line 1013, in open\n    return io.open(self, mode, buffering, encoding, errors, newline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nPermissionError: [Errno 13] Permission denied: 'artifacts\\\\exploring_hbf_native_20261026_v21\\\\progress\\\\native__llama3_405b__CONV__SHORT__G8__DP1_TP8_PP1_EP1__B180.json'\n"
+  },
+  "worker_limit": 8,
+  "wall_factor": 8,
+  "hbm_channel_threads": 4
+}

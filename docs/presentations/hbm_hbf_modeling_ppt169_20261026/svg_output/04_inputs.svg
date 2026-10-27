@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" data-pptx-page-role="content" font-family="Microsoft YaHei, Arial, sans-serif">
+<rect id="bg" data-pptx-role="background" width="1280" height="720" fill="#F6F8FB"/>
+<text x="64" y="98" font-size="42" font-weight="700" fill="#11243A">配置先定义物理约束</text><text x="64" y="146" font-size="24" fill="#526479">访问需求、数据位置与硬件参数分别进入模型</text>
+<g id="input-flow" data-pptx-bounds="64 205 1152 415">
+<text x="64" y="242" font-size="32" font-weight="700" fill="#11243A">工作负载</text><text x="64" y="291" font-size="26" fill="#526479">模型结构、精度</text><text x="64" y="334" font-size="26" fill="#526479">Batch、上下文长度</text><text x="64" y="377" font-size="26" fill="#526479">TP / EP / PP 等并行配置</text>
+<line x1="407" y1="215" x2="407" y2="401" stroke="#CCD6DF" stroke-width="2"/>
+<text x="446" y="242" font-size="32" font-weight="700" fill="#11243A">放置与生命周期</text><text x="446" y="291" font-size="26" fill="#526479">每个 rank 的存储端点</text><text x="446" y="334" font-size="26" fill="#526479">权重 / KV / 激活</text><text x="446" y="377" font-size="26" fill="#526479">分配、释放、缓冲区代次</text>
+<line x1="805" y1="215" x2="805" y2="401" stroke="#CCD6DF" stroke-width="2"/>
+<text x="844" y="242" font-size="32" font-weight="700" fill="#11243A">硬件输入</text><text x="844" y="291" font-size="26" fill="#526479">容量、通道、bank / plane</text><text x="844" y="334" font-size="26" fill="#526479">方向带宽、时延、队列</text><text x="844" y="377" font-size="26" fill="#526479">控制模式、协议与策略</text>
+<path d="M245 416 L245 460 L640 460 M1010 416 L1010 460 L640 460 L640 497" fill="none" stroke="#526479" stroke-width="3"/><line x1="640" y1="416" x2="640" y2="460" stroke="#526479" stroke-width="3"/>
+<rect x="302" y="499" width="676" height="86" fill="#11243A"/><text x="640" y="551" text-anchor="middle" font-size="26" fill="#FFFFFF">可解析的物理请求 + 明确的资源预算</text>
+</g>
+<text x="64" y="628" font-size="24" fill="#526479">容量决定能否放下；地址与时序决定怎样服务；峰值带宽限定传输上限</text>
+<g id="footer" data-pptx-bounds="64 660 1152 36"><text x="64" y="686" font-size="16" fill="#526479">源码：memory_types.py · physical_contract.py · planner.py</text><text x="1216" y="686" text-anchor="end" font-size="18" fill="#526479">04 / 18</text></g></svg>

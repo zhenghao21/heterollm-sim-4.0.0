@@ -1,0 +1,1235 @@
+{
+  "schema": "ppt-master.svg-quality-report.v1",
+  "stage": "final",
+  "target": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026",
+  "source_fingerprint": {
+    "algorithm": "sha256",
+    "digest": "429a97e843ec7ab8abdb7f97df31f228a1a04953c2d61afbb51a3cdec2e54f5b",
+    "file_count": 18,
+    "files": [
+      {
+        "file": "01_cover.svg",
+        "sha256": "c6a6dec8ea10f5745c558788b6dc9084e3418064fa38a5d865e0299aee75d75d"
+      },
+      {
+        "file": "02_pipeline.svg",
+        "sha256": "a173bb140a271a07984c8c2ee32278fdf694ca404665ab1f247b6a1fd8d5461f"
+      },
+      {
+        "file": "03_media.svg",
+        "sha256": "377e964ef28fa0f36a889d1f5083510f872b8d438beef51d3aeaf58675f2bd66"
+      },
+      {
+        "file": "04_inputs.svg",
+        "sha256": "72fbec8daa61d8aa9aab7fa519445c37cd70bfb7b61961f699a4d84a8c007ddd"
+      },
+      {
+        "file": "05_addresses.svg",
+        "sha256": "772394bcc3a40368a19b6ea7bf49451391b5a754bc73e183da7a986fcdd32f02"
+      },
+      {
+        "file": "06_hbm_mapping.svg",
+        "sha256": "aa782237acabf31291e02328268f22095ae3c05769381d9375724150e9649f9c"
+      },
+      {
+        "file": "07_hbm_modes.svg",
+        "sha256": "8cff44b0bf2e5242ddb9ffa9c160bce8458cac5f8da447a9ee33a67153899ef1"
+      },
+      {
+        "file": "08_hbm_commands.svg",
+        "sha256": "5aa9dbf55847f33ffc58cf33d3871989bb7dbf2aae27d0eb42c4254e0584addd"
+      },
+      {
+        "file": "09_hbm_resources.svg",
+        "sha256": "0d9f8bd50b8345841a4c79f32aba2ae84434cdb057723f03e4760af854e20317"
+      },
+      {
+        "file": "10_hbf_geometry.svg",
+        "sha256": "d8987356666569ec848eab3e8e047eae400f123a379c20750f693a2246d27f4b"
+      },
+      {
+        "file": "11_hbf_read.svg",
+        "sha256": "b5dc989de049546ad2d61e3967accc693683809136f7396c0363a3a2be587a97"
+      },
+      {
+        "file": "12_buffers.svg",
+        "sha256": "22ba2200531c51252c8ee618e7e2706a5251f0f3aaf4aa02add4d3411edb922e"
+      },
+      {
+        "file": "13_hbf_write.svg",
+        "sha256": "b0713bdff079a17a277545c841c6fcd58282032ce0fc36a938d7e88ddff65d0a"
+      },
+      {
+        "file": "14_transfer.svg",
+        "sha256": "cfb78d946dbd317b50dc07d83f242e4f4ae68bad5deca8405f7f1975bece3aa4"
+      },
+      {
+        "file": "15_metrics.svg",
+        "sha256": "6c4a020a77a366f3b71978f7d1eb34abba2e19189e31cf1c983df97019124873"
+      },
+      {
+        "file": "16_acceleration.svg",
+        "sha256": "a2c2055b79853f17c90eed49d7e4da22121d419bc44184cc5adaff18c783a919"
+      },
+      {
+        "file": "17_example.svg",
+        "sha256": "d5e14766ce722d7efd7c18652d5bf1becc235ad0b141dfd6f1063f32332ecf59"
+      },
+      {
+        "file": "18_takeaway.svg",
+        "sha256": "e2ba08b9e42219638ad3b3e49a9ffe86d700f5e01112e0bea182c16b4042eb11"
+      }
+    ]
+  },
+  "summary": {
+    "total": 18,
+    "passed": 0,
+    "warnings": 18,
+    "errors": 0
+  },
+  "issue_types": {},
+  "categories": {
+    "blocking": {
+      "count": 0,
+      "issues": []
+    },
+    "introduced": {
+      "count": 23,
+      "issues": [
+        {
+          "file": "01_cover.svg",
+          "message": "Cannot verify root viewBox bounds for visible text with unsupported or unresolved geometry: <text> (x=68, y=480; text='地址、介质状态与资源竞争怎样共同决定完成…'); use supported explicit text positioning when page fit matters"
+        },
+        {
+          "file": "02_pipeline.svg",
+          "message": "3 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3, <text> #5); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "03_media.svg",
+          "message": "Detected 2 paragraph-like line run(s) split across sibling <text> elements (<g id=\"media-comparison\"> x=96.0, y=305.0..358.0, 2 lines; <g id=\"media-comparison\"> x=712.0, y=305.0..358.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate."
+        },
+        {
+          "file": "03_media.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "04_inputs.svg",
+          "message": "Detected 3 paragraph-like line run(s) split across sibling <text> elements (<g id=\"input-flow\"> x=64.0, y=291.0..377.0, 3 lines; <g id=\"input-flow\"> x=446.0, y=291.0..377.0, 3 lines; <g id=\"input-flow\"> x=844.0, y=291.0..377.0, 3 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate."
+        },
+        {
+          "file": "04_inputs.svg",
+          "message": "3 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3, <text> #5); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "05_addresses.svg",
+          "message": "Detected 2 paragraph-like line run(s) split across sibling <text> elements (<g id=\"address-resolution\"> x=64.0, y=248.0..342.0, 3 lines; <g id=\"address-resolution\"> x=494.0, y=252.0..303.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate."
+        },
+        {
+          "file": "05_addresses.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "06_hbm_mapping.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "07_hbm_modes.svg",
+          "message": "3 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3, <text> #6); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "08_hbm_commands.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "09_hbm_resources.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "10_hbf_geometry.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "11_hbf_read.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "12_buffers.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "13_hbf_write.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "14_transfer.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "15_metrics.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "16_acceleration.svg",
+          "message": "3 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3, <text> #5); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "17_example.svg",
+          "message": "Detected 3 paragraph-like line run(s) split across sibling <text> elements (<g id=\"config-example\"> x=94.0, y=309.0..357.0, 2 lines; <g id=\"config-example\"> x=710.0, y=309.0..357.0, 2 lines; <g id=\"assumptions\"> x=64.0, y=597.0..632.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate."
+        },
+        {
+          "file": "17_example.svg",
+          "message": "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        },
+        {
+          "file": "18_takeaway.svg",
+          "message": "Detected 1 paragraph-like line run(s) split across sibling <text> elements (<g id=\"source-map\"> x=64.0, y=574.0..611.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate."
+        },
+        {
+          "file": "18_takeaway.svg",
+          "message": "1 ungrouped top-level Slide-local element(s) in svg_output (<text> #2); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+        }
+      ]
+    },
+    "inherited": {
+      "count": 0,
+      "issues": []
+    },
+    "source-import": {
+      "count": 0,
+      "summary": {
+        "warning_count": 0,
+        "by_code": {}
+      }
+    }
+  },
+  "drift": {
+    "colors": {},
+    "fonts": {},
+    "sizes": {}
+  },
+  "carrier_receipt": {
+    "scope": "informational-not-a-quota",
+    "pages": 18,
+    "totals": {
+      "text_elements": 315,
+      "image_placements": 0,
+      "icons": 0,
+      "svg_geometry_elements": 103,
+      "preset_shapes": 0,
+      "page_frame_elements": 18,
+      "marker_uses": 0
+    },
+    "pages_with": {
+      "images": 0,
+      "icons": 0,
+      "presets": 0,
+      "charts": 0,
+      "tables": 0,
+      "formulas": 0
+    },
+    "geometry_elements": {
+      "circle": 3,
+      "ellipse": 0,
+      "line": 18,
+      "path": 7,
+      "polygon": 0,
+      "polyline": 0,
+      "rect": 75
+    },
+    "preset_names": {},
+    "native_objects": {
+      "chart": 0,
+      "formula_block": 0,
+      "formula_inline": 0,
+      "other": 0,
+      "table": 0
+    },
+    "image_page_max_frame_share_range": []
+  },
+  "project_issues": {
+    "template": [],
+    "animation": [],
+    "illustration": [],
+    "communication_trace": [],
+    "pptx_structure": []
+  },
+  "files": [
+    {
+      "file": "01_cover.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\01_cover.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "Cannot verify root viewBox bounds for visible text with unsupported or unresolved geometry: <text> (x=68, y=480; text='地址、介质状态与资源竞争怎样共同决定完成…'); use supported explicit text positioning when page fit matters"
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 13,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 5,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 2
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 13,
+        "tspan_elements": 1
+      },
+      "passed": true,
+      "source_sha256": "c6a6dec8ea10f5745c558788b6dc9084e3418064fa38a5d865e0299aee75d75d"
+    },
+    {
+      "file": "02_pipeline.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\02_pipeline.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "3 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3, <text> #5); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 24,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 7,
+              "circle": 3,
+              "ellipse": 0,
+              "line": 3,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 24,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "a173bb140a271a07984c8c2ee32278fdf694ca404665ab1f247b6a1fd8d5461f"
+    },
+    {
+      "file": "03_media.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\03_media.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "Detected 2 paragraph-like line run(s) split across sibling <text> elements (<g id=\"media-comparison\"> x=96.0, y=305.0..358.0, 2 lines; <g id=\"media-comparison\"> x=712.0, y=305.0..358.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate.",
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 15,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 3,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 2,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 15,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "377e964ef28fa0f36a889d1f5083510f872b8d438beef51d3aeaf58675f2bd66"
+    },
+    {
+      "file": "04_inputs.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\04_inputs.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "Detected 3 paragraph-like line run(s) split across sibling <text> elements (<g id=\"input-flow\"> x=64.0, y=291.0..377.0, 3 lines; <g id=\"input-flow\"> x=446.0, y=291.0..377.0, 3 lines; <g id=\"input-flow\"> x=844.0, y=291.0..377.0, 3 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate.",
+        "3 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3, <text> #5); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 18,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 2,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 3,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 1
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 18,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "72fbec8daa61d8aa9aab7fa519445c37cd70bfb7b61961f699a4d84a8c007ddd"
+    },
+    {
+      "file": "05_addresses.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\05_addresses.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "Detected 2 paragraph-like line run(s) split across sibling <text> elements (<g id=\"address-resolution\"> x=64.0, y=248.0..342.0, 3 lines; <g id=\"address-resolution\"> x=494.0, y=252.0..303.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate.",
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 17,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 4,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 1,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 17,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "772394bcc3a40368a19b6ea7bf49451391b5a754bc73e183da7a986fcdd32f02"
+    },
+    {
+      "file": "06_hbm_mapping.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\06_hbm_mapping.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 21,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 5,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 21,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "aa782237acabf31291e02328268f22095ae3c05769381d9375724150e9649f9c"
+    },
+    {
+      "file": "07_hbm_modes.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\07_hbm_modes.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "3 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3, <text> #6); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 14,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 3,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 14,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "8cff44b0bf2e5242ddb9ffa9c160bce8458cac5f8da447a9ee33a67153899ef1"
+    },
+    {
+      "file": "08_hbm_commands.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\08_hbm_commands.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 26,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 10,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 2,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 26,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "5aa9dbf55847f33ffc58cf33d3871989bb7dbf2aae27d0eb42c4254e0584addd"
+    },
+    {
+      "file": "09_hbm_resources.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\09_hbm_resources.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 17,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 7,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 4,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 17,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "0d9f8bd50b8345841a4c79f32aba2ae84434cdb057723f03e4760af854e20317"
+    },
+    {
+      "file": "10_hbf_geometry.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\10_hbf_geometry.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 22,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 5,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 22,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "d8987356666569ec848eab3e8e047eae400f123a379c20750f693a2246d27f4b"
+    },
+    {
+      "file": "11_hbf_read.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\11_hbf_read.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 17,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 4,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 1,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 17,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "b5dc989de049546ad2d61e3967accc693683809136f7396c0363a3a2be587a97"
+    },
+    {
+      "file": "12_buffers.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\12_buffers.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 16,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 5,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 2
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 16,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "22ba2200531c51252c8ee618e7e2706a5251f0f3aaf4aa02add4d3411edb922e"
+    },
+    {
+      "file": "13_hbf_write.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\13_hbf_write.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 19,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 4,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 1,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 19,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "b0713bdff079a17a277545c841c6fcd58282032ce0fc36a938d7e88ddff65d0a"
+    },
+    {
+      "file": "14_transfer.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\14_transfer.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 19,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 4,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 19,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "cfb78d946dbd317b50dc07d83f242e4f4ae68bad5deca8405f7f1975bece3aa4"
+    },
+    {
+      "file": "15_metrics.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\15_metrics.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 15,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 2,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 1
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 15,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "6c4a020a77a366f3b71978f7d1eb34abba2e19189e31cf1c983df97019124873"
+    },
+    {
+      "file": "16_acceleration.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\16_acceleration.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "3 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3, <text> #5); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 14,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 1,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 1
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 14,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "a2c2055b79853f17c90eed49d7e4da22121d419bc44184cc5adaff18c783a919"
+    },
+    {
+      "file": "17_example.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\17_example.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "Detected 3 paragraph-like line run(s) split across sibling <text> elements (<g id=\"config-example\"> x=94.0, y=309.0..357.0, 2 lines; <g id=\"config-example\"> x=710.0, y=309.0..357.0, 2 lines; <g id=\"assumptions\"> x=64.0, y=597.0..632.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate.",
+        "2 ungrouped top-level Slide-local element(s) in svg_output (<text> #2, <text> #3); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 17,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 3,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 17,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "d5e14766ce722d7efd7c18652d5bf1becc235ad0b141dfd6f1063f32332ecf59"
+    },
+    {
+      "file": "18_takeaway.svg",
+      "path": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\docs\\presentations\\hbm_hbf_modeling_ppt169_20261026\\svg_output\\18_takeaway.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [
+        "Detected 1 paragraph-like line run(s) split across sibling <text> elements (<g id=\"source-map\"> x=64.0, y=574.0..611.0, 2 lines). If each run is one prose paragraph, combine it into one <text>: keep its first line as direct text and use direct <tspan> children with the parent x and positive relative dy values for later lines. An all-<tspan> form may start with dy=\"0\". Keep semantically independent text frames separate.",
+        "1 ungrouped top-level Slide-local element(s) in svg_output (<text> #2); group only logical content units in a top-level <g id=\"...\">. Keep genuine static page framing as a root primitive and declare a supported data-pptx-role such as \"background\" or \"decoration\""
+      ],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 11,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "geometry": {
+            "svg_elements": {
+              "rect": 1,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 1,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Microsoft YaHei, Arial, sans-serif"
+        ],
+        "text_elements": 11,
+        "tspan_elements": 0
+      },
+      "passed": true,
+      "source_sha256": "e2ba08b9e42219638ad3b3e49a9ffe86d700f5e01112e0bea182c16b4042eb11"
+    }
+  ]
+}

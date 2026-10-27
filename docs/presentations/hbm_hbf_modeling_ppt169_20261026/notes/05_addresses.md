@@ -1,0 +1,1 @@
+权重读取使用相应张量和 rank 分片的真实字节；KV 区分历史读取和新 token 追加；激活依据元素数量和存储位宽换算。每条 memory_accesses 描述给出 operation、physical_owner、byte_count，以及显式 address 或 buffer_id 加 offset_bytes。分配器在解析时检查容量、生命周期与分配代次。随后 HBM 拆 burst，HBF 拆 page，并映射到各自资源。逻辑有效字节和物理流量分别统计，因为部分 burst、传输粒度以及读改写可能增加实际流量。见 src/heterollm_sim/planner.py:16306、19067，data_motion.py:1151、1207–1235，以及 memory_mapping.py:172、212。

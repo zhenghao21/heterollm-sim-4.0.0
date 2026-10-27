@@ -1,0 +1,1 @@
+当前论文原生 HBF 配置每堆十六个 die，每个 die 二十五个 plane，每页四 KiB。代码将每个实际 die 映成一个内部 channel，每个 plane 提供独立阵列资源，而不是根据目标带宽反推出并行度。连续页先分配到 base units，也就是这里的 die 通道，再轮转 plane，之后推进 block 内 page。因此七堆配置有一百一十二个内部通道和两千八百个独立阵列单元。内部通道与 host 出口还有自己的带宽限制；并行资源多也不会消除页读取延迟。见 scripts/exploring_hbf_paper_config.py:153、289、317，src/heterollm_sim/memory_mapping.py:124、132，memory_types.py:813。

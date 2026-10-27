@@ -1,0 +1,1 @@
+图中采用 HBM4 参考组织：每堆三十二个物理 channel，每个 channel 两个 pseudo-channel，也就是 PC。bank 地址继续包含 SID 与 bank group，再确定 row。标准组织中的 SID 已扩展 bank 地址，不能再把容量重复乘 die 数。默认 bank_interleaved 先分散 lane，然后推进 bank、column 和 row。当前 bank 步进在同一 SID 内先轮换 bank group，每组八个 bank 的例子是零、八、一、九。这样会改变同组与异组的连续访问关系，也会影响时序和并行机会。见 src/heterollm_sim/hbm_geometry.py:102、137，memory_mapping.py:18、47，以及 _hbm_control.py:60、105。
