@@ -760,7 +760,7 @@ def native_fast_result(result, params):
                             "slo_met": accepted, "slo_tpot_ns": SLO_NS,
                             "slo_statistic": "conditional_upper_bound_of_virtual_pipeline_request_tpot"},
             "assumptions": list(dict.fromkeys((*result.scenario.assumptions,
-                "PP conditional fast estimate: sampled stage/microbatch service and transfer DAG represents the future physical boundary state; sampled resource ordering remains valid; acceptance is conditional on the 10% error budget and small-model full-window validation."))),
+                f"PP conditional fast estimate: sampled stage/microbatch service and transfer DAG represents the future physical boundary state; sampled resource ordering remains valid; acceptance is conditional on the {acceptance_target:.0%} PP error budget and small-model full-window validation."))),
             "replica_scaling": {"dp": params["dp"], "gpus_per_replica": replica_gpus(params_layout(params)),
                 "scope": "physical sampled prefix and virtual pipeline window remain separate; metrics scale one replica to cluster"}}
         if not accepted:
@@ -1264,7 +1264,7 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
             if search else
             f"每配置固定 {gpus} GPU；有限候选布局 {', '.join(layout_label(layout) for layout in layouts)}，每副本批量 {', '.join(map(str,batches))}。")
         + f"DP 副本是互相独立的拷贝，只仿真一个副本，集群吞吐为单GPU吞吐乘GPU总数。每配置选择通过 100ms 请求均值TPOT约束的最高{'通过验收的' if mode == 'fast' else '实测'}单GPU吞吐，不表示全局最优部署或最大批量。",
-        ("PP/多微批Decode使用真实阶段前缀和条件窗口预测，PP Prefill使用分段层采样；PP=1单微批将原生层样本与预测窗口分开保存，10%为明示条件模型预算。预测尾段没有物理轨迹，预算拒绝时指标为空，不回退详细后缀。"
+        ("PP/多微批Decode使用真实阶段前缀和条件窗口预测，PP Prefill使用分段层采样；PP Decode使用独立的20%条件预算，PP=1 Decode和Prefill仍使用10%预算。预测尾段没有物理轨迹，预算拒绝时指标为空，不回退详细后缀。"
             if mode == "fast" else "完整原生预热与有界测量窗口，无预测尾段；零预测Token不等于与论文或实物误差为零。历史详细参考和旧扫描均未重跑。"),
         ("预测吞吐使用相同测量窗口及可见Token定义，TPOT使用窗口内完整新请求的首末Token预测区间；预测完成不计为物理完成。"
             if mode == "fast" else "吞吐按原生窗口 (开始,结束] 的真实可见Token计算；TPOT仅使用首末Token都在窗口内的完整新请求。未在窗口结束的请求不计为完成。"),
@@ -1297,8 +1297,8 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
     if unaccepted:
         def span(bounds, scale=1.):
             return f"{bounds['lower']/scale:.3f}～{bounds['upper']/scale:.3f}" if bounds else "—"
-        lines += ["", "## 预算拒绝候选的条件区间（未达到10%目标）", "",
-            "以下区间来自同一条件预算模型，但误差预算超出10%目标对应的门槛：不是通过验收的结果，不参与选优，也不代表实测值。", "",
+        lines += ["", "## 预算拒绝候选的条件区间（PP Decode 20%，其他路径未达到10%目标）", "",
+            "以下区间来自同一条件预算模型，但误差预算超出对应门槛（PP Decode为20%，其他快速路径未达到10%目标）：不是通过验收的结果，不参与选优，也不代表实测值。", "",
             "| 模型 | 存储 | 输入/输出Token | 布局 | 批量/副本 | 集群tokens/s区间 | 请求均值TPOT(ms)区间 | 入口TTFT(ms)区间（不含Prefill） | 最大相对误差 |",
             "|---|---|---|---|---:|---|---|---|---:|"]
         for row in unaccepted:
