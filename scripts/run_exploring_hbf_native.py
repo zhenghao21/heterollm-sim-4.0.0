@@ -982,7 +982,12 @@ def with_prefill_ttft(row, params, prefill):
         return
     if params.get("simulation_mode") == "fast":
         bounds = row["diagnostics"]["metric_bounds"]
-        ingress, prefill_bounds = bounds["mean_complete_request_ingress_ttft_ns"], pass_["metric_bounds"]["prefill_pass_ns"]
+        ingress = bounds.get("mean_complete_request_ingress_ttft_ns")
+        if not isinstance(ingress, Mapping):
+            row.update(status="forecast_rejected", rejection_reason="native_pipeline_ingress_ttft_unavailable")
+            row.setdefault("diagnostics", {})["prefill_ttft_rejection"] = "native_pipeline_ingress_ttft_unavailable"
+            return
+        prefill_bounds = pass_["metric_bounds"]["prefill_pass_ns"]
         total = _interval(prefill_bounds["lower"] + ingress["lower"], prefill_bounds["upper"] + ingress["upper"])
         bounds.update(prefill_pass_ns=prefill_bounds, mean_complete_request_ttft_ns=total)
         target = params["target_relative_error"]

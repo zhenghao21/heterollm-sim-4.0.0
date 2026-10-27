@@ -230,6 +230,16 @@ def test_ttft_adds_the_prefill_pass_to_the_ingress_ttft():
     assert row["prefill_pass"]["rejection_reasons"] == ["native_prefill_independent_budget_exceeded"]
 
 
+def test_pipeline_prefill_without_ingress_bound_is_a_forecast_rejection():
+    params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1), 4, "fast")
+    row = {"status": "completed", "metrics": {"mean_complete_request_tpot_ns": 1e6},
+           "diagnostics": {"metric_bounds": {"mean_complete_request_tpot_ns":
+               {"lower": 1e6, "upper": 1e6, "estimate": 1e6, "relative_error_budget": 0.}}}}
+    run.with_prefill_ttft(row, params, _prefill(10e6, 11e6))
+    assert row["status"] == "forecast_rejected"
+    assert row["rejection_reason"] == "native_pipeline_ingress_ttft_unavailable"
+
+
 def test_prefill_pass_runs_once_per_model_prompt_and_layout(tmp_path):
     seen = []
 
