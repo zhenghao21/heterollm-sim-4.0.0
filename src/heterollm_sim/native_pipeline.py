@@ -62,70 +62,80 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
             def first_cohort_admission(active, cohort, _cost, _stages, _ready):
                 active._native_layer_sampler = None
                 _first_cohort_pool_admission(active, cohort, diagnostics)
-                if _representative_seed_boundary(active, cohort):
-                    try:
-                        guard = _query_decode_guard(active, cohort, _stages)
-                    except NativeLayerSamplingGuardError as error:
-                        diagnostics["seed_boundary_rejection"] = str(error)
-                    else:
-                        # The IR guard bounds changed nonphysical service, rather
-                        # than proving it equal. Keep the ordinary warmup whenever
-                        # that service is not exactly the same.
-                        diagnostics["seed_query_decode_guard_ns"] = guard
-                        diagnostics["representative_seed_boundary"] = guard == 0.
-                        if options.pipeline_stage_sampling and guard == 0.:
-                            if sample_decode < 1:
-                                raise PipelineStageSamplingGuardError(
-                                    "native_pipeline_stage_sampling_requires_decode_samples")
-                            ready = {stage.stage_id: active.now for stage in _stages}
-                            specs, _ = active._stage_task_specs(
-                                _stages, ready, "native-pipeline-stage-sample." + cohort.cohort_id)
-                            selected, descriptors = select_representative_pipeline_tasks(_stages, specs)
-                            imports = (active._external_executor, tuple(active._external_pending)) \
-                                if active._external_executor is not None and active._external_pending else None
-                            probe_decode = min(options.pipeline_probe_decode_cohorts, sample_decode)
-                            for sample_index in range(sample_decode):
-                                row = _execute_window(
-                                    active._execution_resource_kernel, specs, selected,
-                                    origin_ns=active.now + sample_index * 1.0e6,
-                                    control=active.execution_control,
-                                    sample_id="native-pipeline-stage-{}".format(sample_index),
-                                    concurrent_imports=imports)
-                                stage_sample_rows.extend(stage_samples_from_window(
-                                    row, descriptors, cohort=sample_index))
-                                if (sample_index + 1 == probe_decode
-                                        and probe_decode < sample_decode):
-                                    try:
-                                        compose_pipeline_window(
-                                            stage_sample_rows,
-                                            sampled_decode_cohorts=probe_decode,
-                                            predicted_decode_cohorts=measured,
-                                            batch_size=plan.scheduler.max_num_seqs,
-                                            output_tokens=max(2, max((s.spec.output_tokens
-                                                for s in runtime._state_values), default=2)),
-                                            cutoff_ns=active.now,
-                                            target_relative_error=pipeline_target,
-                                            warmup_decode_cohorts=warmup,
-                                            physical_prefix_decode_cohorts=0,
-                                            allow_zero_physical_prefix=True)
-                                    except (NativeFastWallBudgetError,
-                                            NativeLayerSamplingGuardError,
-                                            PipelineStageSamplingGuardError,
-                                            ValueError) as error:
-                                        # Do not spend the remaining stage
-                                        # samples when the cheap probe already
-                                        # proves that the unchanged budget
-                                        # cannot be met.
-                                        diagnostics["pipeline_probe_rejection"] = str(error)
-                                        raise _NativeLayerSamplingCutoff()
-                            diagnostics.update(
-                                pipeline_stage_sampling=True,
-                                stage_sample_task_count=len(selected),
-                                stage_sample_total_task_count=len(specs),
-                                physical_complete_cohort_count=0,
-                                physical_visible_output_token_count=0)
+                # Fast PP scans are sampling-only.  A missing or non-equivalent
+                # preloaded seed cannot fall back to replaying a physical decode
+                # prefix: that would turn a rejected forecast into the slow,
+                # full native execution the scan is explicitly avoiding.
+                if not options.pipeline_stage_sampling:
+                    raise PipelineStageSamplingGuardError(
+                        "native_pipeline_stage_sampling_disabled")
+                if not _representative_seed_boundary(active, cohort):
+                    raise PipelineStageSamplingGuardError(
+                        "native_pipeline_stage_sampling_requires_representative_seed_boundary")
+                try:
+                    guard = _query_decode_guard(active, cohort, _stages)
+                except NativeLayerSamplingGuardError as error:
+                    diagnostics["seed_boundary_rejection"] = str(error)
+                    raise PipelineStageSamplingGuardError(
+                        "native_pipeline_stage_sampling_decode_guard_unavailable") from error
+                # The IR guard bounds changed nonphysical service, rather than
+                # proving it equal.  A non-zero guard therefore rejects the
+                # sample-only forecast instead of permitting a physical replay.
+                diagnostics["seed_query_decode_guard_ns"] = guard
+                diagnostics["representative_seed_boundary"] = guard == 0.
+                if guard != 0.:
+                    raise PipelineStageSamplingGuardError(
+                        "native_pipeline_stage_sampling_decode_guard_nonzero")
+                if sample_decode < 1:
+                    raise PipelineStageSamplingGuardError(
+                        "native_pipeline_stage_sampling_requires_decode_samples")
+                ready = {stage.stage_id: active.now for stage in _stages}
+                specs, _ = active._stage_task_specs(
+                    _stages, ready, "native-pipeline-stage-sample." + cohort.cohort_id)
+                selected, descriptors = select_representative_pipeline_tasks(_stages, specs)
+                imports = (active._external_executor, tuple(active._external_pending)) \
+                    if active._external_executor is not None and active._external_pending else None
+                probe_decode = min(options.pipeline_probe_decode_cohorts, sample_decode)
+                for sample_index in range(sample_decode):
+                    row = _execute_window(
+                        active._execution_resource_kernel, specs, selected,
+                        origin_ns=active.now + sample_index * 1.0e6,
+                        control=active.execution_control,
+                        sample_id="native-pipeline-stage-{}".format(sample_index),
+                        concurrent_imports=imports)
+                    stage_sample_rows.extend(stage_samples_from_window(
+                        row, descriptors, cohort=sample_index))
+                    if (sample_index + 1 == probe_decode
+                            and probe_decode < sample_decode):
+                        try:
+                            compose_pipeline_window(
+                                stage_sample_rows,
+                                sampled_decode_cohorts=probe_decode,
+                                predicted_decode_cohorts=measured,
+                                batch_size=plan.scheduler.max_num_seqs,
+                                output_tokens=max(2, max((s.spec.output_tokens
+                                    for s in runtime._state_values), default=2)),
+                                cutoff_ns=active.now,
+                                target_relative_error=pipeline_target,
+                                warmup_decode_cohorts=warmup,
+                                physical_prefix_decode_cohorts=0,
+                                allow_zero_physical_prefix=True)
+                        except (NativeFastWallBudgetError,
+                                NativeLayerSamplingGuardError,
+                                PipelineStageSamplingGuardError,
+                                ValueError) as error:
+                            # Do not spend the remaining stage samples when the
+                            # cheap probe already proves the unchanged budget
+                            # cannot be met.
+                            diagnostics["pipeline_probe_rejection"] = str(error)
                             raise _NativeLayerSamplingCutoff()
-                return False
+                diagnostics.update(
+                    pipeline_stage_sampling=True,
+                    stage_sample_task_count=len(selected),
+                    stage_sample_total_task_count=len(specs),
+                    physical_complete_cohort_count=0,
+                    physical_visible_output_token_count=0)
+                raise _NativeLayerSamplingCutoff()
             runtime._native_layer_sampler = first_cohort_admission
             ingress = scenario.workload.metadata.get("external_kv_ingress", {})
             warmup = int(ingress.get("warmup_decode_cohorts", 0)); measured = int(ingress.get("measurement_decode_cohorts", 0))

@@ -337,7 +337,9 @@ def _simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=
                 if native_chunks_mode:
                     # PP stage transfers and cross-chunk overlap are described
                     # by independent chunk graphs when chunk sampling is
-                    # enabled. A full pass remains the exact fallback.
+                    # enabled. A full pass remains the explicit exact path;
+                    # the scan runner enables chunk sampling for every fast
+                    # layout before entering this callback.
                     if options.full_pass:
                         return False
                     if not options.chunked_sampling:
@@ -403,10 +405,11 @@ def _simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=
         if expired:
             reasons.append("native_total_candidate_wall_budget_exhausted")
         accepted = budget.get("accepted") is True and not expired
-        if native_chunks and runtime is not None:
-            diagnostics.update(physical_complete_cohort_count=len(runtime.batches),
-                physical_visible_output_token_count=sum(event.details.get("visible_tokens", 0)
-                    for event in runtime.events if event.event_type == "tokens_committed"))
+        if runtime is not None:
+            diagnostics.update(physical_complete_cohort_count=(len(runtime.batches) if native_chunks else 0),
+                physical_visible_output_token_count=(sum(event.details.get("visible_tokens", 0)
+                    for event in runtime.events if event.event_type == "tokens_committed")
+                    if native_chunks else 0))
         diagnostics.update(effective_mode="fast" if accepted else "forecast_rejected",
             rejection_reasons=reasons, fallback_reasons=reasons,
             prefill_pass={"accepted": accepted, "metrics": budget.get("metrics", {}) if accepted else {},

@@ -948,10 +948,13 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
             return saved
         scenario = (builder or build_native_prefill_scenario)(params["model"], params["workload"],
             tp=expected["tp"], pp=expected["pp"], ep=expected["ep"], full_pass=full)
-        pipeline_sampling = (not full) and expected["pp"] > 1
         scenario = replace(scenario, simulation=SimulationConfig(mode="fast", native_prefill=NativePrefillPassConfig(
             full_pass=full, max_wall_seconds=cap if capped else None,
-            chunked_sampling=pipeline_sampling or operator_reuse,
+            # Every fast-scan Prefill is sampling-only.  PP1 can still be
+            # scheduler-chunked for long prompts, so enable the independent
+            # chunk sampler there as well; otherwise the runtime would commit
+            # every native prompt chunk as a slow fallback.
+            chunked_sampling=(not full),
             operator_reuse_sampling=operator_reuse,
             numeric_transition_cache=operator_reuse,
             tp_rank_symmetry="quiet" if operator_reuse else "off",

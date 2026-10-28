@@ -263,6 +263,7 @@ def test_prefill_pass_runs_once_per_model_prompt_and_layout(tmp_path):
 
     def runner(scenario, **options):
         assert scenario.simulation.native_prefill.full_pass is False
+        assert scenario.simulation.native_prefill.chunked_sampling is True
         assert scenario.simulation.native_prefill.max_wall_seconds == run.PREFILL_WALL_BUDGET_SECONDS
         return NS(approximation={"prefill_pass": {"accepted": True}, "rejection_reasons": []},
                   layer_window_samples=())

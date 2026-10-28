@@ -78,6 +78,21 @@ def test_pipeline_stage_sample_budget_rejection_is_reported(monkeypatch):
     assert fast.approximation["fallback_reasons"] == ["native_pipeline_independent_budget_exceeded"]
 
 
+def test_pipeline_missing_representative_seed_rejects_without_physical_decode(monkeypatch):
+    """Fast PP never replays a complete native decode when sampling cannot start."""
+    import heterollm_sim.native_pipeline as pipeline
+
+    monkeypatch.setattr(pipeline, "_representative_seed_boundary", lambda *_args: False)
+    scenario = pipeline_scenario()
+    fast = run_scenario(replace(scenario, simulation=SimulationConfig(mode="fast",
+        native_window=NativeWindowFastConfig(max_wall_seconds=120))), retention_policy="aggregate")
+    assert fast.detailed is fast.native_pipeline_forecast is None
+    assert fast.approximation["physical_complete_cohort_count"] == 0
+    assert fast.approximation["physical_visible_output_token_count"] == 0
+    assert fast.approximation["rejection_reasons"] == [
+        "native_pipeline_stage_sampling_requires_representative_seed_boundary"]
+
+
 def test_single_microbatch_pipeline_transfer_gap_is_reported_without_crash():
     """Embedded PP transfers must not escape the forecast rejection path."""
     scenario = pipeline_scenario(microbatches=1)
