@@ -60,7 +60,6 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                 runtime_origin_ns=runtime_origin_ns)
             runtime._native_preload_admission_guard = lambda active: _preloaded_seed_admission(active, diagnostics)
             def first_cohort_admission(active, cohort, _cost, _stages, _ready):
-                active._native_layer_sampler = None
                 _first_cohort_pool_admission(active, cohort, diagnostics)
                 # Fast PP scans are sampling-only.  A missing or non-equivalent
                 # preloaded seed cannot fall back to replaying a physical decode
