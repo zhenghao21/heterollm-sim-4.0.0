@@ -16299,7 +16299,6 @@ class _OnlineRuntime:
                     "native_sampling_original_request_count")})
         with self._cuda_graph_runtime.scope(cohort, self.now) as cuda_transition:
             lowering_scenario = self.plan.scenario
-            bounded_lowering = bool(cohort.metadata.get("native_sampling_bounded"))
             if cohort.metadata.get("native_sampling_bounded"):
                 # The forecast keeps the real scheduler batch in self.plan,
                 # but the native sample's lowerer must see only its bounded
@@ -16324,14 +16323,7 @@ class _OnlineRuntime:
                     scheduler=scheduler)
                 lowering_scenario = replace(self.plan.scenario,
                     workload=workload)
-            defer_physical = getattr(self.lowerer, "_defer_physical_execution", None)
-            if bounded_lowering and type(defer_physical) is bool:
-                # The sampled stage graph is only used as a boundary for the
-                # independent layer windows. Do not run the lowerer's full
-                # physical task replay before the sampler gets control.
-                self.lowerer._defer_physical_execution = True
-            try:
-              if lowering_scenario is not self.plan.scenario:
+            if lowering_scenario is not self.plan.scenario:
                 rebind = getattr(self.lowerer, "_rebind_control_plane_successor", None)
                 if not callable(rebind):
                     raise NativeLayerSamplingGuardError(
@@ -16341,11 +16333,8 @@ class _OnlineRuntime:
                     cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
                 finally:
                     rebind(lowering_scenario, self.plan.scenario)
-              else:
-                  cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
-            finally:
-                if bounded_lowering and type(defer_physical) is bool:
-                    self.lowerer._defer_physical_execution = defer_physical
+            else:
+                cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
         early_sampler = getattr(self, "_native_layer_sampler", None)
         if (early_sampler is not None
                 and cohort.metadata.get("native_sampling_bounded")
@@ -16408,23 +16397,6 @@ class _OnlineRuntime:
                     stage_fallback_reason or "empty execution stage graph"
                 )
             )
-        # A bounded PP sample only needs the authored stage DAG and the
-        # independent layer windows.  Invoke the sampler before execution-plan
-        # expansion, contention accounting, and physical stage replay; those
-        # paths otherwise walk the full request graph even though the sampler
-        # aborts before committing a cohort.
-        layer_sampler = getattr(self, "_native_layer_sampler", None)
-        if (layer_sampler is not None
-                and cohort.metadata.get("native_sampling_bounded")
-                and self.plan.scenario.placement.parallel.pp_degree > 1):
-            sampling_ready_ns = max(
-                (self._request_device_ready_ns.get(
-                    request_id, self.states[request_id].spec.arrival_ns)
-                 for request_id in cohort.request_ids),
-                default=self.now)
-            sampling_stages = self._with_gpu_controller_stages(stages, cohort)
-            if layer_sampler(self, cohort, cost, sampling_stages, sampling_ready_ns) is not False:
-                raise RuntimeError("native layer sampler must stop without committing its partial cohort")
         has_explicit_execution_dag = bool(
             stages
             and _declares_explicit_task_dag(cost.metadata)
