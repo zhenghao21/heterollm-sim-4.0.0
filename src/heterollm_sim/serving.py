@@ -16289,9 +16289,31 @@ class _OnlineRuntime:
                     "requests": table}})
         self.execution_control.raise_if_cancelled()
         self.execution_control.report("cohort_lowering", len(self.batches),
-            simulated_time_ns=self.now, message="正在生成原生批次任务图")
+            simulated_time_ns=self.now, message="正在生成原生批次任务图",
+            metadata={"native_sampling_bounded": bool(
+                cohort.metadata.get("native_sampling_bounded", False)),
+                "native_sampling_request_count": len(cohort.items),
+                "native_sampling_original_request_count": cohort.metadata.get(
+                    "native_sampling_original_request_count")})
         with self._cuda_graph_runtime.scope(cohort, self.now) as cuda_transition:
-            cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
+            lowering_scenario = self.plan.scenario
+            if cohort.metadata.get("native_sampling_bounded"):
+                # The forecast keeps the real scheduler batch in self.plan,
+                # but the native sample's lowerer must see only its bounded
+                # request fan-out. Otherwise planner task metadata expands
+                # the original B again before the sampler can select layers.
+                sample_batch = max(1, len(cohort.items))
+                scheduler = replace(self.plan.scenario.workload.scheduler,
+                    max_num_seqs=sample_batch,
+                    max_num_batched_tokens=min(
+                        self.plan.scenario.workload.scheduler.max_num_batched_tokens,
+                        sample_batch),
+                    max_num_ubatch_tokens=min(
+                        self.plan.scenario.workload.scheduler.max_num_ubatch_tokens,
+                        sample_batch))
+                lowering_scenario = replace(self.plan.scenario,
+                    workload=replace(self.plan.scenario.workload, scheduler=scheduler))
+            cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
         self.execution_control.raise_if_cancelled()
         self.execution_control.report("cohort_scheduling", len(self.batches),
             simulated_time_ns=self.now, message="正在准备原生资源日历与任务调度")
