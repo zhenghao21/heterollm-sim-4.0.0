@@ -1120,6 +1120,16 @@ def execute_candidate(params, directory, progress, *, builder=None, runner=None,
             rejection_reason="native_total_candidate_wall_budget_exhausted", reason=str(error))
     except ExecutionCancelledError as error:
         row.update(status="paused", reason=str(error))
+    except ValueError as error:
+        # Historical screen caches may contain a pre-quantum PP batch. Keep
+        # that stale point out of the native failure count; current search
+        # planning uses the physical EP*microbatch quantum for new probes.
+        if str(error) == "batch_size must be divisible by ep * pipeline_microbatches":
+            row.update(status="forecast_rejected", metrics=None,
+                       rejection_reason="native_invalid_batch_quantum", reason=str(error))
+        else:
+            row.update(status="failed", error={"type": type(error).__name__, "message": str(error),
+                                                "traceback": traceback.format_exc()})
     except Exception as error:
         row.update(status="capacity_rejected" if capacity_error(error) else "failed",
                    error={"type": type(error).__name__, "message": str(error),
