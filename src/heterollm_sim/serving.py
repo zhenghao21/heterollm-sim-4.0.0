@@ -16335,6 +16335,22 @@ class _OnlineRuntime:
                     rebind(lowering_scenario, self.plan.scenario)
             else:
                 cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
+        early_sampler = getattr(self, "_native_layer_sampler", None)
+        if (early_sampler is not None
+                and cohort.metadata.get("native_sampling_bounded")
+                and self.plan.scenario.placement.parallel.pp_degree > 1):
+            early_stages, early_reason = self._execution_stage_metadata_cache.resolve(cost.metadata)
+            if not early_stages:
+                raise ValueError("bounded native PP sample has no execution stages: "
+                                 + str(early_reason or "unknown"))
+            early_ready_ns = max(
+                (self._request_device_ready_ns.get(
+                    request_id, self.states[request_id].spec.arrival_ns)
+                 for request_id in cohort.request_ids),
+                default=self.now)
+            early_stages = self._with_gpu_controller_stages(early_stages, cohort)
+            if early_sampler(self, cohort, cost, early_stages, early_ready_ns) is not False:
+                raise RuntimeError("native layer sampler must stop without committing its partial cohort")
         self.execution_control.raise_if_cancelled()
         self.execution_control.report("cohort_scheduling", len(self.batches),
             simulated_time_ns=self.now, message="正在准备原生资源日历与任务调度")
