@@ -104,9 +104,14 @@ def _interval(lo, hi):
 def _sample_interval(values, limit, *, allow_zero=False):
     if not values or any(not math.isfinite(v) or v < 0 for v in values):
         raise ValueError("invalid PP service samples")
-    mean = fmean(values)
-    drift = max(abs(v - mean) for v in values)
-    lo, hi = max(0., min(values) - drift), max(values) + drift
+    # The physical samples already form the observed envelope.  Expanding the
+    # min/max range by the maximum deviation from the mean double-counted the
+    # same cohort variation and made a two-cohort sample reject otherwise
+    # stable stage/transfer services before composition.  Keep the empirical
+    # envelope and let the independent-budget gate reject genuinely wide
+    # samples; additional cohorts are used by the caller when the envelope is
+    # not stable enough.
+    lo, hi = max(0., min(values)), max(values)
     relative = (hi - lo) / (hi + lo) if hi + lo else 0.
     if (not allow_zero and lo <= 0) or relative > limit:
         raise ValueError("native_pipeline_independent_budget_exceeded")
@@ -243,6 +248,7 @@ def compose_pipeline_window(samples: Sequence[PipelineStageSample | Mapping[str,
         {**bounds, "mean_complete_request_tpot_ns": request_interval}, tuple(future), virtual,
         {"target_relative_error": target_relative_error, "effective_independent_target": limit,
          "relative_error": relative, "conditional_only": True,
+         "interval_method": "observed_min_max_envelope_v2",
          "assumptions": [PP_BOUNDARY_STATE_ASSUMPTION, PP_RESOURCE_ORDER_ASSUMPTION],
          "physical_runtime_state_advanced": False, "sampled_stage_count": len(intervals),
          "sampled_cohort_count": sampled_decode_cohorts, "physical_prefix_decode_cohorts": physical,

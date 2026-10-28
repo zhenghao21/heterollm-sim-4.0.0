@@ -46,3 +46,16 @@ def test_single_microbatch_embedded_activation_transfer_is_sampled_separately():
     }, descriptors, cohort=0)
     assert any(row.kind == "pipeline_activation_transfer" and row.duration_ns == 10
                for row in samples)
+
+
+def test_pipeline_stage_sampling_uses_even_layer_strata():
+    layers = [f"layer-{index:03d}" for index in range(8)]
+    stage = SimpleNamespace(stage_id="operator-invocation-group-0000.stage0000",
+        execution_tasks=tuple(SimpleNamespace(task_id=f"task-{layer}", metadata={"layer_id": layer})
+                              for layer in layers))
+    specs = [SimpleNamespace(task_id=f"task-{layer}", metadata={
+        "execution_stage_id": stage.stage_id, "layer_id": layer}) for layer in layers]
+    selected, descriptors = select_representative_pipeline_tasks((stage,), specs)
+    descriptor = next(item for item in descriptors if item["kind"] == "compute")
+    assert descriptor["layer_ids"] == ("layer-000", "layer-002", "layer-005", "layer-007")
+    assert len(selected) == 4

@@ -79,9 +79,16 @@ def select_representative_pipeline_tasks(stages, specs):
                          if task.metadata.get("layer_id") is not None})
         if not layers:
             raise PipelineStageSamplingGuardError("native_pipeline_stage_sampling_missing_layer")
-        # One real layer is enough to bound a repeated stage service.  The
-        # independent budget checker compares this interval across holdouts.
-        representative_layers = (layers[0], layers[-1]) if len(layers) > 1 else (layers[0],)
+        # Sample a small, evenly spaced layer set instead of only the first
+        # and last layer.  The endpoints can carry different operator/cache
+        # transitions; averaging a few strata makes the repeated stage
+        # service less sensitive to one boundary outlier while keeping the
+        # independent sample much smaller than a full forward.
+        if len(layers) <= 4:
+            representative_layers = tuple(layers)
+        else:
+            indices = tuple(round(index * (len(layers) - 1) / 3) for index in range(4))
+            representative_layers = tuple(layers[index] for index in dict.fromkeys(indices))
         ids = [task.task_id for task in specs
                if task.metadata.get("execution_stage_id") == stage.stage_id
                and task.metadata.get("layer_id") in representative_layers]
@@ -144,9 +151,10 @@ def stage_samples_from_window(row: Mapping[str, object], descriptors, *, cohort:
                          for layer in item["layer_ids"]]
             if any(start is None or end is None or end <= start for start, end in intervals):
                 raise PipelineStageSamplingGuardError("native_pipeline_stage_sampling_layer_interval_missing")
-            # First/last representative layers bound the repeated stage
-            # service. Middle layers remain a conditional model assumption;
-            # the independent sample budget guards this interval.
+            # The evenly spaced representative layers approximate the
+            # repeated stage service. Unobserved layers remain a conditional
+            # model assumption; the independent sample budget guards this
+            # interval.
             duration = sum(float(end - start) for start, end in intervals) / len(intervals)
             start = min(float(start) for start, _end in intervals)
             end = start + duration
