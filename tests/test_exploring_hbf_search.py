@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 import exploring_hbf_search as search
 from exploring_hbf_paper_config import hardware_by_id
-from heterollm_sim.paper_inference import PaperParallelism
+from heterollm_sim.paper_inference import PaperParallelism, enumerate_parallelism
 from heterollm_sim.paper_models import PaperModelSpec, PaperPrecision
 
 
@@ -77,6 +77,13 @@ def test_capacity_binary_search_then_real_event_slo_screen(monkeypatch):
     assert len(initialized) == len({batch for _, batch in initialized})
     assert len(initialized) <= 8
     assert any(not trial["slo_accepted"] for trial in row["trials"])
+
+
+def test_parallelism_enumeration_keeps_intermediate_legal_microbatch_degrees():
+    rows = enumerate_parallelism(MODEL, 8)
+    micro = {row.microbatches for row in rows if row.pp == 1}
+    assert micro == {1}
+    assert {1, 2}.issubset({row.microbatches for row in rows if row.pp == 2})
 
 
 def test_every_strategy_is_kept_and_ranked_by_per_gpu_rate(monkeypatch):

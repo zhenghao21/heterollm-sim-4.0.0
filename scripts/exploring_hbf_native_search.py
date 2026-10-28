@@ -27,7 +27,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-TOP_LAYOUTS = 2
+# The native search is an exhaustive finite-layout search. Bypass screening
+# ranks rows and supplies batch brackets, but it never drops legal layouts.
+TOP_LAYOUTS = None
 # Measured batch points per layout, and native runs per layout including
 # attempts that were too big to measure.
 MAX_POINTS = 6
@@ -55,7 +57,7 @@ THROUGHPUT_SETTINGS = {"top_layouts": TOP_LAYOUTS, "max_points_per_layout": MAX_
             "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
             "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor"}
 # The max-Batch mode is a separate fixed search contract. Layout scope is
-# supplied independently, so the same mode can search all layouts or only PP.
+# supplied independently, and every legal layout is retained.
 MAX_BATCH_SETTINGS = {**THROUGHPUT_SETTINGS,
                        "search_mode": "max_batch_under_slo",
                        "objective": "maximum_batch_under_slo",
@@ -145,14 +147,23 @@ def screen_layouts(rows, buildable, top=None, *, policy=None, layout_scope="all"
     """
     policy = policy or MAX_BATCH_POLICY
     top = policy.settings.get("top_layouts", TOP_LAYOUTS) if top is None else top
+    # ``all_legal`` is an explicit exhaustive mode.  The ordinary ``all``
+    # scope keeps the historical top-layout screen so existing scans remain
+    # bounded; exhaustive mode retains every buildable legal row.
+    if layout_scope == "all_legal":
+        top = None
     if pp_only is not None:
         layout_scope = "pipeline" if pp_only else "all"
     chosen, skipped, seen = [], [], set()
     for row in rows:
         p = row["parallelism"]
         layout = {key: p[key] for key in ("dp", "tp", "pp", "ep")}
-        if p["microbatches"] != 1:
-            layout["microbatches"] = p["microbatches"]
+        # Single-stage microbatching is not a separate deployment dimension in
+        # this study. Normalize legacy PP1_M>1 rows to canonical PP1_M1;
+        # real pipeline layouts retain their explicit microbatch degree.
+        microbatches = 1 if p["pp"] == 1 else p["microbatches"]
+        if microbatches != 1:
+            layout["microbatches"] = microbatches
         if layout_scope == "pipeline" and not is_pipeline_layout(layout):
             continue
         key = tuple(layout.values())
@@ -169,7 +180,7 @@ def screen_layouts(rows, buildable, top=None, *, policy=None, layout_scope="all"
             "candidate_batch": row["candidate_batch"], "capacity_max_batch": row["capacity_max_batch"],
             "tpot_ns": row["screen_tpot_seconds"] * 1e9, "per_gpu_tokens_s": row["screen_per_gpu_tokens_s"],
             "tpot_line_ns": fit_line(trials)}})
-        if len(chosen) == top:
+        if top is not None and len(chosen) == top:
             break
     return chosen, skipped
 

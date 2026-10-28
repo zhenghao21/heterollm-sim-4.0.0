@@ -36,8 +36,8 @@ from heterollm_sim.simulation_options import SimulationConfig
 GPU_REFERENCE_ID = "rubin_public_peak_native_structural_reference_v1"
 PD_BUFFER_BYTES = 64 * 1024**2
 PHYSICAL_WINDOW_ASSUMPTION = (
-    "Bounded physical execution has no sampled suffix: approximation error from forecasting is zero; "
-    "this is not a claim of <10% hardware model error versus silicon or paper.")
+    "Bounded physical execution has no sampled suffix; the fast path reports its conditional sampling interval "
+    "separately and does not use external hardware verification as an acceptance target.")
 PD_LINK_BYTES_PER_SECOND = 100e9
 CONTROL_PLANE_TIME_LIMIT_S = 3600.
 _DTYPE_BYTES = {"bf16": 2, "fp16": 2, "fp32": 4, "fp8": 1}

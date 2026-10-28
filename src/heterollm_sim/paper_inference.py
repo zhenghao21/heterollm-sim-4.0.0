@@ -110,9 +110,15 @@ def enumerate_parallelism(model: PaperModelSpec, gpu_count: int):
                         model.validate_parallelism(tp, ep)
                     except ValueError:
                         continue
-                    # Explicit GPipe-style microbatching is searched alongside
-                    # an unpartitioned batch. It never divides one layer by PP.
-                    for micro in sorted({1, pp}):
+                    # Explicit GPipe-style microbatching is a legal serving
+                    # dimension for multi-stage pipelines. Single-stage
+                    # microbatching is canonicalized to M1 in this study;
+                    # multi-stage layouts keep powers of two up to PP so
+                    # PP2_M1/M2 and intermediate PP4_M2 are distinct.
+                    micro_limit = 1 if pp == 1 else pp
+                    micros = tuple(1 << power for power in range(micro_limit.bit_length())
+                                   if (1 << power) <= micro_limit)
+                    for micro in micros:
                         result.append(PaperParallelism(dp, pp, tp, ep, micro))
     return tuple(result)
 

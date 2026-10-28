@@ -283,7 +283,7 @@ def test_a_failed_acceptance_falls_back_to_the_best_measured_passing_point():
     assert batch == 512 and search.search_result(plan, batch, TP8) == "acceptance_failed_fallback"
 
 
-def test_screen_hands_native_the_two_best_layouts_it_can_run():
+def test_screen_hands_native_all_legal_layouts_it_can_run():
     def row(dp, tp, pp, ep, micro=1, status="screened_candidate", rate=1.):
         return {"parallelism": {"dp": dp, "tp": tp, "pp": pp, "ep": ep, "microbatches": micro}, "status": status,
                 "batch_quantum": ep * micro, "candidate_batch": 64, "capacity_max_batch": 128,
@@ -295,10 +295,35 @@ def test_screen_hands_native_the_two_best_layouts_it_can_run():
     chosen, skipped = search.screen_layouts(rows, lambda layout, quantum: "experts" if layout["ep"] == 8 else None)
     assert [item["layout"] for item in chosen] == [
         {"dp": 1, "tp": 4, "pp": 2, "ep": 1, "microbatches": 2},
-        {"dp": 1, "tp": 4, "pp": 2, "ep": 1}]
-    assert [item["quantum"] for item in chosen] == [2, 1]
+        {"dp": 1, "tp": 4, "pp": 2, "ep": 1},
+        {"dp": 1, "tp": 8, "pp": 1, "ep": 1},
+        {"dp": 2, "tp": 4, "pp": 1, "ep": 1},
+        {"dp": 1, "tp": 2, "pp": 1, "ep": 4}]
+    assert [item["quantum"] for item in chosen] == [2, 1, 1, 1, 4]
     assert skipped == [{"layout": {"dp": 1, "tp": 1, "pp": 1, "ep": 8}, "reason": "experts"}]
     assert chosen[0]["bypass"]["tpot_line_ns"] == pytest.approx((10e6 - 80e6 / 63, 80e6 / 63))
+
+
+def test_all_legal_scope_keeps_every_buildable_layout():
+    def row(tp, pp=1, micro=1):
+        return {"parallelism": {"dp": 1, "tp": tp, "pp": pp, "ep": 1, "microbatches": micro},
+                "status": "screened_candidate", "batch_quantum": 1, "candidate_batch": 64,
+                "capacity_max_batch": 128, "screen_tpot_seconds": .09,
+                "screen_per_gpu_tokens_s": 1.,
+                "trials": [{"batch_size": 1, "tpot_seconds": .01},
+                           {"batch_size": 64, "tpot_seconds": .09}]}
+
+    rows = [row(8), row(4, pp=2), row(2, pp=2, micro=2), row(1)]
+    chosen, skipped = search.screen_layouts(rows, lambda _layout, _quantum: None,
+                                             layout_scope="all_legal")
+    assert skipped == []
+    assert len(chosen) == 4
+    assert [item["layout"] for item in chosen] == [
+        {"dp": 1, "tp": 8, "pp": 1, "ep": 1},
+        {"dp": 1, "tp": 4, "pp": 2, "ep": 1},
+        {"dp": 1, "tp": 2, "pp": 2, "ep": 1, "microbatches": 2},
+        {"dp": 1, "tp": 1, "pp": 1, "ep": 1},
+    ]
 
 
 def test_pp_only_screen_excludes_historical_pp1_layouts():
@@ -315,7 +340,8 @@ def test_pp_only_screen_excludes_historical_pp1_layouts():
     assert all(search.is_pipeline_layout(item["layout"]) for item in chosen)
     assert [item["layout"] for item in chosen] == [
         {"dp": 1, "tp": 4, "pp": 2, "ep": 1, "microbatches": 2},
-        {"dp": 1, "tp": 4, "pp": 2, "ep": 1}]
+        {"dp": 1, "tp": 4, "pp": 2, "ep": 1},
+        {"dp": 2, "tp": 2, "pp": 2, "ep": 1}]
 
 
 def test_expanded_scope_keeps_existing_layouts_and_adds_pipeline(tmp_path):
@@ -333,6 +359,24 @@ def test_expanded_scope_keeps_existing_layouts_and_adds_pipeline(tmp_path):
     layouts = [item["layout"] for item in expanded["layouts"]]
     assert any(layout["pp"] == 1 for layout in layouts)
     assert any(layout["pp"] > 1 for layout in layouts)
+
+
+def test_all_legal_scope_records_layout_coverage(tmp_path):
+    case = run.case_matrix()[0]
+    rows = []
+    for tp, pp, micro in ((8, 1, 1), (4, 2, 1), (2, 2, 2)):
+        rows.append({"parallelism": {"dp": 1, "tp": tp, "pp": pp, "ep": 1, "microbatches": micro},
+                     "status": "screened_candidate", "batch_quantum": micro,
+                     "candidate_batch": 64, "capacity_max_batch": 128,
+                     "screen_tpot_seconds": .09, "screen_per_gpu_tokens_s": 1.,
+                     "trials": [{"batch_size": 1, "tpot_seconds": .01},
+                                {"batch_size": 64, "tpot_seconds": .09}]})
+    screen = run.case_screen(tmp_path, case, screen=lambda _case: rows, layout_scope="all_legal")
+    assert screen["coverage"] == {
+        "scope": "all_legal", "selection": "all_legal_layouts", "bypass_unique_layouts": 3,
+        "selected_layouts": 2, "skipped_layouts": 1, "layout_cap": None,
+        "batch_search": "native_search_per_selected_layout",
+    }
 
 
 def test_pipeline_search_ignores_point_and_attempt_caps_until_physical_limit():
@@ -384,7 +428,8 @@ def test_a_case_selection_runs_only_those_cases_in_matrix_order(tmp_path, monkey
     calls = []
     monkeypatch.setattr(run, "run_search_manager", lambda directory, **options: calls.append(options) or 0)
     assert run.main(["--search", "--directory", str(tmp_path), "--workers", "1", "--cases", chosen[0]]) == 0
-    assert calls == [{"workers": 1, "case_ids": [chosen[0]]}]
+    assert calls == [{"workers": 1, "case_ids": [chosen[0]],
+                      "search_mode": "max_batch_under_slo", "layout_scope": "all_legal"}]
 
 
 def test_search_manager_runs_each_point_once_and_reports_the_accepted_batch(tmp_path, monkeypatch):

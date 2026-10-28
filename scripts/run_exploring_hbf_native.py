@@ -1238,11 +1238,23 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
     counts = Counter(point["status"] for point in points)
     layouts = list({layout_label(layout): layout for grid in planned.values() for layout, _batch in grid}.values())
     batches = sorted({batch for grid in planned.values() for _layout, batch in grid})
+    coverage_rows = [point.get("search", {}).get("coverage", {}) for point in points
+                     if point.get("search", {}).get("coverage")]
+    layout_coverage = {
+        "scope": layout_scope if search else "fixed_grid",
+        "selection": ("all_legal_layouts" if layout_scope == "all_legal" else "screened_top_ranked_layouts") if search else "fixed_grid",
+        "cases_with_coverage": len(coverage_rows),
+        "bypass_unique_layouts": sum(row.get("bypass_unique_layouts", 0) for row in coverage_rows),
+        "selected_layouts": sum(row.get("selected_layouts", 0) for row in coverage_rows),
+        "skipped_layouts": sum(row.get("skipped_layouts", 0) for row in coverage_rows),
+        "batch_search": "native_search_per_selected_layout" if search else "fixed_batch_grid",
+    }
     status = {"state": state, "updated_at": utc_now(), "manager_pid": os.getpid(), "current_phase": phase,
         "total_cases": len(cases), "total_candidates": sum(len(grid) for grid in planned.values()),
         "counts": dict(counts), "candidate_counts": dict(Counter(row["status"] for row in candidates)),
         "running": list(running), "layouts": layouts, "batch_sizes": batches, "backend": BACKEND,
         "runner_contract": runner_contract(mode), "simulation_mode": mode, "deployment_search": search,
+        "layout_coverage": layout_coverage,
         "stop_requested": (directory / "stop.request").exists(), "error": error}
     if worker_limit is not None:
         status.update(worker_limit=worker_limit, wall_factor=worker_limit,
@@ -1273,7 +1285,7 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
     gpus = "/".join(str(count) for count in sorted({case["gpu_count"] for case in cases}))
     lines = ["# 原生后端论文对照实验", "", f"更新：{status['updated_at']}；状态：{STATUS_LABELS.get(state,state)}。",
         f"配置 {len(cases)} 组，成功 {counts.get('completed',0)}，全候选拒绝 {counts.get('all_candidates_rejected',0)}，失败 {counts.get('failed',0)}。", "",
-        (f"每配置固定 {gpus} GPU；部署按论文式搜索：旁路模型筛选布局并给出批量区间，原生在旁路排名前{SEARCH_TOP_LAYOUTS}且原生可组合的布局上各测最多{search_plan.MAX_POINTS}个有效批量点、最多{search_plan.MAX_RUNS}次尝试，"
+        (f"每配置固定 {gpus} GPU；部署按论文式搜索：旁路模型只提供批量区间，原生穷举全部合法布局并搜索各布局的合法 Batch；"
             "把TPOT上界线性插值到100ms，再在最佳布局的插值批量上做一次原生验收；最终数字只取原生候选，旁路数值只用于放置批量点。"
             "够不到100ms的布局停在已测最大点并标注受限，不外推；验收未通过时退回已测通过点。"
             if search else
@@ -1293,8 +1305,14 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
         "| 模型 | 存储 | 输入/输出Token | 配置状态 | 选中布局 | 选中批量/副本 | tokens/s/GPU | 集群tokens/s | 请求均值TPOT(ms) | 请求均值TTFT(ms，含Prefill) |"
         + (" 搜索结果 |" if search else ""),
         "|---|---|---|---|---|---:|---:|---:|---:|---:|" + ("---|" if search else "")]
+    coverage = status.get("layout_coverage") or {}
+    if coverage.get("cases_with_coverage"):
+        lines += ["", (f"布局覆盖：旁路枚举 {coverage['bypass_unique_layouts']} 个唯一合法布局，"
+                        f"原生实际搜索 {coverage['selected_layouts']} 个布局，跳过 {coverage['skipped_layouts']} 个；"
+                        f"范围={coverage['scope']}，选择口径={coverage['selection']}，"
+                        "每个纳入布局独立搜索 Batch。")]
     if search and search_mode == search_plan.MAX_BATCH_POLICY.name:
-        lines[5] = (f"每配置固定 {gpus} GPU；部署按论文式搜索，搜索模式为 SLO 内最大 Batch，当前布局范围为 {layout_scope}，"
+        lines[5] = (f"每配置固定 {gpus} GPU；部署按论文式搜索，搜索模式为 SLO 内最大 Batch，当前覆盖全部合法布局（范围 {layout_scope}），"
                     "不受有效点数和尝试次数上限影响；达到 SLO 时插值到100ms并通过验收；"
                     "容量、内存和墙钟仍是硬边界。")
     for point in points:
@@ -1779,7 +1797,7 @@ def bypass_screen(case):
                              workload, slo_seconds=SLO_NS / 1e9)
 
 
-def case_screen(directory, case, screen=None, *, search_mode=None, layout_scope="all", pp_only=None):
+def case_screen(directory, case, screen=None, *, search_mode=None, layout_scope="all_legal", pp_only=None):
     """Build the bypass screen; layout scope is independent of search mode."""
     path = Path(directory) / "screen" / (case["case_id"] + ".json")
     saved = read_json(path)
@@ -1809,8 +1827,23 @@ def case_screen(directory, case, screen=None, *, search_mode=None, layout_scope=
         skipped = skipped + pipeline_skipped
     else:
         chosen, skipped = search_plan.screen_layouts(rows, buildable, policy=policy, layout_scope=layout_scope)
+    def layout_key(layout):
+        return tuple(layout.get(name, 1) for name in (*LAYOUT_KEYS, "microbatches"))
+    bypass_keys = set()
+    for row in rows:
+        parallel = row.get("parallelism", {})
+        bypass_keys.add(tuple(parallel.get(name, 1) for name in (*LAYOUT_KEYS, "microbatches")))
+    coverage = {
+        "scope": scope,
+        "selection": "all_legal_layouts" if scope == "all_legal" else "screened_top_ranked_layouts",
+        "bypass_unique_layouts": len(bypass_keys),
+        "selected_layouts": len({layout_key(item["layout"]) for item in chosen}),
+        "skipped_layouts": len(skipped),
+        "layout_cap": None if scope == "all_legal" else policy.settings.get("top_layouts"),
+        "batch_search": "native_search_per_selected_layout",
+    }
     value = {"case": case, "deployment_search": settings, "layouts": chosen, "skipped_layouts": skipped,
-             "bypass_rows": rows, "scope": scope,
+             "bypass_rows": rows, "scope": scope, "coverage": coverage,
              "scope_note": "bypass screening only ranks layouts and places native batch points; it reports no number"}
     write_json(path, value)
     return value
@@ -1883,6 +1916,7 @@ def search_case(directory, case, screen, *, search_mode=None, retry_ids=None):
         "layouts": [{key: layout_plan.get(key) for key in ("layout", "quantum", "bypass", "runs", "points", "outcome", "next")}
                     for layout_plan in plan["layouts"]],
         "acceptance": acceptance, "skipped_layouts": screen["skipped_layouts"],
+        "coverage": screen.get("coverage", {}),
         "settings": policy.settings,
         "objective": policy.objective}
     write_json(directory / "points" / (case["case_id"] + ".json"), point)
@@ -1890,7 +1924,7 @@ def search_case(directory, case, screen, *, search_mode=None, retry_ids=None):
 
 
 def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=None, poll_seconds=1., screen=None,
-                       case_ids=None, search_mode=None, layout_scope="all", pp_only=None):
+                       case_ids=None, search_mode=None, layout_scope="all_legal", pp_only=None):
     """Run a fixed search mode over an independently selected layout scope."""
     mode = "fast"
     directory = checked_directory(directory)
@@ -2011,8 +2045,8 @@ def main(argv=None):
         help="固定搜索模式；默认在 SLO 内最大化 Batch，忽略--layout/--batch-sizes")
     parser.add_argument("--search-mode", choices=tuple(search_plan.SEARCH_POLICIES),
         default=search_plan.DEFAULT_SEARCH_MODE, help="搜索模式，默认 max_batch_under_slo")
-    parser.add_argument("--layout-scope", choices=("all", "pipeline", "expanded"), default="all",
-        help="布局范围；expanded 复用已有布局并加入 PP/微批新布局")
+    parser.add_argument("--layout-scope", choices=("all", "pipeline", "expanded", "all_legal"), default="all_legal",
+        help="布局范围；expanded 复用已有布局并加入 PP/微批新布局，all_legal 搜索全部可建合法布局")
     parser.add_argument("--pp-only", action="store_true",
         help=argparse.SUPPRESS)
     parser.add_argument("--cases", nargs="+", metavar="CASE_ID",
