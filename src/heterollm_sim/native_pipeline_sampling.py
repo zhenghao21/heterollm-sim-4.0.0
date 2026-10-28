@@ -44,7 +44,7 @@ def _authored_stage_id(stage_id: str):
     return None
 
 
-def select_representative_pipeline_tasks(stages, specs):
+def select_representative_pipeline_tasks(stages, specs, *, request_cap=None):
     """Select first-layer work plus explicit activation edges per PP stage.
 
     The selected task graph is intentionally independent: omitted layer
@@ -54,6 +54,13 @@ def select_representative_pipeline_tasks(stages, specs):
     """
     authored = {}
     transfers = {}
+    request_ids = tuple(dict.fromkeys(str(task.request_id) for task in specs
+                                     if getattr(task, "request_id", None) is not None))
+    sampled_request_ids = None
+    if request_cap is not None and len(request_ids) > request_cap:
+        indices = tuple(round(index * (len(request_ids) - 1) / (request_cap - 1))
+                        for index in range(request_cap)) if request_cap > 1 else (0,)
+        sampled_request_ids = frozenset(request_ids[index] for index in indices)
     for stage in stages:
         parsed = _authored_stage_id(str(stage.stage_id))
         if parsed is None:
@@ -91,7 +98,9 @@ def select_representative_pipeline_tasks(stages, specs):
             representative_layers = tuple(layers[index] for index in dict.fromkeys(indices))
         ids = [task.task_id for task in specs
                if task.metadata.get("execution_stage_id") == stage.stage_id
-               and task.metadata.get("layer_id") in representative_layers]
+               and task.metadata.get("layer_id") in representative_layers
+               and (sampled_request_ids is None
+                    or str(task.request_id) in sampled_request_ids)]
         if not ids:
             raise PipelineStageSamplingGuardError("native_pipeline_stage_sampling_layer_tasks_missing")
         selected.extend(ids)
@@ -108,6 +117,8 @@ def select_representative_pipeline_tasks(stages, specs):
         if (metadata.get("event_kind") != "pipeline_activation"
                 or type(metadata.get("source_stage")) is not int
                 or type(metadata.get("target_stage")) is not int):
+            continue
+        if sampled_request_ids is not None and str(spec.request_id) not in sampled_request_ids:
             continue
         stage_id = str(metadata.get("execution_stage_id", ""))
         match = re.match(r"^operator-invocation-group-(\d+)\.stage(\d+)$", stage_id)
@@ -128,7 +139,8 @@ def select_representative_pipeline_tasks(stages, specs):
                             "kind": "pipeline_activation_transfer", "stage_id": transfer_id,
                             "embedded_task_id": spec.task_id})
     for (group, number), stage in sorted(transfers.items()):
-        ids = [task.task_id for task in specs if task.metadata.get("execution_stage_id") == stage.stage_id]
+        ids = [task.task_id for task in specs if task.metadata.get("execution_stage_id") == stage.stage_id
+               and (sampled_request_ids is None or str(task.request_id) in sampled_request_ids)]
         if not ids:
             raise PipelineStageSamplingGuardError("native_pipeline_stage_sampling_transfer_tasks_missing")
         selected.extend(ids)

@@ -221,7 +221,7 @@ def drop_unsampled_request_records(metadata_rows, kept_layers):
     return dropped
 
 
-def _independent_kernel(source, executor=None):
+def _independent_kernel(source, executor=None, request_ids=None):
     if source.has_active_tasks:
         raise NativeLayerSamplingGuardError("native layer boundary requires no active full-cohort tasks")
     # Resource ownership is immutable; copy all mutable controllers, calendars
@@ -240,9 +240,16 @@ def _independent_kernel(source, executor=None):
         copied_requests = {}
         memo[id(requests)] = copied_requests
         for identity, keys in requests.items():
+            if request_ids is not None and identity not in request_ids:
+                continue
             if id(keys) not in memo and type(keys) is set:
                 memo[id(keys)] = keys.copy()
             copied_requests[identity] = deepcopy(keys, memo)
+        if request_ids is not None and type(holders) is dict:
+            kept_keys = {key for keys in copied_requests.values() for key in keys}
+            memo[id(holders)] = {key: count for key, count in holders.items()
+                                 if key in kept_keys or key not in {
+                                     item for values in requests.values() for item in values}}
     kernel = deepcopy(source, memo)
     if executor is None:
         return kernel, None
@@ -933,8 +940,14 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
     can move it (see native_row_bounds).
     """
     started = time.perf_counter()
+    sample_request_ids = {str(task.request_id) for task in all_specs
+                          if task.task_id in frozenset(selected_ids)
+                          and getattr(task, "request_id", None) is not None}
+    if concurrent_imports is not None:
+        sample_request_ids.update(str(request_id) for request_id in concurrent_imports[1])
     kernel, executor = _independent_kernel(
-        source, None if concurrent_imports is None else concurrent_imports[0])
+        source, None if concurrent_imports is None else concurrent_imports[0],
+        request_ids=sample_request_ids or None)
     imports = None
     if executor is not None:
         imports = _ConcurrentImports(kernel, executor, concurrent_imports[1])

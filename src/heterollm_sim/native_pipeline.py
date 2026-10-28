@@ -92,7 +92,8 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                 ready = {stage.stage_id: active.now for stage in _stages}
                 specs, _ = active._stage_task_specs(
                     _stages, ready, "native-pipeline-stage-sample." + cohort.cohort_id)
-                selected, descriptors = select_representative_pipeline_tasks(_stages, specs)
+                selected, descriptors = select_representative_pipeline_tasks(
+                    _stages, specs, request_cap=options.pipeline_sample_requests)
                 imports = (active._external_executor, tuple(active._external_pending)) \
                     if active._external_executor is not None and active._external_pending else None
                 probe_decode = min(options.pipeline_probe_decode_cohorts, sample_decode)
@@ -133,6 +134,7 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                     pipeline_stage_sampling=True,
                     stage_sample_task_count=len(selected),
                     stage_sample_total_task_count=len(specs),
+                    stage_sample_request_cap=options.pipeline_sample_requests,
                     physical_complete_cohort_count=0,
                     physical_visible_output_token_count=0)
                 raise _NativeLayerSamplingCutoff()

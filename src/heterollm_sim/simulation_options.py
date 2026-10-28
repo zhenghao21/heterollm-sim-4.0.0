@@ -88,6 +88,10 @@ class NativeWindowFastConfig:
     # useful for layout screening; callers may lower this explicitly when
     # they accept the corresponding rejection rate.
     pipeline_sample_decode_cohorts: int = 4
+    # Bound the request fan-out of a PP layer sample.  The forecast is still
+    # conditioned on the full batch; only the native representative graph is
+    # capped so a B=512 sample does not clone and schedule 512 request lanes.
+    pipeline_sample_requests: int = 32
     # Cheap stability probe before the remaining stage samples are executed.
     # A probe that already exceeds the unchanged 10% budget stops early.
     pipeline_probe_decode_cohorts: int = 2
@@ -109,6 +113,7 @@ class NativeWindowFastConfig:
         if type(self.pd_concurrency_envelope) is not bool:
             raise ValueError("simulation.native_window.pd_concurrency_envelope must be a boolean")
         _integer(self.pipeline_sample_decode_cohorts, "simulation.native_window.pipeline_sample_decode_cohorts", 2)
+        _integer(self.pipeline_sample_requests, "simulation.native_window.pipeline_sample_requests", 1)
         _integer(self.pipeline_probe_decode_cohorts, "simulation.native_window.pipeline_probe_decode_cohorts", 1)
         if self.pipeline_probe_decode_cohorts > self.pipeline_sample_decode_cohorts:
             raise ValueError("simulation.native_window.pipeline_probe_decode_cohorts must not exceed pipeline_sample_decode_cohorts")

@@ -59,3 +59,16 @@ def test_pipeline_stage_sampling_uses_even_layer_strata():
     descriptor = next(item for item in descriptors if item["kind"] == "compute")
     assert descriptor["layer_ids"] == ("layer-000", "layer-002", "layer-005", "layer-007")
     assert len(selected) == 4
+
+
+def test_pipeline_stage_sampling_caps_large_batch_request_fanout():
+    requests = [f"request-{index:03d}" for index in range(64)]
+    stage = SimpleNamespace(stage_id="operator-invocation-group-0000.stage0000",
+        execution_tasks=tuple(SimpleNamespace(task_id=f"task-{request}",
+            metadata={"layer_id": "layer-000"}) for request in requests))
+    specs = [SimpleNamespace(task_id=f"task-{request}", request_id=request,
+        metadata={"execution_stage_id": stage.stage_id, "layer_id": "layer-000"})
+        for request in requests]
+    selected, _ = select_representative_pipeline_tasks((stage,), specs, request_cap=8)
+    assert len(selected) == 8
+    assert selected[0] == "task-request-000" and selected[-1] == "task-request-063"
