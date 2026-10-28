@@ -297,7 +297,11 @@ def _limit(entry, runs, points, caps, rounded):
 
 def _following(entry, runs, points, slo_ns, caps, rounded, *, policy=MAX_BATCH_POLICY):
     """The next batch of a layout's search, or None when it is finished."""
-    q = entry["quantum"]
+    # Older screen caches recorded only EP as the quantum.  Pipeline batches
+    # must also split across request microbatches; derive the physical quantum
+    # from the layout so a reused cache cannot schedule an illegal batch.
+    layout = entry.get("layout") or {}
+    q = max(int(entry["quantum"]), int(layout.get("ep", 1)) * int(layout.get("microbatches", 1)))
     if _bracket(points, slo_ns):
         return None
     if ((policy.max_runs is not None and len(runs) >= policy.max_runs)
@@ -372,7 +376,8 @@ def _step(batch, q):
 
 
 def _outcome(entry, runs, points, slo_ns, caps, rounded, *, policy=MAX_BATCH_POLICY):
-    q = entry["quantum"]
+    layout = entry.get("layout") or {}
+    q = max(int(entry["quantum"]), int(layout.get("ep", 1)) * int(layout.get("microbatches", 1)))
     pair = _bracket(points, slo_ns)
     if pair:
         low, high = pair

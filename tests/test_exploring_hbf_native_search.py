@@ -215,6 +215,14 @@ def test_quality_rejection_probes_larger_batches_without_becoming_capacity_evide
     assert bounded["outcome"]["kind"] == "no_native_measurement"
 
 
+def test_reused_screen_with_legacy_ep_quantum_never_plans_illegal_microbatch():
+    layout = {"dp": 1, "tp": 4, "pp": 2, "ep": 1, "microbatches": 2}
+    legacy = entry(layout, candidate=466, capacity=466)
+    legacy["quantum"] = 1
+    planned = search.plan_layout(legacy, lambda _batch: None, SLO, 1800., policy=search.MAX_BATCH_POLICY)
+    assert planned["next"] % 2 == 0
+
+
 def test_capacity_rejection_bisects_below_the_rejected_batch():
     capacity = ("capacity_rejected", None)
     layouts = [native(lambda b: (7 + .05 * b) * 1e6, lambda b: .5 * b, too_big=lambda b: capacity if b > 900 else None)]
