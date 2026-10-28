@@ -90,8 +90,9 @@ class NativeWindowFastConfig:
     pipeline_sample_decode_cohorts: int = 4
     # Bound the request fan-out of a PP layer sample.  The forecast is still
     # conditioned on the full batch; only the native representative graph is
-    # capped so a B=512 sample does not clone and schedule 512 request lanes.
-    pipeline_sample_requests: int = 32
+    # capped so a B=512 sample does not clone and schedule the full request
+    # fan-out; the default is kept close to PP1's bounded layer samples.
+    pipeline_sample_requests: int = 8
     # Cheap stability probe before the remaining stage samples are executed.
     # A probe that already exceeds the unchanged 10% budget stops early.
     pipeline_probe_decode_cohorts: int = 2
