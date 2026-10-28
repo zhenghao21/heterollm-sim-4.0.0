@@ -233,7 +233,13 @@ def plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes=Non
     """
     policy = policy or MAX_BATCH_POLICY
     caps = (wall_cap_seconds, memory_budget_bytes)
-    q = entry["quantum"]
+    # The bypass screen may only know the expert quantum. Native PP also
+    # requires the per-replica batch to split across every pipeline
+    # microbatch, so quality probes must use the physical divisibility
+    # quantum as well or they can create an invalid candidate (for example
+    # B449 for EP1/M2).
+    layout = entry.get("layout") or {}
+    q = max(entry["quantum"], layout.get("ep", 1) * layout.get("microbatches", 1))
 
     def rounded(batch):
         return max(q, int(batch // q) * q)
