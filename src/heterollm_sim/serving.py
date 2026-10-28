@@ -16257,7 +16257,9 @@ class _OnlineRuntime:
         if (sampler is not None and native_window is not None
                 and self.plan.scenario.placement.parallel.pp_degree > 1
                 and len(cohort.items) > native_window.pipeline_sample_requests):
-            cap = int(native_window.pipeline_sample_requests)
+            microbatches = max(1, int(self.plan.scenario.placement.parallel.pipeline_microbatches))
+            cap = min(int(native_window.pipeline_sample_requests),
+                      max(1, self._ep_degree * microbatches))
             indices = tuple(round(index * (len(cohort.items) - 1) / (cap - 1))
                             for index in range(cap)) if cap > 1 else (0,)
             sampled_items = tuple(cohort.items[index] for index in indices)
