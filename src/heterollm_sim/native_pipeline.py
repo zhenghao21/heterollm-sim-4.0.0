@@ -97,6 +97,9 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                 imports = (active._external_executor, tuple(active._external_pending)) \
                     if active._external_executor is not None and active._external_pending else None
                 probe_decode = min(options.pipeline_probe_decode_cohorts, sample_decode)
+                sample_wall = {"wall_seconds": 0.0, "source_kernel_copy": 0.0,
+                               "compiled_subgraph": 0.0, "physical_tasks": 0.0,
+                               "physical_metrics": 0.0, "task_count": 0}
                 for sample_index in range(sample_decode):
                     row = _execute_window(
                         active._execution_resource_kernel, specs, selected,
@@ -104,6 +107,11 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                         control=active.execution_control,
                         sample_id="native-pipeline-stage-{}".format(sample_index),
                         concurrent_imports=imports)
+                    breakdown = row.get("wall_breakdown_seconds") or {}
+                    sample_wall["wall_seconds"] += float(row.get("wall_seconds", 0.0) or 0.0)
+                    for key in ("source_kernel_copy", "compiled_subgraph", "physical_tasks", "physical_metrics"):
+                        sample_wall[key] += float(breakdown.get(key, 0.0) or 0.0)
+                    sample_wall["task_count"] += int(row.get("task_count", 0) or 0)
                     stage_sample_rows.extend(stage_samples_from_window(
                         row, descriptors, cohort=sample_index))
                     if (sample_index + 1 == probe_decode
@@ -135,6 +143,7 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                     stage_sample_task_count=len(selected),
                     stage_sample_total_task_count=len(specs),
                     stage_sample_request_cap=options.pipeline_sample_requests,
+                    stage_sample_wall_breakdown=sample_wall,
                     physical_complete_cohort_count=0,
                     physical_visible_output_token_count=0)
                 raise _NativeLayerSamplingCutoff()
