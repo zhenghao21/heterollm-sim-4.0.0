@@ -116,8 +116,14 @@ RETRYABLE_FORECAST_REJECTIONS = frozenset({
 QUALITY_REJECTIONS = frozenset({
     "native_pipeline_independent_budget_exceeded",
     "native_pipeline_forecast_error_budget_exceeded",
+    "native_pipeline_quality_evidence_reused",
 })
 MAX_QUALITY_PROBES = 3
+# Two real samples establish that the layout's current stage sampler is
+# unstable. Later quality probes may reuse that evidence without starting
+# another full native window; the row stays a quality rejection and never
+# contributes a metric or capacity bound.
+QUALITY_EVIDENCE_REUSE_AFTER = 2
 
 
 def is_pipeline_layout(layout):

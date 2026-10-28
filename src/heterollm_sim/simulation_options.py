@@ -88,6 +88,9 @@ class NativeWindowFastConfig:
     # useful for layout screening; callers may lower this explicitly when
     # they accept the corresponding rejection rate.
     pipeline_sample_decode_cohorts: int = 4
+    # Cheap stability probe before the remaining stage samples are executed.
+    # A probe that already exceeds the unchanged 10% budget stops early.
+    pipeline_probe_decode_cohorts: int = 2
     pipeline_stage_sampling: bool = True
 
     def __post_init__(self) -> None:
@@ -106,6 +109,9 @@ class NativeWindowFastConfig:
         if type(self.pd_concurrency_envelope) is not bool:
             raise ValueError("simulation.native_window.pd_concurrency_envelope must be a boolean")
         _integer(self.pipeline_sample_decode_cohorts, "simulation.native_window.pipeline_sample_decode_cohorts", 2)
+        _integer(self.pipeline_probe_decode_cohorts, "simulation.native_window.pipeline_probe_decode_cohorts", 1)
+        if self.pipeline_probe_decode_cohorts > self.pipeline_sample_decode_cohorts:
+            raise ValueError("simulation.native_window.pipeline_probe_decode_cohorts must not exceed pipeline_sample_decode_cohorts")
         if type(self.pipeline_stage_sampling) is not bool:
             raise ValueError("simulation.native_window.pipeline_stage_sampling must be a boolean")
 

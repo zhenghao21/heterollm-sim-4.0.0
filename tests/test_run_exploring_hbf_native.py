@@ -694,6 +694,22 @@ def test_worker_reexecutes_one_retryable_fast_forecast_rejection(tmp_path, monke
     assert run.read_json(tmp_path / "candidates" / (rejected["candidate_id"] + ".json"))["status"] == "completed"
 
 
+def test_search_reuses_layout_quality_evidence_after_two_real_rejections(tmp_path):
+    case = run.case_matrix()[0]
+    layout = run.make_layout(1, 4, 2, 1)
+    for batch in (32, 64):
+        params = run.parameters(case, layout, batch, "fast")
+        run.save_candidate(tmp_path, {"runner_contract": run.FAST_CONTRACT, "backend": run.BACKEND,
+            "parameters": params, "candidate_id": run.params_candidate_id(params),
+            "status": "forecast_rejected", "metrics": None,
+            "rejection_reason": "native_pipeline_independent_budget_exceeded"})
+    reused = run._search_lookup(tmp_path, case, layout)(128)
+    assert reused["status"] == "forecast_rejected"
+    assert reused["rejection_reason"] == "native_pipeline_quality_evidence_reused"
+    assert reused["wall_seconds"] == 0.
+    assert run.read_candidate(tmp_path, reused["candidate_id"])["rejection_reason"] == reused["rejection_reason"]
+
+
 def test_stop_marker_is_preserved_and_no_candidate_is_started(tmp_path):
     marker = tmp_path / "stop.request"
     marker.write_text("user paused", encoding="utf-8")

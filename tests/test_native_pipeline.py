@@ -18,8 +18,9 @@ def pipeline_scenario(*, pp=2, microbatches=2, batch=4):
 def test_pipeline_fast_request_forecasts_from_a_real_pipeline_prefix():
     scenario = pipeline_scenario()
     full = run_scenario(scenario, retention_policy="aggregate")
+    options = NativeWindowFastConfig(max_wall_seconds=120)
     fast = run_scenario(replace(scenario, simulation=SimulationConfig(mode="fast",
-        native_window=NativeWindowFastConfig(max_wall_seconds=120))), retention_policy="aggregate")
+        native_window=options)), retention_policy="aggregate")
     assert isinstance(fast, FastScenarioResult)
     assert fast.detailed is None, fast.approximation
     assert fast.native_pipeline_forecast is not None and fast.layer_window_samples == ()
@@ -35,6 +36,7 @@ def test_pipeline_fast_request_forecasts_from_a_real_pipeline_prefix():
     assert "native_sampling" not in fast.manifest.metadata
     assert fast.manifest.metadata["native_pipeline_forecast"]["microbatches"] == 2
     assert fast.native_pipeline_forecast.sampled_decode_cohorts == 4
+    assert options.pipeline_probe_decode_cohorts == 2
     payload = _fast_report_dict(fast, include_visualization=False)
     assert payload["result_semantics"]["forecast_used"] is True
     assert payload["native_pipeline_forecast"]["forecast_has_physical_trace"] is False

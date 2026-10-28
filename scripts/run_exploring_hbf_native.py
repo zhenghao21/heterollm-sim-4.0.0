@@ -1857,7 +1857,10 @@ def _search_lookup(directory, case, layout, *, retry_ids=None):
     point, and ``retry_ids`` bounds that behavior to one attempt per manager
     invocation so a still-failing candidate cannot loop forever.
     """
+    quality_history = None
+
     def lookup(batch):
+        nonlocal quality_history
         physical_quantum = int(layout.get("ep", 1)) * int(layout.get("microbatches", 1))
         if physical_quantum > 1 and batch % physical_quantum:
             # A legacy point can be present in the cache even though the
@@ -1868,6 +1871,33 @@ def _search_lookup(directory, case, layout, *, retry_ids=None):
         identity = candidate_id(case, layout, batch)
         row = read_candidate(directory, identity)
         if row is None:
+            if quality_history is None:
+                quality_history = []
+                candidates_dir = Path(directory) / "candidates"
+                for path in candidates_dir.glob("*.json") if candidates_dir.exists() else ():
+                    saved_row = read_json(path)
+                    saved_params = (saved_row or {}).get("parameters") or {}
+                    if (saved_row and saved_row.get("status") == "forecast_rejected"
+                            and saved_row.get("rejection_reason") in {
+                                "native_pipeline_independent_budget_exceeded",
+                                "native_pipeline_forecast_error_budget_exceeded",
+                            }
+                            and all(saved_params.get(key, 1) == layout.get(key, 1)
+                                    for key in (*LAYOUT_KEYS, "microbatches"))
+                            and saved_params.get("case_id") == case["case_id"]):
+                        quality_history.append(saved_row)
+            if len(quality_history) >= search_plan.QUALITY_EVIDENCE_REUSE_AFTER:
+                expected = parameters(case, layout, batch, "fast")
+                reused = {"runner_contract": expected["runner_contract"], "backend": BACKEND,
+                    "parameters": expected, "candidate_id": identity, "status": "forecast_rejected",
+                    "metrics": None, "forecast_tokens": 0,
+                    "rejection_reason": "native_pipeline_quality_evidence_reused",
+                    "reason": "同一布局已有两次真实采样超出10%条件预算；复用质量证据，避免重复完整原生窗口。",
+                    "fidelity": "quality_evidence_reuse_without_native_window", "wall_seconds": 0.,
+                    "quality_evidence": {"source_candidates": [row["candidate_id"] for row in quality_history],
+                                         "reuse_scope": "same_case_layout_only"}}
+                save_candidate(directory, reused)
+                return reused
             return None
         expected = parameters(case, layout, batch, "fast")
         saved = row.get("parameters")

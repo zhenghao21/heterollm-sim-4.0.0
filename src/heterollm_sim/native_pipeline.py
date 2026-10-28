@@ -83,6 +83,7 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                             selected, descriptors = select_representative_pipeline_tasks(_stages, specs)
                             imports = (active._external_executor, tuple(active._external_pending)) \
                                 if active._external_executor is not None and active._external_pending else None
+                            probe_decode = min(options.pipeline_probe_decode_cohorts, sample_decode)
                             for sample_index in range(sample_decode):
                                 row = _execute_window(
                                     active._execution_resource_kernel, specs, selected,
@@ -92,6 +93,31 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                                     concurrent_imports=imports)
                                 stage_sample_rows.extend(stage_samples_from_window(
                                     row, descriptors, cohort=sample_index))
+                                if (sample_index + 1 == probe_decode
+                                        and probe_decode < sample_decode):
+                                    try:
+                                        compose_pipeline_window(
+                                            stage_sample_rows,
+                                            sampled_decode_cohorts=probe_decode,
+                                            predicted_decode_cohorts=measured,
+                                            batch_size=plan.scheduler.max_num_seqs,
+                                            output_tokens=max(2, max((s.spec.output_tokens
+                                                for s in runtime._state_values), default=2)),
+                                            cutoff_ns=active.now,
+                                            target_relative_error=pipeline_target,
+                                            warmup_decode_cohorts=warmup,
+                                            physical_prefix_decode_cohorts=0,
+                                            allow_zero_physical_prefix=True)
+                                    except (NativeFastWallBudgetError,
+                                            NativeLayerSamplingGuardError,
+                                            PipelineStageSamplingGuardError,
+                                            ValueError) as error:
+                                        # Do not spend the remaining stage
+                                        # samples when the cheap probe already
+                                        # proves that the unchanged budget
+                                        # cannot be met.
+                                        diagnostics["pipeline_probe_rejection"] = str(error)
+                                        raise _NativeLayerSamplingCutoff()
                             diagnostics.update(
                                 pipeline_stage_sampling=True,
                                 stage_sample_task_count=len(selected),
@@ -148,6 +174,17 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
                 wall_seconds=time.perf_counter()-started)
             return FastSimulationOutcome(native_pipeline_forecast=forecast, sampled=sampled, diagnostics=diagnostics)
         except _NativeLayerSamplingCutoff:
+            if diagnostics.get("pipeline_probe_rejection"):
+                reason = diagnostics["pipeline_probe_rejection"]
+                diagnostics["rejection_reasons"] = [reason]
+                diagnostics["fallback_reasons"] = [reason]
+                diagnostics["physical_complete_cohort_count"] = len(runtime.batches)
+                diagnostics["physical_visible_output_token_count"] = sum(
+                    e.details.get("visible_tokens", 0) for e in runtime.events
+                    if e.event_type == "tokens_committed")
+                diagnostics["physical_ingress_accounting"] = runtime._external_ingress_report()
+                diagnostics["wall_seconds"] = time.perf_counter()-started
+                return FastSimulationOutcome(diagnostics=diagnostics)
             if not stage_sample_rows:
                 raise NativeLayerSamplingGuardError("native_pipeline_stage_sampling_empty")
             output_tokens = max(2, max((s.spec.output_tokens for s in runtime._state_values), default=2))
