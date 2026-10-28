@@ -16248,6 +16248,24 @@ class _OnlineRuntime:
 
     def _execute_cohort(self, cohort: BatchCohort) -> None:
         self._residency_cohort_consumer_ids = set()
+        # PP fast sampling must never lower the full request cohort just to
+        # discover a representative stage graph. Keep the original batch size
+        # in the forecast metadata, but lower only an evenly spaced bounded
+        # request sample; the native sampler aborts before any state commits.
+        sampler = getattr(self, "_native_layer_sampler", None)
+        native_window = getattr(self.plan.scenario.simulation, "native_window", None)
+        if (sampler is not None and native_window is not None
+                and self.plan.scenario.placement.parallel.pp_degree > 1
+                and len(cohort.items) > native_window.pipeline_sample_requests):
+            cap = int(native_window.pipeline_sample_requests)
+            indices = tuple(round(index * (len(cohort.items) - 1) / (cap - 1))
+                            for index in range(cap)) if cap > 1 else (0,)
+            sampled_items = tuple(cohort.items[index] for index in indices)
+            cohort = replace(cohort, items=sampled_items,
+                metadata={**cohort.metadata,
+                    "native_sampling_bounded": True,
+                    "native_sampling_original_request_count": len(cohort.items),
+                    "native_sampling_request_cap": cap})
         cohort = self._with_kv_scan_lower_bound(cohort)
         if self._paged_pool_transfer_executor is not None:
             executor = self._paged_pool_transfer_executor

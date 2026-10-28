@@ -257,8 +257,11 @@ def _representative_seed_boundary(runtime, cohort):
     batch = runtime.plan.scheduler.max_num_seqs
     seeds = [state for state in runtime._state_values if state.spec.metadata.get("warmup_seed", False)]
     fresh = [state for state in runtime._state_values if not state.spec.metadata.get("warmup_seed", False)]
+    bounded = bool(cohort.metadata.get("native_sampling_bounded", False))
+    seed_ids = {s.spec.request_id for s in seeds}
     if (len(seeds) != batch or runtime._external_preloaded_requests != batch or not fresh
-            or len(cohort.items) != batch or set(cohort.request_ids) != {s.spec.request_id for s in seeds}
+            or (not bounded and (len(cohort.items) != batch or set(cohort.request_ids) != seed_ids))
+            or (bounded and not set(cohort.request_ids) <= seed_ids)
             or any(s.spec.arrival_ns > runtime.now for s in (*seeds, *fresh))):
         return False
     shapes = {(state.spec.prompt_tokens, state.spec.output_tokens) for state in fresh}
