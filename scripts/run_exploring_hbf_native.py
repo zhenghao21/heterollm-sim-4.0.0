@@ -1820,6 +1820,13 @@ def _search_lookup(directory, case, layout, *, retry_ids=None):
     invocation so a still-failing candidate cannot loop forever.
     """
     def lookup(batch):
+        physical_quantum = int(layout.get("ep", 1)) * int(layout.get("microbatches", 1))
+        if physical_quantum > 1 and batch % physical_quantum:
+            # A legacy point can be present in the cache even though the
+            # current planner would never generate it. Treat it as an
+            # unusable historical row and never send it to a native worker.
+            return {"status": "forecast_rejected",
+                    "rejection_reason": "native_invalid_batch_quantum"}
         identity = candidate_id(case, layout, batch)
         row = read_candidate(directory, identity)
         if row is None:
