@@ -153,7 +153,7 @@ def publish_once(directory: Path, *, previous: dict[str, Any] | None = None,
     return state
 
 
-def run_publisher(directory: Path, *, interval: float = 15., once: bool = False,
+def run_publisher(directory: Path, *, interval: float = 900., once: bool = False,
                   node: str = "node", cli_root: Path = CLI_ROOT,
                   status_path: Path = STATUS_PATH, lock_path: Path = LOCK_PATH) -> int:
     with SinglePublisher(lock_path):
@@ -189,7 +189,7 @@ def start_background(args: argparse.Namespace) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--directory", type=Path, default=DEFAULT_DIRECTORY)
-    parser.add_argument("--interval", type=float, default=15.)
+    parser.add_argument("--interval", type=float, default=900.)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--background", action="store_true")
     parser.add_argument("--node", default="node")
