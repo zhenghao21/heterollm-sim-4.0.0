@@ -31,6 +31,18 @@ def test_schedule_counts_the_imports_each_group_starts_together():
     assert groups["busiest_landings"] == {1: 1, 2: 1}
 
 
+def test_refill_keeps_admission_order_so_tokens_fall_in_known_microbatches():
+    # One refill per step: a fresh request starts last (microbatch 1 of 2)
+    # and is the oldest, first, at its last token.
+    assert stationary._refill_microbatches([3, 2, 1, 0], 4, 1, 0, 8, 2) == [(1, 0)] * 5
+    # Two per step: the pair keeps its relative order.
+    pairs = stationary._refill_microbatches([1, 1, 0, 0], 4, 2, 0, 8, 2)
+    assert pairs == [(0, 0), (1, 1), (0, 0), (1, 1)]
+    schedule = stationary._group_refill_schedule([[1, 1, 0, 0]], 4, 2, 0, 8, 2)
+    assert schedule["microbatches"] == pairs and len(schedule["waits"]) == len(pairs)
+    assert "microbatches" not in stationary._group_refill_schedule([[1, 1, 0, 0]], 4, 2, 0, 8)
+
+
 def test_required_pool_is_the_smallest_keeping_the_measured_lead():
     # One slot frees per step from boundary 3; a pool of p keeps later imports
     # p steps ahead, but the first refill takes an import started at boundary 0.
@@ -182,6 +194,29 @@ def test_forecast_brackets_the_full_native_continuous_refill_window(scenario, ca
         assert bounds[name]["lower"] <= value <= bounds[name]["upper"], name
     assert fast.native_window_forecast.metrics["complete_fresh_requests"] == complete
 
+
+def test_pipeline_forecast_brackets_the_full_native_flushed_window():
+    # Two stages of two microbatches: each step is one max-plus flush of
+    # four stage blocks, sampled per wavefront.
+    scenario = native_toy.pipeline_toy_scenario(16, output=24, warmup=23, measurement=46)
+    fast, _window, observed, complete = native_toy.stationary_and_full_window(scenario, 4, 2)
+    assert fast.approximation["rejection_reasons"] == []
+    assert complete
+    budget = fast.approximation["error_budget"]
+    blocks = budget["step"]["pipeline_blocks"]
+    assert [(row["microbatch"], row["stage"]) for row in blocks] == [(0, 0), (0, 1), (1, 0), (1, 1)]
+    assert all(("transfer_ns" in row) == (row["stage"] == 0) and ("commit_ns" in row) == (row["stage"] == 1)
+               for row in blocks)
+    ids = [row.window_id for row in fast.layer_window_samples]
+    # Wavefronts {(0,0)}, {(1,0),(0,1)}, {(1,1)}; PD sets beside block (0, 0) only.
+    assert sum(identity.startswith("stationary-pp-calibration-") for identity in ids) == 3
+    first_stage = {"dense" + str(index) for index in range(8)}
+    imports = [row for row in fast.layer_window_samples if row.window_id.startswith("stationary-pp-pd-")]
+    assert imports and all(set(row.layer_ids) <= first_stage for row in imports)
+    assert stationary.PIPELINE_CONCURRENT_STAGE_ASSUMPTION in budget["assumptions"]
+    bounds = fast.native_window_forecast.metric_bounds
+    for name, value in observed.items():
+        assert bounds[name]["lower"] <= value <= bounds[name]["upper"], name
 
 def test_short_stack_and_slow_refill_are_rejected_not_extrapolated():
     short = _fast(native_toy.toy_scenario(2, 1., batch_size=2, output=3), 4, 2)

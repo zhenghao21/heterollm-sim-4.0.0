@@ -55,6 +55,7 @@ from dataclasses import asdict, replace
 from fractions import Fraction
 import json
 import math
+import re
 from statistics import fmean
 import time
 
@@ -76,6 +77,16 @@ SAME_CLASS_ADDRESS_ASSUMPTION = (
 _RUN_FIELDS = ("sample_id", "start_ns", "end_ns", "duration_ns", "boundary_origin_ns",
                "elapsed_from_boundary_ns", "task_count", "layer_completion_ns", "first_access_ns",
                "concurrent_imports", "wall_seconds", "physical_observations")
+_PP_COMPUTE = re.compile(r"^operator-invocation-group-(\d+)\.stage(\d+)$")
+_PP_TRANSFER = re.compile(r"^operator-invocation-group-(\d+)\.pp(\d+)\.activation_transfer$")
+_PP_COMMIT = re.compile(r"^operator-invocation-group-(\d+)\.output_cpu_commit$")
+PIPELINE_CONCURRENT_STAGE_ASSUMPTION = (
+    "Each PP sample window runs the blocks of one flush wavefront (microbatch m on stage s with m + s "
+    "fixed) on the stages' disjoint ranks, as a flushed step overlaps them; the boundary's "
+    "per-microbatch contexts represent every later step; running requests keep their admission order "
+    "in every cohort (the scheduler's last-service order, refills appended), which fixes each token's "
+    "microbatch; and PD imports, which start with the step, are sampled beside its first block, whose "
+    "slowdown is taken over each import's whole span.")
 
 
 def _context_sensitive(metadata):
@@ -412,6 +423,109 @@ def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready
             "context": {item.request_id: item.context_tokens for item in cohort.items}}
 
 
+def _pipeline_boundary(runtime, cohort, stages, request_ready_ns, namespace, layers, *, final_exit=True):
+    """The unexecuted PP cohort as (microbatch, stage) serial layer stacks.
+
+    The planner authors one compute stage per microbatch and PP stage, an
+    activation transfer stage between them when microbatches share a stage,
+    and one CPU commit per microbatch; the remaining stages form the cohort
+    prefix. Each block is proven serial on its own task graph (edges into
+    other blocks are the stage FIFO, which the composition restores) and
+    classifies its layers by the block's own native work. Without
+    ``final_exit`` the last stage's blocks end with their last layer: no
+    suffix or commit is run or composed.
+    """
+    depth = runtime.plan.scenario.placement.parallel.pp_degree
+    source = runtime._execution_resource_kernel
+    origin, paid_frontier = cohort_origin(runtime, request_ready_ns)
+    specs, _sources = runtime._stage_task_specs(stages, {stage.stage_id: origin for stage in stages},
+                                                namespace + cohort.cohort_id)
+    source._place_shared_resident_allocations(specs)
+    inventory = layer_inventory(runtime.plan.scenario, specs)
+    compute, transfer, commit, prefix_stages = {}, {}, {}, set()
+    for stage in stages:
+        identity = str(stage.stage_id)
+        if (match := _PP_COMPUTE.match(identity)) is not None:
+            compute[int(match.group(1)), int(match.group(2))] = identity
+        elif (match := _PP_TRANSFER.match(identity)) is not None:
+            transfer[int(match.group(1)), int(match.group(2))] = identity
+        elif (match := _PP_COMMIT.match(identity)) is not None:
+            commit[int(match.group(1))] = identity
+        else:
+            prefix_stages.add(identity)
+    if any(set(map(str, stage.dependencies)) - prefix_stages
+           for stage in stages if str(stage.stage_id) in prefix_stages):
+        raise NativeLayerSamplingGuardError("native_pipeline_cohort_prefix_not_a_prefix")
+    # A cohort of fewer requests than microbatches is lowered into fewer.
+    count = 1 + max((group for group, _stage in compute), default=-1)
+    grid = {(group, stage) for group in range(count) for stage in range(depth)}
+    if (not grid or set(compute) != grid or set(commit) != set(range(count))
+            or not set(transfer) <= {key for key in grid if key[1] < depth - 1}):
+        raise NativeLayerSamplingGuardError("native_pipeline_stage_grid_incomplete")
+    by_stage = defaultdict(list)
+    for task in specs:
+        by_stage[task.metadata.get("execution_stage_id")].append(task)
+    blocks, failures = {}, []
+    for key, identity in sorted(compute.items()):
+        tasks = by_stage[identity]
+        members = frozenset(task.task_id for task in tasks)
+        local = [replace(task, dependencies=tuple(parent for parent in task.dependencies if parent in members))
+                 for task in tasks]
+        by_layer = defaultdict(list)
+        for task in local:
+            if task.metadata.get("layer_id") is not None:
+                by_layer[str(task.metadata["layer_id"])].append(task)
+        stack = []
+        for row in inventory:
+            group = by_layer.get(row["layer_id"])
+            if group:
+                shape = native_layer_shape(group)
+                stack.append({**row, "task_count": len(group), "native_shape": shape,
+                              "class_key": json.dumps({"semantics": row["signature"], "native": shape},
+                                  ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=repr)})
+        composition, boundary = _graph_facts(local, stack)
+        if (not composition["qualified"] or set(boundary) - {"before_first_layer", "after_last_layer"}
+                or composition["nonserial_non_layer_groups"]):
+            failures.append({"block": list(key), "failures": composition["failures"],
+                             "boundary": sorted(boundary)})
+            continue
+        roles = _sample_roles(stack, layers)
+        if roles is None:
+            raise NativeLayerSamplingGuardError("native_stationary_stack_too_short_for_disjoint_runs")
+        exit = final_exit or key[1] < depth - 1
+        last = exit and key[1] == depth - 1
+        blocks[key] = {"key": key, "stage_id": identity, "inventory": stack, "roles": roles, "exit": exit,
+            "by_layer": {layer: [task.task_id for task in group] for layer, group in by_layer.items()},
+            "prefix": list(boundary.get("before_first_layer", ())),
+            "suffix": list(boundary.get("after_last_layer", ())) if exit else [],
+            "transfer_stage": transfer.get(key),
+            "transfer": [task.task_id for task in by_stage[transfer[key]]] if key in transfer else [],
+            "commit_stage": commit[key[0]] if last else None,
+            "commit": [task.task_id for task in by_stage[commit[key[0]]]] if last else []}
+    if failures:
+        raise NativeLayerSamplingGuardError("native_pipeline_stage_requires_serial_layer_composition")
+    cohort_prefix = [task.task_id for stage in stages if str(stage.stage_id) in prefix_stages
+                     for task in by_stage[str(stage.stage_id)]]
+    # Only block (0, 0) waits for the cohort prefix in a step; every later
+    # block starts behind the stage FIFO, long after it. A window that runs
+    # the prefix for block (0, 0) must not charge it to the other blocks.
+    prefix_ids = frozenset(cohort_prefix)
+    for key, block in blocks.items():
+        block["detached"] = {} if key == (0, 0) else {
+            task.task_id: replace(task, dependencies=tuple(parent for parent in task.dependencies
+                                                           if parent not in prefix_ids))
+            for task in by_stage[block["stage_id"]] if prefix_ids.intersection(task.dependencies)}
+    return {"cohort": cohort, "source": source, "origin": origin, "paid_frontier": paid_frontier,
+            "specs": specs, "inventory": inventory,
+            "composition": {"qualified": True, "basis": "per_microbatch_stage_serial_layer_blocks",
+                            "stages": depth, "microbatches": count},
+            "boundary": {}, "pipeline": {"stages": depth, "microbatches": count, "blocks": blocks,
+                                         "cohort_prefix": cohort_prefix},
+            "ranks": {task.task_id: task.metadata["rank"] for task in specs
+                      if type(task.metadata.get("rank")) is int},
+            "context": {item.request_id: item.context_tokens for item in cohort.items}}
+
+
 def prepare_stationary(runtime, cohort, stages, request_ready_ns, control, cost, layers):
     """One unchanged post-boundary source, its graph and layer classes.
 
@@ -424,11 +538,18 @@ def prepare_stationary(runtime, cohort, stages, request_ready_ns, control, cost,
     started = time.perf_counter()
     control.raise_if_cancelled()
     groups = _ep_groups(runtime, cohort)
-    prepared = cohort_layers(runtime, cohort, stages, request_ready_ns, "native-stationary-sample.")
+    parallel = runtime.plan.scenario.placement.parallel
+    if parallel.pp_degree > 1 or parallel.pipeline_microbatches > 1:
+        prepared = _pipeline_boundary(runtime, cohort, stages, request_ready_ns,
+                                      "native-stationary-sample.", layers)
+        kept = frozenset(layer for block in prepared["pipeline"]["blocks"].values()
+                         for ids in block["roles"].values() for layer in ids)
+    else:
+        prepared = cohort_layers(runtime, cohort, stages, request_ready_ns, "native-stationary-sample.")
+        roles = _sample_roles(prepared["inventory"], layers)
+        # A too-short stack is rejected when sampling starts; nothing is cut.
+        kept = None if roles is None else frozenset(layer for ids in roles.values() for layer in ids)
     specs = prepared["specs"]
-    roles = _sample_roles(prepared["inventory"], layers)
-    # A too-short stack is rejected when sampling starts; nothing is cut.
-    kept = None if roles is None else frozenset(layer for ids in roles.values() for layer in ids)
 
     def drop_dead_records():
         if kept is not None:
@@ -510,6 +631,9 @@ def sample_stationary(runtime, prepared, control, layers, records, *, holdout_sh
     Each finished run is appended to ``records`` at once, so a wall limit
     in a later run keeps the physical samples already taken.
     """
+    if "pipeline" in prepared:
+        return _sample_pipeline(runtime, prepared, control, records, holdout_shift_ns=holdout_shift_ns,
+                                pd_concurrency_envelope=pd_concurrency_envelope)
     started = time.perf_counter()
     calibration, holdout = layers
     inventory, boundary = prepared["inventory"], prepared["boundary"]
@@ -535,50 +659,200 @@ def sample_stationary(runtime, prepared, control, layers, records, *, holdout_sh
             "entry_at_holdout_origin": run("entry", roles["entry"], (prefix,), second, "entry-second",
                                            entry=True),
             "exit_at_calibration_origin": run("exit", roles["exit"], (suffix,), first, "exit-second", exit=True)}
-    executor, pending = runtime._external_executor, list(runtime._external_pending)
-    imports = {"in_flight_request_ids": pending, "samples": []}
-    if executor is not None and pending:
-        states = {state.get("request_id"): state for state in executor._async_plan_states.values()
-                  if not state.get("done") and "destinations" in state}
-        # The two imports with the most remaining bytes, each alone; any
-        # import outside a sampled set stays frozen on its copy. Every task of a
-        # layer waits for all terminals of the layer before it, so the
-        # prefix and first two layers end exactly as in the calibration run
-        # without imports; later layers are not needed for the comparison.
-        # With several ep groups the second import is the one with the most
-        # remaining bytes outside the first one's group, when there is one.
-        ordered = sorted((identity for identity in pending if identity in states),
-                         key=lambda identity: (-remaining_import_bytes(states[identity]), identity))
-        group_of = {identity: _destination_group(prepared, states[identity]) for identity in ordered}
-        chosen = ordered[:1]
-        if chosen:
-            other = next((identity for identity in ordered[1:] if group_of[identity] != group_of[chosen[0]]),
-                         None)
-            chosen += [other] if other is not None else ordered[1:2]
-        sets = [[identity] for identity in chosen]
-        # A group starts all the imports landing in one step at the same
-        # boundary, so they run together: for every busiest-group count k > 1
-        # of the measured steps, two sets of k imports also run together.
-        # The step stalls until such a set is written, so the set runs beside
-        # all calibration layers: it finishes inside the window and its joint
-        # extra is its measured later end, not a slope extrapolation.
-        schedule = _group_refill_schedule(*refill_inputs(runtime, prepared))
-        counts = schedule["busiest_landings"]
-        if pd_concurrency_envelope:
-            counts = (max(counts, default=1),)
-        for count in counts:
-            if count > 1:
-                sets += _concurrent_sets(ordered, group_of, count)
-        for identities in sets:
-            rows = [states[identity] for identity in identities]
-            imports["samples"].append({"request_ids": identities,
-                "logical_bytes": sum(state["logical_bytes"] for state in rows),
-                "remaining_bytes_at_cutoff": sum(remaining_import_bytes(state) for state in rows),
-                "destination_group": group_of[identities[0]],
-                "concurrent": run("pd_import", roles["pd_import" if len(identities) == 1 else "calibration"],
-                                  (prefix,), first, "pd-" + "+".join(identities), (executor, identities))})
+    executor, imports, sets = _import_sets(runtime, prepared, pd_concurrency_envelope)
+    for identities, row in sets:
+        imports["samples"].append({**row,
+            "concurrent": run("pd_import", roles["pd_import" if len(identities) == 1 else "calibration"],
+                              (prefix,), first, "pd-" + "+".join(identities), (executor, identities))})
     return {"schema": "native-stationary-samples/v1", "runs": runs, "pd_imports": imports,
             "layers": {role: len(roles[role]) for role in ("calibration", "holdout")}, "layer_count": count,
+            "holdout_shift_ns": holdout_shift_ns, "wall_seconds": time.perf_counter() - started,
+            "physical_state_advanced": False, "source_kernel_modified": False}
+
+
+def _import_sets(runtime, prepared, pd_concurrency_envelope):
+    """The in-flight PD import sets a step sample continues beside its quiet work.
+
+    Returns the PD executor, the sample ledger and ``(request ids, row)``
+    for every set, in the order they are run.
+    """
+    executor, pending = runtime._external_executor, list(runtime._external_pending)
+    imports = {"in_flight_request_ids": pending, "samples": []}
+    if executor is None or not pending:
+        return executor, imports, []
+    states = {state.get("request_id"): state for state in executor._async_plan_states.values()
+              if not state.get("done") and "destinations" in state}
+    # The two imports with the most remaining bytes, each alone; any
+    # import outside a sampled set stays frozen on its copy. Every task of a
+    # layer waits for all terminals of the layer before it, so the
+    # prefix and first two layers end exactly as in the calibration run
+    # without imports; later layers are not needed for the comparison.
+    # With several ep groups the second import is the one with the most
+    # remaining bytes outside the first one's group, when there is one.
+    ordered = sorted((identity for identity in pending if identity in states),
+                     key=lambda identity: (-remaining_import_bytes(states[identity]), identity))
+    group_of = {identity: _destination_group(prepared, states[identity]) for identity in ordered}
+    chosen = ordered[:1]
+    if chosen:
+        other = next((identity for identity in ordered[1:] if group_of[identity] != group_of[chosen[0]]),
+                     None)
+        chosen += [other] if other is not None else ordered[1:2]
+    sets = [[identity] for identity in chosen]
+    # A group starts all the imports landing in one step at the same
+    # boundary, so they run together: for every busiest-group count k > 1
+    # of the measured steps, two sets of k imports also run together.
+    # The step stalls until such a set is written, so the set runs beside
+    # all calibration layers: it finishes inside the window and its joint
+    # extra is its measured later end, not a slope extrapolation.
+    schedule = _group_refill_schedule(*refill_inputs(runtime, prepared))
+    counts = schedule["busiest_landings"]
+    if pd_concurrency_envelope:
+        counts = (max(counts, default=1),)
+    for count in counts:
+        if count > 1:
+            sets += _concurrent_sets(ordered, group_of, count)
+    rows = []
+    for identities in sets:
+        members = [states[identity] for identity in identities]
+        rows.append((identities, {"request_ids": identities,
+            "logical_bytes": sum(state["logical_bytes"] for state in members),
+            "remaining_bytes_at_cutoff": sum(remaining_import_bytes(state) for state in members),
+            "destination_group": group_of[identities[0]]}))
+    return executor, imports, rows
+
+
+def _pipeline_window(prepared, control, records, role, keys, origin, sample_id, imports=None):
+    """Run the (microbatch, stage) blocks ``keys`` on a copy of the source; return each block's run.
+
+    Entry roles run each block's own prefix (the cohort prefix with block
+    (0, 0)); holdout and exit roles run its suffix, and exit roles also its
+    outgoing activation transfer and, on the last stage, the microbatch's
+    CPU commit.
+    """
+    control.raise_if_cancelled()
+    pipeline = prepared["pipeline"]
+    entry, exit = role in ("calibration", "entry", "pd_import"), role in ("holdout", "exit")
+    tail = ("suffix", "transfer", "commit") if role == "exit" else ("suffix",)
+    ids, terms, members = [], {}, []
+    for key in keys:
+        block = pipeline["blocks"][key]
+        layer_ids, by_layer, mark = block["roles"][role], block["by_layer"], "@{}.{}".format(*key)
+        if entry:
+            head = [*(pipeline["cohort_prefix"] if key == (0, 0) else ()), *block["prefix"]]
+            ids += head
+            terms.update((identity, "entry" + mark) for identity in (*head, *by_layer[layer_ids[0]]))
+        for layer in layer_ids:
+            ids += by_layer[layer]
+        terms.update((identity, layer) for layer in layer_ids[1:] for identity in by_layer[layer])
+        if exit:
+            for name in tail:
+                ids += block[name]
+                terms.update((identity, name + mark) for identity in block[name])
+        members.append((key, block, layer_ids, mark))
+    detached = {identity: task for _key, block, _layers, _mark in members
+                for identity, task in block["detached"].items()}
+    wanted = frozenset(ids)
+    specs = [detached.get(task.task_id, task) for task in prepared["specs"] if task.task_id in wanted]
+    record = _execute_window(prepared["source"], specs, ids, origin_ns=origin, control=control,
+                             sample_id=sample_id, concurrent_imports=imports,
+                             row_terms=None if imports else terms,
+                             **({"tp_symmetry": prepared["tp_symmetry"]} if "tp_symmetry" in prepared else {}))
+    cohort = prepared["cohort"]
+    records.append(NativeLayerWindowSample(window_id=record["sample_id"], role=role,
+        cohort_id=cohort.cohort_id, cohort_kind=cohort.kind, decode_step=0,
+        layer_ids=tuple(layer for _key, _block, layer_ids, _mark in members for layer in layer_ids),
+        rank_ids=tuple(sorted({prepared["ranks"][identity] for identity in ids if identity in prepared["ranks"]})),
+        context_tokens_by_request=prepared["context"], executed_task_count=record["task_count"],
+        start_ns=record["start_ns"], end_ns=record["end_ns"], wall_seconds=record["wall_seconds"],
+        physical_observations=record["physical_observations"]))
+    control.report("native_stationary_sample", len(records), unit="work_units",
+        message="原生层样本已保存，不计完整批次或输出词元",
+        metadata={"sample_id": record["sample_id"], "role": role, "executed_tasks": record["task_count"]})
+    access, ends = record["first_access_ns"] or {}, record["stage_completion_ns"]
+    views = {}
+    for key, block, layer_ids, mark in members:
+        end = ends[block["stage_id"]]
+        view = {"layer_ids": layer_ids, "origin_ns": origin, "start_ns": record["start_ns"], "end_ns": end,
+                "layer_completion_ns": record["layer_completion_ns"],
+                "concurrent_imports": record["concurrent_imports"],
+                "first_access_ns": {**{layer: access.get(layer, 0.) for layer in layer_ids},
+                                    "entry": access.get("entry" + mark, 0.), "exit": access.get("suffix" + mark, 0.)}}
+        for name in ("transfer", "commit"):
+            stage_id = block[name + "_stage"]
+            if name in tail and stage_id is not None:
+                view[name + "_ns"] = ends[stage_id] - end
+                view[name + "_first_access_ns"] = access.get(name + mark, 0.)
+        views[key] = view
+    return {"sample_id": record["sample_id"], "views": views, "wall_seconds": record["wall_seconds"],
+            "task_count": record["task_count"], "concurrent_imports": record["concurrent_imports"],
+            "start_ns": record["start_ns"], "end_ns": record["end_ns"]}
+
+
+def _pipeline_wavefronts(pipeline):
+    """The blocks a flushed step overlaps: stage s takes microbatch m as
+    stage s - 1 hands it over, so the blocks with one m + s run together."""
+    depth, count = pipeline["stages"], pipeline["microbatches"]
+    return [[(front - stage, stage) for stage in range(depth) if 0 <= front - stage < count]
+            for front in range(count + depth - 1)]
+
+
+def sample_pipeline_blocks(prepared, control, records, first, second, namespace):
+    """The stationary runs of every (microbatch, stage) block, by block, and the window ledger.
+
+    Calibration, holdout and the entry at the other origin run once per
+    flush wavefront, so every block runs beside the blocks a flushed step
+    overlaps it with. Each block with an exit runs it alone at the first
+    origin, and at the second too when an activation transfer or CPU commit
+    follows it: a wavefront would align its blocks' ends, while the flush
+    staggers them.
+    """
+    pipeline = prepared["pipeline"]
+    runs, windows = defaultdict(dict), []
+
+    def run(name, role, keys, origin, tag):
+        window = _pipeline_window(prepared, control, records, role, keys, origin,
+                                  namespace + name + "-" + tag)
+        windows.append({key: window[key] for key in ("sample_id", "wall_seconds", "task_count")})
+        for key, view in window["views"].items():
+            runs[key][name] = view
+
+    for front, keys in enumerate(_pipeline_wavefronts(pipeline)):
+        run("calibration", "calibration", keys, first, str(front))
+        run("holdout", "holdout", keys, second, str(front))
+        run("entry_at_holdout_origin", "entry", keys, second, str(front))
+    for key, block in sorted(pipeline["blocks"].items()):
+        if block["exit"]:
+            tag = "{}.{}".format(*key)
+            run("exit_at_calibration_origin", "exit", [key], first, tag)
+            if block["transfer_stage"] is not None or block["commit_stage"] is not None:
+                run("exit_at_holdout_origin", "exit", [key], second, tag)
+    return dict(runs), windows
+
+
+def _sample_pipeline(runtime, prepared, control, records, *, holdout_shift_ns, pd_concurrency_envelope):
+    """PP step samples: every block's stationary runs (``sample_pipeline_blocks``)
+    and the PD import sets beside the step's first block, microbatch 0 on
+    stage 0, as the imports start with the step; each against that block's
+    calibration run.
+    """
+    started = time.perf_counter()
+    pipeline = prepared["pipeline"]
+    kept = prepared["record_layers"]
+    if kept is not None and any(not kept.issuperset(ids) for block in pipeline["blocks"].values()
+                                for ids in block["roles"].values()):
+        raise NativeLayerSamplingGuardError("native_stationary_sample_layer_records_dropped")
+    first, second = prepared["origin"], prepared["origin"] + holdout_shift_ns
+    runs, windows = sample_pipeline_blocks(prepared, control, records, first, second, "stationary-pp-")
+    executor, imports, sets = _import_sets(runtime, prepared, pd_concurrency_envelope)
+    for identities, row in sets:
+        imports["samples"].append({**row, "concurrent": _pipeline_window(
+            prepared, control, records, "pd_import" if len(identities) == 1 else "calibration", [(0, 0)], first,
+            "stationary-pp-pd-" + "+".join(identities), (executor, identities))})
+    sample = next(iter(pipeline["blocks"].values()))
+    return {"schema": "native-stationary-samples/v1", "pipeline": True, "runs": runs,
+            "pd_imports": imports, "windows": windows,
+            "layers": {role: len(sample["roles"][role]) for role in ("calibration", "holdout")},
+            "layer_count": len(prepared["inventory"]),
             "holdout_shift_ns": holdout_shift_ns, "wall_seconds": time.perf_counter() - started,
             "physical_state_advanced": False, "source_kernel_modified": False}
 
@@ -698,12 +972,73 @@ def compose_layers(inventory, runs, *, exit):
 
 def _step_service(prepared, samples):
     """Lower/upper native service of one Decode step, and its parts."""
-    lower, upper, parts = compose_layers(prepared["inventory"], samples["runs"], exit=True)
+    if "pipeline" in prepared:
+        lower, upper, parts = _pipeline_step(prepared, samples)
+    else:
+        lower, upper, parts = compose_layers(prepared["inventory"], samples["runs"], exit=True)
     guard = prepared["query_decode_guard_ns"]
     lower, upper = lower - guard, upper + guard
     if lower <= 0:
         raise ValueError("native_stationary_step_lower_bound_not_positive")
     return lower, upper, {**parts, "query_decode_guard_ns": guard}
+
+
+def _edge_interval(runs, name):
+    """An activation transfer or CPU commit after its stage, from both lone exit runs."""
+    roles = ("exit_at_calibration_origin", "exit_at_holdout_origin")
+    observed = [runs[role][name + "_ns"] for role in roles]
+    widths = [runs[role][name + "_first_access_ns"] for role in roles]
+    if min(observed) < 0:
+        raise ValueError("native_pipeline_edge_ends_invalid")
+    lower, upper = _widened_hull(observed, widths, max(observed) - min(observed))
+    return max(0., lower), upper
+
+
+def _pipeline_finish(service, transfer, commit, depth, count, bound):
+    """Each microbatch's end in one PP cohort flush: stage FIFO, link FIFO and
+    the CPU commit FIFO (max-plus), from ``bound`` 0 (lower) or 1 (upper) of
+    every interval. The last end ends the step."""
+    stage_free, link_free, cpu_free, commits = [0.] * depth, [0.] * depth, 0., []
+    for group in range(count):
+        ready = 0.
+        for stage in range(depth):
+            ready = stage_free[stage] = max(stage_free[stage], ready) + service[group, stage][bound]
+            if (group, stage) in transfer:
+                ready = link_free[stage] = max(ready, link_free[stage]) + transfer[group, stage][bound]
+        cpu_free = max(ready, cpu_free) + (commit[group][bound] if group in commit else 0.)
+        commits.append(cpu_free)
+    return commits
+
+
+def _pipeline_step(prepared, samples):
+    """Lower/upper flush of one PP cohort from its (microbatch, stage) block services.
+
+    Every block composes like a stationary stack (its entry includes the
+    cohort prefix for block (0, 0)); a block without an exit ends with its
+    last layer. The max-plus flush is monotone in each service, so the
+    lower and upper services give the cohort's bounds.
+    """
+    pipeline = prepared["pipeline"]
+    depth, count = pipeline["stages"], pipeline["microbatches"]
+    service, transfer, commit, rows = {}, {}, {}, []
+    for key, block in sorted(pipeline["blocks"].items()):
+        runs = samples["runs"][key]
+        lower, upper, parts = compose_layers(block["inventory"], runs, exit=block["exit"])
+        service[key] = (lower, upper)
+        row = {"microbatch": key[0], "stage": key[1], "service_ns": {"lower": lower, "upper": upper}, **parts}
+        if block["transfer_stage"] is not None:
+            transfer[key] = _edge_interval(runs, "transfer")
+            row["transfer_ns"] = dict(zip(("lower", "upper"), transfer[key]))
+        if block["commit_stage"] is not None:
+            commit[key[0]] = _edge_interval(runs, "commit")
+            row["commit_ns"] = dict(zip(("lower", "upper"), commit[key[0]]))
+        rows.append(row)
+    lower = _pipeline_finish(service, transfer, commit, depth, count, 0)
+    upper = _pipeline_finish(service, transfer, commit, depth, count, 1)
+    return lower[-1], upper[-1], {"pipeline_blocks": rows, "pipeline_stages": depth,
+        "pipeline_microbatches": count,
+        "commit_ns_by_microbatch": [{"lower": low, "upper": high} for low, high in zip(lower, upper)],
+        "step_composition": "flush_stage_fifo_link_fifo_cpu_commit_fifo"}
 
 
 def _import_extra(samples):
@@ -717,18 +1052,24 @@ def _import_extra(samples):
     E(k) = T(k)*s/(1+s). Every sampled k needs two sets; returns
     {k: {"extra_ns": (lo, hi), "span_ns": (lo, hi)}} and the sample rows.
     """
-    quiet = samples["runs"]["calibration"]
     rows = []
     for sample in samples["pd_imports"]["samples"]:
         identities, total, busy = sample["request_ids"], sample["logical_bytes"], sample["concurrent"]
+        if samples.get("pipeline"):
+            # A PP set runs beside the step's first block, against that
+            # block's own calibration run.
+            ((key, run),) = busy["views"].items()
+            quiet = samples["runs"][key]["calibration"]
+        else:
+            run, quiet = busy, samples["runs"]["calibration"]
         observed = busy["concurrent_imports"]
         written = sum(observed["written_bytes_by_request"][identity] for identity in identities)
-        layers = busy["layer_ids"]
+        layers = run["layer_ids"]
         if len(layers) < 2 or layers != quiet["layer_ids"][:len(layers)] or written <= 0:
             raise ValueError("native_stationary_PD_sample_invalid")
         # The busy run ends with its last layer; the quiet run reached the
         # same layer at its completion.
-        q, c = _completions(quiet, layers), _completions(busy, layers)
+        q, c = _completions(quiet, layers), _completions(run, layers)
         spans = [observed["import_spans_ns"].get(identity) for identity in identities]
         complete = all(span is not None and span[1] <= busy["end_ns"] for span in spans)
         rate = written / ((max(span[1] for span in spans) if complete else busy["end_ns"]) - busy["start_ns"])
@@ -825,7 +1166,45 @@ def _refill_landings(ages, output, pool, last):
     return landed
 
 
-def _group_refill_schedule(ages_by_group, output, pool, warmup, measured):
+def _refill_microbatches(ages, output, pool, warmup, measured, count):
+    """The microbatches of each complete fresh request's first and last token,
+    following ``_refill_schedule``'s slot rules, in its ``waits`` order.
+
+    Running requests keep their admission order in every cohort: the seeds
+    in ``ages``'s (first cohort) order, then the refills appended. The
+    planner deals a cohort's requests to ``count`` microbatches in turn, so
+    the request at position p is in microbatch p mod ``count``.
+    """
+    finishes = defaultdict(int)
+    for age in ages:
+        finishes[output - age] += 1
+    running = [(output - age, None) for age in ages]
+    starts = [0] * pool
+    first, last = warmup + 2, warmup + measured + 1
+    rows = []
+    for boundary in range(1, last + 1):
+        kept = []
+        for position, (finish, key) in enumerate(running):
+            if finish != boundary:
+                kept.append((finish, key))
+            elif key is not None:
+                rows[key][1] = position % count
+        running = kept
+        if boundary == last:
+            break
+        for _ in range(min(finishes.pop(boundary, 0), len(starts))):
+            starts.pop(0)
+            finishes[boundary + output] += 1
+            key = None
+            if boundary + 1 >= first and boundary + output <= last:
+                key = len(rows)
+                rows.append([len(running) % count, None])
+            running.append((boundary + output, key))
+            starts.append(boundary)
+    return [tuple(row) for row in rows]
+
+
+def _group_refill_schedule(ages_by_group, output, pool, warmup, measured, microbatches=1):
     """Per-ep-group continuous refill: a freed slot is refilled from its own
     group's pool of ``pool`` imports.
 
@@ -841,13 +1220,17 @@ def _group_refill_schedule(ages_by_group, output, pool, warmup, measured):
     measured steps by their busiest group's k = max_g k_g(s) (k > 0), and
     ``fewest_landing_steps`` is the shortest distance between two landing
     steps of one group: the imports started at one boundary run alone only
-    while they finish within that many steps.
+    while they finish within that many steps. With ``microbatches`` > 1,
+    ``microbatches`` holds each waited request's first- and last-token
+    microbatch (``_refill_microbatches``), in ``waits`` order.
     """
     first, last = warmup + 2, warmup + measured + 1
-    rows, waits, landings = [], [], []
+    rows, waits, landings, positions = [], [], [], []
     for ages in ages_by_group:
         group_waits, most, lag = _refill_schedule(ages, output, pool, warmup, measured)
         waits += group_waits
+        if microbatches > 1:
+            positions += _refill_microbatches(ages, output, pool, warmup, measured, microbatches)
         landings.append(_refill_landings(ages, output, pool, last))
         rows.append({"requests": len(ages), "pool": pool, "most_admissions_per_step": most,
                      "fewest_import_steps": lag, "complete_fresh_requests": len(group_waits)})
@@ -864,7 +1247,8 @@ def _group_refill_schedule(ages_by_group, output, pool, warmup, measured):
     return {"waits": waits, "most": max(row["most_admissions_per_step"] for row in rows),
             "lag": min(row["fewest_import_steps"] for row in rows), "groups": rows,
             "rho": peak / total if total else 1., "peak_group_landings": peak, "total_landings": total,
-            "busiest_landings": dict(sorted(busiest.items())), "fewest_landing_steps": gap}
+            "busiest_landings": dict(sorted(busiest.items())), "fewest_landing_steps": gap,
+            **({"microbatches": positions} if microbatches > 1 else {})}
 
 
 def _required_group_pool(ages_by_group, output, pool, warmup, measured, lead):
@@ -968,19 +1352,23 @@ def admission_reasons(runtime, prepared):
 
 
 def refill_inputs(runtime, prepared):
-    """Seed ages per ep group, the fresh output length, the per-group pool and
-    the warmup/measured steps of an admitted stationary boundary's refill, in
-    ``_group_refill_schedule``'s argument order."""
+    """Seed ages per ep group in the first cohort's order, the fresh output
+    length, the per-group pool and the warmup/measured steps of an admitted
+    stationary boundary's refill, in ``_group_refill_schedule``'s argument
+    order."""
     ingress = runtime._external_ingress
     groups = prepared["ep_groups"]
     degree = groups["degree"]
     (output,) = {state.spec.output_tokens for state in runtime._state_values
                  if not state.spec.metadata.get("warmup_seed", False)}
     ages_by_group = [[] for _ in range(degree)]
-    for state in runtime._state_values:
+    # The first cohort's order (``context``) is the running order the refill
+    # keeps; a seed outside it still meets the group check.
+    order = {request_id: index for index, request_id in enumerate(prepared["context"])}
+    seeds = sorted((state for state in runtime._state_values if state.spec.metadata.get("warmup_seed", False)),
+                   key=lambda state: order.get(state.spec.request_id, len(order)))
+    for state in seeds:
         spec = state.spec
-        if not spec.metadata.get("warmup_seed", False):
-            continue
         owner = 0 if degree == 1 else groups["group_of"].get(spec.request_id)
         if owner is None:
             raise NativeLayerSamplingGuardError("native_stationary_ep_groups_unbalanced")
@@ -1011,7 +1399,8 @@ def evaluate_stationary(runtime, prepared, samples, options):
     except ValueError as error:
         reasons.append(str(error))
         return result
-    schedule = _group_refill_schedule(ages_by_group, output, group_pool, warmup, measured)
+    schedule = _group_refill_schedule(ages_by_group, output, group_pool, warmup, measured,
+                                      step.get("pipeline_microbatches", 1))
     waits, most, lag, rho = schedule["waits"], schedule["most"], schedule["lag"], schedule["rho"]
     busiest, total = schedule["busiest_landings"], schedule["total_landings"]
     enveloped = []
@@ -1061,6 +1450,24 @@ def evaluate_stationary(runtime, prepared, samples, options):
               "measurement_duration_ns": _interval(measured * tpot_lo, measured * tpot_hi),
               "cluster_tokens_per_second": _interval(batch * 1e9 / tpot_hi, batch * 1e9 / tpot_lo),
               "mean_complete_request_ingress_ttft_ns": _interval(tpot_lo * wait, tpot_hi * wait)}
+    if "microbatches" in schedule:
+        # A token commits with its request's microbatch m, off[m] before the
+        # step ends (imports start at step ends): off[m] is the last commit
+        # less m's, bounded across the lower and upper flushes. The refill
+        # fixes the microbatch of every complete fresh request's first and
+        # last token.
+        commits = step["commit_ns_by_microbatch"]
+        final = commits[-1]
+        offsets = [(max(0., final["lower"] - row["upper"]), final["upper"] - row["lower"])
+                   for row in commits[:-1]] + [(0., 0.)]
+        heads = [fmean(offsets[pair[0]][bound] for pair in schedule["microbatches"]) for bound in (0, 1)]
+        tails = [fmean(offsets[pair[1]][bound] for pair in schedule["microbatches"]) for bound in (0, 1)]
+        bounds["mean_complete_request_tpot_ns"] = _interval(tpot_lo + (heads[0] - tails[1]) / (output - 1),
+                                                            tpot_hi + (heads[1] - tails[0]) / (output - 1))
+        bounds["mean_complete_request_ingress_ttft_ns"] = _interval(tpot_lo * wait - heads[1],
+                                                                    tpot_hi * wait - heads[0])
+        step = {**step, "token_commit_offsets_ns": offsets,
+                "mean_first_token_offset_ns": heads, "mean_last_token_offset_ns": tails}
     if any(not _within(row, limit) for row in bounds.values()):
         reasons.append("native_stationary_independent_budget_exceeded")
     tokens = measured * batch
@@ -1091,6 +1498,9 @@ def evaluate_stationary(runtime, prepared, samples, options):
                      "in_situ_step_ends_two_origins; boundary_first_access_row_state_bounds; "
                      "measured_joint_PD_import_extra_per_concurrent_count",
             "assumptions": [SAME_CLASS_ADDRESS_ASSUMPTION]})
+    if "pipeline" in prepared:
+        result["error_budget"]["assumptions"].append(PIPELINE_CONCURRENT_STAGE_ASSUMPTION)
+        result["error_budget"]["basis"] += "; per_microbatch_stage_blocks_max_plus_flush"
     if enveloped:
         result["error_budget"]["pd_concurrency_envelope"] = {
             "sampled_endpoints": [1, max(busiest)], "enveloped_counts": enveloped,

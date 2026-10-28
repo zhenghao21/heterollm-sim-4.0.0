@@ -50,16 +50,21 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # Maverick HBM4 EP-group layouts, in addition to the 405B HBM4 exception.
 FAST_CONTRACT = "native_stationary_layout_fast_v21"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
-# use the conditional chunk forecast; detailed passes retain the complete
-# native prompt forward.
+# sample a whole prompt by its stage blocks and a chunked one by the
+# conditional chunk forecast; detailed passes retain the complete native
+# prompt forward.
 PREFILL_CONTRACT = "native_prefill_complete_prompt_pass_v2"
 # PP changes native execution even with one microbatch. Keep its cache
 # identity distinct while the established PP=1/M=1 contracts remain intact.
+# v4 forecasts PP Decode from per-(microbatch, stage) stationary layer blocks
+# composed by the cohort's max-plus flush; v3 forecasts are not reusable.
 PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
-PIPELINE_FORECAST_CONTRACT = "native_stage_fifo_conditional_forecast_v3"
+PIPELINE_FORECAST_CONTRACT = "native_stationary_pp_stage_blocks_v4"
 MAX_BATCH_SEARCH_CONTRACT = "native_max_batch_under_slo_v1"
 THROUGHPUT_SEARCH_CONTRACT = "native_throughput_v1"
-PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_chunk_forecast_v2"
+# v3 samples a whole-prompt PP pass by its stage blocks; a multi-chunk PP
+# pass keeps the conditional chunk forecast.
+PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_stage_blocks_v3"
 PIPELINE_PREFILL_FULL_CONTRACT = "native_pp_prefill_complete_prompt_pass_v2"
 BACKEND = "native_serving_physical"
 PHASES = ("dense_native", "dense_plus", "maverick_native")
@@ -714,7 +719,7 @@ def dp_scaled_bounds(bounds, params):
 
 
 def native_fast_result(result, params):
-    """Report complete PP windows or keep layer samples and forecasts separate.
+    """Keep layer samples and forecasts separate for every fast layout.
 
     The forecast describes one replica; row metrics and intervals are scaled to
     the cluster, the saved forecast metadata stays the single-replica value.
@@ -722,74 +727,6 @@ def native_fast_result(result, params):
     from heterollm_sim.reporting import FastScenarioResult
     if not isinstance(result, FastScenarioResult):
         raise RuntimeError("native fast candidate did not return a separate sampled/forecast result")
-    pipeline_forecast = getattr(result, "native_pipeline_forecast", None)
-    if pipeline_forecast is not None or str(result.approximation.get("method", "")).startswith("native_pipeline_") and result.approximation.get("method") != "native_pipeline_full_window/v1":
-        if pipeline_forecast is None:
-            return {"approximation": dict(result.approximation), "status": "forecast_rejected",
-                    "metrics": None, "rejection_reason": ";".join(result.approximation.get("rejection_reasons", ()))
-                        or "native_pipeline_forecast_unavailable",
-                    "fidelity": "native_pipeline_stage_samples_and_virtual_window_forecast"}
-        bounds = dict(getattr(pipeline_forecast, "metric_bounds", {}) or {})
-        tpot = bounds.get("mean_complete_request_tpot_ns", {})
-        upper = tpot.get("upper") if isinstance(tpot, Mapping) else None
-        metrics_raw = dict(getattr(pipeline_forecast, "metrics", {}) or {})
-        if not _numeric(upper) or upper <= 0:
-            return {"approximation": dict(result.approximation), "status": "forecast_rejected", "metrics": None,
-                    "rejection_reason": "native_pipeline_forecast_missing_tpot_bound",
-                    "fidelity": "native_pipeline_stage_samples_and_virtual_window_forecast"}
-        metrics = {key: value for key, value in metrics_raw.items() if _numeric(value)}
-        if "cluster_tokens_per_second" in metrics:
-            metrics.update(replica_scaling(metrics["cluster_tokens_per_second"], params))
-        target = params["target_relative_error"]
-        # PP composition has a separate conditional budget from the ordinary
-        # single-replica fast target.  Read the effective target from the
-        # forecast metadata so reporting and admission use the same gate.
-        pipeline_budget = getattr(pipeline_forecast, "error_budget", {}) or {}
-        acceptance_target = float(pipeline_budget.get("target_relative_error", target))
-        accepted = (upper <= SLO_NS
-                    and float(pipeline_budget.get("relative_error", 0.0)) <= acceptance_target)
-        details = {"approximation": dict(result.approximation),
-            "status": "completed" if accepted else "forecast_rejected",
-            "fidelity": "native_pipeline_stage_samples_and_virtual_window_forecast",
-            "native_pipeline_forecast": pipeline_forecast.to_metadata() if hasattr(pipeline_forecast, "to_metadata") else dict(pipeline_forecast),
-            "physical_prefix": getattr(result, "sampled", None) is not None,
-            "forecast_tokens": int(getattr(pipeline_forecast, "predicted_visible_output_tokens", 0)),
-            "sampled_tokens": int(getattr(pipeline_forecast, "sampled_visible_output_tokens", 0)),
-            "metrics": metrics if accepted else None,
-            "diagnostics": {"observed_metrics": metrics_raw, "metric_bounds": dp_scaled_bounds(bounds, params),
-                            "slo_met": accepted, "slo_tpot_ns": SLO_NS,
-                            "slo_statistic": "conditional_upper_bound_of_virtual_pipeline_request_tpot"},
-            "assumptions": list(dict.fromkeys((*result.scenario.assumptions,
-                f"PP conditional fast estimate: sampled stage/microbatch service and transfer DAG represents the future physical boundary state; sampled resource ordering remains valid; acceptance is conditional on the {acceptance_target:.0%} PP error budget and small-model full-window validation."))),
-            "replica_scaling": {"dp": params["dp"], "gpus_per_replica": replica_gpus(params_layout(params)),
-                "scope": "physical sampled prefix and virtual pipeline window remain separate; metrics scale one replica to cluster"}}
-        if not accepted:
-            details["rejection_reason"] = ("mean_complete_fresh_request_tpot_upper_bound_exceeds_100ms"
-                if upper > SLO_NS else "native_pipeline_forecast_error_budget_exceeded")
-            details["rejected_metric_bounds"] = {"target_relative_error": acceptance_target,
-                "target_met": False,
-                "label": "未达到PP条件误差目标的区间，不是通过验收的结果",
-                "metrics": dp_scaled_bounds(bounds, params)}
-        return details
-    if result.approximation.get("method") == "native_pipeline_full_window/v1":
-        if result.detailed is not None:
-            metrics, diagnostics = measure_result(result.detailed, params)
-            bounds = {name: {"estimate": value, "lower": value, "upper": value,
-                              "relative_error_budget": 0.}
-                      for name, value in metrics.items() if _numeric(value)}
-            passed = diagnostics["slo_met"]
-            return {"approximation": dict(result.approximation),
-                "fidelity": "complete_native_pipeline_window_no_forecast",
-                "status": "completed" if passed else "slo_rejected", "metrics": metrics if passed else None,
-                "forecast_tokens": 0, "sampled_tokens": 0,
-                "physical_tokens": sum(event.details.get("visible_tokens", 0)
-                    for event in result.detailed.serving.events if event.event_type == "tokens_committed"),
-                "diagnostics": {**diagnostics, "observed_metrics": metrics, "metric_bounds": bounds},
-                "traffic": traffic_result(result.detailed),
-                "assumptions": list(native_fast_assumptions(result.scenario)),
-                "replica_scaling": {"dp": params["dp"], "gpus_per_replica": replica_gpus(params_layout(params)),
-                    "scope": "complete physical window measures one replica; metrics and bounds are scaled to the cluster"},
-                **({"rejection_reason": "mean_complete_fresh_request_tpot_exceeds_100ms"} if not passed else {})}
     if result.detailed is not None:
         raise RuntimeError("native fast candidate returned an unexplained complete physical result")
     forecast = result.native_window_forecast
@@ -993,12 +930,7 @@ def with_prefill_ttft(row, params, prefill):
         return
     if params.get("simulation_mode") == "fast":
         bounds = row["diagnostics"]["metric_bounds"]
-        ingress = bounds.get("mean_complete_request_ingress_ttft_ns")
-        if not isinstance(ingress, Mapping):
-            row.update(status="forecast_rejected", rejection_reason="native_pipeline_ingress_ttft_unavailable")
-            row.setdefault("diagnostics", {})["prefill_ttft_rejection"] = "native_pipeline_ingress_ttft_unavailable"
-            return
-        prefill_bounds = pass_["metric_bounds"]["prefill_pass_ns"]
+        ingress, prefill_bounds = bounds["mean_complete_request_ingress_ttft_ns"], pass_["metric_bounds"]["prefill_pass_ns"]
         total = _interval(prefill_bounds["lower"] + ingress["lower"], prefill_bounds["upper"] + ingress["upper"])
         bounds.update(prefill_pass_ns=prefill_bounds, mean_complete_request_ttft_ns=total)
         target = params["target_relative_error"]
@@ -1025,9 +957,8 @@ def execute_candidate(params, directory, progress, *, builder=None, runner=None,
            **({"candidate_wall_budget_seconds": budget} if fast else {}),
            "fidelity": ("native_stationary_layer_samples_and_separate_conditional_forecast"
                 if fast else "complete_bounded_native_physical_window_no_forecast_no_old_reference")}
-    if params["pp"] > 1 or params.get("microbatches", 1) > 1:
-        row["fidelity"] = ("native_pipeline_stage_samples_and_virtual_window_forecast"
-                           if fast else "complete_native_pipeline_window_no_forecast")
+    if not fast and (params["pp"] > 1 or params.get("microbatches", 1) > 1):
+        row["fidelity"] = "complete_native_pipeline_window_no_forecast"
     try:
         native_progress = type(progress) is ProgressWriter and type(progress.queue) is SimpleQueue
         control = ExecutionControl(
@@ -1182,11 +1113,6 @@ def worker_candidate(case, layout, batch, directory, mode="detailed", wall_facto
                 raise RuntimeError("saved terminal candidate parameters/backend differ; historical results cannot be relabeled")
             if not compatible or row["status"] not in CANDIDATE_TERMINAL:
                 row = None
-            elif mode == "fast" and search_plan.forecast_retryable(row):
-                # The manager deliberately schedules one retry for forecast
-                # quality failures.  A terminal row would otherwise be
-                # reused here and the retry would silently execute nothing.
-                row = None
         if row is None:
             progress.begin_candidate(params)
             progress.publish()
@@ -1294,7 +1220,7 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
             if search else
             f"每配置固定 {gpus} GPU；有限候选布局 {', '.join(layout_label(layout) for layout in layouts)}，每副本批量 {', '.join(map(str,batches))}。")
         + f"DP 副本是互相独立的拷贝，只仿真一个副本，集群吞吐为单GPU吞吐乘GPU总数。每配置选择通过 100ms 请求均值TPOT约束的最高{'通过验收的' if mode == 'fast' else '实测'}单GPU吞吐，不表示全局最优部署或最大批量。",
-        ("PP/多微批Decode使用真实阶段前缀和条件窗口预测，PP Prefill使用分段层采样；PP Decode、PP=1 Decode和Prefill均使用10%条件预算，PP通过增加样本降低区间宽度。预测尾段没有物理轨迹，预算拒绝时指标为空，不回退详细后缀。"
+        ("PP/多微批Decode与PP=1相同：只在首个批次边界的独立副本上运行原生层样本（按微批×阶段分块，每块校准/保留层与两端），由批次的阶段FIFO、激活传输和CPU提交按max-plus合成一步，PP Prefill使用分段层采样；Decode与Prefill的10%条件预算都作用于合成后的TPOT、吞吐与TTFT区间。预测尾段没有物理轨迹，预算拒绝时指标为空，不回退详细后缀。"
             if mode == "fast" else "完整原生预热与有界测量窗口，无预测尾段；零预测Token不等于与论文或实物误差为零。历史详细参考和旧扫描均未重跑。"),
         ("预测吞吐使用相同测量窗口及可见Token定义，TPOT使用窗口内完整新请求的首末Token预测区间；预测完成不计为物理完成。"
             if mode == "fast" else "吞吐按原生窗口 (开始,结束] 的真实可见Token计算；TPOT仅使用首末Token都在窗口内的完整新请求。未在窗口结束的请求不计为完成。"),
@@ -1302,7 +1228,7 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
             "到最后一块的最后一层完成为止（此时开始导出KV）；入口TTFT从该请求实付KV导入开始到首个Token，Decode侧计算最后一个提示Token并给出首Token。"
             + ("多分段Prefill使用独立副本上的分段层采样，阶段传输和跨块边界假设写入误差预算；单段保留分层采样。Prefill区间与入口TTFT区间相加，仍满足同一独立预算。" if mode == "fast"
                else "Prefill通路为覆盖全部块、全部层的原生运行。")),
-        ("PP/多微批的DRAM/NAND/SRAM与PD账本只覆盖真实采样前缀和入站；PP=1单微批同样只覆盖真实层样本及入站，全预测窗口物理流量未知。预测尾段不生成虚构的流量、利用率或物理状态。"
+        ("DRAM/NAND/SRAM与PD账本只覆盖真实层样本及入站（PP与PP=1相同），全预测窗口物理流量未知。预测尾段不生成虚构的流量、利用率或物理状态。"
             if mode == "fast" else "DRAM/NAND/SRAM与PD流量为整个有界运行的真实账本，包含预热和已提交的收尾费用，不是仅测量窗口流量或独占关键路径分解。"), "",
         "累计Token、批次及阶段壁钟见[进度分析](progress_analysis.md)；真实慢路径调查见[原生后端对照说明](../../docs/exploring_hbf_native_comparison.md)。局部事务提速不能代替完整候选耗时验收。", "",
         "| 模型 | 存储 | 输入/输出Token | 配置状态 | 选中布局 | 选中批量/副本 | tokens/s/GPU | 集群tokens/s | 请求均值TPOT(ms) | 请求均值TTFT(ms，含Prefill) |"
@@ -1852,18 +1778,8 @@ def case_screen(directory, case, screen=None, *, search_mode=None, layout_scope=
     return value
 
 
-def _search_lookup(directory, case, layout, *, retry_ids=None):
-    """Read a native search row, retrying one forecast-quality rejection.
-
-    Saved physical limits remain terminal evidence.  Only the PP forecast
-    quality failures listed by ``forecast_retryable`` are treated as a fresh
-    point, and ``retry_ids`` bounds that behavior to one attempt per manager
-    invocation so a still-failing candidate cannot loop forever.
-    """
-    quality_history = None
-
+def _search_lookup(directory, case, layout):
     def lookup(batch):
-        nonlocal quality_history
         physical_quantum = int(layout.get("ep", 1)) * int(layout.get("microbatches", 1))
         if physical_quantum > 1 and batch % physical_quantum:
             # A legacy point can be present in the cache even though the
@@ -1871,47 +1787,11 @@ def _search_lookup(directory, case, layout, *, retry_ids=None):
             # unusable historical row and never send it to a native worker.
             return {"status": "forecast_rejected",
                     "rejection_reason": "native_invalid_batch_quantum"}
-        identity = candidate_id(case, layout, batch)
-        row = read_candidate(directory, identity)
+        row = read_candidate(directory, candidate_id(case, layout, batch))
         if row is None:
-            if quality_history is None:
-                quality_history = []
-                candidates_dir = Path(directory) / "candidates"
-                for path in candidates_dir.glob("*.json") if candidates_dir.exists() else ():
-                    saved_row = read_json(path)
-                    saved_params = (saved_row or {}).get("parameters") or {}
-                    if (saved_row and saved_row.get("status") == "forecast_rejected"
-                            and saved_row.get("rejection_reason") in {
-                                "native_pipeline_independent_budget_exceeded",
-                                "native_pipeline_forecast_error_budget_exceeded",
-                            }
-                            and all(saved_params.get(key, 1) == layout.get(key, 1)
-                                    for key in (*LAYOUT_KEYS, "microbatches"))
-                            and saved_params.get("case_id") == case["case_id"]):
-                        quality_history.append(saved_row)
-            if len(quality_history) >= search_plan.QUALITY_EVIDENCE_REUSE_AFTER:
-                expected = parameters(case, layout, batch, "fast")
-                reused = {"runner_contract": expected["runner_contract"], "backend": BACKEND,
-                    "parameters": expected, "candidate_id": identity, "status": "forecast_rejected",
-                    "metrics": None, "forecast_tokens": 0,
-                    "rejection_reason": "native_pipeline_quality_evidence_reused",
-                    "reason": "同一布局已有两次真实采样超出10%条件预算；复用质量证据，避免重复完整原生窗口。",
-                    "fidelity": "quality_evidence_reuse_without_native_window", "wall_seconds": 0.,
-                    "quality_evidence": {"source_candidates": [row["candidate_id"] for row in quality_history],
-                                         "reuse_scope": "same_case_layout_only"}}
-                save_candidate(directory, reused)
-                return reused
             return None
         expected = parameters(case, layout, batch, "fast")
         saved = row.get("parameters")
-        # A repaired forecast may intentionally change its pipeline contract.
-        # Let that one retry through before the ordinary historical-identity
-        # guard; non-quality failures still fail closed on a mismatch.
-        if (retry_ids is not None and identity not in retry_ids
-                and row.get("backend") == BACKEND
-                and search_plan.forecast_retryable(row)):
-            retry_ids.add(identity)
-            return None
         if (not parameters_compatible(saved, expected) or row.get("backend") != BACKEND) \
                 and row.get("status") in CANDIDATE_TERMINAL:
             raise RuntimeError("saved candidate parameters/backend differ; historical results cannot be relabeled")
@@ -1921,13 +1801,12 @@ def _search_lookup(directory, case, layout, *, retry_ids=None):
     return lookup
 
 
-def search_case(directory, case, screen, *, search_mode=None, retry_ids=None):
+def search_case(directory, case, screen, *, search_mode=None):
     """Replay the case's search from its saved rows; write its point. Returns (plan, planned candidates, point)."""
     directory = Path(directory)
     entries = screen["layouts"]
     policy = search_plan.search_policy(search_mode or search_plan.DEFAULT_SEARCH_MODE)
-    plan = search_plan.plan_case(entries, [_search_lookup(directory, case, entry["layout"], retry_ids=retry_ids)
-                                          for entry in entries],
+    plan = search_plan.plan_case(entries, [_search_lookup(directory, case, entry["layout"]) for entry in entries],
         SLO_NS, FAST_CANDIDATE_WALL_BUDGET_SECONDS, [replica_gpus(entry["layout"]) for entry in entries],
         memory_budget_bytes=total_memory_bytes() - WORKER_MEMORY_RESERVE_BYTES, policy=policy)
     planned = []
@@ -1999,15 +1878,9 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
         screens = {case["case_id"]: case_screen(directory, case, screen, search_mode=policy.name,
                                                  layout_scope=layout_scope) for case in cases}
 
-        # Old PP budget/estimator rejections are retried once.  Successful
-        # retries then feed the normal search planner, which can schedule the
-        # next larger batch while reusing all other cached points.
-        retry_ids = set()
-
         def replay():
             return {case["case_id"]: search_case(directory, case, screens[case["case_id"]],
-                                                   search_mode=policy.name,
-                                                   retry_ids=retry_ids) for case in cases}
+                                                   search_mode=policy.name) for case in cases}
 
         plans, active, error, last_report, known = replay(), {}, None, 0., known_peaks(directory)
         failed = next((point for _plan, _planned, point in plans.values() if point["status"] == "failed"), None)

@@ -120,31 +120,6 @@ def test_pipeline_manager_refuses_a_manifest_without_execution_contract(tmp_path
         run.run_manager(tmp_path, layout=layout, batches=[4], workers=1, mode="fast")
 
 
-def test_exact_pipeline_window_is_measured_without_a_forecast(monkeypatch):
-    from heterollm_sim.reporting import FastScenarioResult
-    from heterollm_sim.reference import build_reference_scenario
-    scenario = build_reference_scenario()
-    scenario = replace(scenario, placement=replace(scenario.placement,
-        parallel=replace(scenario.placement.parallel, pp_degree=2, rank_mapping=())))
-    detailed = fake_result()
-    result = FastScenarioResult(scenario, None,
-        {"method": "native_pipeline_full_window/v1", "effective_mode": "detailed"},
-        (), "aggregate", detailed=detailed)
-    monkeypatch.setattr(run, "traffic_result", lambda measured: {"native": measured is detailed})
-    params = small_parameters(run.make_layout(2, 2, 2, 1, microbatches=2))
-    row = run.native_fast_result(result, params)
-    assert row["status"] == "completed"
-    assert row["metrics"]["mean_complete_request_tpot_ns"] == 5.
-    assert row["metrics"]["cluster_tokens_per_second"] == 550e6
-    assert row["physical_tokens"] == 12
-    assert row["forecast_tokens"] == 0 and "native_window_forecast" not in row
-    assert row["traffic"] == {"native": True}
-    for name, bound in row["diagnostics"]["metric_bounds"].items():
-        assert bound["lower"] == bound["estimate"] == bound["upper"] == row["metrics"][name]
-        assert bound["relative_error_budget"] == 0.
-    assert not any("SAME_CLASS" in value or "same native work" in value for value in row["assumptions"])
-
-
 def test_pp_prefill_uses_chunk_sampling_and_does_not_inherit_decode_microbatches(tmp_path):
     from heterollm_sim.reference import build_reference_scenario
     params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1, microbatches=2), 4, "fast")
@@ -180,35 +155,6 @@ def _fast_result(upper=99e6, accepted=True):
         (), "aggregate", native_window_forecast=forecast)
 
 
-def test_pipeline_forecast_result_is_terminal_for_worker_reuse():
-    from dataclasses import replace
-    from heterollm_sim.native_pipeline_forecast import NativePipelineForecast
-    forecast = NativePipelineForecast(0., 1, 3, 0, 8,
-        {"cluster_tokens_per_second": 80., "mean_complete_request_tpot_ns": 95e6},
-        {"cluster_tokens_per_second": {"estimate": 80., "lower": 79., "upper": 81.},
-         "mean_complete_request_tpot_ns": {"estimate": 95e6, "lower": 94e6, "upper": 96e6}},
-        (), (), {"relative_error": .01})
-    result = replace(_fast_result(), approximation={"method": "native_pipeline_stage_forecast/v2"},
-                     native_window_forecast=None, native_pipeline_forecast=forecast)
-    params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1), 4, "fast")
-    row = run.native_fast_result(result, params)
-    assert row["status"] == "completed"
-
-
-def test_pipeline_forecast_uses_effective_pipeline_error_target():
-    from dataclasses import replace
-    from heterollm_sim.native_pipeline_forecast import NativePipelineForecast
-    forecast = NativePipelineForecast(0., 1, 3, 0, 8,
-        {"cluster_tokens_per_second": 80., "mean_complete_request_tpot_ns": 95e6},
-        {"mean_complete_request_tpot_ns": {"estimate": 90e6, "lower": 80e6, "upper": 99e6}},
-        (), (), {"target_relative_error": .20, "relative_error": .12})
-    result = replace(_fast_result(), approximation={"method": "native_pipeline_stage_forecast/v2"},
-                     native_window_forecast=None, native_pipeline_forecast=forecast)
-    params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1), 4, "fast")
-    row = run.native_fast_result(result, params)
-    assert row["status"] == "completed"
-
-
 PREFILL_LAYOUT = {"tp": 8, "pp": 1, "ep": 1}
 REJECTED_PREFILL = {"prefill_id": "prefill", "status": "rejected", "prefill_pass": {"metric_bounds": {}},
                     "parameters": PREFILL_LAYOUT, "rejection_reasons": ["native_prefill_independent_budget_exceeded"], "wall_seconds": 1.}
@@ -242,16 +188,6 @@ def test_ttft_adds_the_prefill_pass_to_the_ingress_ttft():
     run.with_prefill_ttft(row, detailed, REJECTED_PREFILL)
     assert row["metrics"]["mean_complete_request_ttft_ns"] is row["metrics"]["prefill_pass_ns"] is None
     assert row["prefill_pass"]["rejection_reasons"] == ["native_prefill_independent_budget_exceeded"]
-
-
-def test_pipeline_prefill_without_ingress_bound_is_a_forecast_rejection():
-    params = run.parameters(run.case_matrix()[0], run.make_layout(1, 4, 2, 1), 4, "fast")
-    row = {"status": "completed", "metrics": {"mean_complete_request_tpot_ns": 1e6},
-           "diagnostics": {"metric_bounds": {"mean_complete_request_tpot_ns":
-               {"lower": 1e6, "upper": 1e6, "estimate": 1e6, "relative_error_budget": 0.}}}}
-    run.with_prefill_ttft(row, params, _prefill(10e6, 11e6))
-    assert row["status"] == "forecast_rejected"
-    assert row["rejection_reason"] == "native_pipeline_ingress_ttft_unavailable"
 
 
 def test_prefill_pass_runs_once_per_model_prompt_and_layout(tmp_path):
@@ -673,42 +609,6 @@ def test_worker_reuses_an_exact_terminal_candidate_without_executing_native(tmp_
     saved = run.read_json(tmp_path / "points" / (case["case_id"] + ".json"))
     assert saved["status"] == "completed"
     assert saved["selected"]["parameters"]["batch_size"] == 1
-
-
-def test_worker_reexecutes_one_retryable_fast_forecast_rejection(tmp_path, monkeypatch):
-    case = run.case_matrix()[0]
-    params = run.parameters(case, LAYOUT, 8, "fast")
-    rejected = {"runner_contract": run.FAST_CONTRACT, "backend": run.BACKEND,
-                "parameters": params, "candidate_id": run.params_candidate_id(params),
-                "status": "forecast_rejected", "metrics": None,
-                "rejection_reason": "native_pipeline_independent_budget_exceeded"}
-    run.write_json(tmp_path / "candidates" / (rejected["candidate_id"] + ".json"), rejected)
-    calls = []
-
-    def execute(*args, **kwargs):
-        calls.append(True)
-        return {**rejected, "status": "completed", "metrics": {"tokens_per_second_per_gpu": 1.}}
-
-    monkeypatch.setattr(run, "execute_candidate", execute)
-    assert run.worker_candidate(case, LAYOUT, 8, tmp_path, mode="fast") == 0
-    assert calls == [True]
-    assert run.read_json(tmp_path / "candidates" / (rejected["candidate_id"] + ".json"))["status"] == "completed"
-
-
-def test_search_reuses_layout_quality_evidence_after_two_real_rejections(tmp_path):
-    case = run.case_matrix()[0]
-    layout = run.make_layout(1, 4, 2, 1)
-    for batch in (32, 64):
-        params = run.parameters(case, layout, batch, "fast")
-        run.save_candidate(tmp_path, {"runner_contract": run.FAST_CONTRACT, "backend": run.BACKEND,
-            "parameters": params, "candidate_id": run.params_candidate_id(params),
-            "status": "forecast_rejected", "metrics": None,
-            "rejection_reason": "native_pipeline_independent_budget_exceeded"})
-    reused = run._search_lookup(tmp_path, case, layout)(128)
-    assert reused["status"] == "forecast_rejected"
-    assert reused["rejection_reason"] == "native_pipeline_quality_evidence_reused"
-    assert reused["wall_seconds"] == 0.
-    assert run.read_candidate(tmp_path, reused["candidate_id"])["rejection_reason"] == reused["rejection_reason"]
 
 
 def test_stop_marker_is_preserved_and_no_candidate_is_started(tmp_path):

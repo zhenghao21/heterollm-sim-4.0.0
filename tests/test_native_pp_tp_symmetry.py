@@ -35,9 +35,13 @@ def pp_mirror_prepared(request, monkeypatch):
     origin = max(runtime.now, found["ready"], source.makespan_ns)
     specs, _ = runtime._stage_task_specs(found["stages"],
         {stage.stage_id: origin for stage in found["stages"]}, "pp-exact")
-    wanted = frozenset(task.task_id for task in specs)
-    selected = tuple(replace(task, earliest_start_ns=max(float(task.earliest_start_ns), origin))
-                     for task in specs)
+    # Layer work only, as in the sampler's windows without the cohort
+    # prefix: an unranked physical prefix leaves rank states unequal.
+    wanted = frozenset(task.task_id for task in specs if task.metadata.get("layer_id") is not None)
+    selected = tuple(replace(task,
+        dependencies=tuple(parent for parent in task.dependencies if parent in wanted),
+        earliest_start_ns=max(float(task.earliest_start_ns), origin))
+        for task in specs if task.task_id in wanted)
     return {**found, "source": source, "origin": origin, "specs": specs,
             "wanted": wanted, "selected": selected, "scenario": runtime.plan.scenario}
 

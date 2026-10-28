@@ -16248,26 +16248,6 @@ class _OnlineRuntime:
 
     def _execute_cohort(self, cohort: BatchCohort) -> None:
         self._residency_cohort_consumer_ids = set()
-        # PP fast sampling must never lower the full request cohort just to
-        # discover a representative stage graph. Keep the original batch size
-        # in the forecast metadata, but lower only an evenly spaced bounded
-        # request sample; the native sampler aborts before any state commits.
-        sampler = getattr(self, "_native_layer_sampler", None)
-        native_window = getattr(self.plan.scenario.simulation, "native_window", None)
-        if (sampler is not None and native_window is not None
-                and self.plan.scenario.placement.parallel.pp_degree > 1
-                and len(cohort.items) > native_window.pipeline_sample_requests):
-            microbatches = max(1, int(self.plan.scenario.placement.parallel.pipeline_microbatches))
-            cap = min(int(native_window.pipeline_sample_requests),
-                      max(1, self._ep_degree * microbatches))
-            indices = tuple(round(index * (len(cohort.items) - 1) / (cap - 1))
-                            for index in range(cap)) if cap > 1 else (0,)
-            sampled_items = tuple(cohort.items[index] for index in indices)
-            cohort = replace(cohort, items=sampled_items,
-                metadata={**cohort.metadata,
-                    "native_sampling_bounded": True,
-                    "native_sampling_original_request_count": len(cohort.items),
-                    "native_sampling_request_cap": cap})
         cohort = self._with_kv_scan_lower_bound(cohort)
         if self._paged_pool_transfer_executor is not None:
             executor = self._paged_pool_transfer_executor
@@ -16291,66 +16271,9 @@ class _OnlineRuntime:
                     "requests": table}})
         self.execution_control.raise_if_cancelled()
         self.execution_control.report("cohort_lowering", len(self.batches),
-            simulated_time_ns=self.now, message="正在生成原生批次任务图",
-            metadata={"native_sampling_bounded": bool(
-                cohort.metadata.get("native_sampling_bounded", False)),
-                "native_sampling_request_count": len(cohort.items),
-                "native_sampling_original_request_count": cohort.metadata.get(
-                    "native_sampling_original_request_count")})
+            simulated_time_ns=self.now, message="正在生成原生批次任务图")
         with self._cuda_graph_runtime.scope(cohort, self.now) as cuda_transition:
-            lowering_scenario = self.plan.scenario
-            if cohort.metadata.get("native_sampling_bounded"):
-                # The forecast keeps the real scheduler batch in self.plan,
-                # but the native sample's lowerer must see only its bounded
-                # request fan-out. Otherwise planner task metadata expands
-                # the original B again before the sampler can select layers.
-                sample_batch = max(1, len(cohort.items))
-                scheduler = replace(self.plan.scenario.workload.scheduler,
-                    max_num_seqs=sample_batch,
-                    max_num_batched_tokens=min(
-                        self.plan.scenario.workload.scheduler.max_num_batched_tokens,
-                        sample_batch),
-                    max_num_ubatch_tokens=min(
-                        self.plan.scenario.workload.scheduler.max_num_ubatch_tokens,
-                        sample_batch))
-                sampled_request_ids = {item.request_id for item in cohort.items}
-                sampled_requests = tuple(request for request in
-                    self.plan.scenario.workload.requests
-                    if request.request_id in sampled_request_ids)
-                workload = replace(self.plan.scenario.workload,
-                    requests=sampled_requests,
-                    request_count=(len(sampled_requests) or sample_batch),
-                    scheduler=scheduler)
-                lowering_scenario = replace(self.plan.scenario,
-                    workload=workload)
-            if lowering_scenario is not self.plan.scenario:
-                rebind = getattr(self.lowerer, "_rebind_control_plane_successor", None)
-                if not callable(rebind):
-                    raise NativeLayerSamplingGuardError(
-                        "native_sampling_bounded_lowerer_cannot_rebind")
-                rebind(self.plan.scenario, lowering_scenario)
-                try:
-                    cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
-                finally:
-                    rebind(lowering_scenario, self.plan.scenario)
-            else:
-                cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
-        early_sampler = getattr(self, "_native_layer_sampler", None)
-        if (early_sampler is not None
-                and cohort.metadata.get("native_sampling_bounded")
-                and self.plan.scenario.placement.parallel.pp_degree > 1):
-            early_stages, early_reason = self._execution_stage_metadata_cache.resolve(cost.metadata)
-            if not early_stages:
-                raise ValueError("bounded native PP sample has no execution stages: "
-                                 + str(early_reason or "unknown"))
-            early_ready_ns = max(
-                (self._request_device_ready_ns.get(
-                    request_id, self.states[request_id].spec.arrival_ns)
-                 for request_id in cohort.request_ids),
-                default=self.now)
-            early_stages = self._with_gpu_controller_stages(early_stages, cohort)
-            if early_sampler(self, cohort, cost, early_stages, early_ready_ns) is not False:
-                raise RuntimeError("native layer sampler must stop without committing its partial cohort")
+            cost = _lower_cost(self.lowerer, self.plan.scenario, cohort)
         self.execution_control.raise_if_cancelled()
         self.execution_control.report("cohort_scheduling", len(self.batches),
             simulated_time_ns=self.now, message="正在准备原生资源日历与任务调度")

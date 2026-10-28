@@ -42,19 +42,35 @@ def toy_scenario(layer_count=2, gpu_ghz=.00001, *, batch_size=1, output=3, warmu
     """
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]/"scripts"))
     from exploring_hbf_native_config import build_native_comparison_scenario
+
+    scenario = build_native_comparison_scenario("llama3_405b", "HBM4", "SHORT", tp=2,
+        batch_size=batch_size, model_override=_dense_toy_model(layer_count), prompt_override=20,
+        output_override=output, warmup_override=warmup, measurement_override=measurement)
+    return _analytical_toy_hardware(scenario, gpu_ghz)
+
+
+def pipeline_toy_scenario(layer_count=8, gpu_ghz=1., *, pp=2, microbatches=2, tp=1, batch_size=8, output=6,
+                          warmup=5, measurement=10):
+    """The dense toy split into ``pp`` stages with ``microbatches`` request microbatches."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]/"scripts"))
+    from exploring_hbf_native_config import build_native_comparison_scenario
+
+    scenario = build_native_comparison_scenario("llama3_405b", "HBM4", "SHORT", tp=tp, pp=pp,
+        pipeline_microbatches=microbatches, batch_size=batch_size, model_override=_dense_toy_model(layer_count),
+        prompt_override=20, output_override=output, warmup_override=warmup, measurement_override=measurement)
+    return _analytical_toy_hardware(scenario, gpu_ghz)
+
+
+def _dense_toy_model(layer_count):
     from heterollm_sim.ir import LayerSpec, ModelSpec, build_model_graph_from_layer_specs
 
     layer_bytes = (32*(32+16+16+32)+3*32*64)*2
     layers = tuple(LayerSpec("dense"+str(i), "dense", 32, 64, 4,
         kv_heads=2, dtype="bf16", weight_bytes=layer_bytes) for i in range(layer_count))
-    model = ModelSpec(name="native-layer-budget-toy", graph=build_model_graph_from_layer_specs(
+    return ModelSpec(name="native-layer-budget-toy", graph=build_model_graph_from_layer_specs(
         "native-layer-budget-toy", layers, vocabulary_size=64, max_sequence_length=256,
         embedding_weight_bytes=32*64*2, output_weight_bytes=32*64*2,
         output_head_dtype="bf16"))
-    scenario = build_native_comparison_scenario("llama3_405b", "HBM4", "SHORT", tp=2,
-        batch_size=batch_size, model_override=model, prompt_override=20, output_override=output,
-        warmup_override=warmup, measurement_override=measurement)
-    return _analytical_toy_hardware(scenario, gpu_ghz)
 
 
 def _moe_toy_model(layer_count):

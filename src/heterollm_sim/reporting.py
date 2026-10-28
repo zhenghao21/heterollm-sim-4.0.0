@@ -128,7 +128,6 @@ class FastScenarioResult:
     forecast: Optional[DecodeForecast] = None
     detailed: Optional[Union[ScenarioResult, OnlineScenarioResult]] = None
     native_window_forecast: Optional[Any] = None
-    native_pipeline_forecast: Optional[Any] = None
     sampled: Optional[OnlineScenarioResult] = None
     layer_window_samples: Tuple[Any, ...] = ()
 
@@ -289,17 +288,9 @@ def _run_scenario_in_context(
             **runner_options,
         )
         serving = (simulation.detailed if scenario.simulation.mode == "fast" else simulation)
-        native_pipeline = (scenario.simulation.mode == "fast" and
-                           simulation.diagnostics.get("method") == "native_pipeline_full_window/v1")
-        native_pipeline_forecast = (scenario.simulation.mode == "fast" and
-            simulation.diagnostics.get("method") == "native_pipeline_stage_forecast/v2")
         native_complete_prefill = (scenario.simulation.mode == "fast" and
             (simulation.diagnostics.get("prefill_pass") or {}).get("execution_mode") == "complete_native_chunks")
         fast_assumptions = ((
-            "Native pipeline window: every cohort, visible Token, PD import and stage transfer executes on the live physical runtime; stage FIFO microbatches overlap within each cohort and the cohort drains before the next scheduling decision. No stationary layer forecast is used.",)
-            if native_pipeline else (
-            "Native PP conditional forecast: measured physical pipeline cohorts are composed into a virtual window with stage dependencies, activation transfers, bubbles and refill assumptions; future controller state is not advanced.",)
-            if native_pipeline_forecast else (
             "Native Prefill complete forward: prompt chunks and their stage transfers execute on one live runtime; pass timing ends at the observed last layer of the final chunk. Cohorts and output Tokens may be committed; no stationary layer forecast is used.",)
             if native_complete_prefill else (
             "Native stationary fast mode: only explicitly recorded native layer runs physically execute on independent copies of the first continuous-refill cohort boundary. They are not complete cohorts or observed output Tokens; the forecast window has no physical continuation. Conditional error budgets require independent validation.",)
@@ -358,14 +349,6 @@ def _run_scenario_in_context(
             native_sampling = scenario.simulation.native_window
             manifest = replace(manifest, metadata={**manifest.metadata,
                 "simulation_mode": "fast", "effective_simulation_mode": simulation.diagnostics["effective_mode"],
-                **({"native_execution": {"model": "complete_pipeline_window",
-                    "max_wall_seconds": native_sampling.max_wall_seconds,
-                    **simulation.diagnostics["pipeline"]}}
-                    if native_pipeline else {}),
-                **({"native_pipeline_forecast": {"model": "stage_samples_and_max_plus_window",
-                    "max_wall_seconds": native_sampling.max_wall_seconds,
-                    **simulation.diagnostics["pipeline"]}}
-                    if native_pipeline_forecast else {}),
                 **({"native_sampling": {"model": "stationary_continuous_refill",
                     "target_relative_error": native_sampling.target_relative_error,
                     "max_wall_seconds": native_sampling.max_wall_seconds,
@@ -375,7 +358,7 @@ def _run_scenario_in_context(
                     "tp_rank_symmetry": native_sampling.tp_rank_symmetry,
                     **({"pd_concurrency_envelope": True} if native_sampling.pd_concurrency_envelope else {}),
                     "layer_sample_scope": "boundary_conditioned_physical_tasks_not_complete_cohorts_or_visible_tokens"}}
-                    if native_sampling is not None and not native_pipeline and not native_pipeline_forecast else {}),
+                    if native_sampling is not None else {}),
                 **({"native_execution": {"model": "complete_prefill_prompt",
                     "native_chunk_count": simulation.diagnostics["prefill_pass"]["native_chunk_count"],
                     "timing_boundary": "final_prompt_chunk_last_layer_completion"}}
@@ -384,13 +367,10 @@ def _run_scenario_in_context(
                     **asdict(scenario.simulation.native_prefill),
                     "layer_sample_scope": "boundary_conditioned_physical_tasks_not_complete_cohorts_or_visible_tokens"}}
                     if scenario.simulation.native_prefill is not None and not native_complete_prefill else {})})
-            if native_pipeline and detailed is not None:
-                detailed = replace(detailed, manifest=manifest)
             return FastScenarioResult(scenario, manifest, simulation.diagnostics,
                 validation.warnings, retention_policy.value, validation.information,
                 forecast=simulation.forecast, detailed=detailed,
                 native_window_forecast=simulation.native_window_forecast,
-                native_pipeline_forecast=simulation.native_pipeline_forecast,
                 layer_window_samples=simulation.layer_window_samples,
                 sampled=(OnlineScenarioResult(scenario, simulation.sampled, manifest,
                     validation.warnings, retention_policy.value, validation.information)
@@ -6236,41 +6216,6 @@ def _native_prefill_report_dict(result: FastScenarioResult, **options) -> Dict[s
 
 
 def _fast_report_dict(result: FastScenarioResult, **options) -> Dict[str, Any]:
-    if result.approximation.get("method") == "native_pipeline_stage_forecast/v2":
-        forecast = result.native_pipeline_forecast
-        sampled = result.sampled
-        payload = {
-            "scenario": result.scenario.name, "manifest": to_primitive(result.manifest),
-            "runtime_placement": _runtime_placement_payload(result.scenario),
-            "execution_mode": "continuous_batching", "simulation_mode": "fast",
-            "retention_policy": result.retention_policy, "trace_fidelity": "approximate",
-            "approximation": to_primitive(dict(result.approximation)),
-            "result_semantics": {
-                "precision": "physical_pipeline_prefix_and_conditional_virtual_window",
-                "transactions": "only_sampled_pipeline_cohorts_have_physical_records",
-                "forecast_used": forecast is not None, "controller_state": "discarded_after_physical_prefix",
-                "complete_physical_decode_cohorts_observed": result.approximation.get("physical_complete_cohort_count", 0),
-                "visible_output_tokens_observed": result.approximation.get("physical_visible_output_token_count", 0),
-                "virtual_future_has_physical_trace": False,
-            },
-            "physical_prefix": (_report_dict_in_context(sampled, **options) if sampled is not None else None),
-            "native_pipeline_forecast": (to_primitive(forecast.to_metadata()) if forecast is not None else None),
-            "virtual_requests": (to_primitive(forecast.virtual_request_metrics) if forecast is not None else []),
-            "summary": {}, "requests": {}, "validation_warnings": list(result.validation_warnings),
-            "validation_information": list(result.validation_information),
-        }
-        return payload
-    if result.approximation.get("method") == "native_pipeline_full_window/v1":
-        if result.detailed is not None:
-            data = _report_dict_in_context(result.detailed, **options)
-            data.update(simulation_mode="fast", approximation=to_primitive(dict(result.approximation)),
-                        manifest=to_primitive(result.manifest))
-            return data
-        return {"scenario": result.scenario.name, "simulation_mode": "fast",
-                "manifest": to_primitive(result.manifest),
-                "approximation": to_primitive(dict(result.approximation)),
-                "result_semantics": {"precision": "incomplete_native_pipeline_window", "forecast_used": False},
-                "summary": {}, "requests": {}}
     if result.scenario.simulation.native_window is not None:
         return _native_window_report_dict(result, **options)
     if result.scenario.simulation.native_prefill is not None:
@@ -6597,24 +6542,6 @@ def format_report(
                     approximation.get("physical_visible_output_token_count", 0))
                  if (approximation.get("prefill_pass") or {}).get("execution_mode") == "complete_native_chunks"
                  else "真实层样本 {}；未提交批次、KV导出或输出Token。".format(len(result.layer_window_samples))),
-                *("拒绝原因：" + str(reason) for reason in approximation.get("rejection_reasons", ())),
-            ])
-        if approximation.get("method") == "native_pipeline_full_window/v1":
-            if result.detailed is not None:
-                return format_report(result.detailed, data=data)
-            return "\n".join([
-                "场景：{}".format(result.scenario.name),
-                "仿真模式：原生PP完整窗口（未完成）",
-                *("拒绝原因：" + str(reason) for reason in approximation.get("rejection_reasons", ())),
-            ])
-        if approximation.get("method") == "native_pipeline_stage_forecast/v2":
-            forecast = result.native_pipeline_forecast
-            return "\n".join([
-                "场景：{}".format(result.scenario.name),
-                "仿真模式：原生PP阶段样本与条件窗口预测",
-                "预算结果：{}".format("接受" if forecast is not None else "拒绝"),
-                "真实PP批次数：{}；未来窗口无物理轨迹。".format(
-                    approximation.get("physical_complete_cohort_count", 0)),
                 *("拒绝原因：" + str(reason) for reason in approximation.get("rejection_reasons", ())),
             ])
         if result.scenario.simulation.native_window is not None:

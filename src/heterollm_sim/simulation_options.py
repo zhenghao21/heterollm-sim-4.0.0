@@ -75,28 +75,10 @@ class NativeWindowFastConfig:
 
     max_wall_seconds: float = 3000.
     target_relative_error: float = .10
-    # PP stage/transfer windows use the same declared conditional target as
-    # ordinary fast Decode. Sampling quality, rather than a looser target,
-    # determines whether a PP forecast is admitted.
-    pipeline_target_relative_error: float = .10
     calibration_layers: int = 4
     holdout_layers: int = 2
     tp_rank_symmetry: str = "quiet"
     pd_concurrency_envelope: bool = True
-    # Two samples only provide a very wide max-deviation interval. Four
-    # cohorts keep the PP forecast conditional while making the interval
-    # useful for layout screening; callers may lower this explicitly when
-    # they accept the corresponding rejection rate.
-    pipeline_sample_decode_cohorts: int = 4
-    # Bound the request fan-out of a PP layer sample.  The forecast is still
-    # conditioned on the full batch; only the native representative graph is
-    # capped so a B=512 sample does not clone and schedule the full request
-    # fan-out; the default is kept close to PP1's bounded layer samples.
-    pipeline_sample_requests: int = 8
-    # Cheap stability probe before the remaining stage samples are executed.
-    # A probe that already exceeds the unchanged 10% budget stops early.
-    pipeline_probe_decode_cohorts: int = 2
-    pipeline_stage_sampling: bool = True
 
     def __post_init__(self) -> None:
         if (isinstance(self.max_wall_seconds, bool)
@@ -105,21 +87,12 @@ class NativeWindowFastConfig:
                 or not self.max_wall_seconds > 0):
             raise ValueError("simulation.native_window.max_wall_seconds must be finite and positive")
         _bounded_fraction(self.target_relative_error, "simulation.native_window.target_relative_error", .10)
-        _bounded_fraction(self.pipeline_target_relative_error,
-                          "simulation.native_window.pipeline_target_relative_error", .10)
         _integer(self.calibration_layers, "simulation.native_window.calibration_layers", 4)
         _integer(self.holdout_layers, "simulation.native_window.holdout_layers", 2)
         if type(self.tp_rank_symmetry) is not str or self.tp_rank_symmetry not in ("off", "quiet", "all"):
             raise ValueError("simulation.native_window.tp_rank_symmetry must be off, quiet or all")
         if type(self.pd_concurrency_envelope) is not bool:
             raise ValueError("simulation.native_window.pd_concurrency_envelope must be a boolean")
-        _integer(self.pipeline_sample_decode_cohorts, "simulation.native_window.pipeline_sample_decode_cohorts", 2)
-        _integer(self.pipeline_sample_requests, "simulation.native_window.pipeline_sample_requests", 1)
-        _integer(self.pipeline_probe_decode_cohorts, "simulation.native_window.pipeline_probe_decode_cohorts", 1)
-        if self.pipeline_probe_decode_cohorts > self.pipeline_sample_decode_cohorts:
-            raise ValueError("simulation.native_window.pipeline_probe_decode_cohorts must not exceed pipeline_sample_decode_cohorts")
-        if type(self.pipeline_stage_sampling) is not bool:
-            raise ValueError("simulation.native_window.pipeline_stage_sampling must be a boolean")
 
 
 @dataclass(frozen=True)

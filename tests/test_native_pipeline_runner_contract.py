@@ -21,17 +21,3 @@ def test_fast_pp_uses_forecast_contract_and_pp1_keeps_stationary_contract():
     assert pp_exact["pipeline_execution_contract"] == runner.PIPELINE_EXECUTION_CONTRACT
     assert "pipeline_execution_contract" not in pp1
 
-
-def test_pipeline_forecast_is_explicitly_conditional_and_virtual():
-    from heterollm_sim.native_pipeline_forecast import PipelineStageSample, compose_pipeline_window
-
-    result = compose_pipeline_window(
-        [PipelineStageSample(0, 0, 0, 0, 10),
-         PipelineStageSample(0, 0, 0, 10, 12, kind="pipeline_activation_transfer"),
-         PipelineStageSample(0, 0, 1, 12, 25)],
-        sampled_decode_cohorts=1, predicted_decode_cohorts=3,
-        batch_size=2, output_tokens=3,
-    )
-    assert result.error_budget["conditional_only"] is True
-    assert result.error_budget["physical_runtime_state_advanced"] is False
-    assert result.to_metadata()["forecast_has_physical_trace"] is False

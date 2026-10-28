@@ -110,7 +110,7 @@ def test_pipeline_chunk_sampling_requires_explicit_enablement():
     assert result.approximation["rejection_reasons"] == ["native_prefill_chunked_sampling_not_enabled"]
 
 
-def test_pipeline_chunk_sampling_matches_full_reference_and_keeps_stage_transfers():
+def test_whole_prompt_pipeline_pass_samples_stage_blocks_around_full_reference():
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
     from native_toy import _analytical_toy_hardware, toy_scenario
     from exploring_hbf_native_config import build_native_prefill_scenario
@@ -118,19 +118,19 @@ def test_pipeline_chunk_sampling_matches_full_reference_and_keeps_stage_transfer
     scenario = _analytical_toy_hardware(build_native_prefill_scenario(
         "llama3_405b", "SHORT", tp=1, pp=2, ep=1,
         model_override=toy_scenario(layer_count=8).model, prompt_override=20), .00001)
-    result, sampled = _pass(scenario, chunked_sampling=True,
-                            calibration_layers=2, holdout_layers=2)
+    result, sampled = _pass(scenario, calibration_layers=2, holdout_layers=2)
     _, full = _pass(scenario, full_pass=True, max_wall_seconds=None)
 
     assert sampled["accepted"], result.approximation
-    assert sampled["execution_mode"] == "layer_samples_per_chunk"
-    assert sampled["error_budget"]["physical_full_cohorts_committed"] == 0
-    assert sampled["error_budget"]["conditional_accuracy"] is True
+    assert sampled["execution_mode"] == "native_layer_samples"
+    blocks = sampled["error_budget"]["composition"]["pipeline_blocks"]
+    assert [(row["microbatch"], row["stage"]) for row in blocks] == [(0, 0), (0, 1)]
+    # The first stage ends with its activation send; the last with its last layer.
+    assert "exit_interval_ns" in blocks[0] and "exit_interval_ns" not in blocks[1]
+    assert all(sample.window_id.startswith("prefill-pp-") for sample in result.layer_window_samples)
     bounds = sampled["metric_bounds"]["prefill_pass_ns"]
     observed = full["error_budget"]["observed_pass_ns"]
     assert bounds["lower"] <= observed <= bounds["upper"]
     assert abs(bounds["estimate"] - observed) / observed <= .10
     assert any(sample.physical_observations["category_time_ns"].get("communication", 0) > 0
                for sample in result.layer_window_samples)
-    assert any("PP Prefill layer classes canonicalize" in assumption
-               for assumption in sampled["error_budget"]["assumptions"])

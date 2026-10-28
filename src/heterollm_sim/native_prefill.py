@@ -31,7 +31,8 @@ from .execution_control import ExecutionControl, NativeFastWallBudgetError, _Nat
 from .native_fast_window import _native_runtime_reasons
 from .native_layer_sampling import NativeLayerSamplingGuardError, _layer_counts
 from .native_stationary import (HOLDOUT_SHIFT_NS, SAME_CLASS_ADDRESS_ASSUMPTION, _completions, _interval,
-                                _within, cohort_layers, cohort_origin, compose_layers, deadline_control, run_window,
+                                _pipeline_boundary, _pipeline_step, _within, cohort_layers, cohort_origin,
+                                compose_layers, deadline_control, run_window, sample_pipeline_blocks,
                                 window_terms)
 from .planner import _compilation_scope
 from .serving import _OnlineRuntime, compile_serving_plan
@@ -58,14 +59,23 @@ def _prefill_item(runtime, cohort):
     return item, state
 
 
-def prepare_prefill(runtime, cohort, stages, request_ready_ns, control):
-    """A whole-prompt single cohort on the unchanged source."""
+def prepare_prefill(runtime, cohort, stages, request_ready_ns, control, layers):
+    """A whole-prompt single cohort on the unchanged source.
+
+    With PP it is split into its stage blocks (``_pipeline_boundary``), the
+    last one ending with its last layer; ``layers`` is the (calibration,
+    holdout) layer count of each block's runs.
+    """
     started = time.perf_counter()
     control.raise_if_cancelled()
     item, state = _prefill_item(runtime, cohort)
     if item.context_tokens or item.token_count != state.spec.prompt_tokens:
         raise NativeLayerSamplingGuardError("native_prefill_pass_requires_one_whole_prompt_forward")
-    prepared = cohort_layers(runtime, cohort, stages, request_ready_ns, "native-prefill-sample.")
+    if runtime.plan.scenario.placement.parallel.pp_degree > 1:
+        prepared = _pipeline_boundary(runtime, cohort, stages, request_ready_ns, "native-prefill-sample.",
+                                      layers, final_exit=False)
+    else:
+        prepared = cohort_layers(runtime, cohort, stages, request_ready_ns, "native-prefill-sample.")
     return {**prepared, "prompt_tokens": state.spec.prompt_tokens,
             "preparation_wall_seconds": time.perf_counter() - started}
 
@@ -73,9 +83,17 @@ def prepare_prefill(runtime, cohort, stages, request_ready_ns, control):
 def sample_prefill(prepared, control, options, records, *, holdout_shift_ns=HOLDOUT_SHIFT_NS):
     """Run the pass's native samples; the source kernel never advances."""
     started = time.perf_counter()
+    first = prepared["origin"]
+    if "pipeline" in prepared:
+        runs, windows = sample_pipeline_blocks(prepared, control, records, first, first + holdout_shift_ns,
+                                               "prefill-pp-")
+        block = next(iter(prepared["pipeline"]["blocks"].values()))
+        return {"runs": runs, "pipeline": True, "windows": windows, "layer_count": len(prepared["inventory"]),
+                "holdout_shift_ns": holdout_shift_ns,
+                "layers": {role: len(block["roles"][role]) for role in ("calibration", "holdout")},
+                "wall_seconds": time.perf_counter() - started}
     layer_ids = [row["layer_id"] for row in prepared["inventory"]]
     prefix = prepared["boundary"].get("before_first_layer", [])
-    first = prepared["origin"]
 
     def run(role, ids, groups, origin, tag, entry):
         return run_window(prepared, control, records, role, ids, groups, origin, "prefill-" + tag,
@@ -125,6 +143,14 @@ def evaluate_prefill(prepared, samples, options):
                           observed_pass_ns=value, first_access_ns=run["first_access_ns"], assumptions=[],
                           entry_with_prefix_ns=times[0] - run["origin_ns"],
                           layer_steps_ns=dict(zip(run["layer_ids"][1:], (b - a for a, b in zip(times, times[1:])))))
+        elif "pipeline" in prepared:
+            # One request is one microbatch: the stage blocks run one after
+            # another, each composed like the single-stage pass.
+            lower, upper, parts = _pipeline_step(prepared, samples)
+            budget.update(basis="per_stage_block_calibration_holdout_layer_hull_widened_by_drift; "
+                                "in_situ_entry_two_origins; stage_blocks_serial; "
+                                "boundary_first_access_row_state_bounds",
+                          composition=parts, assumptions=[SAME_CLASS_ADDRESS_ASSUMPTION])
         else:
             lower, upper, parts = compose_layers(prepared["inventory"], runs, exit=False)
             budget.update(basis="calibration_holdout_layer_hull_widened_by_drift; in_situ_entry_two_origins; "
@@ -332,14 +358,16 @@ def _simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=
                     if item.context_tokens:
                         raise NativeLayerSamplingGuardError("native_prefill_pass_requires_prompt_start")
                     pass_origin_ns = cohort_origin(active, request_ready_ns)[0]
+                    # A whole-prompt PP pass is sampled by its stage blocks;
+                    # a full PP pass executes natively.
                     native_chunks_mode = (item.token_count < state.spec.prompt_tokens
-                                          or scenario.placement.parallel.pp_degree > 1)
+                                          or (scenario.placement.parallel.pp_degree > 1 and options.full_pass))
                 if native_chunks_mode:
-                    # PP stage transfers and cross-chunk overlap are described
-                    # by independent chunk graphs when chunk sampling is
-                    # enabled. A full pass remains the explicit exact path;
-                    # the scan runner enables chunk sampling for every fast
-                    # layout before entering this callback.
+                    # Cross-chunk overlap is described by independent chunk
+                    # graphs when chunk sampling is enabled. A full pass
+                    # remains the explicit exact path; the scan runner
+                    # enables chunk sampling for every fast layout before
+                    # entering this callback.
                     if options.full_pass:
                         return False
                     if not options.chunked_sampling:
@@ -349,7 +377,8 @@ def _simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=
                     chunk_seed.update(runtime=active, cohort=cohort, stages=stages,
                                       request_ready_ns=request_ready_ns)
                     raise _NativeLayerSamplingCutoff()
-                prepared.update(prepare_prefill(active, cohort, stages, request_ready_ns, sample_control))
+                prepared.update(prepare_prefill(active, cohort, stages, request_ready_ns, sample_control,
+                                                (options.calibration_layers, options.holdout_layers)))
                 raise _NativeLayerSamplingCutoff()
 
             def completed_chunk(active, cohort, metrics):

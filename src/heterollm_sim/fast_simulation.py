@@ -180,9 +180,6 @@ class FastSimulationOutcome:
     forecast: DecodeForecast | None = None
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
     native_window_forecast: NativeWindowForecast | None = None
-    # PP conditional forecast: real stage/microbatch samples plus a virtual
-    # max-plus suffix. It is deliberately separate from stationary forecasts.
-    native_pipeline_forecast: Any | None = None
     sampled: ServingResult | None = None
     layer_window_samples: tuple[NativeLayerWindowSample, ...] = ()
 
@@ -819,14 +816,8 @@ def simulate_fast(scenario, *, batch_lowerer, execution_control=None,
                   paired_reference: PairedTimingReference | None = None) -> FastSimulationOutcome:
     """Execute a real prefix and forecast only inside the declared safe domain."""
     if scenario.simulation.native_window is not None:
-        parallel = scenario.placement.parallel
-        if parallel.pp_degree > 1 or parallel.pipeline_microbatches > 1:
-            from .native_pipeline import simulate_native_pipeline_forecast_window
-            native_runner = simulate_native_pipeline_forecast_window
-        else:
-            from .native_stationary import simulate_native_stationary
-            native_runner = simulate_native_stationary
-        return native_runner(scenario, batch_lowerer=batch_lowerer,
+        from .native_stationary import simulate_native_stationary
+        return simulate_native_stationary(scenario, batch_lowerer=batch_lowerer,
             execution_control=execution_control, residency_manager=residency_manager,
             execution_kernel=execution_kernel, runtime_origin_ns=runtime_origin_ns,
             custom_lowerer=custom_lowerer)
