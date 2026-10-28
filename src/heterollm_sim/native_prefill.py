@@ -400,7 +400,11 @@ def _simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=
             else:
                 if not native_chunks_mode:
                     raise RuntimeError("native Prefill sampling unexpectedly committed an ordinary cohort")
-            if chunk_seed:
+            if chunk_seed and scenario.placement.parallel.pp_degree > 1:
+                from .native_prefill_stage_chunks import sample_pipeline_prefill_chunks
+                budget = sample_pipeline_prefill_chunks(**chunk_seed, control=sample_control, options=options,
+                                                        records=records)
+            elif chunk_seed:
                 budget = sample_prefill_chunks(**chunk_seed, control=sample_control, options=options, records=records)
             elif native_chunks_mode:
                 state = next(iter(runtime.states.values()))
@@ -445,7 +449,9 @@ def _simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=
                           "metric_bounds": budget.get("metric_bounds", {}),
                           "error_budget": budget.get("error_budget", {}),
                           "boundary_origin_ns": prepared.get("origin"),
-                          "execution_mode": ("layer_samples_per_chunk" if chunk_seed else
+                          "execution_mode": ("stage_block_samples_per_chunk" if chunk_seed and
+                                             scenario.placement.parallel.pp_degree > 1 else
+                                             "layer_samples_per_chunk" if chunk_seed else
                                              "complete_native_chunks" if native_chunks else "native_layer_samples"),
                           "native_chunk_count": budget.get("error_budget", {}).get("native_chunk_count", len(native_chunks)),
                           "layer_count": samples.get("layer_count"), "run_layers": samples.get("layers"),

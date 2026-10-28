@@ -37,7 +37,7 @@ class NativeWindowForecast:
 
 
 _SAMPLE_ROLES = frozenset(("calibration", "holdout", "entry", "exit", "pd_import", "prefill_pass",
-                            "chunk_boundary_history_probe"))
+                            "chunk_boundary_history_probe", "context_growth", "chunk_transition"))
 
 
 @dataclass(frozen=True)

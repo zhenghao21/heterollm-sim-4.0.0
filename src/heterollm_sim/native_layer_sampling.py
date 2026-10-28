@@ -1121,3 +1121,89 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
             "terminal_task_ids": sorted(terminal),
             "resource_frontiers": dict(kernel.resource_available),
             "controller_state_resumable_as_full_cohort": False}}
+
+
+def _execute_transition_window(source, all_specs, tail_ids, head_ids, *, origin_ns, control, sample_id,
+                               row_terms=None):
+    """Drain the ``tail_ids`` tasks, then the ``head_ids`` tasks, on one copy of ``source``.
+
+    The native runtime places all of one Prefill chunk's tasks before it
+    schedules the next chunk, whose back-dated prefix then waits on the
+    resource lanes the previous chunk's last tasks still hold. The tail (the
+    end of one chunk) is drained first; the head (the start of the next)
+    second, on the lanes and calendars the tail left. Both start no earlier
+    than ``origin_ns`` and lose their dependencies outside their own phase.
+    Returns each phase's layer and stage spans; ``first_access_ns`` covers
+    the facts of both phases, keyed by ``row_terms``.
+    """
+    started = time.perf_counter()
+    phases = (frozenset(tail_ids), frozenset(head_ids))
+    if not phases[0] or not phases[1] or phases[0] & phases[1]:
+        raise ValueError("native transition window phases must be non-empty and disjoint")
+    control.report("native_layer_tasks", 0, len(phases[0]) + len(phases[1]), unit="schedule_tasks",
+        message="正在复制原生采样边界",
+        metadata={"sample_id": sample_id, "full_cohort_committed": False, "visible_output_tokens": 0})
+    request_ids = {str(task.request_id) for task in all_specs
+                   if (task.task_id in phases[0] or task.task_id in phases[1])
+                   and getattr(task, "request_id", None) is not None}
+    kernel, _executor = _independent_kernel(source, request_ids=request_ids or None)
+    selected = ([], [])
+    for task in all_specs:
+        for phase, wanted in zip(selected, phases):
+            if task.task_id in wanted:
+                phase.append(replace(task, dependencies=tuple(parent for parent in task.dependencies
+                                                              if parent in wanted),
+                                     earliest_start_ns=max(float(task.earliest_start_ns), origin_ns)))
+    metrics = LiveCohortMetrics(resource_owners=kernel.resource_owners, origin_ns=origin_ns)
+    facts = [] if row_terms is not None else None
+    total, count, rows = sum(map(len, selected)), 0, []
+    for phase in selected:
+        spans = {"layer_start_ns": {}, "layer_completion_ns": {}, "stage_start_ns": {},
+                 "stage_completion_ns": {}, "start_ns": None, "end_ns": origin_ns, "task_count": len(phase)}
+
+        def observe(event, spans=spans):
+            nonlocal count
+            metrics.observe(event)
+            md = event.task.metadata
+            if facts is not None:
+                owner = md.get("physical_owner")
+                facts.append((event.task.task_id, event.start_ns, event.end_ns, event.task.dependencies,
+                              tuple(demand.resource_id for demand in event.task.demands),
+                              tuple((access.get("physical_owner", owner), access["address"], access["byte_count"])
+                                    for access in md.get("memory_accesses", ())
+                                    if type(access.get("address")) is int)))
+            spans["start_ns"] = event.start_ns if spans["start_ns"] is None else min(spans["start_ns"], event.start_ns)
+            spans["end_ns"] = max(spans["end_ns"], event.end_ns)
+            for key, name in (("layer_id", "layer"), ("execution_stage_id", "stage")):
+                identity = md.get(key)
+                if identity is not None:
+                    begun, ended = spans[name + "_start_ns"], spans[name + "_completion_ns"]
+                    begun[identity] = min(begun.get(identity, event.start_ns), event.start_ns)
+                    ended[identity] = max(ended.get(identity, event.end_ns), event.end_ns)
+            count += 1
+            if count == total or count % 256 == 0:
+                try:
+                    control.raise_if_cancelled()
+                    control.report("native_layer_tasks", count, total, unit="schedule_tasks",
+                        simulated_time_ns=event.end_ns, message="正在执行原生分段过渡窗口",
+                        metadata={"sample_id": sample_id, "full_cohort_committed": False,
+                                  "visible_output_tokens": 0})
+                finally:
+                    frame = getattr(kernel, "_token_frame", None)
+                    if frame is not None:
+                        frame.invalidate_frontiers()
+
+        control.raise_if_cancelled()
+        kernel._drain_prevalidated_compiled(phase, CompiledGraphLayout.compile(phase), event_observer=observe,
+                                            index_physical_allocations=True, owned_physical_frontiers=True)
+        rows.append(spans)
+    metadata = metrics.metadata()
+    row_state = None if facts is None else first_access_ns(
+        facts, {owner: active.core.config for owner, active in kernel.physical_runtime.runtimes.items()},
+        row_terms)
+    return {"sample_id": sample_id, "window_id": sample_id, "tail": rows[0], "head": rows[1],
+            "first_access_ns": row_state, "task_count": total, "wall_seconds": time.perf_counter() - started,
+            "visible_output_tokens": 0, "full_cohort_committed": False,
+            "sample_state": "independent_native_kernel_copy_two_phase_chunk_transition",
+            "physical_observations": {key: metadata.get(key) for key in (
+                "storage_traffic", "dram_traffic", "sram_traffic", "resource_busy_ns", "category_time_ns")}}

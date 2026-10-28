@@ -428,8 +428,9 @@ def _pipeline_boundary(runtime, cohort, stages, request_ready_ns, namespace, lay
 
     The planner authors one compute stage per microbatch and PP stage, an
     activation transfer stage between them when microbatches share a stage,
-    and one CPU commit per microbatch; the remaining stages form the cohort
-    prefix. Each block is proven serial on its own task graph (edges into
+    and one CPU commit per microbatch (none for a non-final Prefill chunk);
+    the remaining stages form the cohort prefix. Each block is proven serial
+    on its own task graph (edges into
     other blocks are the stage FIFO, which the composition restores) and
     classifies its layers by the block's own native work. Without
     ``final_exit`` the last stage's blocks end with their last layer: no
@@ -459,7 +460,7 @@ def _pipeline_boundary(runtime, cohort, stages, request_ready_ns, namespace, lay
     # A cohort of fewer requests than microbatches is lowered into fewer.
     count = 1 + max((group for group, _stage in compute), default=-1)
     grid = {(group, stage) for group in range(count) for stage in range(depth)}
-    if (not grid or set(compute) != grid or set(commit) != set(range(count))
+    if (not grid or set(compute) != grid or set(commit) not in (set(), set(range(count)))
             or not set(transfer) <= {key for key in grid if key[1] < depth - 1}):
         raise NativeLayerSamplingGuardError("native_pipeline_stage_grid_incomplete")
     by_stage = defaultdict(list)
@@ -493,11 +494,12 @@ def _pipeline_boundary(runtime, cohort, stages, request_ready_ns, namespace, lay
         if roles is None:
             raise NativeLayerSamplingGuardError("native_stationary_stack_too_short_for_disjoint_runs")
         exit = final_exit or key[1] < depth - 1
-        last = exit and key[1] == depth - 1
+        last = exit and key[1] == depth - 1 and key[0] in commit
+        after = list(boundary.get("after_last_layer", ()))
         blocks[key] = {"key": key, "stage_id": identity, "inventory": stack, "roles": roles, "exit": exit,
             "by_layer": {layer: [task.task_id for task in group] for layer, group in by_layer.items()},
             "prefix": list(boundary.get("before_first_layer", ())),
-            "suffix": list(boundary.get("after_last_layer", ())) if exit else [],
+            "suffix": after if exit else [], "after_last_layer": after,
             "transfer_stage": transfer.get(key),
             "transfer": [task.task_id for task in by_stage[transfer[key]]] if key in transfer else [],
             "commit_stage": commit[key[0]] if last else None,
@@ -515,12 +517,23 @@ def _pipeline_boundary(runtime, cohort, stages, request_ready_ns, namespace, lay
             task.task_id: replace(task, dependencies=tuple(parent for parent in task.dependencies
                                                            if parent not in prefix_ids))
             for task in by_stage[block["stage_id"]] if prefix_ids.intersection(task.dependencies)}
+    # The PP stage of every prefix stage on a replica GPU, and the prefix
+    # stages each compute stage depends on: in multi-chunk Prefill a later
+    # chunk's compute stage also waits for these frontends of its own chunk.
+    stage_of = {row.component_id: row.pp_rank
+                for row in runtime.plan.scenario.placement.parallel.rank_mapping}
+    prefix_pp = {str(stage.stage_id): stage_of.get(stage.component_id) for stage in stages
+                 if str(stage.stage_id) in prefix_stages}
+    waits = {str(stage.stage_id): [str(parent) for parent in stage.dependencies if str(parent) in prefix_stages]
+             for stage in stages if str(stage.stage_id) in compute.values()}
+    for block in blocks.values():
+        block["prefix_stage_waits"] = waits[block["stage_id"]]
     return {"cohort": cohort, "source": source, "origin": origin, "paid_frontier": paid_frontier,
             "specs": specs, "inventory": inventory,
             "composition": {"qualified": True, "basis": "per_microbatch_stage_serial_layer_blocks",
                             "stages": depth, "microbatches": count},
             "boundary": {}, "pipeline": {"stages": depth, "microbatches": count, "blocks": blocks,
-                                         "cohort_prefix": cohort_prefix},
+                                         "cohort_prefix": cohort_prefix, "prefix_stage_pp": prefix_pp},
             "ranks": {task.task_id: task.metadata["rank"] for task in specs
                       if type(task.metadata.get("rank")) is int},
             "context": {item.request_id: item.context_tokens for item in cohort.items}}
@@ -721,13 +734,14 @@ def _import_sets(runtime, prepared, pd_concurrency_envelope):
     return executor, imports, rows
 
 
-def _pipeline_window(prepared, control, records, role, keys, origin, sample_id, imports=None):
+def _pipeline_window(prepared, control, records, role, keys, origin, sample_id, imports=None, layers=None):
     """Run the (microbatch, stage) blocks ``keys`` on a copy of the source; return each block's run.
 
     Entry roles run each block's own prefix (the cohort prefix with block
     (0, 0)); holdout and exit roles run its suffix, and exit roles also its
     outgoing activation transfer and, on the last stage, the microbatch's
-    CPU commit.
+    CPU commit. ``layers`` maps a block to the layers it runs instead of its
+    role's.
     """
     control.raise_if_cancelled()
     pipeline = prepared["pipeline"]
@@ -736,7 +750,8 @@ def _pipeline_window(prepared, control, records, role, keys, origin, sample_id, 
     ids, terms, members = [], {}, []
     for key in keys:
         block = pipeline["blocks"][key]
-        layer_ids, by_layer, mark = block["roles"][role], block["by_layer"], "@{}.{}".format(*key)
+        layer_ids = layers[key] if layers is not None else block["roles"][role]
+        by_layer, mark = block["by_layer"], "@{}.{}".format(*key)
         if entry:
             head = [*(pipeline["cohort_prefix"] if key == (0, 0) else ()), *block["prefix"]]
             ids += head

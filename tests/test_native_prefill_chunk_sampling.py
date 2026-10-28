@@ -110,6 +110,26 @@ def test_pipeline_chunk_sampling_requires_explicit_enablement():
     assert result.approximation["rejection_reasons"] == ["native_prefill_chunked_sampling_not_enabled"]
 
 
+@pytest.mark.parametrize("pp,layer_count", [(2, 16), (4, 32)])
+def test_multi_chunk_pipeline_pass_samples_stage_blocks_around_full_reference(pp, layer_count):
+    scenario = _experiment_scenario(tp=1, pp=pp, prompt=26, layer_count=layer_count)
+    result, sampled = _pass(scenario, chunked_sampling=True)
+    _, full = _pass(scenario, full_pass=True, max_wall_seconds=None)
+
+    assert sampled["accepted"], result.approximation
+    assert sampled["execution_mode"] == "stage_block_samples_per_chunk"
+    assert full["execution_mode"] == "complete_native_chunks"
+    budget = sampled["error_budget"]
+    assert budget["physical_full_cohorts_committed"] == 0 and budget["chunk_count"] > 2
+    assert len(budget["chunk_stages_ns"]) == budget["chunk_count"]
+    assert all(len(stages) == pp for stages in budget["chunk_stages_ns"])
+    assert {sample.window_id.rsplit("-", 1)[-1] for sample in result.layer_window_samples} >= {"transition"}
+    bounds = sampled["metric_bounds"]["prefill_pass_ns"]
+    observed = full["error_budget"]["observed_pass_ns"]
+    assert bounds["lower"] <= observed <= bounds["upper"], (bounds, observed)
+    assert abs(bounds["estimate"] - observed) / observed <= .10
+
+
 def test_whole_prompt_pipeline_pass_samples_stage_blocks_around_full_reference():
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
     from native_toy import _analytical_toy_hardware, toy_scenario
