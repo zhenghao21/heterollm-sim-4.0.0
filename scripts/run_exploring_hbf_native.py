@@ -1124,7 +1124,12 @@ def execute_candidate(params, directory, progress, *, builder=None, runner=None,
         # Historical screen caches may contain a pre-quantum PP batch. Keep
         # that stale point out of the native failure count; current search
         # planning uses the physical EP*microbatch quantum for new probes.
-        if str(error) == "batch_size must be divisible by ep * pipeline_microbatches":
+        if capacity_error(error):
+            row.update(status="capacity_rejected", metrics=None, reason=str(error),
+                       error={"type": type(error).__name__, "message": str(error),
+                              "details": getattr(error, "details", None),
+                              "traceback": traceback.format_exc()})
+        elif str(error) == "batch_size must be divisible by ep * pipeline_microbatches":
             row.update(status="forecast_rejected", metrics=None,
                        rejection_reason="native_invalid_batch_quantum", reason=str(error))
         else:
