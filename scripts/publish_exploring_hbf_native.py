@@ -92,7 +92,10 @@ def upload_snapshot(snapshot: dict[str, Any], *, node: str = "node", cli_root: P
     try:
         result = subprocess.run(command, input=json.dumps(snapshot, ensure_ascii=False, allow_nan=False),
             text=True, encoding="utf-8", stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            cwd=ROOT, timeout=30, check=False, **options)
+            # The all-legal scan snapshot is larger than the old fixed-layout
+            # snapshot; allow the authenticated Netlify blob round-trip enough
+            # time to upload and read it back.
+            cwd=ROOT, timeout=120, check=False, **options)
     except subprocess.TimeoutExpired:
         # subprocess.run kills and waits for the timed-out Node process.
         raise UploadError("UploadTimeout", code="UPLOAD_TIMEOUT") from None
