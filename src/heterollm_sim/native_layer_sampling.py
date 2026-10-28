@@ -247,9 +247,9 @@ def _independent_kernel(source, executor=None, request_ids=None):
             copied_requests[identity] = deepcopy(keys, memo)
         if request_ids is not None and type(holders) is dict:
             kept_keys = {key for keys in copied_requests.values() for key in keys}
+            request_keys = {key for keys in requests.values() for key in keys}
             memo[id(holders)] = {key: count for key, count in holders.items()
-                                 if key in kept_keys or key not in {
-                                     item for values in requests.values() for item in values}}
+                                 if key in kept_keys or key not in request_keys}
     kernel = deepcopy(source, memo)
     if executor is None:
         return kernel, None
@@ -940,8 +940,15 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
     can move it (see native_row_bounds).
     """
     started = time.perf_counter()
+    wanted = frozenset(selected_ids)
+    # Announce the window before the boundary copy so a slow copy is not
+    # attributed to whatever stage the live runtime last reported.
+    control.report("native_layer_tasks", 0, len(wanted), unit="schedule_tasks",
+        message="正在复制原生采样边界",
+        metadata={"sample_id": sample_id, "full_cohort_committed": False,
+                  "visible_output_tokens": 0})
     sample_request_ids = {str(task.request_id) for task in all_specs
-                          if task.task_id in frozenset(selected_ids)
+                          if task.task_id in wanted
                           and getattr(task, "request_id", None) is not None}
     if concurrent_imports is not None:
         sample_request_ids.update(str(request_id) for request_id in concurrent_imports[1])
@@ -954,7 +961,6 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
         # Reach the window boundary with every earlier PD phase submitted.
         imports.advance_until(origin_ns)
     clone_wall = time.perf_counter()-started
-    wanted = frozenset(selected_ids)
     selected = []
     omitted = set()
     inputs = {}
