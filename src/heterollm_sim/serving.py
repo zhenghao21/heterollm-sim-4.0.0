@@ -16381,6 +16381,23 @@ class _OnlineRuntime:
                     stage_fallback_reason or "empty execution stage graph"
                 )
             )
+        # A bounded PP sample only needs the authored stage DAG and the
+        # independent layer windows.  Invoke the sampler before execution-plan
+        # expansion, contention accounting, and physical stage replay; those
+        # paths otherwise walk the full request graph even though the sampler
+        # aborts before committing a cohort.
+        layer_sampler = getattr(self, "_native_layer_sampler", None)
+        if (layer_sampler is not None
+                and cohort.metadata.get("native_sampling_bounded")
+                and self.plan.scenario.placement.parallel.pp_degree > 1):
+            sampling_ready_ns = max(
+                (self._request_device_ready_ns.get(
+                    request_id, self.states[request_id].spec.arrival_ns)
+                 for request_id in cohort.request_ids),
+                default=self.now)
+            sampling_stages = self._with_gpu_controller_stages(stages, cohort)
+            if layer_sampler(self, cohort, cost, sampling_stages, sampling_ready_ns) is not False:
+                raise RuntimeError("native layer sampler must stop without committing its partial cohort")
         has_explicit_execution_dag = bool(
             stages
             and _declares_explicit_task_dag(cost.metadata)
