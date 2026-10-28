@@ -17,7 +17,7 @@ import tempfile
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DIRECTORY = ROOT / "artifacts/exploring_hbf_native_20261019"
+DEFAULT_DIRECTORY = ROOT / "artifacts/exploring_hbf_native_20261027_pp_prefill_final4"
 SCHEMA = "exploring-hbf-native-dashboard/v1"
 BEIJING = timezone(timedelta(hours=8))
 LABELS = {"running": "运行中", "pending": "等待", "completed": "完成",

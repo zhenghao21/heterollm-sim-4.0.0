@@ -11,7 +11,7 @@ export const TARGET = Object.freeze({
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI_ROOT = 'C:/Users/A/AppData/Local/npm-cache/_npx/da5c1b6ea715e8b4/node_modules/netlify-cli';
 const SCHEMA = 'exploring-hbf-native-dashboard/v1';
-const SCAN_ID = 'exploring_hbf_native_20261019';
+const SCAN_ID = 'exploring_hbf_native_20261027_pp_prefill_final4';
 
 function fail(code) {
   const error = new Error();

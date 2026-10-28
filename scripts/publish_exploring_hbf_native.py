@@ -19,7 +19,7 @@ from typing import Any
 
 from exploring_hbf_native_status import BEIJING, DEFAULT_DIRECTORY, ROOT, SCHEMA, write_snapshot
 
-SCAN_ID = "exploring_hbf_native_20261019"
+SCAN_ID = "exploring_hbf_native_20261027_pp_prefill_final4"
 STATUS_PATH = ROOT / "tmp/native_comparison_publisher.json"
 LOG_PATH = ROOT / "tmp/native_comparison_publisher.log"
 LOCK_PATH = ROOT / "tmp/native_comparison_publisher.lock"
