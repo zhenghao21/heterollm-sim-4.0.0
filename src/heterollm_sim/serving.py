@@ -16311,8 +16311,16 @@ class _OnlineRuntime:
                     max_num_ubatch_tokens=min(
                         self.plan.scenario.workload.scheduler.max_num_ubatch_tokens,
                         sample_batch))
+                sampled_request_ids = {item.request_id for item in cohort.items}
+                sampled_requests = tuple(request for request in
+                    self.plan.scenario.workload.requests
+                    if request.request_id in sampled_request_ids)
+                workload = replace(self.plan.scenario.workload,
+                    requests=sampled_requests,
+                    request_count=(len(sampled_requests) or sample_batch),
+                    scheduler=scheduler)
                 lowering_scenario = replace(self.plan.scenario,
-                    workload=replace(self.plan.scenario.workload, scheduler=scheduler))
+                    workload=workload)
             if lowering_scenario is not self.plan.scenario:
                 rebind = getattr(self.lowerer, "_rebind_control_plane_successor", None)
                 if not callable(rebind):
