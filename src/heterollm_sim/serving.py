@@ -16313,7 +16313,18 @@ class _OnlineRuntime:
                         sample_batch))
                 lowering_scenario = replace(self.plan.scenario,
                     workload=replace(self.plan.scenario.workload, scheduler=scheduler))
-            cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
+            if lowering_scenario is not self.plan.scenario:
+                rebind = getattr(self.lowerer, "_rebind_control_plane_successor", None)
+                if not callable(rebind):
+                    raise NativeLayerSamplingGuardError(
+                        "native_sampling_bounded_lowerer_cannot_rebind")
+                rebind(self.plan.scenario, lowering_scenario)
+                try:
+                    cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
+                finally:
+                    rebind(lowering_scenario, self.plan.scenario)
+            else:
+                cost = _lower_cost(self.lowerer, lowering_scenario, cohort)
         self.execution_control.raise_if_cancelled()
         self.execution_control.report("cohort_scheduling", len(self.batches),
             simulated_time_ns=self.now, message="正在准备原生资源日历与任务调度")
