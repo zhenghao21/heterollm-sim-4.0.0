@@ -29588,6 +29588,48 @@ def _record_compute_components(
     }
 
 
+def _dependencies_first(
+    records: Tuple[TaskExecutionRecord, ...],
+) -> Tuple[TaskExecutionRecord, ...]:
+    """``records`` in their order, but each after its in-region dependencies.
+
+    Records in (start, end, task id) order can tie at one instant with zero
+    service, where neither the task-id order (task counters past 99999 sort
+    before shorter ones) nor the given order need follow the dependencies.
+    Ready records keep the given order.
+    """
+    position = {record.task_id: index for index, record in enumerate(records)}
+    seen: Set[str] = set()
+    for record in records:
+        if any(dependency in position and dependency not in seen
+               for dependency in record.dependencies):
+            break
+        seen.add(record.task_id)
+    else:
+        return records
+    waiting = [0] * len(records)
+    children: List[List[int]] = [[] for _ in records]
+    for index, record in enumerate(records):
+        for dependency in set(record.dependencies):
+            parent = position.get(dependency)
+            if parent is not None:
+                waiting[index] += 1
+                children[parent].append(index)
+    ready = [index for index, count in enumerate(waiting) if not count]
+    heapq.heapify(ready)
+    ordered = []
+    while ready:
+        index = heapq.heappop(ready)
+        ordered.append(records[index])
+        for child in children[index]:
+            waiting[child] -= 1
+            if not waiting[child]:
+                heapq.heappush(ready, child)
+    if len(ordered) != len(records):
+        raise ValueError("executed records form a dependency cycle")
+    return tuple(ordered)
+
+
 def _replay_local_record_timeline(
     records: Sequence[TaskExecutionRecord],
 ) -> Tuple[
@@ -29614,6 +29656,7 @@ def _replay_local_record_timeline(
             )
             break
         previous_order_key = order_key
+    ordered_records = _dependencies_first(ordered_records)
     local_end_by_task: Dict[str, float] = {}
     local_resource_available: Dict[str, float] = {}
     local_interval_by_task: Dict[str, Tuple[float, float]] = {}
