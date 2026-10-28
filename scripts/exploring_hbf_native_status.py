@@ -285,8 +285,8 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         "当前cohort的completed/total是任务数，不是Token数、请求数或整轮完成百分比。累计Token与批次数独立记录，仅在原生提交完成后增加。",
         "累计Prefill Token只计实际执行的查询Token；PD导入历史KV不冒充Prefill计算。累计输出Token来自真实可见Token提交事件，包含真实首Token。",
         "壁钟分项按原生阶段切换时刻独占累计，包含该阶段未完成的当前区间；它是仿真器运行耗时，不是硬件延迟。旧尝试未记录的累计Token和分项保持未知。",
-        ("物理层或批次样本与条件预测窗口分别记录。层样本不计完整批次或Token。PP Decode使用20%条件模型预算，PP=1 Decode和Prefill使用10%预算；未执行窗口没有物理轨迹，不是全窗口实测误差保证；预测拒绝指标为空，不详细回退。"
-            if fast else "本轮有界物理窗口没有预测尾段；快速模式的PP Decode使用20%预算，其他快速路径使用10%，不表示已证明与真实硬件误差小于对应目标。"),
+        ("物理层或批次样本与条件预测窗口分别记录。层样本不计完整批次或Token。PP Decode、PP=1 Decode和Prefill均使用10%条件模型预算；未执行窗口没有物理轨迹，不是全窗口实测误差保证；预测拒绝指标为空，不详细回退。"
+            if fast else "本轮有界物理窗口没有预测尾段；快速模式各路径均使用10%预算，不表示已证明与真实硬件误差小于10%。"),
         "旧详细参考和已经取消的5K、10K配置均不重跑。"]
     assessment = _eta(directory, warnings, eta)
     if not eta and not (directory / "eta_assessment.json").exists() and candidate_states:

@@ -196,6 +196,25 @@ def test_reused_pipeline_budget_rejection_is_retried_once(tmp_path):
     assert run._search_lookup(tmp_path, case, layout, retry_ids=set())(512)["rejection_reason"].startswith("unable")
 
 
+def test_quality_rejection_probes_larger_batches_without_becoming_capacity_evidence():
+    layout = TP8 | {"pp": 2, "tp": 4}
+    candidate = entry(layout, candidate=2048, capacity=4096)
+    rows = {
+        512: {"status": "forecast_rejected",
+              "rejection_reason": "native_pipeline_independent_budget_exceeded"},
+        1024: {"status": "forecast_rejected",
+               "rejection_reason": "native_pipeline_independent_budget_exceeded"},
+    }
+    first = search.plan_layout(candidate, rows.get, SLO, 1800., policy=search.MAX_BATCH_POLICY)
+    assert first["next"] == 2048
+    assert [run["kind"] for run in first["runs"]] == ["quality_rejected", "quality_rejected"]
+    rows[2048] = {"status": "forecast_rejected",
+                  "rejection_reason": "native_pipeline_independent_budget_exceeded"}
+    rows[4096] = {"status": "capacity_rejected", "rejection_reason": "native KV capacity"}
+    bounded = search.plan_layout(candidate, rows.get, SLO, 1800., policy=search.MAX_BATCH_POLICY)
+    assert bounded["outcome"]["kind"] == "no_native_measurement"
+
+
 def test_capacity_rejection_bisects_below_the_rejected_batch():
     capacity = ("capacity_rejected", None)
     layouts = [native(lambda b: (7 + .05 * b) * 1e6, lambda b: .5 * b, too_big=lambda b: capacity if b > 900 else None)]

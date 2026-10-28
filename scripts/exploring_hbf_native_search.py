@@ -93,8 +93,8 @@ _WALL_TOO_BIG = ("wall_budget",)
 CAPACITY_REJECTIONS = ("not_a_full_batch", "import_pool_not_full")
 IMPORT_REJECTIONS = ("native_stationary_refill_not_always_ready", "native_pipeline_refill_not_always_ready")
 # These are forecast-quality failures rather than physical limits.  A later
-# scan may use a wider error budget or a repaired transfer/ingress estimator,
-# so an old terminal row must be allowed one fresh native attempt.  Keep
+# scan may use a better sampler or a repaired transfer/ingress estimator, so
+# an old terminal row must be allowed one fresh native attempt.  Keep
 # capacity, wall-clock, import-readiness and DAG-shape failures out of this
 # set: those rows are useful evidence of a real upper bound or an invalid
 # layout and must remain reusable as-is.
@@ -102,9 +102,20 @@ RETRYABLE_FORECAST_REJECTIONS = frozenset({
     "native_pipeline_independent_budget_exceeded",
     "native_pipeline_activation_transfer_sample_missing",
     "native_pipeline_ingress_ttft_unavailable",
+    "native_pipeline_forecast_error_budget_exceeded",
     "native_prefill_independent_budget_exceeded",
     "native_prefill_pass_lower_bound_not_positive",
 })
+# A quality rejection is not evidence that the batch is physically too large.
+# After the one cache retry, probe a few larger points so a layout can reach a
+# stable sample at a useful batch.  The cap prevents a quality-only layout
+# from becoming an unbounded scan; physical wall/capacity limits still stop
+# through the ordinary ``too_big`` path.
+QUALITY_REJECTIONS = frozenset({
+    "native_pipeline_independent_budget_exceeded",
+    "native_pipeline_forecast_error_budget_exceeded",
+})
+MAX_QUALITY_PROBES = 3
 
 
 def is_pipeline_layout(layout):
@@ -174,7 +185,7 @@ def fit_line(points):
 
 
 def classify(row):
-    """measured / too_big / unusable / failed / pending for one saved candidate row."""
+    """measured / quality_rejected / too_big / unusable / failed / pending."""
     status = row.get("status")
     if status in ("completed", "slo_rejected"):
         bounds = ((row.get("diagnostics") or {}).get("metric_bounds") or {}).get("mean_complete_request_tpot_ns")
@@ -183,6 +194,8 @@ def classify(row):
         return "too_big"
     if status == "forecast_rejected":
         reason = str(row.get("rejection_reason", ""))
+        if reason in QUALITY_REJECTIONS:
+            return "quality_rejected"
         return "too_big" if any(marker in reason for marker in _WALL_TOO_BIG + CAPACITY_REJECTIONS + IMPORT_REJECTIONS) else "unusable"
     return "failed" if status == "failed" else "pending"
 
@@ -286,6 +299,20 @@ def _following(entry, runs, points, slo_ns, caps, rounded, *, policy=MAX_BATCH_P
         return None
     last, known, tried = runs[-1], _native_capacities(runs), [run["batch"] for run in runs]
     if not points:
+        if last["kind"] == "quality_rejected":
+            # Forecast quality is independent of physical batch capacity. A
+            # larger probe may have a steadier stage/transfer sample and can
+            # then enter the ordinary measured-point search. Keep the probe
+            # count finite and never cross the bypass physical capacity.
+            quality_probes = sum(run["kind"] == "quality_rejected" for run in runs)
+            if quality_probes >= MAX_QUALITY_PROBES:
+                return None
+            capacity = entry["bypass"]["capacity_max_batch"]
+            target = max(q, last["batch"] * 2)
+            if capacity is not None:
+                target = min(target, capacity)
+            batch = rounded(target)
+            return batch if batch > last["batch"] and batch not in tried else None
         # Too big: a reported native capacity goes there directly; wall and
         # import-speed rejections use the existing halving path. An unusable
         # rejection ends the layout.

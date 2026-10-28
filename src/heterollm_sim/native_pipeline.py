@@ -30,10 +30,9 @@ def simulate_native_pipeline_forecast_window(scenario, *, batch_lowerer, executi
     from .fast_simulation import FastSimulationOutcome
     started = time.perf_counter()
     options = scenario.simulation.native_window
-    # PP stage composition has its own conditional budget. A PP forecast
-    # combines stage compute and activation-transfer intervals; using the
-    # ordinary single-replica target here made the independent gate too
-    # strict for the two-cohort sample used by layout screening.
+    # PP stage composition uses the same declared conditional target as the
+    # ordinary fast path. Sampling changes reduce the interval before this
+    # gate; the acceptance budget itself is never widened for PP.
     pipeline_target = (options.pipeline_target_relative_error
                        if scenario.placement.parallel.pp_degree > 1
                        else options.target_relative_error)
