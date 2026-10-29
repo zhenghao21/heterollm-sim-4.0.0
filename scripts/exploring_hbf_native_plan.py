@@ -121,10 +121,11 @@ def build_native_plan() -> dict:
             "ep_scope": "仅 Maverick（MoE）可取 EP>1：每个 EP 组独占 B/EP 个请求及其 KV，注意力、稠密 MLP、路由和共享专家在本组 TP 卡上执行（稠密权重每组一份）；专家由各组共享，经原生 all_to_all 分发/合并，每层在跨组屏障处同步。要求 B 与每个 MoE 层的专家数都能被 EP 整除。",
             "dp_scope": "DP 副本是互相独立的拷贝，不共享 KV 或批次；只仿真一个副本，单GPU吞吐＝副本吞吐÷(TP×PP×EP)，集群吞吐＝单GPU吞吐×GPU总数。每个副本有自己的 PD 入站，未建模副本之间共享网卡或 PD 源的争用，也不添加不存在的 ParallelSpec 字段。",
             "pp_scope": "原生PP按独立请求微批跨阶段执行，每阶段FIFO，每个cohort结束后排空再补位；PP候选完整执行原生服务窗口及阶段发送，不使用串层稳态估计，仍受候选壁钟上限约束。",
-            "selection": "默认 max_batch_under_slo 模式在所有选定布局中选择 SLO 内最大 Batch；布局范围由本次运行单独指定为 all、pipeline、expanded（已有布局加 PP 新布局）或 all_legal（全部可建合法布局）。throughput 模式单独按单GPU吞吐率选优。容量不足的布局或批量记为物理边界。",
-            "batch_search": ("搜索驱动（run_exploring_hbf_native.py --search，总是fast；默认 max_batch_under_slo，也可指定 throughput）：旁路模型（exploring_hbf_search）对每个配置枚举全部合法布局并给出批量区间；"
-                             "all_legal 模式逐一交给原生快速路径，首点取旁路批量的一半且不超过512，"
-                             "第二点按原生/旁路TPOT比例缩放旁路TPOT直线推到100ms，未夹住100ms时继续定点；质量拒绝表示采样证据不足，继续增加采样或探测更大Batch；max_batch_under_slo 模式对所有布局都不使用6个测量点和10次运行上限，持续到 SLO 上界或实际容量、内存、墙钟边界；throughput 模式保留独立的点数/尝试数策略；"
+            "selection": "在所有选定布局中选择 SLO 内单GPU吞吐最大者（同一配置各布局GPU总数相同，单GPU吞吐即集群吞吐的固定比例，不偏向少DP副本）；布局范围由本次运行单独指定为 all、pipeline、expanded（已有布局加 PP 新布局）或 all_legal（全部可建合法布局）。容量不足的布局或批量记为物理边界。",
+            "batch_search": ("搜索驱动（run_exploring_hbf_native.py --search，总是fast）：旁路模型（exploring_hbf_search）对每个配置枚举全部合法布局并给出批量区间；"
+                             "布局按旁路吞吐上界（旁路TPOT直线在SLO内允许的单GPU吞吐；原生TPOT实测都在旁路直线之上）分支定界：首个布局（锚点）首点取旁路批量的一半且不超过512，"
+                             "其余布局首点取通过SLO即追平锚点最佳通过吞吐的批量；旁路上界（低于原生容量界时取容量界）÷0.8或超SLO点的吞吐×1.1低于全配置已测最佳通过吞吐即剪枝；"
+                             "第二点按原生/旁路TPOT比例缩放旁路TPOT直线推到100ms，未夹住100ms时继续定点；各布局不设测量点和运行次数上限，持续到 SLO 上界或实际容量、内存、墙钟边界；"
                              "批量点不超过旁路KV容量（直到原生点达到它，之后以原生容量拒绝为界；KV容量拒绝报告原生放得下的最大批量，下一点直接测它）、"
                              "壁钟（已测壁钟不含Prefill，直接对比每worker 1800s，不除以并行数）"
                              "和峰值内存（线性投影到物理内存减保留量）；过大的点减半或二分。每个快速候选及Prefill的壁钟倍数固定为本次worker上限K，HBM通道线程数为MAX_WORKERS//K；导入补位未就绪视为批量过大并标注受导入速度限制。夹住100ms的相邻两点线性插值TPOT上界，"

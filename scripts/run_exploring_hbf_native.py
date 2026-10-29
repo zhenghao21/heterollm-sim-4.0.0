@@ -60,8 +60,8 @@ PREFILL_CONTRACT = "native_prefill_complete_prompt_pass_v2"
 # composed by the cohort's max-plus flush; v3 forecasts are not reusable.
 PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
 PIPELINE_FORECAST_CONTRACT = "native_stationary_pp_stage_blocks_v4"
-MAX_BATCH_SEARCH_CONTRACT = "native_max_batch_under_slo_v1"
-THROUGHPUT_SEARCH_CONTRACT = "native_throughput_v1"
+# Per-GPU throughput under the SLO, layouts searched by branch and bound.
+SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v1"
 # v3 samples a whole-prompt PP pass by its stage blocks; a multi-chunk PP
 # pass keeps the conditional chunk forecast.
 PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_stage_blocks_v3"
@@ -1129,7 +1129,7 @@ def worker_candidate(case, layout, batch, directory, mode="detailed", wall_facto
 
 
 def refresh(directory, cases, planned, running=(), *, state="running", phase=None, error=None, mode="detailed",
-            search=False, worker_limit=None, pp_only=False, search_mode=None, layout_scope="all"):
+            search=False, worker_limit=None, pp_only=False, layout_scope="all"):
     """``planned`` maps each case id to the (layout, per-replica batch) candidates it is asked to evaluate."""
     directory = Path(directory)
     points, candidates = [], []
@@ -1214,9 +1214,10 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
     gpus = "/".join(str(count) for count in sorted({case["gpu_count"] for case in cases}))
     lines = ["# 原生后端论文对照实验", "", f"更新：{status['updated_at']}；状态：{STATUS_LABELS.get(state,state)}。",
         f"配置 {len(cases)} 组，成功 {counts.get('completed',0)}，全候选拒绝 {counts.get('all_candidates_rejected',0)}，失败 {counts.get('failed',0)}。", "",
-        (f"每配置固定 {gpus} GPU；部署按论文式搜索：旁路模型只提供批量区间，原生穷举全部合法布局并搜索各布局的合法 Batch；"
-            "把TPOT上界线性插值到100ms，再在最佳布局的插值批量上做一次原生验收；最终数字只取原生候选，旁路数值只用于放置批量点。"
-            "够不到100ms的布局停在已测最大点并标注受限，不外推；验收未通过时退回已测通过点。"
+        (f"每配置固定 {gpus} GPU；部署按论文式搜索，目标为 SLO 内单GPU吞吐最大（各布局GPU数相同，不偏向少DP副本）：旁路模型只提供批量区间和布局吞吐上界，"
+            "布局按旁路吞吐上界分支定界：首个布局完整搜索 Batch，其余布局先在追平其最佳通过吞吐所需的批量上测一次，"
+            "旁路上界或超SLO点证明赢不了已测最佳通过点即剪枝；各布局 Batch 搜索不设点数上限，把TPOT上界线性插值到100ms，再在最佳布局的插值批量上做一次原生验收；"
+            "最终数字只取原生候选，旁路数值只用于放置批量点和剪枝。够不到100ms的布局停在已测最大点并标注受限，不外推；验收未通过时退回已测通过点。"
             if search else
             f"每配置固定 {gpus} GPU；有限候选布局 {', '.join(layout_label(layout) for layout in layouts)}，每副本批量 {', '.join(map(str,batches))}。")
         + f"DP 副本是互相独立的拷贝，只仿真一个副本，集群吞吐为单GPU吞吐乘GPU总数。每配置选择通过 100ms 请求均值TPOT约束的最高{'通过验收的' if mode == 'fast' else '实测'}单GPU吞吐，不表示全局最优部署或最大批量。",
@@ -1240,10 +1241,6 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
                         f"原生实际搜索 {coverage['selected_layouts']} 个布局，跳过 {coverage['skipped_layouts']} 个；"
                         f"范围={coverage['scope']}，选择口径={coverage['selection']}，"
                         "每个纳入布局独立搜索 Batch。")]
-    if search and search_mode == search_plan.MAX_BATCH_POLICY.name:
-        lines[5] = (f"每配置固定 {gpus} GPU；部署按论文式搜索，搜索模式为 SLO 内最大 Batch，当前覆盖全部合法布局（范围 {layout_scope}），"
-                    "不受有效点数和尝试次数上限影响；达到 SLO 时插值到100ms并通过验收；"
-                    "容量、内存和墙钟仍是硬边界。")
     for point in points:
         case, selected = point["case"], point.get("selected")
         m = selected["metrics"] if selected else {}
@@ -1726,26 +1723,22 @@ def bypass_screen(case):
                              workload, slo_seconds=SLO_NS / 1e9)
 
 
-def case_screen(directory, case, screen=None, *, search_mode=None, layout_scope="all_legal", pp_only=None):
-    """Build the bypass screen; layout scope is independent of search mode."""
+def case_screen(directory, case, screen=None, *, layout_scope="all_legal", pp_only=None):
+    """Build the bypass screen for one layout scope; a saved screen of the case is reused."""
     path = Path(directory) / "screen" / (case["case_id"] + ".json")
     saved = read_json(path)
     if pp_only is not None:
         layout_scope = "pipeline" if pp_only else "all"
-    policy = search_plan.search_policy(search_mode or search_plan.DEFAULT_SEARCH_MODE)
-    settings = {**policy.settings, "layout_scope": layout_scope}
     scope = layout_scope
     saved_scope = (saved or {}).get("scope", "all_layouts")
-    if (saved is not None and saved.get("case") == case
-            and saved.get("deployment_search") == settings and saved_scope == scope):
+    if saved is not None and saved.get("case") == case and saved_scope == scope:
         return saved
     rows = (screen or bypass_screen)(case)
     buildable = lambda layout, quantum: layout_rejection(case, make_layout(
         *(layout[key] for key in LAYOUT_KEYS), microbatches=layout.get("microbatches", 1)), quantum)
     if layout_scope == "expanded":
-        current, skipped = search_plan.screen_layouts(rows, buildable, policy=policy, layout_scope="all")
-        pipeline, pipeline_skipped = search_plan.screen_layouts(rows, buildable, policy=policy,
-                                                                 layout_scope="pipeline")
+        current, skipped = search_plan.screen_layouts(rows, buildable, layout_scope="all")
+        pipeline, pipeline_skipped = search_plan.screen_layouts(rows, buildable, layout_scope="pipeline")
         historical = (saved or {}).get("layouts", []) if (saved or {}).get("case") == case else []
         chosen, seen = [], set()
         for entry in [*pipeline, *historical, *current]:
@@ -1755,7 +1748,7 @@ def case_screen(directory, case, screen=None, *, search_mode=None, layout_scope=
                 chosen.append(entry)
         skipped = skipped + pipeline_skipped
     else:
-        chosen, skipped = search_plan.screen_layouts(rows, buildable, policy=policy, layout_scope=layout_scope)
+        chosen, skipped = search_plan.screen_layouts(rows, buildable, layout_scope=layout_scope)
     def layout_key(layout):
         return tuple(layout.get(name, 1) for name in (*LAYOUT_KEYS, "microbatches"))
     bypass_keys = set()
@@ -1768,10 +1761,10 @@ def case_screen(directory, case, screen=None, *, search_mode=None, layout_scope=
         "bypass_unique_layouts": len(bypass_keys),
         "selected_layouts": len({layout_key(item["layout"]) for item in chosen}),
         "skipped_layouts": len(skipped),
-        "layout_cap": None if scope == "all_legal" else policy.settings.get("top_layouts"),
+        "layout_cap": None if scope == "all_legal" else search_plan.TOP_LAYOUTS,
         "batch_search": "native_search_per_selected_layout",
     }
-    value = {"case": case, "deployment_search": settings, "layouts": chosen, "skipped_layouts": skipped,
+    value = {"case": case, "layouts": chosen, "skipped_layouts": skipped,
              "bypass_rows": rows, "scope": scope, "coverage": coverage,
              "scope_note": "bypass screening only ranks layouts and places native batch points; it reports no number"}
     write_json(path, value)
@@ -1801,14 +1794,13 @@ def _search_lookup(directory, case, layout):
     return lookup
 
 
-def search_case(directory, case, screen, *, search_mode=None):
+def search_case(directory, case, screen):
     """Replay the case's search from its saved rows; write its point. Returns (plan, planned candidates, point)."""
     directory = Path(directory)
     entries = screen["layouts"]
-    policy = search_plan.search_policy(search_mode or search_plan.DEFAULT_SEARCH_MODE)
     plan = search_plan.plan_case(entries, [_search_lookup(directory, case, entry["layout"]) for entry in entries],
         SLO_NS, FAST_CANDIDATE_WALL_BUDGET_SECONDS, [replica_gpus(entry["layout"]) for entry in entries],
-        memory_budget_bytes=total_memory_bytes() - WORKER_MEMORY_RESERVE_BYTES, policy=policy)
+        memory_budget_bytes=total_memory_bytes() - WORKER_MEMORY_RESERVE_BYTES)
     planned = []
     for layout_plan in plan["layouts"]:
         planned += [(layout_plan["layout"], run["batch"]) for run in layout_plan["runs"]]
@@ -1825,19 +1817,20 @@ def search_case(directory, case, screen, *, search_mode=None):
     selected = point["selected"]
     point["search"] = {"result": (search_plan.search_result(plan, selected["parameters"]["batch_size"],
                                                              params_layout(selected["parameters"])) if selected else None),
-        "layouts": [{key: layout_plan.get(key) for key in ("layout", "quantum", "bypass", "runs", "points", "outcome", "next")}
+        "layouts": [{key: layout_plan.get(key) for key in ("layout", "quantum", "bypass", "runs", "points", "outcome",
+                                                            "next", "waiting")}
                     for layout_plan in plan["layouts"]],
-        "acceptance": acceptance, "skipped_layouts": screen["skipped_layouts"],
+        "bounds": plan["bounds"], "acceptance": acceptance, "skipped_layouts": screen["skipped_layouts"],
         "coverage": screen.get("coverage", {}),
-        "settings": policy.settings,
-        "objective": policy.objective}
+        "settings": search_plan.SETTINGS,
+        "objective": search_plan.OBJECTIVE}
     write_json(directory / "points" / (case["case_id"] + ".json"), point)
     return plan, planned, point
 
 
 def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=None, poll_seconds=1., screen=None,
-                       case_ids=None, search_mode=None, layout_scope="all_legal", pp_only=None):
-    """Run a fixed search mode over an independently selected layout scope."""
+                       case_ids=None, layout_scope="all_legal", pp_only=None):
+    """Run the deployment search over an independently selected layout scope."""
     mode = "fast"
     directory = checked_directory(directory)
     ceiling = worker_ceiling(workers)
@@ -1847,13 +1840,10 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
         _refuse_live_workers(directory)
         if pp_only is not None:
             layout_scope = "pipeline" if pp_only else "all"
-        policy = search_plan.search_policy(search_mode or search_plan.DEFAULT_SEARCH_MODE)
-        settings = policy.settings
-        search_contract = (MAX_BATCH_SEARCH_CONTRACT if policy.name == search_plan.MAX_BATCH_POLICY.name
-                           else THROUGHPUT_SEARCH_CONTRACT)
+        settings = search_plan.SETTINGS
         scope = layout_scope
         manifest = {"runner_contract": runner_contract(mode), "backend": BACKEND, "cases": cases,
-            "deployment_search": settings, "search_contract": search_contract, "search_scope": scope,
+            "deployment_search": settings, "search_contract": SEARCH_CONTRACT, "search_scope": scope,
             "slo_tpot_ns": SLO_NS, "max_parallel_configurations": ceiling,
             "workers_requested": workers, "wall_factor": ceiling,
             "hbm_channel_threads": max(1, MAX_WORKERS // ceiling),
@@ -1863,10 +1853,9 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
             "prefill_wall_budget_seconds": (PREFILL_WALL_BUDGET_SECONDS
                                              if mode == "fast" else None),
             "phases": list(PHASES), "simulation_mode": mode,
-            "selection_scope": ("maximum batch under the SLO among the selected layouts; physical limits remain hard bounds"
-                                if policy.objective == "maximum_batch_under_slo" else
-                                "highest conditionally accepted per-GPU throughput among the native points the deployment search ran; not a global optimum"),
-            "search_mode": policy.name, "layout_scope": layout_scope}
+            "selection_scope": ("highest conditionally accepted per-GPU throughput under the SLO among the native points "
+                                "the branch-and-bound deployment search ran; physical limits remain hard bounds"),
+            "layout_scope": layout_scope}
         previous = read_json(directory / "run_manifest.json")
         previous_scope = previous.get("search_scope", "all_layouts") if previous else None
         if previous and any(previous.get(key) != manifest[key]
@@ -1875,12 +1864,11 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
         if previous and previous_scope == layout_scope and previous.get("deployment_search") != settings:
             raise RuntimeError("existing PP search manifest differs; refusing silent parameter changes")
         write_json(directory / "run_manifest.json", manifest)
-        screens = {case["case_id"]: case_screen(directory, case, screen, search_mode=policy.name,
-                                                 layout_scope=layout_scope) for case in cases}
+        screens = {case["case_id"]: case_screen(directory, case, screen, layout_scope=layout_scope)
+                   for case in cases}
 
         def replay():
-            return {case["case_id"]: search_case(directory, case, screens[case["case_id"]],
-                                                   search_mode=policy.name) for case in cases}
+            return {case["case_id"]: search_case(directory, case, screens[case["case_id"]]) for case in cases}
 
         plans, active, error, last_report, known = replay(), {}, None, 0., known_peaks(directory)
         failed = next((point for _plan, _planned, point in plans.values() if point["status"] == "failed"), None)
@@ -1915,11 +1903,11 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
             jobs = _jobs(active)
             if changed or time.monotonic() - last_report >= 60 or not active:
                 refresh(directory, cases, planned, jobs, phase=phase, error=error, mode=mode, search=True,
-                        worker_limit=ceiling, search_mode=policy.name, layout_scope=layout_scope)
+                        worker_limit=ceiling, layout_scope=layout_scope)
                 last_report = time.monotonic()
             if not active and ((directory / "stop.request").exists() or error):
                 refresh(directory, cases, planned, state="failed" if error else "paused", phase=phase, error=error,
-                        mode=mode, search=True, worker_limit=ceiling, search_mode=policy.name, layout_scope=layout_scope)
+                        mode=mode, search=True, worker_limit=ceiling, layout_scope=layout_scope)
                 return 1 if error else 0
             if not active and not any(plan["next"] for plan, _planned, _point in plans.values()):
                 break
@@ -1929,7 +1917,7 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
         state = "completed_with_rejections" if any(point.get("status") == "all_candidates_rejected"
                                                   for point in points) else "completed"
         refresh(directory, cases, planned, state=state, mode=mode, search=True, worker_limit=ceiling,
-                search_mode=policy.name, layout_scope=layout_scope)
+                layout_scope=layout_scope)
         return 0
 
 
@@ -1948,9 +1936,7 @@ def main(argv=None):
     parser.add_argument("--mode", choices=("detailed", "fast"), default="detailed",
         help="fast candidate and Prefill wall caps are absolute 3000 seconds; the cap covers setup, physical samples and budget")
     parser.add_argument("--search", action="store_true",
-        help="固定搜索模式；默认在 SLO 内最大化 Batch，忽略--layout/--batch-sizes")
-    parser.add_argument("--search-mode", choices=tuple(search_plan.SEARCH_POLICIES),
-        default=search_plan.DEFAULT_SEARCH_MODE, help="搜索模式，默认 max_batch_under_slo")
+        help="部署搜索：SLO 内单GPU吞吐最大，布局分支定界；忽略--layout/--batch-sizes")
     parser.add_argument("--layout-scope", choices=("all", "pipeline", "expanded", "all_legal"), default="all_legal",
         help="布局范围；expanded 复用已有布局并加入 PP/微批新布局，all_legal 搜索全部可建合法布局")
     parser.add_argument("--pp-only", action="store_true",
@@ -1995,7 +1981,7 @@ def main(argv=None):
                 "--mode", args.mode, "--directory", str(directory), "--layout", *map(str, args.layout),
                 "--microbatches", str(args.microbatches),
                 "--batch-sizes", *map(str, batches), *(["--search"] if args.search else []),
-                *( ["--search-mode", args.search_mode] if args.search else []), *( ["--layout-scope", args.layout_scope] if args.search else []),
+                *( ["--layout-scope", args.layout_scope] if args.search else []),
                 *(["--cases", *args.cases] if args.cases else [])], cwd=ROOT,
                 stdout=output, stderr=errors,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
@@ -2006,8 +1992,8 @@ def main(argv=None):
         if args.search:
             options = {"workers": args.workers, "case_ids": args.cases}
             scope = "pipeline" if args.pp_only else args.layout_scope
-            if args.search_mode != search_plan.DEFAULT_SEARCH_MODE or scope != "all":
-                options.update(search_mode=args.search_mode, layout_scope=scope)
+            if scope != "all":
+                options.update(layout_scope=scope)
             return run_search_manager(directory, **options)
         return run_manager(directory, layout=layout, batches=batches, workers=args.workers, mode=args.mode,
                            case_ids=args.cases)

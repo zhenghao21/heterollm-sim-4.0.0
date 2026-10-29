@@ -1,4 +1,5 @@
 """Paper-style deployment search over native fast candidates."""
+import math
 from pathlib import Path
 from types import SimpleNamespace as NS
 import sys
@@ -14,10 +15,9 @@ TP8 = {"dp": 1, "tp": 8, "pp": 1, "ep": 1}
 DP2_TP4 = {"dp": 2, "tp": 4, "pp": 1, "ep": 1}
 
 
-def test_search_modes_are_fixed_and_default_to_max_batch():
-    assert search.DEFAULT_SEARCH_MODE == "max_batch_under_slo"
-    assert search.search_policy("throughput").objective == "per_gpu_throughput"
-    assert search.search_policy().objective == "maximum_batch_under_slo"
+def test_search_maximises_per_gpu_throughput_without_point_caps():
+    assert search.OBJECTIVE == search.SETTINGS["objective"] == "per_gpu_throughput_under_slo"
+    assert search.SETTINGS["max_points_per_layout"] is None and search.SETTINGS["max_runs_per_layout"] is None
 
 
 def entry(layout=TP8, candidate=1555, line=(11.4e6, .0448e6), capacity=None):
@@ -56,16 +56,18 @@ def native(tpot, wall, too_big=lambda batch: None, gpus=8, factor=1, peak=None, 
     return rows, execute
 
 
-def drive(entries, layouts, cap=1800., memory=None, policy=search.THROUGHPUT_POLICY):
+def drive(entries, layouts, cap=1800., memory=None):
     runs = []
     while True:
         plan = search.plan_case(entries, [rows.get for rows, _ in layouts], SLO, cap,
-                                [entry["layout"]["tp"] * entry["layout"]["ep"] for entry in entries],
-                                memory_budget_bytes=memory, policy=policy)
+                                [entry["layout"]["tp"] * entry["layout"]["pp"] * entry["layout"]["ep"]
+                                 for entry in entries], memory_budget_bytes=memory)
         if not plan["next"]:
             return plan, runs
         for layout, batch in plan["next"]:
             index = next(i for i, item in enumerate(entries) if item["layout"] == layout)
+            # A replay never asks for a saved point again.
+            assert (index, batch) not in runs
             layouts[index][1](batch)
             runs.append((index, batch))
 
@@ -115,7 +117,7 @@ def test_a_too_big_first_point_is_halved():
     layouts = [native(linear, lambda b: 4. * b, too_big=lambda b: wall_exhausted if b >= 400 else None)]
     plan, runs = drive([entry()], layouts)
     batches = [batch for _index, batch in runs]
-    assert batches[:2] == [512, 256] and len(batches) <= search.MAX_RUNS
+    assert batches[:2] == [512, 256]
     assert all(batch < 400 for batch in batches[1:])
     assert plan["layouts"][0]["outcome"]["kind"] == "limited"
     assert plan["layouts"][0]["outcome"]["reason"] == "native_wall_limited"
@@ -136,7 +138,7 @@ def test_reused_screen_with_legacy_ep_quantum_never_plans_illegal_microbatch():
     layout = {"dp": 1, "tp": 4, "pp": 2, "ep": 1, "microbatches": 2}
     legacy = entry(layout, candidate=466, capacity=466)
     legacy["quantum"] = 1
-    planned = search.plan_layout(legacy, lambda _batch: None, SLO, 1800., policy=search.MAX_BATCH_POLICY)
+    planned = search.plan_layout(legacy, lambda _batch: None, SLO, 1800.)
     assert planned["next"] % 2 == 0
 
 
@@ -301,37 +303,67 @@ def test_pipeline_search_ignores_point_and_attempt_caps_until_physical_limit():
     rows, execute = native(lambda _batch: 10e6, lambda batch: .000001 * batch,
                            too_big=lambda batch: ("capacity_rejected", None) if batch > (1 << 20) else None,
                            gpus=8, capacity=1 << 20)
-    plan, runs = drive([entry(pipeline, candidate=1 << 20, capacity=1 << 20)], [(rows, execute)],
-                       policy=search.MAX_BATCH_POLICY)
-    assert len(runs) > search.MAX_RUNS
-    assert len(plan["layouts"][0]["points"]) > search.MAX_POINTS
+    plan, runs = drive([entry(pipeline, candidate=1 << 20, capacity=1 << 20)], [(rows, execute)])
+    assert len(runs) > 10
+    assert len(plan["layouts"][0]["points"]) > 6
     assert plan["layouts"][0]["outcome"]["reason"] == "native_capacity_limited"
 
 
-def test_max_batch_policy_ignores_caps_for_non_pipeline_layout():
+def test_search_ignores_caps_for_non_pipeline_layout():
     rows, execute = native(lambda _batch: 10e6, lambda batch: .000001 * batch,
                            too_big=lambda batch: ("capacity_rejected", None) if batch > (1 << 20) else None,
                            gpus=8, capacity=1 << 20)
-    plan, runs = drive([entry(TP8, candidate=1 << 20, capacity=1 << 20)], [(rows, execute)],
-                       policy=search.MAX_BATCH_POLICY)
-    assert len(runs) > search.MAX_RUNS
-    assert len(plan["layouts"][0]["points"]) > search.MAX_POINTS
+    plan, runs = drive([entry(TP8, candidate=1 << 20, capacity=1 << 20)], [(rows, execute)])
+    assert len(runs) > 10
+    assert len(plan["layouts"][0]["points"]) > 6
 
 
-def test_pipeline_search_selects_largest_batch_before_throughput():
-    first = {"dp": 1, "tp": 4, "pp": 2, "ep": 1}
-    second = {"dp": 1, "tp": 2, "pp": 4, "ep": 1}
-    first_rows, first_execute = native(lambda _batch: 50e6, lambda batch: .0001 * batch,
-                                       gpus=8, capacity=1000)
-    second_rows, second_execute = native(lambda _batch: 1e6, lambda batch: .0001 * batch,
-                                         gpus=8, capacity=900)
-    plan, _runs = drive([entry(first, candidate=1000, capacity=1000),
-                         entry(second, candidate=900, capacity=900)],
-                        [(first_rows, first_execute), (second_rows, second_execute)],
-                        policy=search.MAX_BATCH_POLICY)
-    assert plan["acceptance"]["layout"] == first
-    assert plan["acceptance"]["batch"] == plan["layouts"][0]["outcome"]["batch"]
-    assert plan["layouts"][0]["outcome"]["batch"] > plan["layouts"][1]["outcome"]["batch"]
+def test_throughput_objective_prefers_more_replicas_over_a_larger_replica_batch():
+    # TP8 reaches B=911 per replica (1141 tokens/s/GPU); DP2_TP4 only B=878
+    # per replica, but over twice the replicas runs 1.9x faster per GPU.
+    entries = [entry(), entry(DP2_TP4, candidate=700, line=(19.2e6, .0592e6), capacity=900)]
+    layouts = [native(linear, lambda b: 1.5 * b), native(lambda b: (12 + .1 * b) * 1e6, lambda b: 1. * b, gpus=4)]
+    plan, _runs = drive(entries, layouts)
+    tp8, dp2 = (layout["outcome"] for layout in plan["layouts"])
+    assert dp2["kind"] == tp8["kind"] == "interpolated" and tp8["batch"] > dp2["batch"]
+    assert plan["acceptance"]["layout"] == DP2_TP4 and plan["acceptance"]["status"] == "completed"
+    _row, index, batch = selected(plan, layouts)
+    assert index == 1 and batch == dp2["batch"]
+
+
+def test_branch_and_bound_prunes_layouts_that_cannot_beat_the_incumbent():
+    slow = {"dp": 4, "tp": 2, "pp": 1, "ep": 1}
+    weak = {"dp": 2, "tp": 2, "pp": 2, "ep": 1}
+    entries = [entry(DP2_TP4, candidate=700, line=(19.2e6, .0592e6), capacity=900),
+               entry(slow, candidate=500, line=(20e6, .16e6), capacity=600),
+               entry(weak, candidate=200, line=(60e6, .2e6))]
+    layouts = [native(lambda b: (12 + .1 * b) * 1e6, lambda b: 1. * b, gpus=4),
+               native(lambda b: (60 + .2 * b) * 1e6, lambda b: 1. * b, gpus=2),
+               native(lambda b: (60 + .2 * b) * 1e6, lambda b: 1. * b, gpus=4)]
+    plan, runs = drive(entries, layouts)
+    anchor, second, third = plan["layouts"]
+    bounds = plan["bounds"]
+    # The anchor has the highest bypass rate bound and searches from half its bypass batch.
+    assert bounds["order"][0] == 0 and anchor["runs"][0]["batch"] == 350
+    # The slow layout first runs where passing the SLO would match the
+    # anchor's best passing rate; it fails far above the SLO and is pruned.
+    threshold = math.ceil(bounds["anchor_tokens_per_second_per_gpu"] * 2 * SLO / 1e9)
+    assert threshold < search.FIRST_POINT_MAX_BATCH
+    assert [batch for index, batch in runs if index == 1] == [threshold]
+    assert second["outcome"]["kind"] == "pruned"
+    assert second["outcome"]["reason"] == "native_point_above_slo_below_incumbent"
+    # The weak layout's bypass line alone bounds it below the incumbent: it never runs.
+    assert third["outcome"]["reason"] == "bypass_rate_bound_below_incumbent"
+    assert third["runs"] == [] and all(index != 2 for index, _batch in runs)
+    assert second["outcome"]["incumbent_tokens_per_second_per_gpu"] == bounds["incumbent_tokens_per_second_per_gpu"]
+    assert plan["acceptance"]["layout"] == DP2_TP4
+
+
+def test_later_layouts_wait_for_the_anchor():
+    entries = [entry(DP2_TP4, candidate=700, line=(19.2e6, .0592e6), capacity=900), entry()]
+    plan = search.plan_case(entries, [lambda _batch: None] * 2, SLO, 1800., [4, 8])
+    assert plan["next"] == [(DP2_TP4, 350)]
+    assert plan["layouts"][1]["waiting"] == "anchor" and plan["acceptance"] is None
 
 
 def test_a_case_selection_runs_only_those_cases_in_matrix_order(tmp_path, monkeypatch):
@@ -345,8 +377,7 @@ def test_a_case_selection_runs_only_those_cases_in_matrix_order(tmp_path, monkey
     calls = []
     monkeypatch.setattr(run, "run_search_manager", lambda directory, **options: calls.append(options) or 0)
     assert run.main(["--search", "--directory", str(tmp_path), "--workers", "1", "--cases", chosen[0]]) == 0
-    assert calls == [{"workers": 1, "case_ids": [chosen[0]],
-                      "search_mode": "max_batch_under_slo", "layout_scope": "all_legal"}]
+    assert calls == [{"workers": 1, "case_ids": [chosen[0]], "layout_scope": "all_legal"}]
 
 
 def test_search_manager_runs_each_point_once_and_reports_the_accepted_batch(tmp_path, monkeypatch):
