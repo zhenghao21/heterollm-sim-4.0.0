@@ -104,8 +104,8 @@ class NativePrefillPassConfig:
     the prefix) and ``holdout_layers`` from its end, extended until both runs
     step every layer class, are run on independent copies of the boundary
     and the pass is composed within ``target_relative_error``. Only
-    ``chunked_sampling`` explicitly enables the experimental per-chunk layer
-    forecast, including its declared future-boundary-state approximation. Only
+    ``chunked_sampling`` enables the multi-chunk forecast from per-chunk stage
+    block samples, including its declared future-boundary-state approximation. Only
     a full pass may run without a wall limit (``max_wall_seconds`` None),
     like a detailed run. Two layers each way keep a 100K-token 405B pass
     (about 230 s of wall per layer) inside the default 1800 s.
@@ -117,18 +117,11 @@ class NativePrefillPassConfig:
     holdout_layers: int = 2
     full_pass: bool = False
     chunked_sampling: bool = False
-    operator_reuse_sampling: bool = False
-    chunk_boundary_probe: bool = False
-    chunk_interval_model: str = "per_access"
     numeric_transition_cache: bool = False
     numeric_memo_max_bytes: int = 2 * 1024**3
     tp_rank_symmetry: str = "off"
 
     def __post_init__(self) -> None:
-        if self.chunk_interval_model not in {"per_access", "history"}:
-            raise ValueError("simulation.native_prefill.chunk_interval_model must be per_access or history")
-        if self.chunk_interval_model == "history" and not self.chunk_boundary_probe:
-            raise ValueError("simulation.native_prefill.history requires chunk_boundary_probe")
         if type(self.numeric_transition_cache) is not bool:
             raise ValueError("simulation.native_prefill.numeric_transition_cache must be a boolean")
         if (type(self.numeric_memo_max_bytes) is not int
@@ -136,14 +129,8 @@ class NativePrefillPassConfig:
             raise ValueError("simulation.native_prefill.numeric_memo_max_bytes must be positive and at most 2 GiB")
         if self.tp_rank_symmetry not in {"off", "quiet"}:
             raise ValueError("simulation.native_prefill.tp_rank_symmetry must be off or quiet")
-        if type(self.chunk_boundary_probe) is not bool:
-            raise ValueError("simulation.native_prefill.chunk_boundary_probe must be a boolean")
         if type(self.chunked_sampling) is not bool:
             raise ValueError("simulation.native_prefill.chunked_sampling must be a boolean")
-        if type(self.operator_reuse_sampling) is not bool:
-            raise ValueError("simulation.native_prefill.operator_reuse_sampling must be a boolean")
-        if self.operator_reuse_sampling and not self.chunked_sampling:
-            raise ValueError("simulation.native_prefill.operator_reuse_sampling requires chunked_sampling")
         if self.full_pass and self.chunked_sampling:
             raise ValueError("simulation.native_prefill.chunked_sampling cannot combine with full_pass")
         if type(self.full_pass) is not bool:

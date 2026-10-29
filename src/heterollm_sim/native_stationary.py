@@ -50,7 +50,6 @@ from __future__ import annotations
 
 from array import array
 from collections import defaultdict
-from collections.abc import Mapping
 from dataclasses import asdict, replace
 from fractions import Fraction
 import json
@@ -330,47 +329,7 @@ def cohort_origin(runtime, request_ready_ns):
     return origin, paid_frontier
 
 
-def prefill_stage_ready(runtime, cohort, stages, request_ready_ns, *, host_ns=0.0):
-    """Read the native Prefill stage constraints without advancing the boundary.
-
-    This is the readiness calculation in ``_schedule_execution_stages`` for
-    the supplied closed native stages, before they execute. Callers must
-    supply the same stages and host duration; this does not create owner
-    residency transfers or runtime extension stages.
-    """
-    if cohort.kind != "prefill" or any(item.phase != "prefill" for item in cohort.items):
-        raise NativeLayerSamplingGuardError("native_prefill_stage_ready_requires_prefill")
-    component_count = len({stage.component_id for stage in stages})
-    metadata = runtime.plan.scenario.workload.metadata
-    if not isinstance(metadata, Mapping):
-        metadata = {}
-    pipeline_prefill = (component_count > 1 and not bool(
-        metadata.get("llama_cpp_single_request_prefill_serialized", False)))
-    host_request_ready_ns = (max((max(runtime.states[item.request_id].spec.arrival_ns,
-        runtime._runtime_origin_ns) for item in cohort.items), default=runtime.now)
-        if pipeline_prefill else request_ready_ns)
-    previous_device_available_ns = runtime._gpu_available_ns
-    host_start_ns = max(runtime._host_available_ns, host_request_ready_ns)
-    host_end_ns = host_start_ns + host_ns
-    ready = {}
-    for stage in stages:
-        participates = runtime._component_participates_in_device_fence(stage.component_id)
-        requires_fence = stage.requires_device_fence and participates
-        device_fence_ready_ns = 0.0
-        if participates:
-            device_fence_ready_ns = runtime._last_serial_device_end_ns
-            if requires_fence:
-                device_fence_ready_ns = max(device_fence_ready_ns, previous_device_available_ns)
-        cross_chunk_ready = max((runtime._request_stage_ready_ns.get(
-            (request_id, stage.component_id, stage.stage_index),
-            max(runtime.states[request_id].spec.arrival_ns, runtime._runtime_origin_ns))
-            for request_id in stage.request_ids), default=host_end_ns)
-        ready[stage.stage_id] = max(host_end_ns, cross_chunk_ready, device_fence_ready_ns)
-    return ready
-
-
-def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready_by_stage=None,
-                  allow_pipeline=False):
+def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace):
     """Task specs of an unexecuted cohort on the unchanged source, with its layer classes.
 
     The part every native layer-sample preparation shares: the boundary
@@ -378,14 +337,7 @@ def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready
     """
     source = runtime._execution_resource_kernel
     origin, paid_frontier = cohort_origin(runtime, request_ready_ns)
-    native_ready = ready_by_stage is not None
-    if native_ready:
-        if (cohort.kind != "prefill" or set(ready_by_stage) != {stage.stage_id for stage in stages}
-                or any(not math.isfinite(value) or value < 0 for value in ready_by_stage.values())):
-            raise NativeLayerSamplingGuardError("native_prefill_stage_ready_invalid")
-    else:
-        ready_by_stage = {stage.stage_id: origin for stage in stages}
-    specs, _sources = runtime._stage_task_specs(stages, ready_by_stage,
+    specs, _sources = runtime._stage_task_specs(stages, {stage.stage_id: origin for stage in stages},
                                                 namespace + cohort.cohort_id)
     # The live run places the cohort's shared resident buffers when it
     # indexes the cohort, before any task runs; every copy inherits them.
@@ -394,8 +346,7 @@ def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready
     composition, boundary = _graph_facts(specs, inventory)
     if not composition["qualified"]:
         raise NativeLayerSamplingGuardError("native_stationary_requires_serial_layer_composition")
-    if ((set(boundary) - {"before_first_layer", "after_last_layer"}
-         or composition["nonserial_non_layer_groups"]) and not allow_pipeline):
+    if set(boundary) - {"before_first_layer", "after_last_layer"} or composition["nonserial_non_layer_groups"]:
         raise NativeLayerSamplingGuardError("native_stationary_non_layer_work_not_a_serial_prefix_or_suffix")
     by_layer = defaultdict(list)
     for task in specs:
@@ -405,17 +356,7 @@ def cohort_layers(runtime, cohort, stages, request_ready_ns, namespace, *, ready
         row["native_shape"] = native_layer_shape(by_layer[row["layer_id"]])
         row["class_key"] = json.dumps({"semantics": row["signature"], "native": row["native_shape"]},
                                       ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=repr)
-        if allow_pipeline:
-            key = json.loads(row["class_key"])
-            native = key.get("native")
-            if isinstance(native, dict):
-                native.pop("owner_io_shape", None)
-                native.pop("balanced_expert_shape", None)
-            row["class_key"] = json.dumps(key, ensure_ascii=False, sort_keys=True,
-                                           separators=(",", ":"))
     return {"cohort": cohort, "source": source, "origin": origin, "paid_frontier": paid_frontier,
-            **({"native_stage_ready": True} if native_ready else {}),
-            **({"pipeline_layer_class_normalized": True} if allow_pipeline else {}),
             "specs": specs, "inventory": inventory, "composition": composition, "boundary": boundary,
             "by_layer": {layer: [task.task_id for task in tasks] for layer, tasks in by_layer.items()},
             "ranks": {task.task_id: task.metadata["rank"] for task in specs
@@ -602,27 +543,12 @@ def run_window(prepared, control, records, role, layer_ids, groups, origin, samp
     by_layer, cohort = prepared["by_layer"], prepared["cohort"]
     ids = [identity for group in groups for identity in group] + [
         identity for layer in layer_ids for identity in by_layer[layer]]
-    specs, execution_origin = prepared["specs"], origin
-    if prepared.get("native_stage_ready"):
-        # Native Prefill host/controller preparation can overlap earlier
-        # chunks. Preserve its absolute constraints instead of fencing it at
-        # the device boundary; later-origin samples shift those same inputs.
-        selected = frozenset(ids)
-        shift = origin - prepared["origin"]
-        specs = tuple(replace(task, earliest_start_ns=task.earliest_start_ns + shift)
-                      for task in specs if task.task_id in selected)
-        execution_origin = min(origin, min((task.earliest_start_ns for task in specs), default=origin))
-    record = _execute_window(prepared["source"], specs, ids, origin_ns=execution_origin,
+    record = _execute_window(prepared["source"], prepared["specs"], ids, origin_ns=origin,
                              control=control, sample_id=sample_id, concurrent_imports=imports,
                              row_terms=row_terms,
-                             **({"capture_prefill_terms": True} if prepared.get("native_stage_ready") else {}),
                              **({"tp_symmetry": prepared["tp_symmetry"]}
                                  if "tp_symmetry" in prepared else {}))
     row = {"layer_ids": layer_ids, "origin_ns": origin, **{key: record[key] for key in _RUN_FIELDS}}
-    if prepared.get("native_stage_ready"):
-        row["prefill_terms"] = record["prefill_terms"]
-        row.update(boundary_origin_ns=origin, elapsed_from_boundary_ns=row["end_ns"] - origin,
-                   execution_origin_ns=execution_origin)
     records.append(NativeLayerWindowSample(window_id=row["sample_id"], role=role,
         cohort_id=cohort.cohort_id, cohort_kind=cohort.kind, decode_step=0,
         layer_ids=tuple(layer_ids),

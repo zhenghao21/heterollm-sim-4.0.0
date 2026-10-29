@@ -247,7 +247,7 @@ def test_prefill_contract_invalidates_old_rejection_without_changing_decode(tmp_
                   layer_window_samples=())
 
     result = run.prefill_pass(params, tmp_path, builder=lambda *a, **k: _fast_result().scenario, runner=runner)
-    assert result["status"] == "accepted" and result["parameters"]["prefill_contract"] == run.PREFILL_CONTRACT
+    assert result["status"] == "accepted" and result["parameters"]["prefill_contract"] == run.PREFILL_STAGE_CHUNK_CONTRACT
     again = run.prefill_pass(params, tmp_path,
         builder=lambda *a, **k: pytest.fail("current Prefill cache rebuilt"),
         runner=lambda *a, **k: pytest.fail("current Prefill cache rerun"))

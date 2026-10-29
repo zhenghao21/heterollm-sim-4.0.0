@@ -62,9 +62,11 @@ PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
 PIPELINE_FORECAST_CONTRACT = "native_stationary_pp_stage_blocks_v4"
 # Per-GPU throughput under the SLO, layouts searched by branch and bound.
 SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v1"
-# v3 samples a whole-prompt PP pass by its stage blocks; a multi-chunk PP
-# pass keeps the conditional chunk forecast.
+# v3 samples a whole-prompt PP pass by its stage blocks.
 PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_stage_blocks_v3"
+# A fast pass the model's chunked attention splits into several chunks, at
+# any PP degree: per-chunk stage blocks chained by stage (max-plus).
+PREFILL_STAGE_CHUNK_CONTRACT = "native_prefill_stage_chunk_chain_v1"
 PIPELINE_PREFILL_FULL_CONTRACT = "native_pp_prefill_complete_prompt_pass_v2"
 BACKEND = "native_serving_physical"
 PHASES = ("dense_native", "dense_plus", "maverick_native")
@@ -809,10 +811,13 @@ def prefill_parameters(params):
     if tp is None:
         raise ValueError("native_prefill_replica_does_not_fit_hbm4")
     pipeline_contract = (PIPELINE_PREFILL_CONTRACT if fast else PIPELINE_PREFILL_FULL_CONTRACT)
+    contract = pipeline_contract if params["pp"] > 1 else PREFILL_CONTRACT
+    if fast and prefill_chunked(params["model"], params["input_tokens"]):
+        contract = PREFILL_STAGE_CHUNK_CONTRACT
     return {"model": params["model"], "workload": params["workload"], "input_tokens": params["input_tokens"],
             "tp": tp, "pp": params["pp"], "ep": params["ep"], "prefill_hardware": "HBM4",
             "pass": "sampled" if fast else "full", "runner_contract": params["runner_contract"],
-            "prefill_contract": pipeline_contract if params["pp"] > 1 else PREFILL_CONTRACT,
+            "prefill_contract": contract,
             **({"target_relative_error": params["target_relative_error"]} if fast else {})}
 
 
@@ -821,10 +826,13 @@ def prefill_id(expected):
             f"EP{expected['ep']}__{expected['pass']}")
 
 
-def prefill_operator_reuse_enabled(params, expected):
-    """Enable conditional operator reuse only for validated Maverick LONG layouts."""
-    return (params.get("model") == "llama4_maverick" and params.get("workload") == "LONG"
-            and (expected["tp"], expected["pp"], expected["ep"]) in {(2, 1, 4), (4, 1, 2), (8, 1, 1)})
+def prefill_chunked(model, input_tokens):
+    """Whether the model's chunked attention splits the Prefill prompt (all but its last token) into chunks."""
+    from exploring_hbf_native_models import build_native_paper_model
+    from heterollm_sim.ir import model_graph_execution_layers
+    sizes = [layer.attention_chunk_size for layer in model_graph_execution_layers(build_native_paper_model(model).graph)
+             if layer.attention_chunk_size]
+    return bool(sizes) and input_tokens - 1 > min(sizes)
 
 
 @contextlib.contextmanager
@@ -855,14 +863,12 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
     shares it: the Prefill replica is HBM4 with the Decode replica's layout,
     or the larger TP of ``prefill_parameters`` when HBM4 cannot hold its weights.
     No scheduler limit adds chunks beyond those required by the model.
-    Fast candidates use conditional chunk sampling for PP>1 and single-cohort
-    PP=1 passes; detailed candidates run every prompt chunk and layer natively.
-    PP chunk sampling keeps stage transfers in each independent chunk graph and
-    records the boundary-state/address assumptions in its error budget.
-    Both use the same independent budget and their own absolute wall cap
-    (outside the candidate). Detailed
-    candidates run every cohort and layer natively, without a wall cap like
-    the detailed run.
+    Fast candidates sample a single-cohort pass by its layers (PP: its stage
+    blocks) and a multi-chunk pass by every chunk's stage blocks chained by
+    stage, with the boundary-state/address assumptions in its error budget;
+    both use the same independent budget and their own absolute wall cap
+    (outside the candidate). Detailed candidates run every prompt chunk,
+    cohort and layer natively, without a wall cap like the detailed run.
     """
     from heterollm_sim.execution_control import ExecutionControl
     from exploring_hbf_native_config import build_native_prefill_scenario
@@ -873,7 +879,6 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
     identity = prefill_id(expected)
     path = directory / "prefill" / (identity + ".json")
     full = expected["pass"] == "full"
-    operator_reuse = (not full) and prefill_operator_reuse_enabled(params, expected)
     capped = params.get("simulation_mode") == "fast"
     cap = PREFILL_WALL_BUDGET_SECONDS
     started = time.perf_counter()
@@ -892,9 +897,6 @@ def prefill_pass(params, directory, *, builder=None, runner=None, wall_factor=1)
             # chunk sampler there as well; otherwise the runtime would commit
             # every native prompt chunk as a slow fallback.
             chunked_sampling=(not full),
-            operator_reuse_sampling=operator_reuse,
-            numeric_transition_cache=operator_reuse,
-            tp_rank_symmetry="quiet" if operator_reuse else "off",
             **({} if full else {"target_relative_error": expected["target_relative_error"]}))))
         result = (runner or run_scenario)(scenario, retention_policy="aggregate", control=control)
         approximation = result.approximation
@@ -920,7 +922,8 @@ def with_prefill_ttft(row, params, prefill):
     pass_ = prefill["prefill_pass"]
     metrics = row["metrics"]
     layout = prefill["parameters"]
-    row["prefill_pass"] = {"prefill_id": prefill["prefill_id"], "status": prefill["status"],
+    row["prefill_pass"] = {"prefill_id": prefill["prefill_id"], "prefill_contract": layout.get("prefill_contract"),
+        "status": prefill["status"],
         "layout": {"tp": layout["tp"], "pp": layout["pp"], "ep": layout["ep"], "decode_tp": params["tp"],
                    "tp_widened_for_hbm4_weights": layout["tp"] != params["tp"]},
         "metric_bounds": pass_["metric_bounds"], "rejection_reasons": prefill["rejection_reasons"],
@@ -1227,7 +1230,7 @@ def refresh(directory, cases, planned, running=(), *, state="running", phase=Non
             if mode == "fast" else "吞吐按原生窗口 (开始,结束] 的真实可见Token计算；TPOT仅使用首末Token都在窗口内的完整新请求。未在窗口结束的请求不计为完成。"),
         ("TTFT = Prefill通路 + 入口TTFT。Prefill副本为HBM4、与Decode副本相同的TP/PP/EP布局，请求到达即单独计算完整的前P-1个提示Token（不排队、不额外限制分块，保留模型强制分块），"
             "到最后一块的最后一层完成为止（此时开始导出KV）；入口TTFT从该请求实付KV导入开始到首个Token，Decode侧计算最后一个提示Token并给出首Token。"
-            + ("多分段Prefill使用独立副本上的分段层采样，阶段传输和跨块边界假设写入误差预算；单段保留分层采样。Prefill区间与入口TTFT区间相加，仍满足同一独立预算。" if mode == "fast"
+            + ("多分段Prefill在独立副本上对每段的各阶段层块采样，按阶段 max-plus 串接各段（全注意力层按上下文线性插值），段间过渡和跨块边界假设写入误差预算；单段保留分层采样。Prefill区间与入口TTFT区间相加，仍满足同一独立预算。" if mode == "fast"
                else "Prefill通路为覆盖全部块、全部层的原生运行。")),
         ("DRAM/NAND/SRAM与PD账本只覆盖真实层样本及入站（PP与PP=1相同），全预测窗口物理流量未知。预测尾段不生成虚构的流量、利用率或物理状态。"
             if mode == "fast" else "DRAM/NAND/SRAM与PD流量为整个有界运行的真实账本，包含预热和已提交的收尾费用，不是仅测量窗口流量或独占关键路径分解。"), "",

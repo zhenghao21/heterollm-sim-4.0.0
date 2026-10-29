@@ -932,7 +932,7 @@ class _TPRankMirror:
 
 
 def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, sample_id,
-                    concurrent_imports=None, row_terms=None, tp_symmetry=None, capture_prefill_terms=False):
+                    concurrent_imports=None, row_terms=None, tp_symmetry=None):
     """Run the selected tasks on an independent copy of ``source``.
 
     With ``row_terms`` (task id -> term key) the record also carries
@@ -1003,7 +1003,6 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
     stage_starts = {}
     pipeline_transfer_ends = {}
     pipeline_transfer_starts = {}
-    prefill_terms = {"prefix_tasks": [], "layer_start_ns": {}} if capture_prefill_terms else None
     facts = [] if row_terms is not None else None
     def observe(event):
         nonlocal first, last, count, physical
@@ -1038,22 +1037,6 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
                 pipeline_transfer_starts.get(transfer_id, event.start_ns), event.start_ns)
             pipeline_transfer_ends[transfer_id] = max(
                 pipeline_transfer_ends.get(transfer_id, event.end_ns), event.end_ns)
-        if prefill_terms is not None:
-            md = event.task.metadata
-            if layer_id is not None:
-                starts = prefill_terms["layer_start_ns"]
-                starts[layer_id] = min(starts.get(layer_id, event.start_ns), event.start_ns)
-            else:
-                prefill_terms["prefix_tasks"].append({
-                    "node_id": event.task.task_id,
-                    "stage_id": md.get("execution_stage_id"),
-                    "dependencies": list(event.task.dependencies),
-                    "resource_ids": [d.resource_id for d in event.demands],
-                    "resource_lanes": dict(event.resource_lanes),
-                    "demands": [{"resource_id": d.resource_id, "service_ns": d.service_ns} for d in event.demands],
-                    "start_ns": event.start_ns, "end_ns": event.end_ns,
-                    "duration_ns": event.end_ns - event.start_ns,
-                    "earliest_start_ns": event.task.earliest_start_ns})
         count += 1
         physical += int(bool(event.task.metadata.get("physical_execution_by_owner")))
         if count == len(selected) or count % 256 == 0:
@@ -1083,13 +1066,8 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
     row_state = None if facts is None else first_access_ns(
         facts, {owner: active.core.config for owner, active in kernel.physical_runtime.runtimes.items()},
         row_terms)
-    if capture_prefill_terms and facts is not None:
-        from .native_prefill_access_bounds import per_access_ns
-        prefill_terms["per_access_row_state_ns"] = per_access_ns(
-            facts, {owner: active.core.config for owner, active in kernel.physical_runtime.runtimes.items()}, row_terms)
     carry = max(0., max(source.physical_runtime.timeline.ready_ns.values(), default=origin_ns)-origin_ns)
     return {"sample_id": sample_id, "window_id": sample_id,
-        **({"prefill_terms": prefill_terms} if prefill_terms is not None else {}),
         "tp_symmetry": None if mirror is None else mirror.stats,
         "concurrent_imports": None if imports is None else imports.observation(first, last),
         "layer_start_ns": layer_starts, "layer_completion_ns": layer_ends,

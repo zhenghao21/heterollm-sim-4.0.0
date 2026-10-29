@@ -1,8 +1,9 @@
-"""Multi-chunk PP Prefill pass from per-stage native layer blocks.
+"""Multi-chunk Prefill pass from per-stage native layer blocks.
 
 A prompt longer than one scheduler chunk is lowered as serial native
-cohorts. Each chunk splits into its PP stage blocks (``_pipeline_boundary``);
-one request is one microbatch, so a chunk's blocks run one after another.
+cohorts. Each chunk splits into its PP stage blocks (``_pipeline_boundary``;
+without PP the whole chunk is one block); one request is one microbatch, so a
+chunk's blocks run one after another.
 The native runtime places a whole chunk before it schedules the next, whose
 back-dated frontends (host and per-GPU prefix stages) wait on the lanes the
 previous chunk still holds on their GPUs. Compute stage s of a chunk depends
@@ -196,9 +197,9 @@ def _chained_chunks(chunks, waits, gaps, bound):
     return layers[-1]
 
 
-def sample_pipeline_prefill_chunks(runtime, cohort, stages, request_ready_ns, control, options, records,
-                                   *, holdout_shift_ns=HOLDOUT_SHIFT_NS):
-    """Sample and compose a multi-chunk PP Prefill pass; the source kernel never advances."""
+def sample_prefill_stage_chunks(runtime, cohort, control, options, records, *, holdout_shift_ns=HOLDOUT_SHIFT_NS):
+    """Sample and compose the multi-chunk Prefill pass that starts with ``cohort``;
+    the live boundary is never advanced or placed on."""
     started = time.perf_counter()
     target = options.target_relative_error
     limit = target / (2 + target)
@@ -217,10 +218,9 @@ def sample_pipeline_prefill_chunks(runtime, cohort, stages, request_ready_ns, co
     lowered = {}
 
     def boundary(index):
-        if index == 0:
-            active, chunk, chunk_stages, ready = runtime, cohort, stages, request_ready_ns
-        else:
-            active, chunk, chunk_stages, ready = _declared_chunk(runtime, cohort, index, index * size, control)
+        # Every chunk, the first too, is lowered on a description copy: the
+        # live boundary does not even place a chunk's resident buffers.
+        active, chunk, chunk_stages, ready = _declared_chunk(runtime, cohort, index, index * size, control)
         expected = min(size, total - index * size)
         if chunk.items[0].token_count != expected:
             raise NativeLayerSamplingGuardError("native_prefill_chunk_sizes_not_uniform")
@@ -390,4 +390,4 @@ def sample_pipeline_prefill_chunks(runtime, cohort, stages, request_ready_ns, co
     return result
 
 
-__all__ = ["sample_pipeline_prefill_chunks", "LINEAR_CONTEXT_ASSUMPTION", "TRANSITION_ASSUMPTION"]
+__all__ = ["sample_prefill_stage_chunks", "LINEAR_CONTEXT_ASSUMPTION", "TRANSITION_ASSUMPTION"]

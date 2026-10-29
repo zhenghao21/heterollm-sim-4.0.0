@@ -41,10 +41,10 @@ def _experiment_scenario(*, tp=2, pp=1, ep=1, prompt=50, layer_count=8):
         tp=tp, pp=pp, ep=ep, model_override=model, prompt_override=prompt), .00001)
 
 
-@pytest.mark.parametrize("tp,ep,prompt", [(2, 1, 50), (2, 4, 10), (4, 2, 10), (8, 1, 10)])
-def test_declared_chunk_sampling_covers_full_native_reference_and_keeps_source(
-        monkeypatch, record_property, tp, ep, prompt):
-    scenario = _experiment_scenario(tp=tp, ep=ep, prompt=prompt)
+@pytest.mark.parametrize("tp,ep", [(2, 1), (2, 4), (4, 2), (8, 1)])
+def test_stage_chunk_sampling_covers_full_native_reference_and_keeps_source(monkeypatch, tp, ep):
+    # PP1: every chunk is one stage block; full attention grows with the context.
+    scenario = _experiment_scenario(tp=tp, ep=ep, prompt=26, layer_count=16)
     original = _OnlineRuntime.run_until_decode_steps
     checked_boundaries = []
 
@@ -70,37 +70,21 @@ def test_declared_chunk_sampling_covers_full_native_reference_and_keeps_source(
     result, forecast = _pass(scenario, chunked_sampling=True)
     assert checked_boundaries
     assert result.approximation["future_physical_state_advanced"] is False
-    assert result.layer_window_samples
-    assert forecast.get("native_chunk_count", 0) == 0
-    contexts = list(range(0, prompt - 1, 4))
-    assert sorted({sample.context_tokens_by_request["native-prefill-request"]
-                   for sample in result.layer_window_samples}) == contexts
+    assert forecast["execution_mode"] == "stage_block_samples_per_chunk"
     budget = forecast["error_budget"]
-    assert budget["native_chunk_count"] == budget["physical_full_cohorts_committed"] == 0
-    assert budget["sampled_chunk_count"] == len(contexts)
-    assert budget["conditional_accuracy"] is True
-    assert budget["default_enabled"] is False
-    assert [(chunk["context_tokens"], chunk["prompt_tokens"]) for chunk in budget["chunks"]] == [
-        (context, min(4, prompt - 1 - context)) for context in contexts]
-    assert sum(chunk["prompt_tokens"] for chunk in budget["chunks"]) == prompt - 1
-    assumptions = budget["assumptions"]
-    assert DECLARED_CHUNK_STATE_ASSUMPTION in assumptions
-    assert DECLARED_CHUNK_ADDRESS_ASSUMPTION in assumptions
+    assert budget["physical_full_cohorts_committed"] == 0 and not budget["physical_full_prompt_executed"]
+    assert (budget["chunk_tokens"], budget["chunk_count"]) == (4, 7)
+    assert all(len(stages) == 1 for stages in budget["chunk_stages_ns"])
+    assert {row["layer_id"] for row in budget["context_dependent_layers"]} >= {"layer-003", "layer-007"}
+    assert DECLARED_CHUNK_STATE_ASSUMPTION in budget["assumptions"]
+    assert DECLARED_CHUNK_ADDRESS_ASSUMPTION in budget["assumptions"]
     _, reference = _pass(scenario, full_pass=True, max_wall_seconds=None)
     assert reference["accepted"] and reference["execution_mode"] == "complete_native_chunks"
     observed = reference["error_budget"]["observed_pass_ns"]
     bounds = forecast["metric_bounds"]["prefill_pass_ns"]
-    experiment = {"tp": tp, "ep": ep, "chunk_count": len(contexts), "prompt_tokens": prompt - 1,
-        "estimate_ns": bounds["estimate"], "full_native_ns": observed,
-        "lower_ns": bounds["lower"], "upper_ns": bounds["upper"],
-        "relative_error": abs(bounds["estimate"] - observed) / observed,
-        "reference_in_interval": bounds["lower"] <= observed <= bounds["upper"],
-        "conditional_assumption_count": len(assumptions)}
-    record_property("chunk_sampling_experiment", experiment)
-    print("chunk_sampling_experiment", experiment)
-    assert experiment["reference_in_interval"], experiment
-    assert experiment["relative_error"] <= .10, experiment
-    assert forecast["accepted"], (experiment, result.approximation.get("rejection_reasons"))
+    assert bounds["lower"] <= observed <= bounds["upper"], (bounds, observed)
+    assert abs(bounds["estimate"] - observed) / observed <= .10
+    assert forecast["accepted"], result.approximation.get("rejection_reasons")
 
 
 def test_pipeline_chunk_sampling_requires_explicit_enablement():
