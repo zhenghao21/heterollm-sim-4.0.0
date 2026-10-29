@@ -74,7 +74,10 @@ SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_
             "rate_margin": RATE_MARGIN, "bypass_tpot_floor": BYPASS_TPOT_FLOOR, "slope_floor": SLOPE_FLOOR,
             "native_layouts": "legal DP/TP/PP/EP and pipeline microbatch layouts",
             "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
-            "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
+            "acceptance": ("one fast native run at the best layout's interpolated batch; one above the SLO joins the bracket "
+                           "and the batch is interpolated again, settling at the bracket's passing end within a step of a "
+                           "measured batch; falls back to the best measured passing point"),
+            "no_rising_line": "double the largest point below the SLO, or halve the smallest above it",
             "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
             "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
             "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
@@ -85,7 +88,7 @@ SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_
                         "when the bypass rate bound (below any native limit, divided by bypass_tpot_floor) or a point above the SLO "
                         "(rate x (1 + rate_margin)) "
                         "falls below the case's best measured passing rate, or when a point below the SLO cannot reach it "
-                        "with TPOT growing at slope_floor x min(1, the case's least native/bypass slope ratio) "
+                        "with TPOT growing at slope_floor x min(1, the case's least native/bypass slope ratio from a point within the SLO) "
                         "x the bypass slope")}
 # Rejections that say the batch is too big for a native candidate: its wall
 # cap, or its KV capacity.
@@ -227,7 +230,7 @@ def plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes=Non
         return _rounded(batch, q)
 
     batch = default_first_batch(entry) if first is None else first
-    runs, points = [], []
+    runs, points, refining = [], [], False
     while True:
         reason = prune and prune(runs, points)
         if reason:
@@ -243,8 +246,35 @@ def plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes=Non
         points = [_point(run["batch"], lookup(run["batch"])) for run in runs if run["kind"] == "measured"]
         batch = _following(entry, runs, points, slo_ns, caps, rounded)
         if batch is None:
-            return {"runs": runs, "points": points,
-                    "outcome": _outcome(entry, runs, points, slo_ns, caps, rounded)}
+            outcome = _outcome(entry, runs, points, slo_ns, caps, rounded)
+            batch = _refinement(outcome, lookup, points, slo_ns, q)
+            if batch is None and refining:
+                outcome = _refined_outcome(outcome, points, q)
+            if batch is None:
+                return {"runs": runs, "points": points, "outcome": outcome}
+            refining = True
+
+
+def _refinement(outcome, lookup, points, slo_ns, q):
+    """The interpolated batch again, as a measured point, when its acceptance run exceeded the SLO."""
+    # A failed acceptance is a point above the SLO inside the bracket: it
+    # narrows the bracket and the batch is interpolated again.
+    if outcome["kind"] != "interpolated" or outcome["batch"] in [point["batch"] for point in points]:
+        return None
+    row = lookup(outcome["batch"])
+    if row is None or classify(row) != "measured":
+        return None
+    return outcome["batch"] if _point(outcome["batch"], row)["tpot_upper_ns"] > slo_ns else None
+
+
+def _refined_outcome(outcome, points, q):
+    """A re-interpolated batch closer than a step to a measured one settles at the bracket's passing end."""
+    if outcome["kind"] != "interpolated":
+        return outcome
+    if all(abs(outcome["batch"] - point["batch"]) >= _step(point["batch"], q) for point in points):
+        return outcome
+    low = next(point for point in points if point["batch"] == outcome["bracket"][0])
+    return {**outcome, "batch": low["batch"], "predicted_tpot_ns": low["tpot_ns"], "settled": "bracket_passing_end"}
 
 
 def _limit(entry, runs, points, caps, rounded):
@@ -308,7 +338,10 @@ def _following(entry, runs, points, slo_ns, caps, rounded):
         target = _toward(fit_line([(point["batch"], point["tpot_upper_ns"]) for point in pair]), slo_ns)
     below = all(point["tpot_upper_ns"] <= slo_ns for point in points)
     if target is None:
-        target = max(point["batch"] for point in points) * 2 if below else q
+        # No rising line: double past points below the SLO, halve below
+        # points above it (native TPOT need not rise between close batches).
+        target = (max(point["batch"] for point in points) * 2 if below
+                  else min(point["batch"] for point in points) / 2)
     big = [run["batch"] for run in runs if run["kind"] == "too_big"]
     if below and big and target >= min(big) and not known:
         # Bisect between the largest measured point and the smallest too-big
@@ -386,9 +419,12 @@ def _passing_rate(plan, gpus, slo_ns):
                 if point["tpot_upper_ns"] <= slo_ns], default=0.)
 
 
-def slope_floor(plans):
-    """SLOPE_FLOOR times the least native/bypass TPOT slope ratio between measured points of
-    ``plans`` at least MIN_STEP apart, if below 1; None without such a pair."""
+def slope_floor(plans, slo_ns):
+    """SLOPE_FLOOR times the least native/bypass TPOT slope ratio from a measured point of
+    ``plans`` within the SLO to one at least MIN_STEP larger, if below 1; None without such a pair."""
+    # The bound extrapolates only from points within the SLO, so only pairs
+    # starting there calibrate it: native TPOT can fall between two batches
+    # above the SLO (Maverick HBF+ MID EP8: 130.9 ms at B4160, 113.8 ms at B4768).
     ratios = []
     for plan in plans:
         slope = plan["bypass"]["tpot_line_ns"][1]
@@ -396,7 +432,7 @@ def slope_floor(plans):
         if slope > 0:
             ratios += [(high["tpot_ns"] - low["tpot_ns"]) / (high["batch"] - low["batch"]) / slope
                        for index, low in enumerate(points) for high in points[index + 1:]
-                       if high["batch"] >= (1 + MIN_STEP) * low["batch"]]
+                       if low["tpot_upper_ns"] <= slo_ns and high["batch"] >= (1 + MIN_STEP) * low["batch"]]
     return SLOPE_FLOOR * min(1., *ratios) if ratios else None
 
 
@@ -494,14 +530,14 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
     # The anchor's rate and slope floor prune on a first pass; the best
     # passing rate any layout reaches, with the slope floor of every measured
     # layout, then prunes every later layout but the one that holds it.
-    floor = slope_floor([layouts[index] for index in order[:settled]])
+    floor = slope_floor([layouts[index] for index in order[:settled]], slo_ns)
     for index in later:
         layouts[index] = plan(index, first=first(index),
                               prune=_pruner(entries[index], replica_gpus[index], slo_ns, anchor_rate, floor))
     rates = [_passing_rate(plan_, gpus, slo_ns) for plan_, gpus in zip(layouts, replica_gpus)]
     incumbent = max(rates, default=0.)
     holder = rates.index(incumbent) if count else None
-    floor = slope_floor(layouts)
+    floor = slope_floor(layouts, slo_ns)
     for index in later:
         if index != holder:
             layouts[index] = plan(index, first=first(index),
@@ -525,7 +561,8 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
     rate, index = max(options)
     chosen, outcome = layouts[index], layouts[index]["outcome"]
     acceptance = {"layout": chosen["layout"], "batch": outcome["batch"], "kind": outcome["kind"],
-                  "reason": outcome.get("reason"), "predicted_tokens_per_second_per_gpu": rate}
+                  "reason": outcome.get("reason"), "predicted_tokens_per_second_per_gpu": rate,
+                  "settled": outcome.get("settled")}
     if outcome["kind"] == "interpolated":
         row = lookup(index)(outcome["batch"])
         if row is None or classify(row) == "pending":
@@ -546,5 +583,6 @@ def search_result(plan, selected_batch, selected_layout):
                                         and acceptance["batch"] == selected_batch) else "best_measured_point"
     if acceptance.get("status") != "completed":
         return "acceptance_failed_fallback"
-    return ("slo_accepted" if acceptance["layout"] == selected_layout and acceptance["batch"] == selected_batch
-            else "best_measured_point")
+    if acceptance["layout"] != selected_layout or acceptance["batch"] != selected_batch:
+        return "best_measured_point"
+    return acceptance["settled"] or "slo_accepted"

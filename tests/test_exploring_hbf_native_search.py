@@ -200,13 +200,39 @@ def test_measured_wall_projects_as_measured_and_memory_bounds_the_batch():
     assert plan["layouts"][0]["outcome"]["reason"] == "native_memory_limited"
 
 
-def test_a_failed_acceptance_falls_back_to_the_best_measured_passing_point():
-    # The acceptance batch runs 5% slower than the line through the points.
+def test_a_failed_acceptance_settles_at_the_bracket_passing_end_within_a_step():
+    # The acceptance batch runs 5% slower than the line through the points:
+    # interpolating again lands within a step of it, so the search settles
+    # at the passing end of the narrowed bracket.
     layouts = [native(lambda b: linear(b) * (1.05 if 850 < b < 950 else 1.), lambda b: 1.5 * b)]
     plan, runs = drive([entry()], layouts)
-    assert plan["acceptance"]["batch"] == 911 and plan["acceptance"]["status"] == "slo_rejected"
+    assert [batch for _index, batch in runs] == [512, 1038, 911]
+    assert plan["acceptance"]["batch"] == 512 and plan["acceptance"]["status"] == "completed"
     row, _index, batch = selected(plan, layouts)
-    assert batch == 512 and search.search_result(plan, batch, TP8) == "acceptance_failed_fallback"
+    assert batch == 512 and search.search_result(plan, batch, TP8) == "bracket_passing_end"
+
+
+def test_a_failed_acceptance_joins_the_bracket_and_is_interpolated_again():
+    # 20% slower at the acceptance batch: the new interpolation is a step
+    # away from every measured batch and runs; it passes and settles.
+    layouts = [native(lambda b: linear(b) * (1.2 if 900 < b < 950 else 1.), lambda b: 1.5 * b)]
+    plan, runs = drive([entry()], layouts)
+    batches = [batch for _index, batch in runs]
+    assert batches[:3] == [512, 1038, 911] and len(batches) == 4 and 512 < batches[3] < 911
+    assert plan["acceptance"]["batch"] == batches[3] and plan["acceptance"]["status"] == "completed"
+    assert plan["layouts"][0]["outcome"]["bracket"][1] == 911
+
+
+def test_a_layout_halves_below_points_above_the_slo_whose_tpot_falls():
+    # Native TPOT need not rise between close batches (405B CONV SHORT TP8:
+    # 108 ms at B180, 101 ms at B200). No rising line halves the smallest
+    # point instead of jumping to the batch quantum.
+    tpot = lambda b: (80. if b < 200 else 150. if b < 400 else 140.) * 1e6
+    plan, runs = drive([entry()], [native(tpot, lambda b: 1. * b)])
+    batches = [batch for _index, batch in runs]
+    assert batches[0] == 512 and tpot(batches[1]) > tpot(512)
+    assert batches[2] == batches[1] // 2 and 1 not in batches
+    assert plan["acceptance"]["status"] == "completed"
 
 
 def test_screen_hands_native_all_legal_layouts_it_can_run():
@@ -389,13 +415,18 @@ def test_a_point_below_the_slo_prunes_by_the_slope_floor():
 
 def test_slope_floor_takes_the_least_measured_slope_ratio_up_to_one():
     def measured(points):
-        return {"bypass": {"tpot_line_ns": (10e6, .05e6)}, "points": [{"batch": b, "tpot_ns": t} for b, t in points]}
+        return {"bypass": {"tpot_line_ns": (10e6, .05e6)},
+                "points": [{"batch": b, "tpot_ns": t, "tpot_upper_ns": t} for b, t in points]}
     steep = measured([(100, 20e6), (200, 30e6)])
     # Slope ratios 0.4 and 0.55; the last pair is under MIN_STEP apart.
     flat = measured([(1000, 60e6), (2000, 80e6), (2100, 90e6)])
-    assert search.slope_floor([steep]) == search.SLOPE_FLOOR
-    assert search.slope_floor([steep, flat]) == pytest.approx(search.SLOPE_FLOOR * .4)
-    assert search.slope_floor([measured([(100, 20e6)])]) is None
+    assert search.slope_floor([steep], SLO) == search.SLOPE_FLOOR
+    assert search.slope_floor([steep, flat], SLO) == pytest.approx(search.SLOPE_FLOOR * .4)
+    assert search.slope_floor([measured([(100, 20e6)])], SLO) is None
+    # TPOT falling between two points above the SLO calibrates nothing: the
+    # bound extrapolates only from points within it.
+    falling = measured([(1000, 60e6), (1500, 130e6), (2000, 120e6)])
+    assert search.slope_floor([falling], SLO) == search.SLOPE_FLOOR
 
 
 def test_later_layouts_wait_for_the_anchor():
