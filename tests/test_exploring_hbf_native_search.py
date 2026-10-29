@@ -176,6 +176,13 @@ def test_a_kv_capacity_rejection_sends_the_next_point_to_the_native_capacity():
     plan, runs = drive([entry()], layouts)
     assert [batch for _index, batch in runs] == [512, 300]
     assert plan["layouts"][0]["outcome"] == {"kind": "limited", "reason": "native_capacity_limited", "batch": 300}
+    # A reported capacity off the batch quantum (EP2 here) jumps to the
+    # largest legal batch below it, never to an illegal one.
+    ep2 = {"dp": 1, "tp": 4, "pp": 1, "ep": 2}
+    layouts = [native(linear, lambda b: 1.5 * b, too_big=lambda b: full if b > 301 else None, capacity=301)]
+    plan, runs = drive([entry(ep2)], layouts)
+    assert [batch for _index, batch in runs] == [512, 300]
+    assert plan["layouts"][0]["outcome"] == {"kind": "limited", "reason": "native_capacity_limited", "batch": 300}
 
 
 def test_measured_wall_projects_as_measured_and_memory_bounds_the_batch():

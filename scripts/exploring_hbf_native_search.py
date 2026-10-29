@@ -286,12 +286,12 @@ def _following(entry, runs, points, slo_ns, caps, rounded):
         return None
     last, known, tried = runs[-1], _native_capacities(runs), [run["batch"] for run in runs]
     if not points:
-        # Too big: a reported native capacity goes there directly; wall and
-        # import-speed rejections use the existing halving path. An unusable
-        # rejection ends the layout.
+        # Too big: a reported native capacity goes there directly, down to
+        # the batch quantum; wall and import-speed rejections use the
+        # existing halving path. An unusable rejection ends the layout.
         if last["kind"] != "too_big" or last["batch"] <= q:
             return None
-        batch = min(known) if known else rounded(last["batch"] / 2)
+        batch = min(known) // q * q if known else rounded(last["batch"] / 2)
         return batch if batch >= q and batch not in tried else None
     limit, _reason = _limit(entry, runs, points, caps, rounded)
     if len(points) == 1:
