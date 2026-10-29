@@ -59,13 +59,19 @@ MIN_STEP = .1
 RATE_MARGIN = .1
 # Native TPOT is taken to be at least this share of the bypass TPOT line when
 # a layout is pruned by its bypass bound (367 native points: 1.03x to 7.8x;
-# no native PP>1 Maverick point yet).
+# Maverick PP>1 1.83x and above).
 BYPASS_TPOT_FLOOR = .8
+# Beyond a measured point below the SLO, native TPOT is taken to grow at
+# least this share of the bypass TPOT slope, times the case's least
+# native/bypass slope ratio between measured points MIN_STEP apart when that
+# is below 1 (PP>1 intercepts measured 1.8-3.8x the bypass line but slopes
+# 1.05-1.35x; Maverick HBF PP1 slopes fell to 0.40x at large batches).
+SLOPE_FLOOR = BYPASS_TPOT_FLOOR
 OBJECTIVE = "per_gpu_throughput_under_slo"
 SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_layouts": TOP_LAYOUTS,
             "max_points_per_layout": None, "max_runs_per_layout": None,
             "first_point_max_batch": FIRST_POINT_MAX_BATCH, "wall_fill": WALL_FILL, "min_step": MIN_STEP,
-            "rate_margin": RATE_MARGIN, "bypass_tpot_floor": BYPASS_TPOT_FLOOR,
+            "rate_margin": RATE_MARGIN, "bypass_tpot_floor": BYPASS_TPOT_FLOOR, "slope_floor": SLOPE_FLOOR,
             "native_layouts": "legal DP/TP/PP/EP and pipeline microbatch layouts",
             "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
             "acceptance": "one fast native run at the best layout's interpolated batch; falls back to the best measured passing point",
@@ -78,7 +84,9 @@ SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_
                         "later layouts first run where passing the SLO matches the anchor's best passing rate and are pruned "
                         "when the bypass rate bound (below any native limit, divided by bypass_tpot_floor) or a point above the SLO "
                         "(rate x (1 + rate_margin)) "
-                        "falls below the case's best measured passing rate")}
+                        "falls below the case's best measured passing rate, or when a point below the SLO cannot reach it "
+                        "with TPOT growing at slope_floor x min(1, the case's least native/bypass slope ratio) "
+                        "x the bypass slope")}
 # Rejections that say the batch is too big for a native candidate: its wall
 # cap, or its KV capacity.
 _WALL_TOO_BIG = ("wall_budget",)
@@ -378,8 +386,37 @@ def _passing_rate(plan, gpus, slo_ns):
                 if point["tpot_upper_ns"] <= slo_ns], default=0.)
 
 
-def _pruner(entry, gpus, slo_ns, incumbent):
-    """Why a layout cannot beat ``incumbent`` given its runs and points, else None."""
+def slope_floor(plans):
+    """SLOPE_FLOOR times the least native/bypass TPOT slope ratio between measured points of
+    ``plans`` at least MIN_STEP apart, if below 1; None without such a pair."""
+    ratios = []
+    for plan in plans:
+        slope = plan["bypass"]["tpot_line_ns"][1]
+        points = sorted(plan.get("points") or (), key=lambda point: point["batch"])
+        if slope > 0:
+            ratios += [(high["tpot_ns"] - low["tpot_ns"]) / (high["batch"] - low["batch"]) / slope
+                       for index, low in enumerate(points) for high in points[index + 1:]
+                       if high["batch"] >= (1 + MIN_STEP) * low["batch"]]
+    return SLOPE_FLOOR * min(1., *ratios) if ratios else None
+
+
+def slope_rate_bound(entry, point, gpus, slo_ns, floor):
+    """Highest per-GPU rate under the SLO when TPOT grows beyond ``point`` at least ``floor`` times
+    the bypass TPOT slope; below the point the rate stays within RATE_MARGIN of the point's."""
+    slope = floor * entry["bypass"]["tpot_line_ns"][1]
+    if slope <= 0:
+        return math.inf
+    # Along that floor line the rate peaks where it reaches the SLO, or at
+    # the point itself when the line has no positive intercept.
+    batch = point["batch"] + (slo_ns - point["tpot_ns"]) / slope
+    return max(batch * 1e9 / (gpus * slo_ns), _point_rate(point, gpus) * (1 + RATE_MARGIN))
+
+
+def _pruner(entry, gpus, slo_ns, incumbent, floor):
+    """Why a layout cannot beat ``incumbent`` given its runs and points, else None.
+
+    ``floor`` (None: no slope bound) is the case's ``slope_floor``.
+    """
     def prune(runs, points):
         limits = _native_capacities(runs) + [run["batch"] - 1 for run in runs if run["kind"] == "too_big"]
         if bypass_rate_bound(entry, gpus, slo_ns, min(limits, default=None)) / BYPASS_TPOT_FLOOR < incumbent:
@@ -389,6 +426,10 @@ def _pruner(entry, gpus, slo_ns, incumbent):
         if any(point["tpot_upper_ns"] > slo_ns and _point_rate(point, gpus) * (1 + RATE_MARGIN) < incumbent
                for point in points):
             return "native_point_above_slo_below_incumbent"
+        if floor is not None and any(point["tpot_upper_ns"] <= slo_ns
+                                     and slope_rate_bound(entry, point, gpus, slo_ns, floor) < incumbent
+                                     for point in points):
+            return "native_slope_bound_below_incumbent"
         return None
     return prune
 
@@ -450,18 +491,21 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
             return default
         return threshold
 
-    # The anchor's rate prunes on a first pass; the best passing rate any
-    # layout reaches then prunes every later layout but the one that holds it.
+    # The anchor's rate and slope floor prune on a first pass; the best
+    # passing rate any layout reaches, with the slope floor of every measured
+    # layout, then prunes every later layout but the one that holds it.
+    floor = slope_floor([layouts[index] for index in order[:settled]])
     for index in later:
         layouts[index] = plan(index, first=first(index),
-                              prune=_pruner(entries[index], replica_gpus[index], slo_ns, anchor_rate))
+                              prune=_pruner(entries[index], replica_gpus[index], slo_ns, anchor_rate, floor))
     rates = [_passing_rate(plan_, gpus, slo_ns) for plan_, gpus in zip(layouts, replica_gpus)]
     incumbent = max(rates, default=0.)
     holder = rates.index(incumbent) if count else None
+    floor = slope_floor(layouts)
     for index in later:
         if index != holder:
             layouts[index] = plan(index, first=first(index),
-                                  prune=_pruner(entries[index], replica_gpus[index], slo_ns, incumbent))
+                                  prune=_pruner(entries[index], replica_gpus[index], slo_ns, incumbent, floor))
         if layouts[index].get("outcome", {}).get("kind") == "pruned":
             layouts[index]["outcome"]["incumbent_tokens_per_second_per_gpu"] = incumbent
     pending = [(plan_["layout"], plan_["next"]) for plan_ in layouts if "next" in plan_]
@@ -470,7 +514,8 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
                          # None: a bypass line that bounds nothing.
                          "bypass_rate_bounds": [None if math.isinf(bound) else bound for bound in bounds],
                          "anchor_tokens_per_second_per_gpu": anchor_rate,
-                         "incumbent_tokens_per_second_per_gpu": incumbent}}
+                         "incumbent_tokens_per_second_per_gpu": incumbent,
+                         "slope_floor": floor}}
     if pending or any("waiting" in plan_ or plan_["outcome"]["kind"] == "failed" for plan_ in layouts):
         return result
     options = [(_outcome_rate(plan_, replica_gpus[index]), index) for index, plan_ in enumerate(layouts)

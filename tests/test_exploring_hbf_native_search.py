@@ -359,6 +359,38 @@ def test_branch_and_bound_prunes_layouts_that_cannot_beat_the_incumbent():
     assert plan["acceptance"]["layout"] == DP2_TP4
 
 
+def test_a_point_below_the_slo_prunes_by_the_slope_floor():
+    # A pipeline whose native intercept is far above its bypass line but
+    # whose slope is not: the bypass bound keeps it, one point prunes it.
+    pipe = {"dp": 1, "tp": 4, "pp": 2, "ep": 1}
+    entries = [entry(DP2_TP4, candidate=700, line=(19.2e6, .0592e6), capacity=900),
+               entry(pipe, candidate=1800, line=(10e6, .05e6))]
+    pipe_tpot = lambda b: (40 + .06 * b) * 1e6
+    layouts = [native(lambda b: (12 + .1 * b) * 1e6, lambda b: 1. * b, gpus=4), native(pipe_tpot, lambda b: 1. * b)]
+    plan, runs = drive(entries, layouts)
+    bounds, outcome = plan["bounds"], plan["layouts"][1]["outcome"]
+    incumbent = bounds["incumbent_tokens_per_second_per_gpu"]
+    assert search.bypass_rate_bound(entries[1], 8, SLO) / search.BYPASS_TPOT_FLOOR > incumbent
+    # The anchor's native slope exceeds its bypass slope, so the floor is SLOPE_FLOOR.
+    assert bounds["slope_floor"] == search.SLOPE_FLOOR
+    assert [batch for index, batch in runs if index == 1] == [512]
+    assert outcome["kind"] == "pruned" and outcome["reason"] == "native_slope_bound_below_incumbent"
+    # The bound still lies above the pipeline's real best rate (B=1000 at the SLO).
+    point = plan["layouts"][1]["points"][0]
+    assert 1000 * 1e9 / (8 * SLO) < search.slope_rate_bound(entries[1], point, 8, SLO, bounds["slope_floor"]) < incumbent
+
+
+def test_slope_floor_takes_the_least_measured_slope_ratio_up_to_one():
+    def measured(points):
+        return {"bypass": {"tpot_line_ns": (10e6, .05e6)}, "points": [{"batch": b, "tpot_ns": t} for b, t in points]}
+    steep = measured([(100, 20e6), (200, 30e6)])
+    # Slope ratios 0.4 and 0.55; the last pair is under MIN_STEP apart.
+    flat = measured([(1000, 60e6), (2000, 80e6), (2100, 90e6)])
+    assert search.slope_floor([steep]) == search.SLOPE_FLOOR
+    assert search.slope_floor([steep, flat]) == pytest.approx(search.SLOPE_FLOOR * .4)
+    assert search.slope_floor([measured([(100, 20e6)])]) is None
+
+
 def test_later_layouts_wait_for_the_anchor():
     entries = [entry(DP2_TP4, candidate=700, line=(19.2e6, .0592e6), capacity=900), entry()]
     plan = search.plan_case(entries, [lambda _batch: None] * 2, SLO, 1800., [4, 8])

@@ -61,7 +61,7 @@ PREFILL_CONTRACT = "native_prefill_complete_prompt_pass_v2"
 PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
 PIPELINE_FORECAST_CONTRACT = "native_stationary_pp_stage_blocks_v4"
 # Per-GPU throughput under the SLO, layouts searched by branch and bound.
-SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v1"
+SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v2"
 # v3 samples a whole-prompt PP pass by its stage blocks.
 PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_stage_blocks_v3"
 # A fast pass the model's chunked attention splits into several chunks, at
