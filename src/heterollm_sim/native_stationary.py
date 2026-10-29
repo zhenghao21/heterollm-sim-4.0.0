@@ -86,6 +86,10 @@ PIPELINE_CONCURRENT_STAGE_ASSUMPTION = (
     "in every cohort (the scheduler's last-service order, refills appended), which fixes each token's "
     "microbatch; and PD imports, which start with the step, are sampled beside its first block, whose "
     "slowdown is taken over each import's whole span.")
+WHOLE_BLOCK_ASSUMPTION = (
+    "A PP stage block too short for disjoint calibration and holdout runs runs whole at both origins: "
+    "every layer of it is observed twice, and each class step is the hull of those observations "
+    "widened by the difference between the two origins.")
 
 
 def _context_sensitive(metadata):
@@ -211,18 +215,23 @@ def _query_decode_guard(runtime, cohort, stages, *, before_decode=None):
     return guard
 
 
-def _sample_roles(inventory, layers):
+def _sample_roles(inventory, layers, *, whole_block=False):
     """Layer ids each sample run executes, or None when the stack is too short.
 
     Entry, exit and PD runs lie inside the calibration and holdout layers.
+    With ``whole_block`` a stack too short for disjoint runs runs whole as
+    both, if its layers after the first step every class.
     """
     calibration, holdout = layers
     count = len(inventory)
     if calibration < 2 or holdout < 2:
         return None
-    calibration, holdout = _layer_counts([row["class_key"] for row in inventory], calibration, holdout)
+    classes = [row["class_key"] for row in inventory]
+    calibration, holdout = _layer_counts(classes, calibration, holdout)
     if calibration + holdout > count:
-        return None
+        if not whole_block or count < 2 or set(classes[1:]) != set(classes):
+            return None
+        calibration = holdout = count
     head = [row["layer_id"] for row in inventory[:calibration]]
     tail = [row["layer_id"] for row in inventory[count - holdout:]]
     return {"calibration": head, "holdout": tail, "entry": head[:1], "exit": tail[-1:],
@@ -431,13 +440,14 @@ def _pipeline_boundary(runtime, cohort, stages, request_ready_ns, namespace, lay
             failures.append({"block": list(key), "failures": composition["failures"],
                              "boundary": sorted(boundary)})
             continue
-        roles = _sample_roles(stack, layers)
+        roles = _sample_roles(stack, layers, whole_block=True)
         if roles is None:
             raise NativeLayerSamplingGuardError("native_stationary_stack_too_short_for_disjoint_runs")
         exit = final_exit or key[1] < depth - 1
         last = exit and key[1] == depth - 1 and key[0] in commit
         after = list(boundary.get("after_last_layer", ()))
         blocks[key] = {"key": key, "stage_id": identity, "inventory": stack, "roles": roles, "exit": exit,
+            "whole_block": len(roles["calibration"]) == len(stack),
             "by_layer": {layer: [task.task_id for task in group] for layer, group in by_layer.items()},
             "prefix": list(boundary.get("before_first_layer", ())),
             "suffix": after if exit else [], "after_last_layer": after,
@@ -966,7 +976,8 @@ def _pipeline_step(prepared, samples):
         runs = samples["runs"][key]
         lower, upper, parts = compose_layers(block["inventory"], runs, exit=block["exit"])
         service[key] = (lower, upper)
-        row = {"microbatch": key[0], "stage": key[1], "service_ns": {"lower": lower, "upper": upper}, **parts}
+        row = {"microbatch": key[0], "stage": key[1], "service_ns": {"lower": lower, "upper": upper},
+               "whole_block": block["whole_block"], **parts}
         if block["transfer_stage"] is not None:
             transfer[key] = _edge_interval(runs, "transfer")
             row["transfer_ns"] = dict(zip(("lower", "upper"), transfer[key]))
@@ -980,6 +991,12 @@ def _pipeline_step(prepared, samples):
         "pipeline_microbatches": count,
         "commit_ns_by_microbatch": [{"lower": low, "upper": high} for low, high in zip(lower, upper)],
         "step_composition": "flush_stage_fifo_link_fifo_cpu_commit_fifo"}
+
+
+def pipeline_assumptions(prepared):
+    """The assumptions a PP boundary's blocks add to its composition."""
+    return [WHOLE_BLOCK_ASSUMPTION] if any(block["whole_block"]
+                                           for block in prepared["pipeline"]["blocks"].values()) else []
 
 
 def _import_extra(samples):
@@ -1440,7 +1457,8 @@ def evaluate_stationary(runtime, prepared, samples, options):
                      "measured_joint_PD_import_extra_per_concurrent_count",
             "assumptions": [SAME_CLASS_ADDRESS_ASSUMPTION]})
     if "pipeline" in prepared:
-        result["error_budget"]["assumptions"].append(PIPELINE_CONCURRENT_STAGE_ASSUMPTION)
+        result["error_budget"]["assumptions"] += [PIPELINE_CONCURRENT_STAGE_ASSUMPTION,
+                                                  *pipeline_assumptions(prepared)]
         result["error_budget"]["basis"] += "; per_microbatch_stage_blocks_max_plus_flush"
     if enveloped:
         result["error_budget"]["pd_concurrency_envelope"] = {

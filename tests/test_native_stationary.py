@@ -218,6 +218,20 @@ def test_pipeline_forecast_brackets_the_full_native_flushed_window():
     for name, value in observed.items():
         assert bounds[name]["lower"] <= value <= bounds[name]["upper"], name
 
+def test_short_pipeline_blocks_run_whole_and_bracket_the_full_native_window():
+    # Four layers per stage block cannot hold disjoint 4- and 2-layer runs:
+    # every block runs whole at both origins.
+    scenario = native_toy.pipeline_toy_scenario(16, pp=4, output=24, warmup=23, measurement=46)
+    fast, _window, observed, complete = native_toy.stationary_and_full_window(scenario, 4, 2)
+    assert fast.approximation["rejection_reasons"] == [] and complete
+    budget = fast.approximation["error_budget"]
+    assert all(row["whole_block"] for row in budget["step"]["pipeline_blocks"])
+    assert stationary.WHOLE_BLOCK_ASSUMPTION in budget["assumptions"]
+    bounds = fast.native_window_forecast.metric_bounds
+    for name, value in observed.items():
+        assert bounds[name]["lower"] <= value <= bounds[name]["upper"], name
+
+
 def test_short_stack_and_slow_refill_are_rejected_not_extrapolated():
     short = _fast(native_toy.toy_scenario(2, 1., batch_size=2, output=3), 4, 2)
     assert short.native_window_forecast is None

@@ -47,7 +47,7 @@ from .native_prefill_chunk_inputs import (DECLARED_CHUNK_ADDRESS_ASSUMPTION, DEC
                                           _description_runtime, _lower_description)
 from .native_stationary import (HOLDOUT_SHIFT_NS, SAME_CLASS_ADDRESS_ASSUMPTION, _completions, _interval,
                                 _pipeline_boundary, _pipeline_step, _pipeline_window, _widened_hull, _within,
-                                sample_pipeline_blocks)
+                                pipeline_assumptions, sample_pipeline_blocks)
 
 LINEAR_CONTEXT_ASSUMPTION = (
     "A layer whose native work changes with its chunk's context (attention over the earlier prompt) "
@@ -374,8 +374,8 @@ def sample_prefill_stage_chunks(runtime, cohort, control, options, records, *, h
     result = {"accepted": False, "reasons": [], "metrics": {}, "metric_bounds": {}, "error_budget": budget}
     budget.update(basis="per_stage_block_samples_per_chunk; context_linear_layer_steps; "
                         "native_two_phase_chunk_transitions; per_stage_chunk_chain",
-        assumptions=[SAME_CLASS_ADDRESS_ASSUMPTION, LINEAR_CONTEXT_ASSUMPTION, TRANSITION_ASSUMPTION,
-                     UNIFORM_CHUNK_ASSUMPTION, DECLARED_CHUNK_STATE_ASSUMPTION, DECLARED_CHUNK_ADDRESS_ASSUMPTION],
+        assumptions=[SAME_CLASS_ADDRESS_ASSUMPTION, *pipeline_assumptions(first), LINEAR_CONTEXT_ASSUMPTION,
+                     TRANSITION_ASSUMPTION, UNIFORM_CHUNK_ASSUMPTION, DECLARED_CHUNK_STATE_ASSUMPTION, DECLARED_CHUNK_ADDRESS_ASSUMPTION],
         sampled_layer_window_count=len(records), sample_wall_seconds=time.perf_counter() - started,
         physical_full_cohorts_committed=0, physical_full_prompt_executed=False)
     if lower <= 0:

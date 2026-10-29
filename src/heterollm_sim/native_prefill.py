@@ -32,6 +32,7 @@ from .native_fast_window import _native_runtime_reasons
 from .native_layer_sampling import NativeLayerSamplingGuardError, _layer_counts
 from .native_stationary import (HOLDOUT_SHIFT_NS, SAME_CLASS_ADDRESS_ASSUMPTION, _completions, _interval,
                                 _pipeline_boundary, _pipeline_step, _within, cohort_layers, cohort_origin,
+                                pipeline_assumptions,
                                 compose_layers, deadline_control, run_window, sample_pipeline_blocks,
                                 window_terms)
 from .planner import _compilation_scope
@@ -142,7 +143,8 @@ def evaluate_prefill(prepared, samples, options):
             budget.update(basis="per_stage_block_calibration_holdout_layer_hull_widened_by_drift; "
                                 "in_situ_entry_two_origins; stage_blocks_serial; "
                                 "boundary_first_access_row_state_bounds",
-                          composition=parts, assumptions=[SAME_CLASS_ADDRESS_ASSUMPTION])
+                          composition=parts,
+                          assumptions=[SAME_CLASS_ADDRESS_ASSUMPTION, *pipeline_assumptions(prepared)])
         else:
             lower, upper, parts = compose_layers(prepared["inventory"], runs, exit=False)
             budget.update(basis="calibration_holdout_layer_hull_widened_by_drift; in_situ_entry_two_origins; "

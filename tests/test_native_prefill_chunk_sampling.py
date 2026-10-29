@@ -7,6 +7,7 @@ import pytest
 
 from heterollm_sim.native_prefill_chunk_inputs import (
     DECLARED_CHUNK_ADDRESS_ASSUMPTION, DECLARED_CHUNK_STATE_ASSUMPTION)
+from heterollm_sim.native_stationary import WHOLE_BLOCK_ASSUMPTION
 from heterollm_sim.serving import _OnlineRuntime
 from test_native_prefill import _pass
 from test_native_prefill_chunk_inputs import _live_boundary
@@ -94,7 +95,8 @@ def test_pipeline_chunk_sampling_requires_explicit_enablement():
     assert result.approximation["rejection_reasons"] == ["native_prefill_chunked_sampling_not_enabled"]
 
 
-@pytest.mark.parametrize("pp,layer_count", [(2, 16), (4, 32)])
+# PP2: eight layers per stage block; PP4: four, run whole at both origins.
+@pytest.mark.parametrize("pp,layer_count", [(2, 16), (4, 16)])
 def test_multi_chunk_pipeline_pass_samples_stage_blocks_around_full_reference(pp, layer_count):
     scenario = _experiment_scenario(tp=1, pp=pp, prompt=26, layer_count=layer_count)
     result, sampled = _pass(scenario, chunked_sampling=True)
@@ -107,6 +109,7 @@ def test_multi_chunk_pipeline_pass_samples_stage_blocks_around_full_reference(pp
     assert budget["physical_full_cohorts_committed"] == 0 and budget["chunk_count"] > 2
     assert len(budget["chunk_stages_ns"]) == budget["chunk_count"]
     assert all(len(stages) == pp for stages in budget["chunk_stages_ns"])
+    assert (WHOLE_BLOCK_ASSUMPTION in budget["assumptions"]) == (pp == 4)
     assert {sample.window_id.rsplit("-", 1)[-1] for sample in result.layer_window_samples} >= {"transition"}
     bounds = sampled["metric_bounds"]["prefill_pass_ns"]
     observed = full["error_budget"]["observed_pass_ns"]
