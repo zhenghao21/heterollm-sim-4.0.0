@@ -48,7 +48,9 @@ RETIRED_DIRECTORIES = (ROOT / "artifacts/exploring_hbf_native_20261019",
 CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # v21 enables the approved all-rank PD defaults for the two selected
 # Maverick HBM4 EP-group layouts, in addition to the 405B HBM4 exception.
-FAST_CONTRACT = "native_stationary_layout_fast_v21"
+# v22 executes the NAND out-of-order read batch, KV page staging and the HBM4
+# SID-aware per-PC FR-FCFS controller; v21 results describe older physics.
+FAST_CONTRACT = "native_stationary_layout_fast_v22"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # sample a whole prompt by its stage blocks and a chunked one by the
 # conditional chunk forecast; detailed passes retain the complete native
