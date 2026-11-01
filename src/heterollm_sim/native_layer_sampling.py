@@ -1057,6 +1057,42 @@ def _page_staging_snapshot(kernel):
     return snapshot
 
 
+def _hbm_scheduler_snapshot(kernel):
+    """Open a window on HBM queue counters of this independent kernel copy."""
+    from .dram_core import DramCore
+    snapshot = {}
+    for owner, active in kernel.physical_runtime.runtimes.items():
+        core = active.core
+        if type(core) is DramCore and core.config.scheduler == "fr_fcfs":
+            core.hbm_reset_scheduler_peaks()
+            snapshot[owner] = core.hbm_scheduler_stats()
+    return snapshot
+
+
+def _hbm_scheduler_window_delta(before, kernel):
+    """Each HBM owner's scheduler totals in the window, and its per-PC spread."""
+    from ._hbm_numeric import FR_STAT_FIELDS
+    rows = []
+    additive = FR_STAT_FIELDS[:7]
+    for owner, start in sorted(before.items()):
+        stats = kernel.physical_runtime.runtimes[owner].core.hbm_scheduler_stats()
+        delta = stats[:, :7] - start[:, :7]
+        hits, misses, conflicts = delta[:, 0], delta[:, 1], delta[:, 2]
+        used = hits + misses + conflicts > 0
+        rates = hits[used] / (hits + misses + conflicts)[used]
+        rows.append({"owner": owner, **{name: int(delta[:, index].sum()) for index, name in enumerate(additive)},
+                     "peak_read_queue": int(stats[:, 7].max()), "peak_write_queue": int(stats[:, 8].max()),
+                     "max_read_wait_ns": float(stats[:, 9].max()),
+                     "pcs_used": int(used.sum()),
+                     "pc_row_hit_rate": {"min": float(rates.min()), "mean": float(rates.mean()),
+                                         "max": float(rates.max())} if rates.size else None,
+                     "pc_activate_commands": {"min": int(delta[used, 3].min()), "max": int(delta[used, 3].max())}
+                     if rates.size else None,
+                     "pc_read_wait_ns": {"min": float(stats[used, 9].min()), "max": float(stats[used, 9].max())}
+                     if rates.size else None})
+    return rows
+
+
 def _page_staging_window_delta(before, kernel):
     """Return per-window deltas plus the true end-of-window pending pages."""
     after = _page_staging_snapshot(kernel)
@@ -1147,6 +1183,7 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
             if mirror.pairs:
                 kernel._native_tp_mirror = mirror
     page_staging_before = _page_staging_snapshot(kernel)
+    hbm_scheduler_before = _hbm_scheduler_snapshot(kernel)
     # The source is read only throughout independent window execution.
     metrics = LiveCohortMetrics(resource_owners=kernel.resource_owners, origin_ns=origin_ns)
     first, last, count, physical = None, origin_ns, 0, 0
@@ -1272,6 +1309,7 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
             "storage_traffic", "dram_traffic", "sram_traffic", "resource_busy_ns", "category_time_ns")},
              "allocator_peak_end_bytes": _allocator_peaks(kernel),
               "page_staging": _page_staging_window_delta(page_staging_before, kernel),
+              "hbm_scheduler": _hbm_scheduler_window_delta(hbm_scheduler_before, kernel),
               "scheduler_read_wait_ns_by_layer": scheduler_read_wait_ns_by_layer,
               "external_import_nand_billing": None if imports is None else imports.nand_bill_summary()},
         "input_boundary": {"qualified": True,

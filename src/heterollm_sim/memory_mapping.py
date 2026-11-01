@@ -57,7 +57,33 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
     stack, stack_local = divmod(address, per_stack)
     die, local = divmod(stack_local, per_die)
     bursts_per_row = config.row_bytes // config.burst_bytes
-    if config.address_mapping == "row_local":
+    if config.address_mapping == "sid_aware":
+        # HBM4 SID-aware mapping (JESD270-4A Table 5, printed p.7):
+        # burst | SID-internal BG bit | lane | column | bank-in-group |
+        # SID | row.  The low BG bit alternates the two bank groups inside
+        # one SID, so two consecutive bursts remain in the same PC and do
+        # not pay tCCDR.  Keep the mixed-radix form instead of masking bits;
+        # the HBM4 reference geometry is power-of-two, while this decoder is
+        # also used by small non-standard test geometries.
+        sid_count = int(config.metadata.get("sid_count", config.bank_groups_per_rank // 2))
+        groups_per_sid = config.bank_groups_per_rank // sid_count
+        if sid_count <= 0 or groups_per_sid < 2:
+            raise ValueError("sid_aware mapping requires at least two bank groups per SID")
+        cursor = local // config.burst_bytes
+        sid_bg, lane = divmod(cursor // 2, config.lane_count)
+        bg_in_sid = cursor & 1
+        column = sid_bg % bursts_per_row
+        sid_bg //= bursts_per_row
+        bank = sid_bg % config.banks_per_group
+        sid_bg //= config.banks_per_group
+        sid = sid_bg % sid_count
+        row = sid_bg // sid_count
+        if sid >= sid_count or row >= config.rows_per_bank:
+            raise ValueError("sid_aware address exceeds the selected HBM SID geometry")
+        bank_group = sid * groups_per_sid + (bg_in_sid % groups_per_sid)
+        # ``bank`` is already the bank-in-group coordinate.  The rest of the
+        # function decodes the flat lane into stack/channel/pseudo-channel.
+    elif config.address_mapping == "row_local":
         # Column, bank, lane, row; division admits non-power-of-two geometry.
         stripe, column = divmod(local // config.burst_bytes, bursts_per_row)
         stripe, bank = divmod(stripe, config.bank_count)
@@ -87,10 +113,14 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
     channel = rem % config.channels
     # Independent stacks are interleaved in the global lane number; channel
     # and pseudo-channel coordinates remain local to their physical stack.
-    rank = bank // (config.bank_groups_per_rank * config.banks_per_group)
-    bank_in_rank = bank % (config.bank_groups_per_rank * config.banks_per_group)
-    bank_group = bank_in_rank // config.banks_per_group
-    bank_id = bank_in_rank % config.banks_per_group
+    if config.address_mapping == "sid_aware":
+        rank = 0
+        bank_id = bank
+    else:
+        rank = bank // (config.bank_groups_per_rank * config.banks_per_group)
+        bank_in_rank = bank % (config.bank_groups_per_rank * config.banks_per_group)
+        bank_group = bank_in_rank // config.banks_per_group
+        bank_id = bank_in_rank % config.banks_per_group
     return AddressMapping(
         address=address, stack=stack, die=die, lane=lane, channel=channel, subchannel=subchannel,
         pseudo_channel=pseudo, rank=rank, bank_group=bank_group,
@@ -105,9 +135,14 @@ def dram_request_channels(config: DramConfig, request: AccessRequest) -> tuple[t
     completion. Shared stacks use the same external lane/channel credits.
     """
     lane_count = config.lane_count
-    block_bytes = (config.row_bytes * config.bank_count
-                   if config.address_mapping == "row_local"
-                   else config.interleave_bytes or config.burst_bytes)
+    if config.address_mapping == "row_local":
+        block_bytes = config.row_bytes * config.bank_count
+    elif config.address_mapping == "sid_aware":
+        # The low BG digit is the only radix below lane, hence each lane's
+        # address stripe is exactly two bursts.
+        block_bytes = config.burst_bytes * 2
+    else:
+        block_bytes = config.interleave_bytes or config.burst_bytes
     start = request.address // block_bytes
     stop = (request.address + request.byte_count - 1) // block_bytes + 1
     lanes = (range(lane_count) if stop - start >= lane_count

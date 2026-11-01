@@ -625,7 +625,21 @@ def _binary_shift(value):
 def _burst_location(cursor, g, binary_mapping, lane_shift, bank_shift, interleave_shift, row_shift):
     """Lane, bank within the lane, activated row and inner burst of a cursor."""
     inner = 0
-    if binary_mapping:
+    if g[13]:
+        # HBM4 SID-aware mixed radix: burst | BG-in-SID | lane | column |
+        # bank-in-group | SID | row. The two low bursts stay within one PC
+        # and alternate its two bank groups, avoiding a tCCDR crossing.
+        cursor, bg_in_sid = divmod(cursor, 2)
+        lane = cursor % g[0]
+        cursor //= g[0]
+        column = cursor % g[3]
+        cursor //= g[3]
+        bank_in_group = cursor % g[4]
+        cursor //= g[4]
+        sid = cursor % g[14]
+        row = cursor // g[14]
+        bank_within = sid * g[15] * g[4] + (bg_in_sid % g[15]) * g[4] + bank_in_group
+    elif binary_mapping:
         if g[11]:
             stripe = cursor >> row_shift
             bank_within = stripe & (g[1] - 1)
@@ -1359,3 +1373,529 @@ def _run_hbm_numeric(first, stop, arrival, read, g, t, arrays, scratch):
     for result in results:
         counts += result[4]
     return completion, hits, misses, conflicts, counts
+
+
+# Per-PC scheduler counters kept with the controller state, one row per lane.
+FR_STAT_FIELDS = ("row_hits", "row_misses", "row_conflicts", "activate_commands",
+                  "precharge_commands", "direction_switches", "write_drains",
+                  "peak_read_queue", "peak_write_queue", "max_read_wait_ns")
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_lane_cursor(first, stop, lane, lanes):
+    """First burst of [first, stop) on a lane; the stripe is two bursts wide."""
+    block = first >> 1
+    offset = (lane - block) % lanes
+    cursor = first if offset == 0 else (block + offset) << 1
+    return cursor if cursor < stop else -1
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_next_request(start, direction, lane, lanes, firsts, stops, reads):
+    """The next request of one direction reaching this lane, with its burst."""
+    for request in range(start, firsts.shape[0]):
+        if reads[request] == (direction == 0):
+            cursor = _fr_lane_cursor(firsts[request], stops[request], lane, lanes)
+            if cursor >= 0:
+                return request, cursor
+    return -1, -1
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_recount(ch, banks, rows, count, head, q, q_bank, q_row, pending_hit, dirty):
+    """Rebuild each direction's open-row hit counts after maintenance closed rows."""
+    for pseudo in range(2):
+        target = 2 * ch + pseudo
+        for direction in range(2):
+            dirty[pseudo, direction] = True
+            pending_hit[pseudo, direction, :] = 0
+            slot = head[pseudo, direction]
+            for _ in range(count[pseudo, direction]):
+                bank = q_bank[pseudo, direction, slot]
+                if rows[bank] == q_row[pseudo, direction, slot]:
+                    pending_hit[pseudo, direction, bank - target * banks] += 1
+                slot += 1
+                if slot == q[direction]:
+                    slot = 0
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc,
+                          history, pc_seen, channel, channel_int, resources, moved, directions,
+                          touched, windows, window_counts, stats, out_int, out_float,
+                          channel_first, channel_stop):
+    """Issue one batch's bursts command by command through per-PC queues.
+
+    Each physical channel owns both PCs, their banks and its CA buses, so one
+    worker can finish a channel alone. Inside it the lane with the earliest
+    legal next command issues first, which keeps both command buses in time
+    order. A lane's next command is the earlier of the best row hit's column
+    and the row command of its oldest entry without a queued hit on the open
+    row; the latter is what closes and opens banks ahead of their turn.
+    """
+    requests, lanes, banks = firsts.shape[0], g[0], g[1]
+    channels = lanes // 2
+    half = t[0] / 2
+    counts = np.zeros(7, dtype=np.float64)
+    if requests == 0 or channel_first >= channel_stop:
+        return counts
+    depth = max(q[0], q[1])
+    q_bank = np.empty((2, 2, depth), dtype=np.int64)
+    q_row = np.empty((2, 2, depth), dtype=np.int64)
+    q_request = np.empty((2, 2, depth), dtype=np.int64)
+    q_entry = np.empty((2, 2, depth), dtype=np.float64)
+    head = np.empty((2, 2), dtype=np.int64)
+    count = np.empty((2, 2), dtype=np.int64)
+    bypass = np.empty((2, 2), dtype=np.int64)
+    iter_request = np.empty((2, 2), dtype=np.int64)
+    iter_cursor = np.empty((2, 2), dtype=np.int64)
+    slot_free = np.empty((2, 2), dtype=np.float64)
+    dirty = np.empty((2, 2), dtype=np.bool_)
+    pending_hit = np.empty((2, 2, banks), dtype=np.int64)
+    early = np.empty((2, banks), dtype=np.int8)
+    active_deadlines = np.empty(channels, dtype=np.float64)
+    stale_deadline = np.zeros(channels, dtype=np.int64)
+    own_last = np.empty((requests, 2), dtype=np.float64)
+    own_wait = np.empty((requests, 2), dtype=np.float64)
+    draining = np.empty(2, dtype=np.bool_)
+    stale = np.empty(2, dtype=np.bool_)
+    reads_since = np.empty(2, dtype=np.int64)
+    last_group = np.empty(2, dtype=np.int64)
+    lane_request = np.empty(2, dtype=np.int64)
+    plan_kind = np.empty(2, dtype=np.int64)
+    plan_direction = np.empty(2, dtype=np.int64)
+    plan_offset = np.empty(2, dtype=np.int64)
+    last_column = np.empty(2, dtype=np.float64)
+    act_floor = np.empty(2, dtype=np.float64)
+    plan_start = np.empty(2, dtype=np.float64)
+    traffic_floor = np.empty(2, dtype=np.float64)
+    recovery = (t[9], _after(_after(t[23], t[26], half), t[10], half))
+    for ch in range(channel_first, channel_stop):
+        row_bus, column_bus = ch, channels + ch
+        reached = False
+        for pseudo in range(2):
+            lane = 2 * ch + pseudo
+            traffic_floor[pseudo] = _after(resources[2 * channels + lane, 0], -t[22], half)
+            for direction in range(2):
+                iter_request[pseudo, direction], iter_cursor[pseudo, direction] = _fr_next_request(
+                    0, direction, lane, lanes, firsts, stops, reads)
+                reached = reached or iter_request[pseudo, direction] >= 0
+        if not reached:
+            continue
+        active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+        head[:] = 0
+        count[:] = 0
+        bypass[:] = 0
+        slot_free[:] = 0.
+        dirty[:] = False
+        pending_hit[:] = 0
+        early[:] = 0
+        own_last[:] = -1.
+        own_wait[:] = 0.
+        draining[:] = False
+        stale[:] = True
+        reads_since[:] = q[4]
+        last_group[:] = -1
+        lane_request[:] = -1
+        plan_kind[:] = -1
+        last_column[:] = -1.
+        act_floor[:] = 0.
+        plan_start[:] = math.inf
+        last_pseudo = 1
+        while True:
+            for pseudo in range(2):
+                if not stale[pseudo]:
+                    continue
+                stale[pseudo] = False
+                lane = 2 * ch + pseudo
+                if draining[pseudo] and count[pseudo, 1] <= q[3]:
+                    draining[pseudo] = False
+                    reads_since[pseudo] = 0
+                for direction in range(2):
+                    # A drain lowers the write queue only if refill waits for its end.
+                    if direction == 1 and draining[pseudo]:
+                        continue
+                    capacity = q[direction]
+                    while count[pseudo, direction] < capacity and iter_request[pseudo, direction] >= 0:
+                        request = iter_request[pseudo, direction]
+                        cursor = iter_cursor[pseudo, direction]
+                        _, bank_within, row, _ = _burst_location(cursor, g, False, 0, 0, 0, 0)
+                        bank = lane * banks + bank_within
+                        slot = head[pseudo, direction] + count[pseudo, direction]
+                        if slot >= capacity:
+                            slot -= capacity
+                        q_bank[pseudo, direction, slot] = bank
+                        q_row[pseudo, direction, slot] = row
+                        q_request[pseudo, direction, slot] = request
+                        q_entry[pseudo, direction, slot] = max(arrivals[request], slot_free[pseudo, direction])
+                        count[pseudo, direction] += 1
+                        if addresses[bank] < 0:
+                            addresses[bank] = cursor * g[9]
+                            if rows[bank] >= 0:
+                                stale_deadline[ch] = 1
+                        pc_seen[lane] = True
+                        if rows[bank] == row:
+                            pending_hit[pseudo, direction, bank_within] += 1
+                        else:
+                            dirty[pseudo, direction] = True
+                        cursor = cursor + 1 if not cursor & 1 else cursor - 1 + 2 * lanes
+                        if cursor < stops[request]:
+                            iter_cursor[pseudo, direction] = cursor
+                        else:
+                            iter_request[pseudo, direction], iter_cursor[pseudo, direction] = _fr_next_request(
+                                request + 1, direction, lane, lanes, firsts, stops, reads)
+                    if count[pseudo, direction] > stats[lane, 7 + direction]:
+                        stats[lane, 7 + direction] = count[pseudo, direction]
+                waiting_reads, waiting_writes = count[pseudo, 0], count[pseudo, 1]
+                if waiting_reads + waiting_writes == 0:
+                    plan_start[pseudo] = math.inf
+                    plan_kind[pseudo] = -1
+                    continue
+                if (not draining[pseudo] and waiting_reads and waiting_writes >= q[2]
+                        and reads_since[pseudo] >= q[4]):
+                    draining[pseudo] = True
+                    stats[lane, 6] += 1
+                column_floor = resources[column_bus, 0]
+                if draining[pseudo] or not waiting_reads:
+                    direction = 1
+                elif not waiting_writes:
+                    direction = 0
+                else:
+                    # A read that has arrived always goes ahead of a queued write.
+                    direction = 0 if (q_entry[pseudo, 0, head[pseudo, 0]]
+                                      <= max(q_entry[pseudo, 1, head[pseudo, 1]], column_floor)) else 1
+                read = direction == 0
+                capacity = q[direction]
+                waiting = count[pseudo, direction]
+                first_slot = head[pseudo, direction]
+                forced = bypass[pseudo, direction] >= capacity
+                previous, previous_group = last_column[pseudo], last_group[pseudo]
+                floor = column_floor if previous < 0 else max(column_floor, previous + t[12])
+                hit_offset = row_offset = -1
+                best = math.inf
+                for offset in range(1 if forced else waiting):
+                    slot = first_slot + offset
+                    if slot >= capacity:
+                        slot -= capacity
+                    bank = q_bank[pseudo, direction, slot]
+                    if rows[bank] != q_row[pseudo, direction, slot]:
+                        continue
+                    bank_within = bank - lane * banks
+                    group = bank_within // g[4]
+                    ready = max(floor, bf[bank, 3 if read else 4], q_entry[pseudo, direction, slot])
+                    stamp = history[lane, bank_within // g[10], 1 if read else 2]
+                    if stamp >= 0:
+                        ready = max(ready, stamp + t[11])
+                    if previous >= 0:
+                        if previous_group == group:
+                            ready = max(ready, previous + t[11])
+                        elif read and previous_group // g[15] != group // g[15]:
+                            ready = max(ready, previous + t[13])
+                    if ready < best:
+                        best, hit_offset = ready, offset
+                        if ready <= floor:
+                            break
+                if dirty[pseudo, direction]:
+                    unserved = False
+                    for offset in range(waiting):
+                        slot = first_slot + offset
+                        if slot >= capacity:
+                            slot -= capacity
+                        bank = q_bank[pseudo, direction, slot]
+                        if rows[bank] == q_row[pseudo, direction, slot]:
+                            continue
+                        unserved = True
+                        if (rows[bank] >= 0 and pending_hit[pseudo, direction, bank - lane * banks] > 0
+                                and not (forced and offset == 0)):
+                            continue
+                        row_offset = offset
+                        break
+                    dirty[pseudo, direction] = unserved
+                start = math.inf
+                kind = -1
+                chosen = -1
+                if hit_offset >= 0:
+                    slot = first_slot + hit_offset
+                    if slot >= capacity:
+                        slot -= capacity
+                    bank = q_bank[pseudo, direction, slot]
+                    bank_within = bank - lane * banks
+                    start = _column_start(lane, bank, bank_within // g[4], bf[bank, 3 if read else 4],
+                                          q_entry[pseudo, direction, slot], read, g, t, pc, history,
+                                          resources, directions)
+                    kind, chosen = 0, hit_offset
+                if row_offset >= 0:
+                    slot = first_slot + row_offset
+                    if slot >= capacity:
+                        slot -= capacity
+                    bank = q_bank[pseudo, direction, slot]
+                    entry = q_entry[pseudo, direction, slot]
+                    if rows[bank] >= 0:
+                        row_start = _precharge_start(lane, bank, entry, g, t, bf, pc, channel, channel_int, resources)
+                        row_kind = 1
+                    else:
+                        # The row bus alone bounds later ACTs, so it alone may prune tFAW history.
+                        row_start = _activate_start(lane, bank, (bank - lane * banks) // g[4],
+                                                    max(entry, act_floor[pseudo]), 0., g, t, bf, pc,
+                                                    history, resources, windows, window_counts)
+                        row_kind = 2
+                    if row_start < start:
+                        start, kind, chosen = row_start, row_kind, row_offset
+                if kind < 0:
+                    raise ValueError("HBM scheduler has queued work but no eligible command")
+                plan_start[pseudo], plan_kind[pseudo] = start, kind
+                plan_direction[pseudo], plan_offset[pseudo] = direction, chosen
+            if plan_start[0] == plan_start[1]:
+                if plan_kind[0] < 0:
+                    break
+                pseudo = 1 - last_pseudo
+            else:
+                pseudo = 0 if plan_start[0] < plan_start[1] else 1
+            kind = plan_kind[pseudo]
+            start = plan_start[pseudo]
+            # The other lane's issue may have passed this plan's bus slot.
+            if start < resources[column_bus if kind == 0 else row_bus, 0]:
+                stale[pseudo] = True
+                continue
+            lane = 2 * ch + pseudo
+            direction, chosen = plan_direction[pseudo], plan_offset[pseudo]
+            read = direction == 0
+            capacity = q[direction]
+            slot = head[pseudo, direction] + chosen
+            if slot >= capacity:
+                slot -= capacity
+            bank, row = q_bank[pseudo, direction, slot], q_row[pseudo, direction, slot]
+            request, entry = q_request[pseudo, direction, slot], q_entry[pseudo, direction, slot]
+            bank_within = bank - lane * banks
+            group, history_entry = bank_within // g[4], bank_within // g[10]
+            horizon = _after(start, recovery[direction], half) if kind == 0 else start
+            if stale_deadline[ch]:
+                active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+                stale_deadline[ch] = 0
+            maintained = False
+            if active_deadlines[ch] <= horizon:
+                if g[8] and channel[ch, 1] < 0:
+                    channel[ch, 1] = max(t[20], math.floor(entry / t[20]) * t[20])
+                if g[8] and channel[ch, 1] <= active_deadlines[ch]:
+                    _refresh_until(lane, channel[ch, 1], entry, g, t, rows, bf, addresses,
+                                   pc, pc_seen, channel, channel_int, resources, touched, counts)
+                else:
+                    _close_expiring(ch, horizon, g, t, rows, bf, addresses, pc, channel,
+                                    channel_int, resources, touched, counts)
+                maintained = True
+            elif _refresh_until(lane, start, entry, g, t, rows, bf, addresses, pc, pc_seen,
+                                channel, channel_int, resources, touched, counts):
+                maintained = True
+            if maintained:
+                active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+                _fr_recount(ch, banks, rows, count, head, q, q_bank, q_row, pending_hit, dirty)
+                stale[:] = True
+                continue
+            if kind == 1:
+                _precharge(lane, bank, entry, g, t, rows, bf, pc, channel, channel_int,
+                           resources, touched, counts)
+                _close_deadline(ch, bank, g, t, rows, bf, addresses, active_deadlines, stale_deadline)
+                stats[lane, 4] += 1
+                early[pseudo, bank_within] = 1
+                pending_hit[pseudo, 0, bank_within] = 0
+                pending_hit[pseudo, 1, bank_within] = 0
+                dirty[pseudo, 0] = dirty[pseudo, 1] = True
+                stale[pseudo] = True
+                last_pseudo = pseudo
+                continue
+            if kind == 2:
+                anchor = _after(start, t[0], half)
+                if t[29] > 0:
+                    rcd = t[4 if read else 5]
+                    column = _column_start(lane, bank, group, _after(anchor, rcd, half), entry, read,
+                                           g, t, pc, history, resources, directions)
+                    latest = _after(column, recovery[direction], half)
+                    if latest > _after(anchor, t[29], half):
+                        if _after(rcd, recovery[direction], half) > t[29]:
+                            raise ValueError("HBM access recovery exceeds the tRASmax activation window")
+                        # A later DQ reservation keeps the row closed rather than
+                        # holding it open for longer than tRASmax.
+                        act_floor[pseudo] = _align(max(_after(start, t[0], half),
+                            _after(_after(latest, -t[29], half), -t[0], half)), t[0])
+                        stale[pseudo] = True
+                        continue
+                command, _ = _command(ch, 0, start, t[1], True, g, t, resources, touched, counts)
+                anchor = _after(command, t[0], half)
+                history[lane, group, 0] = anchor
+                if t[30] > 0:
+                    _record_activate(lane, anchor, windows, window_counts)
+                channel[ch, 0] = command
+                channel_int[ch, 0], channel_int[ch, 1] = bank, lane
+                bf[bank, 0] = anchor
+                bf[bank, 3], bf[bank, 4] = _after(anchor, t[4], half), _after(anchor, t[5], half)
+                bf[bank, 2] = _after(anchor, t[7], half)
+                rows[bank] = row
+                bf[bank, 6] = min(bf[bank, 3], bf[bank, 4])
+                bf[bank, 5] = bf[bank, 2]
+                counts[0] += 1
+                stats[lane, 3] += 1
+                if stale_deadline[ch]:
+                    active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
+                    stale_deadline[ch] = 0
+                elif t[29] > 0:
+                    active_deadlines[ch] = min(active_deadlines[ch], _after(anchor, t[29], half))
+                early[pseudo, bank_within] = 2 if early[pseudo, bank_within] == 1 else 3
+                act_floor[pseudo] = 0.
+                for side in range(2):
+                    hits_now = 0
+                    position = head[pseudo, side]
+                    for _ in range(count[pseudo, side]):
+                        if q_bank[pseudo, side, position] == bank and q_row[pseudo, side, position] == row:
+                            hits_now += 1
+                        position += 1
+                        if position == q[side]:
+                            position = 0
+                    pending_hit[pseudo, side, bank_within] = hits_now
+                    dirty[pseudo, side] = True
+                stale[pseudo] = True
+                last_pseudo = pseudo
+                continue
+            command, _ = _command(ch, 1, start, t[3], True, g, t, resources, touched, counts)
+            counts[2 if read else 3] += 1
+            history[lane, history_entry, 1 if read else 2] = command
+            data = 2 * channels + lane
+            if directions[data] and directions[data] != (1 if read else 2):
+                stats[lane, 5] += 1
+            data_start = max(_after(command, t[22 if read else 23], half), resources[data, 0])
+            data_end = _after(data_start, t[26], half)
+            resources[data, 0] = data_end
+            resources[data, 1] += t[26]
+            resources[data, 2], resources[data, 3] = data_start, data_end
+            moved[data] += g[9]
+            directions[data] = 1 if read else 2
+            touched[data] = True
+            pc[lane, 2 if read else 3] = _after(data_start, t[27 if read else 28], half)
+            if read:
+                bf[bank, 2] = max(bf[bank, 2], _after(command, t[9], half))
+                reads_since[pseudo] += 1
+                # Waits only count time another request's traffic held this lane.
+                own = own_last[request, pseudo]
+                if own >= 0:
+                    if lane_request[pseudo] != request:
+                        own_wait[request, pseudo] += max(0., command - max(entry, own + t[12]))
+                elif lane_request[pseudo] >= 0:
+                    own_wait[request, pseudo] += max(0., command - entry)
+                else:
+                    own_wait[request, pseudo] += max(0., min(command, traffic_floor[pseudo]) - entry)
+                own_last[request, pseudo] = command
+                lane_request[pseudo] = request
+            else:
+                bf[bank, 2] = max(bf[bank, 2], _after(data_end, t[10], half))
+                history[lane, history_entry, 3] = data_end
+            bf[bank, 5] = bf[bank, 2]
+            out_float[request, 0] = max(out_float[request, 0], data_end)
+            outcome = early[pseudo, bank_within]
+            early[pseudo, bank_within] = 0
+            # Early tags: 0 row hit, 2 opened after a conflict, 3 opened from closed.
+            outcome = 0 if outcome == 0 else 2 if outcome == 2 else 1
+            out_int[request, outcome] += 1
+            stats[lane, outcome] += 1
+            pending_hit[pseudo, direction, bank_within] -= 1
+            # Remove the entry, keeping the others in age order.
+            first_slot = head[pseudo, direction]
+            position = slot
+            for _ in range(chosen):
+                source = position - 1 if position else capacity - 1
+                q_bank[pseudo, direction, position] = q_bank[pseudo, direction, source]
+                q_row[pseudo, direction, position] = q_row[pseudo, direction, source]
+                q_request[pseudo, direction, position] = q_request[pseudo, direction, source]
+                q_entry[pseudo, direction, position] = q_entry[pseudo, direction, source]
+                position = source
+            head[pseudo, direction] = first_slot + 1 if first_slot + 1 < capacity else 0
+            count[pseudo, direction] -= 1
+            bypass[pseudo, direction] = bypass[pseudo, direction] + 1 if chosen else 0
+            slot_free[pseudo, direction] = command
+            last_column[pseudo], last_group[pseudo] = command, group
+            stale[pseudo] = True
+            last_pseudo = pseudo
+        for pseudo in range(2):
+            lane = 2 * ch + pseudo
+            for request in range(requests):
+                pending_wait = own_wait[request, pseudo]
+                if pending_wait > out_float[request, 1]:
+                    out_float[request, 1] = pending_wait
+                if pending_wait > stats[lane, 9]:
+                    stats[lane, 9] = pending_wait
+    return counts
+
+
+def run_fr_fcfs(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc, history, pc_seen,
+                channel, channel_int, resources, moved, directions, touched, windows, window_counts,
+                stats):
+    """Run one batch, one worker per channel range; returns per-request outcomes.
+
+    Workers own disjoint channels and their own output rows. The outcome rows
+    are reduced in channel order, so results do not depend on thread timing.
+    """
+    lanes, channels = int(g[0]), int(g[0]) // 2
+    channel_first, channel_stop = channels, 0
+    for first, stop in zip(firsts.tolist(), stops.tolist()):
+        first_block, last_block = first >> 1, (stop - 1) >> 1
+        if first_block // lanes != last_block // lanes:
+            channel_first, channel_stop = 0, channels
+            break
+        channel_first = min(channel_first, (first_block % lanes) // 2)
+        channel_stop = max(channel_stop, (last_block % lanes) // 2 + 1)
+    arrays = (rows, bf, addresses, pc, history, pc_seen, channel, channel_int, resources, moved,
+              directions, touched, windows, window_counts, stats)
+    requests = len(firsts)
+
+    def execute(left, right):
+        out_int = np.zeros((requests, 3), dtype=np.int64)
+        out_float = np.zeros((requests, 2), dtype=np.float64)
+        out_float[:, 0] = arrivals
+        counts = _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, *arrays,
+                                       out_int, out_float, left, right)
+        return out_int, out_float, counts
+
+    physical_bytes = int((stops - firsts).sum()) * int(g[9])
+    workers = min(_CHANNEL_WORKERS, channel_stop - channel_first, physical_bytes // (32 * 1024))
+    if physical_bytes < 128 * 1024 or workers < 2:
+        return execute(channel_first, channel_stop)
+    # Compile or load the kernel on the calling thread before workers start.
+    execute(0, 0)
+    condition = Condition()
+    cancelled = False
+    active = 0
+
+    def guarded(left, right):
+        nonlocal active
+        with condition:
+            if cancelled:
+                return None
+            active += 1
+        try:
+            return execute(left, right)
+        finally:
+            with condition:
+                active -= 1
+                condition.notify_all()
+
+    jobs = []
+    try:
+        for index in range(workers):
+            jobs.append(_CHANNEL_EXECUTOR.submit(guarded,
+                channel_first + index * (channel_stop - channel_first) // workers,
+                channel_first + (index + 1) * (channel_stop - channel_first) // workers))
+        wait(jobs)
+        results = [job.result() for job in jobs]
+    except BaseException:
+        with condition:
+            cancelled = True
+            while active:
+                try:
+                    condition.wait()
+                except BaseException:
+                    continue
+        raise
+    out_int = sum(result[0] for result in results)
+    out_float = np.stack([result[1] for result in results]).max(axis=0)
+    counts = np.zeros(7, dtype=np.float64)
+    for result in results:
+        counts += result[2]
+    return out_int, out_float, counts

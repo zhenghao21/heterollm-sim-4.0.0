@@ -19,6 +19,7 @@ def _analytical_toy_hardware(scenario, gpu_ghz):
             capacity = raw.capacity_bytes if component.component_id == "pd_host" else 8*1024**2
             component = replace(component, capacity_bytes=capacity, metadata={**component.metadata,
                 "physical_memory_config": replace(raw, control_mode="analytical",
+                    address_mapping="bank_interleaved", scheduler="fcfs", queue_scope="device",
                     refresh_policy="disabled", channels=1, pseudo_channels_per_channel=1,
                     subchannels_per_channel=1, stacks=1, dies_per_stack=1, ranks_per_channel=1,
                     bank_groups_per_rank=1, banks_per_group=1, rows_per_bank=capacity // 1024,

@@ -382,11 +382,14 @@ class DramCore:
                 id(self.config): self.config,
                 id(self.timeline.resource_aliases): self.timeline.resource_aliases,
             })
-            result = shadow._submit_validated(request)
+            result = (shadow._submit_fr_fcfs((request,))[0] if self.config.scheduler == "fr_fcfs"
+                      else shadow._submit_validated(request))
             if (not math.isfinite(result.completion_ns)
                     or any(not math.isfinite(bank.ready_ns) for bank in shadow._banks.values())
                     or any(not math.isfinite(value) for value in shadow.timeline.busy_ns.values())):
                 raise ValueError("DRAM request exceeds finite timing range")
+        if self.config.scheduler == "fr_fcfs":
+            return self._submit_fr_fcfs((request,), _resource_accumulator=_resource_accumulator)[0]
         if (_resource_accumulator is not None and not self.capture_details
                 and self.config.control_mode == "jedec_hbm"
                 and not self._finite_guard_required(request)):
@@ -492,7 +495,9 @@ class DramCore:
         for request in items:
             validate_dram_request(request, self.config)
         previous_direction = self._scheduler_direction
-        if self.config.scheduler != "fcfs" and len(items) > 1:
+        if self.config.scheduler == "fr_fcfs":
+            results = self._submit_fr_fcfs(items, _resource_accumulator=_resource_accumulator) if items else ()
+        elif self.config.scheduler != "fcfs" and len(items) > 1:
             from ._dram_scheduler import schedule_requests
             results = schedule_requests(self, items)
             if _resource_accumulator is not None:
@@ -523,6 +528,124 @@ class DramCore:
             previous_direction = request.operation.value
             tagged.append(replace(result, counters=counters))
         return tuple(tagged)
+
+    def _submit_fr_fcfs(self, items, *, _resource_accumulator=None):
+        """Per-PC FR-FCFS over one arrived window; results keep input order.
+
+        Bursts of different requests interleave in the per-PC queues, so a
+        request holds no credit. A request overlapping an earlier one with a
+        write present waits for its completion in a later group: the queues
+        reorder bursts freely only between independent addresses.
+        """
+        results = [None] * len(items)
+        finished = []
+        group = []
+        def run_group():
+            nonlocal group
+            requests = tuple(items[index] if finished == [] else
+                             self._fr_fcfs_after_dependencies(items[index], finished) for index in group)
+            executed = self._execute_fr_fcfs(requests, _resource_accumulator)
+            for index, admitted, result in zip(group, requests, executed):
+                request = items[index]
+                results[index] = replace(result, arrival_ns=request.arrival_ns, counters={
+                    **result.counters, "queue_wait_ns": result.counters["queue_wait_ns"]
+                    + admitted.arrival_ns - request.arrival_ns})
+                finished.append((request.address, request.address + request.byte_count,
+                                 request.operation is Operation.WRITE, result.completion_ns))
+            group = []
+        any_write = any(request.operation is Operation.WRITE for request in items)
+        for index, request in enumerate(items):
+            if any_write and any(
+                    items[other].address < request.address + request.byte_count
+                    and request.address < items[other].address + items[other].byte_count
+                    and (request.operation is Operation.WRITE or items[other].operation is Operation.WRITE)
+                    for other in group):
+                run_group()
+            group.append(index)
+        run_group()
+        tagged = []
+        for request, result in zip(items, results):
+            tagged.append(replace(result, counters={
+                **result.counters, "scheduler_reordered_requests": 0, "scheduler_batches": 0,
+                "controller_direction_switches": int(self._scheduler_direction is not None
+                    and self._scheduler_direction != request.operation.value)}))
+            self._scheduler_streak = (self._scheduler_streak + 1
+                                      if self._scheduler_direction == request.operation.value else 1)
+            self._scheduler_direction = request.operation.value
+        return tuple(tagged)
+
+    @staticmethod
+    def _fr_fcfs_after_dependencies(request, finished):
+        write = request.operation is Operation.WRITE
+        ready = request.arrival_ns
+        end = request.address + request.byte_count
+        for left, right, other_write, completion in finished:
+            if left < end and request.address < right and (write or other_write):
+                ready = max(ready, completion)
+        return request if ready == request.arrival_ns else replace(request, arrival_ns=ready)
+
+    def _execute_fr_fcfs(self, requests, accumulator):
+        """The numeric controller when it applies, otherwise its reference."""
+        c = self.config
+        burst = c.burst_bytes
+        bursts = sum((request.address + request.byte_count - 1) // burst - request.address // burst + 1
+                     for request in requests)
+        # A few bursts on a large idle device cost less through the reference
+        # controller than through a cold numeric pack; see execute_hbm.
+        tiny = (not self._hbm_transactions and not self._hbm_numeric_enabled
+                and bursts <= min(128, c.lane_count * c.bank_count // 128))
+        outcome = None
+        if not (self.capture_details or tiny or any(map(self._finite_guard_required, requests))):
+            try:
+                from ._compiled_hbm import execute_fr_fcfs_numeric
+            except (ImportError, OSError):
+                pass
+            else:
+                outcome = execute_fr_fcfs_numeric(self, requests, resource_accumulator=accumulator)
+        if outcome is None:
+            from ._hbm_control import execute_fr_fcfs_reference
+            before = self.timeline.metrics_snapshot(
+                max_intervals=c.max_expanded_segments if self.capture_details else 0)
+            results = execute_fr_fcfs_reference(self, requests)
+            metrics = self.timeline._core_metrics_delta(before)
+            if accumulator is not None:
+                accumulator.consume_metrics(metrics)
+                for field in ("resource_busy_ns", "resource_bytes", "resource_last_intervals"):
+                    metrics.pop(field, None)
+        else:
+            results, metrics = outcome
+        extra = {}
+        if c.bank_group_timing_enabled:
+            extra = {"bank_group_timing_enabled": True, "bank_group_timing_fallback": False}
+        # A batch's resources are one bill; its first result carries them.
+        empty = {key: {} if isinstance(value, dict) else value for key, value in metrics.items()}
+        return tuple(replace(result, counters={**result.counters, **extra,
+                                               **(metrics if position == 0 else empty)})
+                     for position, result in enumerate(results))
+
+    def hbm_scheduler_stats(self):
+        """Per-PC scheduler counters without ending numeric residency."""
+        packed = self.__dict__.get("_hbm_numeric_state")
+        if packed is not None:
+            return packed.arrays[14].copy()
+        import numpy as np
+        from ._hbm_numeric import FR_STAT_FIELDS
+        c = self.config
+        stats = np.zeros((c.lane_count, len(FR_STAT_FIELDS)), dtype=np.float64)
+        for (stack, channel, pseudo), state in self.__dict__["_hbm_control_state"].get("pcs", {}).items():
+            values = state.get("scheduler_stats")
+            if values is not None:
+                stats[(stack * c.channels + channel) * 2 + pseudo] = values
+        return stats
+
+    def hbm_reset_scheduler_peaks(self):
+        """Begin a new observation window for the peak and wait columns."""
+        packed = self.__dict__.get("_hbm_numeric_state")
+        if packed is not None:
+            packed.arrays[14][:, 7:] = 0.
+        for state in self.__dict__["_hbm_control_state"].get("pcs", {}).values():
+            if "scheduler_stats" in state:
+                state["scheduler_stats"] = state["scheduler_stats"][:7] + [0.0, 0.0, 0.0]
 
     def _submit_many_ordered(self, items, *, _resource_accumulator=None):
         """FCFS execution, amortizing numeric state packing when possible."""

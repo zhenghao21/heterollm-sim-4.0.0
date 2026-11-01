@@ -31,7 +31,8 @@ _DRAM_RESEARCH_BASE = {
     "bank_geometry_scope": "per_die", "stack_interface_mode": "shared",
     "control_mode": "analytical", "activated_row_msb": None, "refresh_policy": "disabled",
     "address_mapping": "bank_interleaved", "scheduler": "fcfs", "scheduler_window": 16,
-    "queue_scope": "device",
+    "queue_scope": "device", "read_queue_depth_per_pc": 32, "write_queue_depth_per_pc": 64,
+    "write_high_watermark": 0.85, "write_low_watermark": 0.50, "min_reads_per_switch": 16,
     **{name: 0.0 for name in HBM_CONTROL_TIMING_FIELDS},
     "bank_groups_per_rank": 1, "banks_per_group": 8,
     "rows_per_bank": 524288, "row_bytes": 8192, "burst_bytes": 64,
@@ -328,8 +329,11 @@ def _hbm_reference(profile_id, updates, expand_geometry=False):
         "interface_bandwidth_gb_s", "read_bandwidth_gb_s", "write_bandwidth_gb_s")
         if name in updates}
     if mode == "flat":
+        # One flat bank group has no SID structure for the SID-aware mapping.
         changes.update(bank_groups_per_rank=1,
-                       banks_per_group=payload["bank_groups_per_rank"] * payload["banks_per_group"])
+                       banks_per_group=payload["bank_groups_per_rank"] * payload["banks_per_group"],
+                       address_mapping="bank_interleaved", scheduler="fcfs", queue_scope="device",
+                       interleave_bytes=payload["burst_bytes"])
     changes.update(values)
     changes["metadata"] = {
         **metadata,

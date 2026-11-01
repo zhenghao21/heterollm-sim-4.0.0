@@ -16,7 +16,7 @@ from ._hbm_dependencies import normalize_hbm_dependencies
 from ._hbm_errors import HBMConfigError
 
 from .memory_types import (
-    DRAM_BANK_GROUP_TIMING_FIELDS, HBM_CONTROL_TIMING_FIELDS, DRAM_CONTROLLER_FIELDS,
+    DRAM_FR_FCFS_FIELDS, DRAM_BANK_GROUP_TIMING_FIELDS, HBM_CONTROL_TIMING_FIELDS, DRAM_CONTROLLER_FIELDS,
     DramConfig, NandConfig, SramConfig, MemoryKind, Operation, parse_physical_memory_config,
 )
 
@@ -168,6 +168,8 @@ def parse_required_physical_config(component_id, kind, raw):
     if raw.get("control_mode") == "jedec_hbm":
         missing += sorted(name for name in (*HBM_CONTROL_TIMING_FIELDS, "activated_row_msb", "refresh_policy")
                           if name not in raw)
+    if raw.get("scheduler") == "fr_fcfs":
+        missing += sorted(name for name in DRAM_FR_FCFS_FIELDS if raw.get(name) is None)
     if kind in DRAM_COMPONENT_KINDS and not (
         raw.get("interface_bandwidth_gb_s") is not None
         or raw.get("lane_bandwidth_gb_s") is not None

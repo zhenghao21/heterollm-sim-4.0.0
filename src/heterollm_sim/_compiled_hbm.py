@@ -13,6 +13,7 @@ from .memory_mapping import map_dram_address
 from ._hbm_pack import (refresh_resource_columns, publish_resource_columns,
                        can_capture_resource_columns, consume_resource_columns,
                        HBMResourceBatch, HBMAdmission, HBMResourceAccumulator)
+from ._hbm_control import fr_queue_parameters
 
 
 # Cover the 4 TiB, 64-stack HBM reference without raising the analytical
@@ -58,7 +59,7 @@ def _request_array_selection(lanes, banks, first_lane, lane_count):
     # complete previous bitmap even when all other writes are channel-local.
     return (bank_rows, bank_rows, bank_rows, pc_rows, pc_rows, pc_rows,
             channel_rows, channel_rows, resources, resources, resources,
-            slice(None), pc_rows, pc_rows)
+            slice(None), pc_rows, pc_rows, pc_rows)
 
 
 @lru_cache(maxsize=8)
@@ -120,8 +121,10 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     # The parallel traversal strides one complete address stripe. Validate in
     # Python integers before constructing the int64 geometry vector; a tiny
     # valid request may still have an authored stripe wider than int64.
+    mapping_bursts = (2 if c.address_mapping == "sid_aware"
+                      else (c.interleave_bytes or c.burst_bytes) // c.burst_bytes)
     if (c.address_mapping != "row_local"
-            and lanes * ((c.interleave_bytes or c.burst_bytes) // c.burst_bytes) > (1 << 63) - 1):
+            and lanes * mapping_bursts > (1 << 63) - 1):
         return None
     cached = core._hbm_numeric_state
     if cached is not None:
@@ -137,7 +140,7 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
             return cached
         return None
     try:
-        from ._hbm_numeric import TIMING_FIELDS, run_hbm_numeric
+        from ._hbm_numeric import FR_STAT_FIELDS, TIMING_FIELDS, run_hbm_numeric
     except (ImportError, OSError):
         return None
     metadata = c.metadata
@@ -176,6 +179,7 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     moved = np.zeros(len(ids), dtype=np.int64)
     directions = np.zeros(len(ids), dtype=np.int8)
     touched = np.zeros(len(ids), dtype=np.bool_)
+    stats = np.zeros((lanes, len(FR_STAT_FIELDS)), dtype=np.float64)
     live_slots = set()
     try:
         for index, rid in enumerate(ids):
@@ -221,6 +225,7 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
                 return None
             window_counts[lane] = len(calendar)
             windows[lane, :len(calendar)] = calendar
+            stats[lane] = previous.get("scheduler_stats", 0.)
             pc[lane] = [previous["last_precharge"] if previous["last_precharge"] is not None else -1.,
                         previous["blocked_until"], previous["next_data_start"]["read"], previous["next_data_start"]["write"]]
             for group, value in previous["activate"].items():
@@ -244,7 +249,9 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
                 channel_int[ch, 1] = pc_lookup[last_pc]
     except (KeyError, IndexError, TypeError, ValueError, OverflowError):
         return None
-    g = np.array([lanes, banks, (c.interleave_bytes or c.burst_bytes) // c.burst_bytes,
+    sid_aware = c.address_mapping == "sid_aware"
+    sid_count = int(c.metadata.get("sid_count", c.bank_groups_per_rank // 2)) if sid_aware else 0
+    g = np.array([lanes, banks, 2 if sid_aware else (c.interleave_bytes or c.burst_bytes) // c.burst_bytes,
                   c.row_bytes // c.burst_bytes, c.banks_per_group, groups,
                   -1 if c.activated_row_msb is None else c.activated_row_msb,
                   c.generation in {"HBM2", "HBM2E"}, c.refresh_policy == "all_bank", c.burst_bytes,
@@ -263,12 +270,16 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     ticks = np.rint(stamps / half_clock)
     grid_history = bool(np.all((stamps < 0) | ((np.abs(ticks) < 2. ** 49)
                                              & (stamps == ticks * half_clock))))
-    g = np.append(g, np.int64(grid_history))
+    g = np.append(g, np.array([np.int64(grid_history), np.int64(sid_aware),
+                               np.int64(sid_count), np.int64(
+                                   c.bank_groups_per_rank // sid_count if sid_aware and sid_count else 0)],
+                              dtype=np.int64))
     if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t, windows)):
         return None
-    packed = _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t,
-        run_hbm_numeric, (rows, bf, addresses, pc, history, pc_seen, channel,
-                          channel_int, resources, moved, directions, touched, windows, window_counts))
+    arrays = (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
+              resources, moved, directions, touched, windows, window_counts)
+    packed = _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t, run_hbm_numeric,
+                              (*arrays, stats) if sid_aware else arrays)
     if core._hbm_numeric_enabled:
         core._hbm_numeric_state = packed
         for token in core._hbm_transactions:
@@ -277,7 +288,7 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
 
 
 class _HBMNumericState:
-    """One packed controller; requests still execute in submission order."""
+    """One packed controller, its FCFS and FR-FCFS numeric executors."""
 
     def __init__(self, core, bank_ids, pc_keys, channel_keys, ids, g, t, run_numeric, arrays):
         self.core = core
@@ -286,11 +297,13 @@ class _HBMNumericState:
         # generator frame per name on every request publication.
         self._id_objects = np.array(ids, dtype=object)
         self.g, self.t, self.run_numeric, self.arrays = g, t, run_numeric, arrays
+        self.run_fr_fcfs = _owned_numeric_module.run_fr_fcfs
         self._controller_before = self._copy_controller_arrays()
         self._controller_commits = 0
         self._config = copy.deepcopy(core.config)
         c = self._config
         self._request_lane_span = (c.row_bytes * c.bank_count if c.address_mapping == "row_local"
+                                   else 2 * c.burst_bytes if c.address_mapping == "sid_aware"
                                    else c.interleave_bytes or c.burst_bytes)
         self._dense_request_bytes = max(1, c.lane_count // 4) * self._request_lane_span
         aliases = core.timeline.resource_aliases
@@ -305,6 +318,7 @@ class _HBMNumericState:
         self._resource_lookup = {rid: index for index, rid in enumerate(ids)}
         self._capture_positions = {}
         self._refreshed_resource_ids = ids
+        self._fr_queue = np.array(fr_queue_parameters(c), dtype=np.int64)
 
     def validate_aliases(self):
         aliases = self.core.timeline.resource_aliases
@@ -350,6 +364,7 @@ class _HBMNumericState:
         # does not rely on hidden mutation versions or trusted caller state.
         c = self.core.config
         lane_span = (c.row_bytes * c.bank_count if c.address_mapping == "row_local"
+                     else 2 * c.burst_bytes if c.address_mapping == "sid_aware"
                      else c.interleave_bytes or c.burst_bytes)
         channels = len(self.channel_keys)
         selected = set()
@@ -501,6 +516,64 @@ class _HBMNumericState:
         return TransactionResult(request.request_id, request.operation, request.arrival_ns,
                                  float(completion), request.byte_count, physical, counters=counters)
 
+    def execute_fr_fcfs(self, requests):
+        """Run one batch through the per-PC queues, or decline with None."""
+        c = self.core.config
+        burst = c.burst_bytes
+        count = len(requests)
+        firsts = np.fromiter((request.address // burst for request in requests),
+                             dtype=np.int64, count=count)
+        stops = np.fromiter(((request.address + request.byte_count - 1) // burst + 1 for request in requests),
+                            dtype=np.int64, count=count)
+        arrivals = np.fromiter((request.arrival_ns for request in requests),
+                               dtype=np.float64, count=count)
+        reads = np.fromiter((request.operation is Operation.READ for request in requests),
+                            dtype=np.bool_, count=count)
+        bursts = (stops - firsts).tolist()
+        (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
+         resources, moved, directions, touched, windows, window_counts, stats) = self.arrays
+        physical_total = sum(bursts) * burst
+        if (not np.isfinite(arrivals).all() or physical_total > (1 << 63) - 1
+                or int(moved.max()) > (1 << 63) - 1 - physical_total):
+            return None
+        touched.fill(False)
+        try:
+            out_int, out_float, counts = self.run_fr_fcfs(
+                firsts, stops, arrivals, reads, self._fr_queue, self.g, self.t, rows, bf, addresses,
+                pc, history, pc_seen, channel, channel_int, resources, moved, directions, touched,
+                windows, window_counts, stats)
+        except OverflowError:
+            return None
+        if not (np.isfinite(out_float).all() and np.isfinite(resources).all() and np.isfinite(bf).all()):
+            return None
+        results = []
+        for index, request in enumerate(requests):
+            read = request.operation is Operation.READ
+            physical = bursts[index] * burst
+            first = index == 0
+            # Commands of a batch are shared; its first result carries their totals.
+            counters = dict(activate_commands=int(counts[0]) if first else 0,
+                            precharge_commands=int(counts[1]) if first else 0,
+                            read_commands=int(counts[2]) if first else 0,
+                            write_commands=int(counts[3]) if first else 0,
+                            row_command_bus_busy_ns=float(counts[5]) if first else 0.,
+                            column_command_bus_busy_ns=float(counts[6]) if first else 0.,
+                            control_mode="jedec_hbm", row_hits=int(out_int[index, 0]),
+                            row_misses=int(out_int[index, 1]), row_conflicts=int(out_int[index, 2]),
+                            burst_count=bursts[index], details_truncated=bursts[index] > c.max_expanded_segments,
+                            compiled_hbm_float64=True,
+                            physical_read_bytes=physical if read else 0, physical_write_bytes=0 if read else physical,
+                            queue_wait_ns=float(out_float[index, 1]),
+                            bandwidth_ceiling_gb_s=c.directional_bandwidth_gb_s(request.operation),
+                            host_transfer_bytes=0, internal_transfer_bytes=0,
+                            pages_read=0, pages_programmed=0, erase_operations=0)
+            if c.refresh_policy == "all_bank":
+                counters["refresh_commands"] = int(counts[4]) if first else 0
+            results.append(TransactionResult(request.request_id, request.operation, request.arrival_ns,
+                                             float(out_float[index, 0]), request.byte_count, physical,
+                                             counters=counters))
+        return tuple(results)
+
     def commit_controller(self):
         from .dram_core import _BankState
 
@@ -510,7 +583,7 @@ class _HBMNumericState:
         bank_ids, pc_keys, channel_keys = self.bank_ids, self.pc_keys, self.channel_keys
         history_stride = int(self.g[10])
         (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
-         resources, moved, directions, touched, windows, window_counts) = self.arrays
+         resources, moved, directions, touched, windows, window_counts) = self.arrays[:14]
         old_rows, old_bf, old_addresses, old_channel, old_channel_int = self._controller_before
         # Compare float bits rather than tolerances, including signed zero.
         changed_banks = ((rows != old_rows) | (addresses != old_addresses)
@@ -558,6 +631,8 @@ class _HBMNumericState:
             core._hbm_remember_entry("pcs", pc_keys[lane])
             previous = saved_pcs.setdefault(pc_keys[lane], {"activate_window": []})
             previous["activate_window"] = windows[lane, :window_counts[lane]].tolist()
+            if len(self.arrays) > 14:
+                previous["scheduler_stats"] = self.arrays[14][lane].tolist()
             previous.update(activate={group: entry[0] for group, entry in enumerate(entries)
                                       if entry[0] >= 0},
                             column={op: {key: entry[index] for key, entry in zip(history_keys, entries)
@@ -584,14 +659,18 @@ class _HBMNumericState:
     def commit_timeline(self, request):
         timeline, ids = self.core.timeline, self.ids
         channels = len(self.channel_keys)
-        (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
-         resources, moved, directions, touched, windows, window_counts) = self.arrays
+        moved, touched = self.arrays[9], self.arrays[11]
+        resources, directions = self.arrays[8], self.arrays[10]
         indices = np.flatnonzero(touched)
         timeline._remember_resources(self._id_objects[indices].tolist())
         publish_resource_columns(ids, resources, moved, indices,
             timeline.lane_available, timeline.ready_ns, timeline.busy_ns,
             timeline.last_intervals, timeline.bytes_moved, timeline.directions,
             timeline.lane_directions, timeline._touched, channels, request.operation.value)
+        if self._config.scheduler == "fr_fcfs":
+            # One batch can mix directions on different lanes.
+            for index in indices[indices >= 2 * channels].tolist():
+                timeline.directions[ids[index]] = "read" if directions[index] == 1 else "write"
         timeline._intervals_truncated = True
 
 
@@ -616,6 +695,49 @@ def execute_hbm_numeric(core, request):
     elif resident:
         packed.restore_checkpoint(before)
     return result
+
+
+class _RequestSpan:
+    """The address span covering a batch, for selecting its channels' state."""
+    __slots__ = ("address", "byte_count")
+
+    def __init__(self, requests):
+        self.address = min(request.address for request in requests)
+        self.byte_count = max(request.address + request.byte_count for request in requests) - self.address
+
+
+def execute_fr_fcfs_numeric(core, requests, *, resource_accumulator=None):
+    """Execute one batch, returning its results and metrics, or decline with None."""
+    packed = _pack_hbm_numeric(core, requests[0], refresh_requests=requests)
+    if packed is None:
+        return None
+    resident = core._hbm_numeric_state is packed
+    before = packed.checkpoint(_RequestSpan(requests) if len(requests) > 1 else requests[0]) if resident else None
+    capture = None
+    if (resident and resource_accumulator is not None
+            and can_capture_resource_columns(core.timeline, packed._refreshed_resource_ids)):
+        capture = _NumericResourceCapture(packed, resource_accumulator)
+        capture.before = before
+        capture.begin()
+    else:
+        before_metrics = core.timeline.metrics_snapshot(max_intervals=0)
+    try:
+        results = packed.execute_fr_fcfs(requests)
+    except BaseException:
+        if resident:
+            packed.restore_checkpoint(before)
+        raise
+    if results is None:
+        if resident:
+            packed.restore_checkpoint(before)
+        return None
+    packed._controller_commits += 1
+    if not resident:
+        packed.commit_controller()
+    packed.commit_timeline(requests[0])
+    if capture is not None:
+        return results, capture.finish()
+    return results, core.timeline._core_metrics_delta(before_metrics)
 
 
 class _NumericDeclined(Exception):
@@ -773,13 +895,13 @@ def execute_hbm_numeric_many(core, requests, *, resource_accumulator=None):
 # A wrapper around any of these hooks can write a different resource before
 # raising, so checking DramCore.submit alone does not establish ownership.
 _OWNED_TIMELINE_HBM_FUNCTIONS = tuple((name, globals()[name]) for name in (
-    "_pack_hbm_numeric", "execute_hbm_numeric", "execute_hbm_numeric_many",
+    "_pack_hbm_numeric", "execute_hbm_numeric", "execute_hbm_numeric_many", "execute_fr_fcfs_numeric",
     "_request_array_selection", "can_capture_resource_columns",
     "refresh_resource_columns", "publish_resource_columns", "consume_resource_columns",
     "_can_batch_resources"))
 _OWNED_TIMELINE_HBM_METHODS = tuple((name, getattr(_HBMNumericState, name)) for name in (
     "validate_aliases", "refresh_resources", "request_selection", "checkpoint",
-    "restore_checkpoint", "execute", "commit_controller", "commit_timeline"))
+    "restore_checkpoint", "execute", "execute_fr_fcfs", "commit_controller", "commit_timeline"))
 _OWNED_TIMELINE_HBM_CLASS = _HBMNumericState
 _OWNED_TIMELINE_CAPTURE_METHODS = tuple((name, getattr(_NumericResourceCapture, name))
     for name in ("__init__", "begin", "finish"))
@@ -794,7 +916,8 @@ from . import _hbm_control as _owned_control_module
 from . import native_hbm_memo_experiment as _owned_memo_module
 
 _OWNED_TIMELINE_NUMERIC_FUNCTIONS = tuple((name, getattr(_owned_numeric_module, name))
-    for name in ("run_hbm_numeric", "_run_hbm_numeric", "_run_hbm_channel_range", "_new_channel_scratch"))
+    for name in ("run_hbm_numeric", "_run_hbm_numeric", "_run_hbm_channel_range", "_new_channel_scratch",
+                 "run_fr_fcfs", "_run_fr_fcfs_channels"))
 _OWNED_TIMELINE_CONTROL_ENTRY = _owned_control_module.execute_hbm
 _OWNED_NUMERIC_MEMO_CONTEXT = _owned_memo_module._ACTIVE
 _OWNED_NUMERIC_MEMO_VALIDATOR = _owned_memo_module.native_memo_hooks

@@ -263,6 +263,21 @@ def make_hbm_geometry_config(
             "leaves base-organization physical stack height vendor-specific"
         )
 
+    # HBM4's 16H address organization exposes four SIDs and two bank groups
+    # per SID.  The controller uses the SID-aware low-BG mapping only for
+    # this organization; HBM2/3 retain their imported generic mixed-radix
+    # mapping until a corresponding SID table is available.
+    sid_mapping = hbm4 and groups_per_pc == 8 and banks_per_group == 8
+    hbm4_rtw = None
+    hbm4_wtr_s = hbm4_wtr_l = hbm4_rtp = None
+    if hbm4:
+        # JESD270-4A Table 108 note 18 (printed pp.194–199), with RL32/WL8,
+        # BL=8 and the PHY terms kept as explicit simulator assumptions.
+        # The formula is rounded to a legal rising command edge.
+        hbm4_rtw = math.ceil(max(0.0,
+            read_latency_ns - write_latency_ns + 2.5 * clock_ns
+            + max(-0.2, -0.2 * clock_ns) + 1.5 + 0.020 + 0.080) / clock_ns) * clock_ns
+        hbm4_wtr_s, hbm4_wtr_l, hbm4_rtp = 6.0 * clock_ns, 8.0 * clock_ns, 6.0 * clock_ns
     config = DramConfig(
         kind="HBM", generation=generation, channels=physical_channels,
         subchannels_per_channel=1, pseudo_channels_per_channel=2,
@@ -274,7 +289,11 @@ def make_hbm_geometry_config(
         bandwidth_input_mode="bandwidth", interface_bandwidth_gb_s=interface_gb_s,
         read_bandwidth_gb_s=read_bandwidth_gbps / 8.0,
         write_bandwidth_gb_s=write_bandwidth_gbps / 8.0,
-        interleave_bytes=32, open_ns=14.0, close_ns=reference_rp,
+        interleave_bytes=None if sid_mapping else 32, open_ns=14.0, close_ns=reference_rp,
+        address_mapping="sid_aware" if sid_mapping else "bank_interleaved",
+        scheduler="fr_fcfs" if sid_mapping else "fcfs", queue_scope="pc" if sid_mapping else "device",
+        read_queue_depth_per_pc=32, write_queue_depth_per_pc=64,
+        write_high_watermark=0.85, write_low_watermark=0.50, min_reads_per_switch=16,
         read_latency_ns=read_latency_ns, write_latency_ns=write_latency_ns,
         burst_interval_ns=32 / lane_gb_s, capacity_bytes=capacity_bytes,
         bank_geometry_scope="per_stack", stack_interface_mode="independent",
@@ -287,7 +306,10 @@ def make_hbm_geometry_config(
         precharge_to_activate_ns=reference_rp,
         minimum_active_ns=reference_ras, maximum_active_ns=9 * 3900.0,
         activate_cycle_ns=reference_ras + reference_rp,
-        read_to_precharge_ns=0.0, write_to_precharge_ns=15.0,
+        read_to_precharge_ns=hbm4_rtp or 0.0, write_to_precharge_ns=15.0,
+        write_to_read_different_group_ns=hbm4_wtr_s or 0.0,
+        write_to_read_same_group_ns=hbm4_wtr_l or 0.0,
+        read_to_write_command_ns=hbm4_rtw or 0.0,
         precharge_to_precharge_ns=timing_reference["precharge_to_precharge_ns"],
         column_same_group_ns=timing_reference["column_same_group_ns"],
         column_different_group_ns=timing_reference["column_different_group_ns"],
@@ -297,6 +319,27 @@ def make_hbm_geometry_config(
         refresh_cycle_ns=refresh_ns or 0.0,
         metadata=metadata,
     )
+    config.metadata.update({
+        "address_mapping_basis": (
+            "JESD270-4A Table 5 (printed p.7): burst | SID-internal BG | lane | column | bank-in-group | SID | row"
+            if sid_mapping else "legacy mixed-radix research mapping"),
+        "sid_aware_mapping": bool(sid_mapping),
+        "controller_policy": "per-PC/bank FR-FCFS with cross-request PRE/ACT lookahead" if sid_mapping else "FCFS",
+        "queue_policy": {"read_depth_per_pc": 32, "write_depth_per_pc": 64,
+                          "write_high_watermark": 0.85, "write_low_watermark": 0.50,
+                          "min_reads_per_switch": 16,
+                          "basis": "gem5 MemInterface and MemCtrl defaults (read_buffer_size 32, "
+                                   "write_buffer_size 64, write_high_thresh_perc 85, write_low_thresh_perc 50, "
+                                   "min_reads_per_switch 16); gem5's HBM classes set read_buffer_size 64"},
+    })
+    if sid_mapping:
+        config.metadata["timing_assumptions"] = {
+            "tRTW": {"value_ns": hbm4_rtw, "formula": "ceil((RL-WL+2.5*tCK+tDQSS+tWDQS2DQ_O+tDQSQtra+margin)/tCK)*tCK",
+                     "source": "JESD270-4A Table 108 note 18, printed pp.194-199; PHY terms are simulator assumptions"},
+            "tWTR_S": {"value_nCK": 6, "source": "JESD270-4A Table 108, printed pp.194-199; simulator assumption"},
+            "tWTR_L": {"value_nCK": 8, "source": "JESD270-4A Table 108, printed pp.194-199; simulator assumption"},
+            "tRTP": {"value_nCK": 6, "source": "JESD270-4A Table 108, printed pp.194-199; simulator assumption"},
+        }
     # The complete executable payload keeps provenance for defaults too, so
     # serialization cannot silently turn an unspecified timing into a fact.
     provenance = {

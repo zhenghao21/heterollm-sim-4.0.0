@@ -74,6 +74,10 @@ DRAM_BANK_GROUP_TIMING_FIELDS = (
 DRAM_CONTROLLER_FIELDS = (
     "address_mapping", "scheduler", "scheduler_window", "queue_scope",
 )
+DRAM_FR_FCFS_FIELDS = (
+    "read_queue_depth_per_pc", "write_queue_depth_per_pc",
+    "write_high_watermark", "write_low_watermark", "min_reads_per_switch",
+)
 
 # HBM command occupancy and array constraints are separate quantities. These
 # fields are unused by the analytical DRAM model; the JEDEC HBM command
@@ -279,6 +283,14 @@ class DramConfig:
     scheduler: str = field(default="fcfs", kw_only=True)
     scheduler_window: int = field(default=16, kw_only=True)
     queue_scope: str = field(default="device", kw_only=True)
+    # HBM FR-FCFS controller policy: queue capacities in bursts per
+    # pseudo-channel, the write drain's fill fractions, and the reads a lane
+    # serves after a drain before the next one can begin.
+    read_queue_depth_per_pc: int = field(default=32, kw_only=True)
+    write_queue_depth_per_pc: int = field(default=64, kw_only=True)
+    write_high_watermark: float = field(default=0.85, kw_only=True)
+    write_low_watermark: float = field(default=0.50, kw_only=True)
+    min_reads_per_switch: int = field(default=16, kw_only=True)
     open_ns: float = 14.0
     close_ns: float = 14.0
     read_latency_ns: float = 14.0
@@ -365,15 +377,35 @@ class DramConfig:
             raise ValueError("stack_interface_mode must be shared or independent")
         if self.control_mode not in {"analytical", "jedec_hbm"}:
             raise ValueError("control_mode must be analytical or jedec_hbm")
-        if self.address_mapping not in {"bank_interleaved", "row_local"}:
-            raise ValueError("address_mapping must be bank_interleaved or row_local")
+        if self.address_mapping not in {"bank_interleaved", "row_local", "sid_aware"}:
+            raise ValueError("address_mapping must be bank_interleaved, row_local or sid_aware")
         if self.address_mapping == "row_local" and self.interleave_bytes is not None:
             raise ValueError("row_local address_mapping requires interleave_bytes=None")
-        if self.scheduler not in {"fcfs", "row_hit_first", "read_write_batch"}:
-            raise ValueError("scheduler must be fcfs, row_hit_first or read_write_batch")
+        if self.scheduler not in {"fcfs", "row_hit_first", "read_write_batch", "fr_fcfs"}:
+            raise ValueError("scheduler must be fcfs, row_hit_first, read_write_batch or fr_fcfs")
         _positive_int("scheduler_window", self.scheduler_window)
-        if self.queue_scope not in {"device", "channel"}:
-            raise ValueError("queue_scope must be device or channel")
+        if self.queue_scope not in {"device", "channel", "pc"}:
+            raise ValueError("queue_scope must be device, channel or pc")
+        fr_fields = (self.address_mapping == "sid_aware", self.scheduler == "fr_fcfs",
+                     self.queue_scope == "pc")
+        if any(fr_fields) and (not all(fr_fields) or self.kind is not MemoryKind.HBM
+                               or self.control_mode != "jedec_hbm"):
+            raise ValueError("sid_aware address_mapping, fr_fcfs scheduler and queue_scope=pc "
+                             "go together and require the jedec_hbm controller")
+        if self.address_mapping == "sid_aware" and (
+                self.interleave_bytes is not None or self.banks_per_group > 16
+                or self.pseudo_channels_per_channel != 2):
+            raise ValueError("sid_aware address_mapping requires interleave_bytes=None, "
+                             "at most 16 banks per group and two pseudo channels per channel")
+        _positive_int("read_queue_depth_per_pc", self.read_queue_depth_per_pc)
+        _positive_int("write_queue_depth_per_pc", self.write_queue_depth_per_pc)
+        _positive_int("min_reads_per_switch", self.min_reads_per_switch)
+        for name in ("write_high_watermark", "write_low_watermark"):
+            value = _nonnegative(name, getattr(self, name))
+            if value > 1:
+                raise ValueError(f"{name} must be in [0, 1]")
+        if self.write_low_watermark > self.write_high_watermark:
+            raise ValueError("write_low_watermark cannot exceed write_high_watermark")
         if self.refresh_policy not in {"disabled", "all_bank"}:
             raise ValueError("refresh_policy must be disabled or all_bank")
         for name in HBM_CONTROL_TIMING_FIELDS:
@@ -1157,7 +1189,7 @@ def make_hbf_config(**kwargs: Any) -> NandConfig:
 
 __all__ = [
     "AccessRequest", "AddressMapping", "BatchResult", "DramConfig", "MemoryKind", "NandConfig", "SramConfig",
-    "DRAM_BANK_GROUP_TIMING_FIELDS", "DRAM_CONTROLLER_FIELDS",
+    "DRAM_BANK_GROUP_TIMING_FIELDS", "DRAM_CONTROLLER_FIELDS", "DRAM_FR_FCFS_FIELDS",
     "NandWearConfig",
     "Operation", "Segment", "StageTiming", "TransactionResult",
     "make_ddr_config", "make_lpddr_config", "make_hbm_config", "make_gddr_config",

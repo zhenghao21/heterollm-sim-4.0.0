@@ -1339,7 +1339,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     if (len(owners) == 1 and not staging_bindings and not runtime.capture_details
             and all(isinstance(item[5], DramConfig)
                     and item[5].control_mode == "jedec_hbm"
-                    and item[5].scheduler == "fcfs" for item in validated)):
+                    and item[5].scheduler in ("fcfs", "fr_fcfs") for item in validated)):
         from ._hbm_pack import HBMResourceAccumulator
         resource_accumulator = HBMResourceAccumulator()
     index = 0
@@ -1802,7 +1802,7 @@ def _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns
             resources = _sink_nand_acceleration_module.owned_resource_footprint(core)
             has_nand = True
         elif type(core) is _sink_dram_module.DramCore:
-            if (core.config.control_mode != "jedec_hbm" or core.config.scheduler != "fcfs"
+            if (core.config.control_mode != "jedec_hbm" or core.config.scheduler not in ("fcfs", "fr_fcfs")
                     or type(core.capture_details) is not bool or core.capture_details
                     or type(core._hbm_numeric_enabled) is not bool or not core._hbm_numeric_enabled
                     or core._hbm_numeric_state is None

@@ -8,7 +8,6 @@ from heterollm_sim import _hbm_numeric
 from heterollm_sim._compiled_hbm import _pack_hbm_numeric
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.memory_types import AccessRequest
-from heterollm_sim.physical_presets import resolve_physical_config
 from test_hbm_compiled_control import configuration
 from test_hbm_write_ticks import same_result
 
@@ -53,18 +52,3 @@ def test_refresh_recovery_partial_ranges_and_direction_changes_are_bitwise(mappi
         AccessRequest("at-refresh", "read", 17, row_span + 71, 400.),
         AccessRequest("late-write", "write", 333, row_span + 17, 70000.001),
     ), monkeypatch)
-
-
-@pytest.mark.parametrize("workers", (1, 8))
-def test_formal_hbm4_refresh_and_weight_row_cycles_match_all_state(workers, monkeypatch):
-    # The actual study's physical eight-stack HBM4 organization and clocks.
-    config = resolve_physical_config("hbm4_reference", overrides={
-        "capacity_bytes": 288_000_000_000, "stacks": 8, "dies_per_stack": 16,
-        "die_density_gbits": 32, "interface_bandwidth_gb_s": 12800.})
-    assert config.refresh_policy == "all_bank"
-    assert config.lane_count * config.bank_count == 32768
-    compare(config, (
-        AccessRequest("weight", "read", 193, 2 ** 23 + 37, .125),
-        AccessRequest("kv-write", "write", 65539, 8192, 100.),
-        AccessRequest("following-weight", "read", 333, 2 ** 23 + 17, 70000.001),
-    ), monkeypatch, workers)

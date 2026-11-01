@@ -104,8 +104,10 @@ def _tasks(scenario, kind, batch, *, ep_degree=1):
 
 def test_ep1_toy_lowering_is_byte_identical_to_the_single_group_graph():
     build = lambda: native_toy.toy_scenario(layer_count=2, batch_size=4)
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "1b243248334be272")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "06bd78477e684ba6")
+    # The digest covers each task's serialized physical config: the HBM4 queue
+    # fields and assumed turnaround timings changed it, not the graph.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "e5ec379fd83a462c")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "0b9a2c722dcff120")
 
 
 def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
@@ -113,9 +115,9 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # The planner now records the layer's final NAND-read (or KV fallback)
     # anchor in each deferred tail branch.  That intentional dependency-field
     # change updates the structural digest while leaving task cardinality
-    # unchanged.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "2ca4ca887a943e1d")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "546b4aba9fb3b987")
+    # unchanged. The serialized HBM4 queue fields and timings changed it again.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "ba44482dcc40fad7")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "0525f8098185dc9c")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():

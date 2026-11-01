@@ -263,7 +263,16 @@ def build_paper_hbm_config(configuration_id: str) -> DramConfig | None:
                 "Table I aggregate bandwidth selected as a reference interface budget; vendor pin rate not disclosed",
                 "HBM4 catalog reference normal-operation timing; not a calibrated Rubin speed bin",
                 "tRRD_S 4 ns, tRRD_L 6 ns and tFAW 20 ns taken from the HBM3E reference package "
-                "(JESD238 Table 93 / section 6.3.2.2.1); HBM4 values are not published"],
+                "(JESD238 Table 93 / section 6.3.2.2.1); HBM4 values are not published",
+                "address mapping burst | BG-in-SID | lane | column | bank-in-group | SID | row, a controller "
+                "design choice over the JESD270-4A Table 5 (printed p.7) 16H address organization",
+                "tRTW 18.56 ns from JESD270-4A Table 108 note 18 (printed pp.194-199) with RL32, WL8 and "
+                "assumed PHY terms 1.5 ns, 0.020 ns, 0.080 ns; tWTR_S 6 nCK, tWTR_L 8 nCK, tRTP 6 nCK assumed",
+                "per-PC FR-FCFS with row-hit priority: read queue 32 and write queue 64 bursts, write drain from "
+                "85% down to 50%, 16 reads between drains; gem5 MemInterface and MemCtrl defaults, "
+                "whose HBM classes set a read queue of 64 instead",
+                "queues reorder bursts within one memory task's batch; batches of different tasks run in "
+                "submission order on the controller's frontiers"],
             "paper_workload_reproduced": False, "target_hardware_calibrated": False}})
     return parse_execution_physical_config(asdict(config))
 

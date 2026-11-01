@@ -39,7 +39,9 @@ def test_generational_command_clock_latency_and_refresh(generation, density, rf,
     assert p["minimum_active_ns"]["status"] == "jedec_idd_example"
     assert p["activate_to_read_ns"]["status"] == "unknown_with_assumption"
     assert "activate_to_read_ns" in config.metadata["unknown_parameters"]
-    assert p["read_to_write_command_ns"]["status"] == "unknown_disabled"
+    # HBM4 now applies an assumed tRTW; the other generations still leave it off.
+    assert p["read_to_write_command_ns"]["status"] == ("unknown_with_assumption" if generation == "HBM4"
+                                                       else "unknown_disabled")
     assert config.metadata["timing_validation"] == "not_a_vendor_speed_bin"
 
 

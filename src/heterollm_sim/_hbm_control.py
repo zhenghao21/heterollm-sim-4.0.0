@@ -8,6 +8,8 @@ channel ahead and precharges their conflicting rows in channel order, so a
 later bank's PRE/tRP overlaps the tRP of the burst being served while the
 row bus still issues commands in a timing-independent order.
 Configured maximum row-active deadlines also apply with refresh disabled.
+The HBM4 SID-aware configuration instead queues bursts per pseudo channel and
+issues them FR-FCFS across requests; see _FrFcfsController.
 Training, auto-precharge and refresh postponement are not
 implemented. Timing values are supplied by DramConfig, with their provenance
 owned by the configuration builder rather than inferred here.
@@ -617,3 +619,379 @@ def execute_hbm(core, request):
             if result is not None:
                 return result
     return _Controller(core, request).execute()
+
+
+def fr_queue_parameters(c):
+    """Queue capacities and drain thresholds, in bursts, for one pseudo channel."""
+    write_depth = c.write_queue_depth_per_pc
+    return (c.read_queue_depth_per_pc, write_depth,
+            max(1, math.ceil(write_depth * c.write_high_watermark)),
+            math.floor(write_depth * c.write_low_watermark), c.min_reads_per_switch)
+
+
+_FR_STAT_COUNT = 10
+
+
+class _FrFcfsIssue:
+    """What the shared command methods read from the request being served."""
+    __slots__ = ("operation", "arrival_ns")
+
+    def __init__(self, operation, arrival_ns):
+        self.operation, self.arrival_ns = operation, arrival_ns
+
+
+class _FrFcfsController(_Controller):
+    """The numeric per-PC FR-FCFS controller's reference, decision for decision."""
+
+    def __init__(self, core, requests):
+        super().__init__(core, requests[0])
+        self.requests = requests
+        self.outcomes = [[0, 0, 0] for _ in requests]
+        self.completions = [request.arrival_ns for request in requests]
+        self.waits = [0.0] * len(requests)
+        self.request_stages = [[] for _ in requests]
+        self.request_mappings = [[] for _ in requests]
+        self.logical = [0] * len(requests)
+        self.physical = [0] * len(requests)
+        self.counted = 0
+        self.q = fr_queue_parameters(self.config)
+        self.groups_per_sid = self.config.bank_groups_per_rank // int(
+            self.config.metadata.get("sid_count", self.config.bank_groups_per_rank // 2))
+
+    def pc(self, key):
+        state = super().pc(key)
+        if "scheduler_stats" not in state:
+            state["scheduler_stats"] = [0.0] * _FR_STAT_COUNT
+        return state
+
+    def record(self, name, start, end, resource=None, byte_count=0):
+        if self.core.capture_details and not self.truncated:
+            if self.counted >= 6 * self.config.max_expanded_segments:
+                self.drop_details()
+                return
+            self.counted += 1
+            self.stages.append(StageTiming(name, start, end, resource, byte_count))
+
+    def drop_details(self):
+        for stages in self.request_stages:
+            stages.clear()
+        for mappings in self.request_mappings:
+            mappings.clear()
+        self.truncated = True
+
+    def execute(self):
+        channels = {}
+        for index, request in enumerate(self.requests):
+            direction = 0 if request.operation is Operation.READ else 1
+            for segment in split_dram_request(request, self.config):
+                key = self._pc_key(segment.mapping)
+                lanes = channels.setdefault(key[:2], {})
+                lanes.setdefault(key[2], ([], []))[direction].append((index, segment))
+                self.logical[index] += segment.logical_bytes
+                self.physical[index] += segment.transfer_bytes
+        for channel_key in sorted(channels, key=lambda item: (item[0], item[1])):
+            self.run_channel(channel_key, channels[channel_key])
+        results = []
+        total = sum(self.physical) // self.config.burst_bytes
+        if total > self.config.max_expanded_segments and not self.truncated:
+            self.drop_details()
+        for index, request in enumerate(self.requests):
+            read = request.operation is Operation.READ
+            first = index == 0
+            counters = {name: value if first else type(value)(0) for name, value in self.counts.items()}
+            hits, misses, conflicts = self.outcomes[index]
+            burst_count = self.physical[index] // self.config.burst_bytes
+            counters.update({
+                "control_mode": "jedec_hbm", "row_hits": hits, "row_misses": misses,
+                "row_conflicts": conflicts, "burst_count": burst_count,
+                "details_truncated": self.truncated or burst_count > self.config.max_expanded_segments,
+                "physical_read_bytes": self.physical[index] if read else 0,
+                "physical_write_bytes": 0 if read else self.physical[index],
+                "queue_wait_ns": self.waits[index],
+                "bandwidth_ceiling_gb_s": self.config.directional_bandwidth_gb_s(request.operation),
+                "host_transfer_bytes": 0, "internal_transfer_bytes": 0,
+                "pages_read": 0, "pages_programmed": 0, "erase_operations": 0})
+            results.append(TransactionResult(
+                request.request_id, request.operation, request.arrival_ns, self.completions[index],
+                self.logical[index], self.physical[index], tuple(self.request_mappings[index]),
+                tuple(self.request_stages[index]), counters))
+        return tuple(results)
+
+    def enqueue(self, lane, direction):
+        capacity = self.q[direction]
+        queue, pending = lane["queues"][direction], lane["pending"][direction]
+        stats = lane["stats"]
+        while len(queue) < capacity and lane["cursor"][direction] < len(pending):
+            index, segment = pending[lane["cursor"][direction]]
+            lane["cursor"][direction] += 1
+            mapping = segment.mapping
+            old, bank = self.bank(mapping)
+            row = self.active_row(mapping)
+            within = mapping.bank_group * self.config.banks_per_group + mapping.bank
+            rid = self.core._bank_id(mapping)
+            entry = dict(index=index, segment=segment, mapping=mapping, old=old, bank=bank, row=row,
+                         rid=rid, within=within, group=mapping.bank_group,
+                         sid=within // 16, arrival=max(self.requests[index].arrival_ns, lane["slot_free"][direction]))
+            queue.append(entry)
+            if old.open_row == row:
+                lane["pending_hit"][direction][rid] = lane["pending_hit"][direction].get(rid, 0) + 1
+            else:
+                lane["dirty"][direction] = True
+        stats[7 + direction] = max(stats[7 + direction], float(len(queue)))
+
+    def recount(self, lanes):
+        for lane in lanes:
+            for direction in range(2):
+                lane["dirty"][direction] = True
+                counts = lane["pending_hit"][direction] = {}
+                for entry in lane["queues"][direction]:
+                    if entry["old"].open_row == entry["row"]:
+                        counts[entry["rid"]] = counts.get(entry["rid"], 0) + 1
+
+    def plan(self, lane):
+        c, q = self.config, self.q
+        queues, stats = lane["queues"], lane["stats"]
+        if lane["draining"] and len(queues[1]) <= q[3]:
+            lane["draining"] = False
+            lane["reads_since"] = 0
+        self.enqueue(lane, 0)
+        if not lane["draining"]:
+            self.enqueue(lane, 1)
+        reads, writes = queues
+        if not reads and not writes:
+            lane["start"], lane["kind"] = math.inf, -1
+            return
+        if not lane["draining"] and reads and len(writes) >= q[2] and lane["reads_since"] >= q[4]:
+            lane["draining"] = True
+            stats[6] += 1
+        key = lane["key"]
+        column_floor = self.timeline.available_ns(self.bus_id(key, "column"))
+        if lane["draining"] or not reads:
+            direction = 1
+        elif not writes:
+            direction = 0
+        else:
+            direction = 0 if reads[0]["arrival"] <= max(writes[0]["arrival"], column_floor) else 1
+        read = direction == 0
+        queue = queues[direction]
+        op = "read" if read else "write"
+        forced = lane["bypass"][direction] >= q[direction]
+        previous, previous_group = lane["last_column"], lane["last_group"]
+        floor = column_floor if previous < 0 else max(column_floor, previous + c.column_different_group_ns)
+        hit_offset = row_offset = -1
+        best = math.inf
+        history = self.pc(key)["column"][op]
+        for offset in range(1 if forced else len(queue)):
+            entry = queue[offset]
+            if entry["old"].open_row != entry["row"]:
+                continue
+            group = entry["group"]
+            ready = max(floor, entry["bank"]["read_ready" if read else "write_ready"], entry["arrival"])
+            stamp = history.get((entry["sid"], group))
+            if stamp is not None:
+                ready = max(ready, stamp + c.column_same_group_ns)
+            if previous >= 0:
+                if previous_group == group:
+                    ready = max(ready, previous + c.column_same_group_ns)
+                elif read and previous_group // self.groups_per_sid != group // self.groups_per_sid:
+                    ready = max(ready, previous + c.column_different_sid_ns)
+            if ready < best:
+                best, hit_offset = ready, offset
+                if ready <= floor:
+                    break
+        if lane["dirty"][direction]:
+            unserved = False
+            for offset, entry in enumerate(queue):
+                if entry["old"].open_row == entry["row"]:
+                    continue
+                unserved = True
+                if (entry["old"].open_row is not None
+                        and lane["pending_hit"][direction].get(entry["rid"], 0) > 0
+                        and not (forced and offset == 0)):
+                    continue
+                row_offset = offset
+                break
+            lane["dirty"][direction] = unserved
+        start, kind, chosen = math.inf, -1, -1
+        self.request = _FrFcfsIssue(Operation.READ if read else Operation.WRITE, 0.0)
+        if hit_offset >= 0:
+            entry = queue[hit_offset]
+            start = self.column_start(entry["mapping"], entry["bank"]["read_ready" if read else "write_ready"],
+                                      entry["arrival"])
+            kind, chosen = 0, hit_offset
+        if row_offset >= 0:
+            entry = queue[row_offset]
+            if entry["old"].open_row is not None:
+                row_start = self.precharge_start(entry["mapping"], entry["bank"], entry["arrival"])
+                row_kind = 1
+            else:
+                row_start = self.activate_start(entry["mapping"], entry["bank"],
+                                                max(entry["arrival"], lane["act_floor"]))
+                row_kind = 2
+            if row_start < start:
+                start, kind, chosen = row_start, row_kind, row_offset
+        if kind < 0:
+            raise ValueError("HBM scheduler has queued work but no eligible command")
+        lane["start"], lane["kind"], lane["direction"], lane["offset"] = start, kind, direction, chosen
+
+    def run_channel(self, channel_key, pseudo_lanes):
+        q, c = self.q, self.config
+        lanes = []
+        for pseudo in range(2):
+            reads, writes = pseudo_lanes.get(pseudo, ([], []))
+            lanes.append(dict(key=(*channel_key, pseudo), pending=(reads, writes), cursor=[0, 0],
+                              queues=([], []), slot_free=[0.0, 0.0], dirty=[False, False],
+                              pending_hit=[{}, {}], bypass=[0, 0], early={}, draining=False,
+                              reads_since=q[4], last_column=-1.0, last_group=-1, lane_request=-1,
+                              act_floor=0.0, stale=True, start=math.inf, kind=-1, direction=0, offset=0,
+                              own_last={}, own_wait={},
+                              traffic_floor=None, stats=None))
+            if reads or writes:
+                lanes[pseudo]["stats"] = self.pc(lanes[pseudo]["key"])["scheduler_stats"]
+                mapping = (reads or writes)[0][1].mapping
+                lanes[pseudo]["traffic_floor"] = self.after(
+                    self.timeline.available_ns(self.core._data_id(mapping)), -c.read_latency_ns)
+            else:
+                lanes[pseudo]["stats"] = [0.0] * _FR_STAT_COUNT
+        last_pseudo = 1
+        while True:
+            for lane in lanes:
+                if lane["stale"]:
+                    lane["stale"] = False
+                    self.plan(lane)
+            if lanes[0]["start"] == lanes[1]["start"]:
+                if lanes[0]["kind"] < 0:
+                    break
+                pseudo = 1 - last_pseudo
+            else:
+                pseudo = 0 if lanes[0]["start"] < lanes[1]["start"] else 1
+            lane = lanes[pseudo]
+            kind, start = lane["kind"], lane["start"]
+            bus = self.bus_id(lane["key"], "column" if kind == 0 else "row")
+            if start < self.timeline.available_ns(bus):
+                lane["stale"] = True
+                continue
+            self.issue(lane, lanes, kind, start)
+            if not lane["stale_only"]:
+                last_pseudo = pseudo
+        for lane in lanes:
+            for index, wait in lane["own_wait"].items():
+                self.waits[index] = max(self.waits[index], wait)
+                lane["stats"][9] = max(lane["stats"][9], wait)
+
+    def issue(self, lane, lanes, kind, start):
+        c = self.config
+        lane["stale_only"] = True
+        direction, offset = lane["direction"], lane["offset"]
+        read = direction == 0
+        queue = lane["queues"][direction]
+        entry = queue[offset]
+        mapping, old, bank, row, rid = entry["mapping"], entry["old"], entry["bank"], entry["row"], entry["rid"]
+        arrival = entry["arrival"]
+        index = entry["index"]
+        operation = Operation.READ if read else Operation.WRITE
+        self.request = _FrFcfsIssue(operation, arrival)
+        self.stages = self.request_stages[index]
+        recovery = (c.read_to_precharge_ns if read else self.after(self.after(
+            c.write_latency_ns, entry["segment"].transfer_bytes / c.effective_lane_bandwidth_gb_s),
+            c.write_to_precharge_ns))
+        horizon = self.after(start, recovery) if kind == 0 else start
+        if self.maintain_before(mapping, horizon) or self.refresh_until(mapping, start):
+            self.recount(lanes)
+            lanes[0]["stale"] = lanes[1]["stale"] = True
+            return
+        stats = lane["stats"]
+        self.request = _FrFcfsIssue(operation, 0.0)
+        if kind == 1:
+            self.precharge(mapping, old, bank, arrival)
+            stats[4] += 1
+            lane["early"][rid] = 1
+            lane["pending_hit"][0].pop(rid, None)
+            lane["pending_hit"][1].pop(rid, None)
+            lane["dirty"][0] = lane["dirty"][1] = True
+            lane["stale"] = True
+            lane["stale_only"] = False
+            return
+        if kind == 2:
+            anchor = self.after(start, self.clock)
+            if c.maximum_active_ns > 0:
+                rcd = c.activate_to_read_ns if read else c.activate_to_write_ns
+                column = self.column_start(mapping, self.after(anchor, rcd), arrival)
+                latest = self.after(column, recovery)
+                if latest > self.after(anchor, c.maximum_active_ns):
+                    if self.after(rcd, recovery) > c.maximum_active_ns:
+                        raise ValueError("HBM access recovery exceeds the tRASmax activation window")
+                    lane["act_floor"] = self.align(max(self.after(start, self.clock),
+                        self.after(self.after(latest, -c.maximum_active_ns), -self.clock)), self.clock)
+                    lane["stale"] = True
+                    return
+            self.activate(mapping, old, bank, row, max(arrival, lane["act_floor"]))
+            stats[3] += 1
+            lane["early"][rid] = 2 if lane["early"].get(rid) == 1 else 3
+            lane["act_floor"] = 0.0
+            for side in range(2):
+                lane["pending_hit"][side][rid] = sum(
+                    1 for other in lane["queues"][side] if other["rid"] == rid and other["row"] == row)
+                lane["dirty"][side] = True
+            lane["stale"] = True
+            lane["stale_only"] = False
+            return
+        key = lane["key"]
+        segment = entry["segment"]
+        command = self.command(key, "column", start, c.column_command_cycles,
+                               "READ_COMMAND" if read else "WRITE_COMMAND", rising=True)
+        self.counts["read_commands" if read else "write_commands"] += 1
+        pc = self.pc(key)
+        pc["column"][operation.value][(entry["sid"], entry["group"])] = command.start_ns
+        latency = c.read_latency_ns if read else c.write_latency_ns
+        data_ready = self.after(command.start_ns, latency)
+        self.record("READ_PIPELINE" if read else "WRITE_PIPELINE", command.start_ns, data_ready)
+        data_id = self.core._data_id(mapping)
+        before = self.timeline.directions.get(data_id)
+        if before and before != operation.value:
+            stats[5] += 1
+        data = self.reserve_clock(data_id, data_ready,
+                                  segment.transfer_bytes / c.effective_lane_bandwidth_gb_s,
+                                  direction=operation.value, byte_count=segment.transfer_bytes)
+        pc["next_data_start"][operation.value] = self.after(
+            data.start_ns, segment.transfer_bytes / c.directional_lane_bandwidth_gb_s(operation))
+        self.record("BURST_TRANSFER", data.start_ns, data.end_ns, data.resource_id, segment.transfer_bytes)
+        if read:
+            bank["precharge_ready"] = max(bank["precharge_ready"], self.after(command.start_ns, c.read_to_precharge_ns))
+            lane["reads_since"] += 1
+            own = lane["own_last"].get(index)
+            wait = lane["own_wait"].get(index, 0.0)
+            if own is not None:
+                if lane["lane_request"] != index:
+                    wait += max(0.0, command.start_ns - max(arrival, own + c.column_different_group_ns))
+            elif lane["lane_request"] >= 0:
+                wait += max(0.0, command.start_ns - arrival)
+            else:
+                wait += max(0.0, min(command.start_ns, lane["traffic_floor"]) - arrival)
+            lane["own_wait"][index] = wait
+            lane["own_last"][index] = command.start_ns
+            lane["lane_request"] = index
+        else:
+            bank["precharge_ready"] = max(bank["precharge_ready"], self.after(data.end_ns, c.write_to_precharge_ns))
+            pc["write_end"][(entry["sid"], entry["group"])] = data.end_ns
+        old.ready_ns = bank["precharge_ready"]
+        self.completions[index] = max(self.completions[index], data.end_ns)
+        tag = lane["early"].pop(rid, 0)
+        outcome = 0 if tag == 0 else 2 if tag == 2 else 1
+        self.outcomes[index][outcome] += 1
+        stats[outcome] += 1
+        hits = lane["pending_hit"][direction]
+        hits[rid] = hits.get(rid, 0) - 1
+        del queue[offset]
+        lane["bypass"][direction] = lane["bypass"][direction] + 1 if offset else 0
+        lane["slot_free"][direction] = command.start_ns
+        lane["last_column"], lane["last_group"] = command.start_ns, entry["group"]
+        if self.core.capture_details and not self.truncated:
+            self.request_mappings[index].append(mapping)
+        lane["stale"] = True
+        lane["stale_only"] = False
+
+
+def execute_fr_fcfs_reference(core, requests):
+    """Per-PC FR-FCFS through the reference controller and public timeline."""
+    return _FrFcfsController(core, requests).execute()

@@ -1,10 +1,10 @@
 """Cold selection avoids full-bank packing without changing physical execution."""
 from dataclasses import replace
+from unittest.mock import patch
 
 import pytest
 
-from heterollm_sim._compiled_hbm import execute_hbm_numeric
-from heterollm_sim._hbm_control import _Controller
+from heterollm_sim import _compiled_hbm
 from heterollm_sim.data_motion import PhysicalRuntimeContext
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.execution_control import ExecutionCancelledError, ExecutionControl
@@ -30,9 +30,16 @@ def physical_result(result):
 
 
 def force(core, request, numeric):
-    return core._submit_validated(request, execute=(
-        lambda accepted: execute_hbm_numeric(core, accepted)) if numeric else (
-        lambda accepted: _Controller(core, accepted).execute()))
+    """Submit through one named path of the FR-FCFS controller."""
+    if not numeric:
+        with patch.object(_compiled_hbm, "execute_fr_fcfs_numeric", lambda *args, **kwargs: None):
+            return core.submit(request)
+    # A resident pack keeps even a tiny request on the numeric path.
+    core._hbm_numeric_enabled = True
+    try:
+        return core.submit(request)
+    finally:
+        core._hbm_publish_numeric()
 
 
 @pytest.mark.parametrize("operation", ["read", "write"])
@@ -72,6 +79,9 @@ def test_reference_prefix_then_large_numeric_preserves_every_following_state(fir
         actual = selected.submit(request)
         expected = force(numeric, request, True)
         assert physical_result(actual) == physical_result(expected)
+        # Commands insert resources in issue order, publication in index order.
+        selected.timeline._metric_key_orders.clear()
+        numeric.timeline._metric_key_orders.clear()
         assert_core_state_equal(selected, numeric)
 
 
