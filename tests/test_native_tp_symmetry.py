@@ -62,7 +62,7 @@ def test_native_tp_events_and_window_are_bit_exact(native_prepared, monkeypatch,
         # This early asymmetric transition can then consume every remaining
         # reuse opportunity; the contract here is fallback with exact events.
         assert actual["tp_symmetry"]["fallback_tasks"] > 0
-    elif not with_import:
+    elif mode == "all":
         assert actual["tp_symmetry"]["mirrored_tasks"] > 0
     assert seen == events
     def semantic(row):

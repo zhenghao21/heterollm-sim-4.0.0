@@ -708,6 +708,11 @@ class PhysicalKVTransferExecutor:
                 "chunk_bytes": chunk_bytes, "slot_count": slots, "chunks": {}, "events": [],
                 "next_chunk_id": 0, "submitted_actions": 0, "submitted_write_bytes": 0,
                 "last_write": None, "logical_bytes": sum(r["size_bytes"] for r in rows),
+                # Native PD continuation submits memory phases through the
+                # executor callback rather than a KernelEvent. Retain the
+                # authoritative NAND bills so the sampling window can attach
+                # those physical pages to its storage ledger.
+                "native_nand_bills": [],
                 "start_ns": start, "completion_ns": start, "submitted_until_ns": start,
                 "rollback_snapshot": snapshot}
             self._async_plan_states[plan_id] = state
@@ -744,6 +749,15 @@ class PhysicalKVTransferExecutor:
         address = self._allocator(row["physical_owner"]).address(row["buffer_id"],
             row["offset_bytes"] + offset, amount, row["generation"])
         actions.append(("memory", row["component_id"], "write", address, amount))
+        mirror = row.get("hbm_mirror")
+        if mirror is not None:
+            if amount > int(mirror["size_bytes"]):
+                raise KvPoolError("external KV HBM mirror range is smaller than its source chunk")
+            mirror_address = self._allocator(mirror["physical_owner"]).address(
+                mirror["buffer_id"], int(mirror["offset_bytes"]) + offset,
+                amount, int(mirror.get("generation", 0)))
+            actions.append(("memory", mirror["component_id"], "write",
+                            mirror_address, amount))
         return tuple(actions)
 
     def _start_external_chunk(self, state, stream_index, slot, now):
@@ -790,6 +804,14 @@ class PhysicalKVTransferExecutor:
                                       _owned_timeline=native_writer) as checkpoint:
                 bills = self._price_chunks(component, AccessKind.READ if operation == "read" else AccessKind.WRITE,
                     address, amount, arrival_ns=now, caller_managed_transaction=True)
+            config = self._configs[component]
+            if isinstance(config, NandConfig):
+                state.setdefault("native_nand_bills", []).extend(
+                    {"component": component, "owner": owner,
+                     "kind": getattr(config.kind, "value", str(config.kind)),
+                     "operation": operation, "page_bytes": int(config.page_bytes),
+                     "bill": dict(bill)}
+                    for bill in bills)
             completion = float(bills[-1]["completion_ns"])
             journal = checkpoint["timeline"].get("_owned_transaction")
             if native_writer and checkpoint.get("_owned_native_writers") and journal is not None:

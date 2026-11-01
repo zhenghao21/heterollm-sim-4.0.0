@@ -137,51 +137,23 @@ def test_authored_undo_writer_retains_original_request_accounting(monkeypatch):
 
 @pytest.mark.parametrize("depth", [1, 3])
 @pytest.mark.parametrize("multilane", [False, True])
-def test_submit_many_keeps_each_request_bits_admission_and_rollback(depth, multilane):
+def test_submit_many_on_shared_arrays_and_lanes_restores_on_rollback(depth, multilane):
+    # The out-of-order batch controller (test_nand_read_batch) on a wide
+    # layout with shared parallel arrays and multi-lane calendars.
     settings = config(channels=112, planes_per_lun=25, max_outstanding_requests=depth,
                       host_granularity_bytes=256, parallel_units=2 if multilane else None)
-    pair = contexts(settings)
-    sequential = PhysicalRuntimeContext(settings, "flash", capture_details=False)
+    context = PhysicalRuntimeContext(settings, "flash", capture_details=False)
     if multilane:
-        for context in (*pair, sequential):
-            context.timeline.lane_available.update({"flash:nand:parallel:0": [0., 77.125],
-                                                    "flash:nand:host:read": [12.5, 0.]})
-    seed = AccessRequest("seed", "read", 0, 128 * PAGE)
-    compare(pair, seed)
-    sequential.runtimes["flash"].core.submit(seed)
-    all_contexts = [*pair, sequential]
-    before = [numerical_bits(logical(context.runtimes["flash"].core)) for context in all_contexts]
-    tokens = [context.begin_transaction(owners=("flash",), _owned_timeline=True) for context in all_contexts]
+        context.timeline.lane_available.update({"flash:nand:parallel:0": [0., 77.125],
+                                                "flash:nand:host:read": [12.5, 0.]})
+    fast = context.runtimes["flash"].core
+    fast.submit(AccessRequest("seed", "read", 0, 128 * PAGE))
+    before = numerical_bits(logical(fast))
+    token = context.begin_transaction(owners=("flash",), _owned_timeline=True)
     requests = [AccessRequest(str(index), "read", (index % 15) * 117 * PAGE + 17,
                               116 * PAGE - 23, .125) for index in range(40)]
-    fast = pair[0].runtimes["flash"].core
     actual = fast.submit_many(requests)
-    reference = [pair[1].runtimes["flash"].core.submit(request) for request in requests]
-    ordered = [sequential.runtimes["flash"].core.submit(request) for request in requests]
-    for a, b, c in zip(actual, reference, ordered):
-        counters = dict(a.counters)
-        counters.pop("native_fullpage_pages")
-        assert numerical_bits(replace(a, counters=counters)) == numerical_bits(b)
-        assert bits(a) == bits(c)
-    assert "_nand_request_metric_orders" not in fast.__dict__
-    assert bits(logical(fast)) == bits(logical(sequential.runtimes["flash"].core))
-    for context, token, saved in zip(all_contexts, tokens, before):
-        context.restore(token)
-        assert numerical_bits(logical(context.runtimes["flash"].core)) == saved
-
-
-def test_submit_many_invalid_suffix_executes_the_same_valid_prefix():
-    pair = contexts(config())
-    compare(pair, AccessRequest("seed", "read", 0, 128 * PAGE))
-    requests = [AccessRequest("valid", "read", 17, 128 * PAGE),
-                AccessRequest("invalid", "read", pair[0].config.effective_capacity_bytes, PAGE)]
-    for index, context in enumerate(pair):
-        core = context.runtimes["flash"].core
-        with pytest.raises(ValueError):
-            if index == 0:
-                core.submit_many(requests)
-            else:
-                for request in requests:
-                    core.submit(request)
-        assert "_nand_request_metric_orders" not in core.__dict__
-    assert numerical_bits(logical(pair[0].runtimes["flash"].core)) == numerical_bits(logical(pair[1].runtimes["flash"].core))
+    assert all(row.counters["native_fullpage_pages"] == row.counters["page_count"] for row in actual)
+    assert sum(row.counters["queue_wait_ns"] > 0 for row in actual) >= (40 - depth if depth == 1 else 1)
+    context.restore(token)
+    assert numerical_bits(logical(fast)) == before

@@ -59,8 +59,15 @@ def test_nand_builder_uses_actual_die_plane_counts_not_effective_units(name, pla
             config.luns_per_die, config.planes_per_lun) == (hardware.hbf_stacks * 16, 1, 1, 1, planes)
     assert config.array_units == hardware.hbf_stacks * 16 * planes
     assert (config.page_bytes, config.page_read_ns, config.page_program_ns) == (4096, read_ns, 100000)
-    assert config.host_read_bandwidth_gb_s == hardware.hbf_read_gb_s
-    assert config.host_write_bandwidth_gb_s == hardware.hbf_write_gb_s
+    # One 1.6 TB/s host channel per stack; Table I's NAND rates are the
+    # array ceilings that the page timings enforce.
+    assert config.host_channels == hardware.hbf_stacks
+    assert config.host_read_bandwidth_gb_s == config.host_write_bandwidth_gb_s == hardware.hbf_stacks * 1600.
+    assert abs(config.array_units * 4096 / read_ns / hardware.hbf_read_gb_s - 1) < .03
+    assert abs(config.array_units * 4096 / 100000 / hardware.hbf_write_gb_s - 1) < .03
+    logic_die = hardware.intermediate_storage == "logic_die_SRAM"
+    assert config.page_staging == ("logic_die" if logic_die else "external")
+    assert config.page_staging_bytes_per_host_channel == (40_000_000 if logic_die else 0)
     assert config.capacity_bytes == hardware.hbf_capacity_bytes
     assert config.computed_capacity_bytes >= config.capacity_bytes
     assert config.computed_capacity_bytes - config.capacity_bytes < (
@@ -70,6 +77,8 @@ def test_nand_builder_uses_actual_die_plane_counts_not_effective_units(name, pla
     assert "local choices, not parameters sourced" in config.metadata["research_assumptions"]["basis"]
     assert config.metadata["protocol_basis"].startswith("generic_nand")
     assert config.read_cache_pages_per_bank == 2
+    assert "logic_die_flush_assumption" in config.metadata
+    assert "本层最后一个 NAND 读完成后发起刷写" in config.metadata["logic_die_flush_assumption"]
     assert config.metadata["execution_backend"] == "native_nand_core"
     assert config.metadata["native_memory_execution_contract"] == "native_nand_plane_double_buffer_v1"
     assert "native per-bank" in config.metadata["paper_read_staging_execution"]
@@ -142,21 +151,24 @@ def test_new_catalog_scope_does_not_relabel_historical_bypass_results():
     assert "historical bypass results retain their original identity" in catalog["comparison_scope"]
 
 
-def test_nand_core_executes_controlled_pages_and_charges_real_rmw_for_small_kv_writes():
+def test_nand_core_stages_small_kv_writes_until_their_page_is_full():
     config = paper.build_paper_nand_config("HBF+", assumptions=paper.default_research_assumptions("HBF+"))
     core = NandCore(config, capture_details=False)
     result = core.submit(AccessRequest("read-page", "read", 0, 4096, 0))
     assert result.completion_ns > config.page_read_ns
     assert result.physical_read_bytes == 4096
-    assert config.partial_page_policy == "read_modify_write"
     assert config.host_granularity_bytes == 4096
-    partial = NandCore(config, capture_details=False).submit(AccessRequest("small-kv", "write", 0, 256, 0))
-    full = NandCore(config, capture_details=False).submit(AccessRequest("full-page", "write", 0, 4096, 0))
-    assert partial.physical_read_bytes == partial.physical_write_bytes == 4096
-    assert full.physical_read_bytes == 0
-    assert full.physical_write_bytes == 4096
-    assert partial.completion_ns > full.completion_ns
-    assert "pays NandCore" in config.metadata["partial_page_basis"]
+    staged = NandCore(config, capture_details=False)
+    rows = [staged.submit(AccessRequest(f"kv-{row}", "write", 4096 + row * 256, 256, row * 10.))
+            for row in range(16)]
+    full = NandCore(config, capture_details=False).submit(AccessRequest("full-page", "write", 4096, 4096, 0))
+    # No read-modify-write: rows wait in the logic-die SRAM until the last
+    # one completes the page, which then programs after acknowledgement.
+    assert all(row.physical_read_bytes == 0 for row in rows)
+    assert [row.physical_write_bytes for row in rows] == [0] * 15 + [4096]
+    assert all(row.completion_ns - row.arrival_ns < 10 for row in rows)
+    assert full.physical_write_bytes == 4096 and full.completion_ns > config.page_program_ns
+    assert staged.page_staging_state()["valid_bytes"][1] == 4096
 
 
 @pytest.mark.parametrize("name", ["HBF", "HBF+", "CONV", "CONV+"])
@@ -164,7 +176,7 @@ def test_native_paper_two_slot_overwrite_waits_for_the_live_reader(name):
     config = paper.build_paper_nand_config(name, assumptions=paper.default_research_assumptions(name))
     # Keep the authored hardware rates unchanged. Independent host lanes are
     # occupied by earlier traffic so both page fills precede consumption.
-    timeline = ResourceTimeline(lane_available={"nand:host:read": [1e6] * 3})
+    timeline = ResourceTimeline(lane_available={"nand:host:0:read": [1e6] * 3})
     core = NandCore(config, timeline, capture_details=True)
     stride = config.array_units * config.page_bytes
     results = [core.submit(AccessRequest(f"page-{index}", "read", index * stride,
@@ -177,8 +189,6 @@ def test_native_paper_two_slot_overwrite_waits_for_the_live_reader(name):
     assert len(next(iter(core._read_cache.values()))) == 2
     assert all(result.pages_read == 1 for result in results)
     assert all(result.bandwidth_ceiling_gb_s == config.host_read_bandwidth_gb_s for result in results)
-    assert config.host_read_bandwidth_gb_s == paper.hardware_by_id(name).hbf_read_gb_s
-    assert config.host_write_bandwidth_gb_s == paper.hardware_by_id(name).hbf_write_gb_s
 
 
 @pytest.mark.parametrize("name", ["HBF", "HBF+", "CONV", "CONV+"])

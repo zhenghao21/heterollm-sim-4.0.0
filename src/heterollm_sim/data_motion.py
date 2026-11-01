@@ -61,7 +61,7 @@ _PHYSICAL_ADDITIVE_COUNTERS = frozenset((
     "write_buffer_wait_ns", "write_buffer_bytes", "merge_bytes",
     "staging_read_hits", "staging_read_merges", "staging_write_pages",
     "read_cache_hits", "read_cache_misses",
-    "merged_pages", "auto_drain_physical_programs",
+    "merged_pages", "auto_drain_physical_programs", "page_staging_flush_programs",
 ) + DRAM_CONTROL_COUNT_FIELDS + DRAM_CONTROL_TIME_FIELDS)
 _PHYSICAL_PEAK_COUNTERS = frozenset((
     "write_buffer_peak_bytes", "host_outstanding_at_admission_peak",
@@ -237,6 +237,8 @@ class PhysicalRuntimeContext:
     _committed_owners: set[str] = field(default_factory=set, repr=False)
     hbf_staging: dict[str, Any] = field(default_factory=dict, repr=False)
     _owner_config_cache: dict[str, Any] = field(default_factory=dict, repr=False)
+    # NAND owner -> (owner of data sharing its staging store, host channels).
+    _staging_shares: dict[str, Any] = field(default_factory=dict, repr=False)
     _execution_config_cache: dict[Any, Any] = field(default_factory=dict, repr=False)
     _physical_demand_cache: dict[Any, ResourceDemand] = field(default_factory=dict, repr=False)
 
@@ -265,10 +267,14 @@ class PhysicalRuntimeContext:
         return parsed
 
     def release_staging_buffer(self, owner: str, buffer_id: str, generation: int,
-                               *, arrival_ns: float = 0.0) -> None:
+                               *, arrival_ns: float = 0.0, allocation=None) -> None:
         """Discard dead logical data; request completion does not force a tail write."""
         from .hbf_staging_runtime import release
         release(self, owner, buffer_id, generation, arrival_ns)
+        active = self.runtimes.get(owner)
+        if (allocation is not None and allocation.alias_of is None and active is not None
+                and getattr(active.core.config, "page_staging", "none") != "none"):
+            active.core.discard_tail_pages(allocation.base_address, allocation.size_bytes)
 
     def __post_init__(self) -> None:
         if self.timeline is None:
@@ -345,6 +351,11 @@ class PhysicalRuntimeContext:
         elif isinstance(core, NandCore):
             core._nand_numeric_enabled = (not self.capture_details
                                           and config.protocol_mode in ("ocp_hbf_0_7", "generic_nand"))
+            shared = metadata.get("page_staging_shared_owner")
+            if config.page_staging != "none" and shared:
+                # Data interleaved over the same staging store (logic-die
+                # SRAM) takes its share of every channel's capacity.
+                self._staging_shares[owner] = (str(shared), config.host_channels)
         capacity = config.effective_capacity_bytes
         if capacity > 0:
             # The direct-backing planner uses burst alignment for DRAM and
@@ -448,7 +459,8 @@ class PhysicalRuntimeContext:
                     continue
                 if nand_transaction is not None and key in {
                     "_next_program_page", "_block_wear_state", "_nand_transactions", "_read_cache",
-                    "_array_ready", "_buffer_ready", "_nand_numeric_state"
+                    "_array_ready", "_buffer_ready", "_nand_numeric_state", "_tail_pages",
+                    "_tail_full_scopes"
                 }:
                     continue
                 if key == "_banks" and isinstance(value, dict):
@@ -478,8 +490,14 @@ class PhysicalRuntimeContext:
                     # execution state, so a failed task must not modify its
                     # saved retry point through a nested alias.
                     core_state[key] = copy.deepcopy(value)
-                elif key in {"_inflight", "_inflight_operations", "_write_buffer_pending", "_hbm_transactions", "_nand_transactions"} and isinstance(value, list):
+                elif key in {"_inflight", "_inflight_operations", "_write_buffer_pending", "_hbm_transactions",
+                             "_nand_transactions", "_tail_flushing"} and isinstance(value, list):
                     core_state[key] = list(value)
+                elif key == "_tail_pages":
+                    # Staged pages map to immutable tuples.
+                    core_state[key] = dict(value)
+                elif key == "_tail_full_scopes":
+                    core_state[key] = {scope: set(pages) for scope, pages in value.items()}
                 elif key == "_read_cache":
                     core_state[key] = _copy_nand_read_cache(value)
                 elif key == "_staged_pages":
@@ -564,6 +582,10 @@ class PhysicalRuntimeContext:
             "committed_owners": set(self._committed_owners),
             "hbf_staging": snapshot_staging(self.hbf_staging, transactional=transactional),
         }
+        if not transactional:
+            # Transactions keep the high-water mark in their allocator save.
+            snapshot["allocator_peaks"] = {owner: allocator.peak_end_bytes
+                                           for owner, allocator in self.allocators.items()}
         if _immutable_timeline and not transactional:
             from ._timeline_history import _freeze_allocation_state
             _freeze_allocation_state(snapshot["allocator_state"], snapshot["allocators"])
@@ -679,8 +701,11 @@ class PhysicalRuntimeContext:
                         prefix = core.config.metadata.get("port_resource_prefix", "sram:port")
                         if type(prefix) is not str or core.config.ports > 65536:
                             return False
-                        resources = tuple(self.timeline.canonical_resource_id(f"{prefix}:{index}")
-                                          for index in range(core.config.ports))
+                        bound = core.config.metadata.get("port_resource_ids")
+                        names = ([str(name) for direction in ("read", "write") for name in bound[direction]]
+                                 if bound else [f"{prefix}:{index}" for index in range(core.config.ports)])
+                        resources = tuple(dict.fromkeys(self.timeline.canonical_resource_id(name)
+                                                        for name in names))
                 except (TypeError, ValueError, RecursionError):
                     return False
                 if resources is None or not can_own_timeline(self.timeline, resources):
@@ -730,7 +755,8 @@ class PhysicalRuntimeContext:
                 active.core.rollback_transaction(nand_token)
                 journal_state.update({key: active.core.__dict__[key] for key in (
                     "_next_program_page", "_block_wear_state", "_nand_transactions", "_read_cache",
-                    "_array_ready", "_buffer_ready", "_nand_numeric_state")})
+                    "_array_ready", "_buffer_ready", "_nand_numeric_state", "_tail_pages",
+                    "_tail_full_scopes")})
             active.core.__dict__.clear()
             # Restored live state must not become the rollback point itself.
             # Otherwise another submission mutates the saved bank rows,
@@ -751,6 +777,7 @@ class PhysicalRuntimeContext:
                 allocations = allocations._plain()
             if type(allocations) is dict:
                 allocator._restore_allocations(allocations)
+                allocator.peak_end_bytes = snapshot["allocator_peaks"][owner]
             else:
                 allocator.rollback_transaction(allocations)
         timeline_state = snapshot["timeline"]
@@ -1203,7 +1230,9 @@ def prepare_physical_task(
     for access in accesses:
         if not isinstance(access, Mapping):
             raise ValueError("physical memory_accesses entries must be mappings")
-        operation = Operation(str(access.get("operation", "")).lower())
+        operation_name = str(access.get("operation", "")).lower()
+        operation = ("flush" if operation_name == "flush"
+                     else Operation(operation_name))
         address, byte_count = access.get("address"), access.get("byte_count")
         if isinstance(byte_count, bool) or not isinstance(byte_count, int) or byte_count <= 0:
             raise ValueError("physical task byte_count must be a positive integer")
@@ -1296,6 +1325,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
                 placeholder_ids.add(str(value))
     ledger = PhysicalTaskLedger()
     physical_results, staging_stats = ledger.records, ledger.staging_stats
+    media_wait_by_owner = {}
     staging_sessions = {}
     resolved_accesses = []
     task_resource_sink = (({}, {}, {})
@@ -1315,6 +1345,56 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     index = 0
     while index < len(validated):
         access, operation, address, byte_count, owner, access_config = validated[index]
+        if operation == "flush":
+            if (not isinstance(access_config, NandConfig)
+                    or access_config.page_staging != "logic_die"):
+                raise ValueError("page-staging flush requires a logic-die NAND owner")
+            scope = metadata.get("page_staging_scope")
+            if not isinstance(scope, str) or not scope:
+                raise ValueError("page-staging flush requires page_staging_scope")
+            active = runtime.runtime(access_config, owner)
+            account = active.core.flush_staged_pages(
+                # The task's descriptors identify the physical owner and
+                # keep the transaction allocator-backed; the scope is the
+                # authoritative page set.  Do not narrow it to the tiny KV
+                # row spans carried by the descriptor, otherwise full pages
+                # filled by earlier rows in this attention remain deferred.
+                scope, arrival_ns)
+            intervals = account.get("resource_last_intervals", {})
+            completion = max(
+                [float(arrival_ns)]
+                + [float(value[1]) for value in intervals.values()]
+            )
+            counters = {
+                "host_transfer_bytes": int(account.get("host_transfer_bytes", 0)),
+                "internal_transfer_bytes": int(account.get("internal_transfer_bytes", 0)),
+                "physical_read_bytes": 0,
+                "physical_write_bytes": int(account.get("physical_write_bytes", 0)),
+                "pages_read": 0,
+                "pages_programmed": int(account.get("programs", 0)),
+                "page_staging_flush_programs": int(account.get("programs", 0)),
+                "program_operations": int(account.get("programs", 0)),
+                "page_count": 0,
+                "details_truncated": False,
+                "resource_busy_ns": dict(account.get("resource_busy_ns", {})),
+                "resource_bytes": dict(account.get("resource_bytes", {})),
+                "resource_last_intervals": dict(intervals),
+            }
+            from .memory_types import TransactionResult
+            result = TransactionResult(
+                request_id=f"{task.request_id or task.task_id}:{index}",
+                operation=Operation.WRITE,
+                arrival_ns=float(arrival_ns), completion_ns=completion,
+                logical_bytes=0,
+                transfer_bytes=counters["internal_transfer_bytes"],
+                counters=counters,
+            )
+            active.clock_ns = max(active.clock_ns, completion)
+            ledger.accept(Operation.WRITE, completion)
+            physical_results.append((Operation.WRITE, owner, access_config, result))
+            resolved_accesses.append({**dict(access), "address": address})
+            index += 1
+            continue
         if owner in staging_bindings:
             from ._io_execution import PreparedStagingIO
             session = staging_sessions.get(owner)
@@ -1334,6 +1414,15 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             index += 1
             continue
         active = runtime.runtime(access_config, owner)
+        if isinstance(access_config, NandConfig) and access_config.page_staging == "logic_die":
+            scope = metadata.get("page_staging_scope")
+            active.core.set_staging_scope(
+                scope if metadata.get("defer_page_staging") else None)
+        share = runtime._staging_shares.get(owner)
+        if share is not None:
+            # The shared store's first-fit high-water mark, interleaved.
+            allocator = runtime.allocators.get(share[0])
+            active.core._tail_shared = -(-getattr(allocator, "peak_end_bytes", 0) // share[1])
         # An authored task may mix staged HBF accesses and a direct access
         # to the same HOST controller. Publish the preceding staged work
         # before the direct core reads the shared resource calendars.
@@ -1410,6 +1499,10 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             group_results = active.core.submit_many(requests)
         else:
             group_results = tuple(active.core.submit(request) for request in requests)
+        media_wait_by_owner[owner] = max(
+            media_wait_by_owner.get(owner, 0.0),
+            float(getattr(active.core, "_last_media_queue_wait_ns", 0.0)),
+        )
         for position, result in zip(range(index, stop), group_results):
             access, op, addr, count, _owner, _config = validated[position]
             active.clock_ns = max(active.clock_ns, result.completion_ns)
@@ -1451,6 +1544,9 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     execution_by_owner = reduce_physical_results(
         physical_results, arrival_ns, DRAM_OPTIONAL_COUNTER_FIELDS,
         _PHYSICAL_ADDITIVE_COUNTERS, _PHYSICAL_PEAK_COUNTERS, Operation.READ)
+    for owner, wait in media_wait_by_owner.items():
+        if owner in execution_by_owner:
+            execution_by_owner[owner]["media_queue_wait_ns"] = float(wait)
     if task_resource_sink is not None:
         for owner, (busy, byte_counts, last) in owner_resource_sinks.items():
             owner_bill = execution_by_owner[owner]
@@ -1473,7 +1569,15 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     from ._resource_ledger import physical_demands
     demands = physical_demands(
         resource_busy, resource_bytes, runtime._physical_demand_cache, ResourceDemand)
-    if not demands and not ledger.all_erases:
+    is_staging_flush = any(
+        str(item.get("operation", "")).lower() == "flush"
+        for item in resolved_accesses
+    )
+    flush_programs = sum(
+        int(result.counters.get("page_staging_flush_programs", 0))
+        for _op, _owner, _config, result in physical_results
+    )
+    if not demands and not ledger.all_erases and not (is_staging_flush and flush_programs == 0):
         raise ValueError("physical memory core returned no resource timing for a positive-byte access")
     metadata = dict(metadata)
     metadata.update({
@@ -1495,6 +1599,15 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     # Keep unrelated compute/link demands. Only preview demands for resources
     # identified by this transaction are replaced by core-owned reservations.
     memory_ids = set(metadata["physical_demands_resource_ids"]) | placeholder_ids
+    if is_staging_flush and not demands:
+        # A layer may reach attention before any full staged page exists.  The
+        # explicit flush task remains a real no-op and must not retain its
+        # analytical endpoint demand as a phantom NAND reservation.
+        memory_ids.update({
+            str(metadata.get("physical_resource_id", "")),
+            str(metadata.get("physical_owner", "")),
+        })
+        memory_ids.discard("")
     canonical_memory_ids = {runtime.timeline.canonical_resource_id(rid) for rid in memory_ids}
     preserved = tuple(d for d in task.demands
                       if runtime.timeline.canonical_resource_id(d.resource_id) not in canonical_memory_ids)
@@ -1543,7 +1656,7 @@ _SINK_CLASSES = tuple((cls, tuple((name, value) for name, value in vars(cls).ite
         _sink_types_module.Operation, _sink_types_module.MemoryKind,
         _sink_hbm_transaction_module.HBMTransaction, _sink_hbm_transaction_module._NumericUndo,
         _sink_hbm_module._HBMNumericState, _sink_dram_module._BankState,
-        _sink_nand_acceleration_module._DEFER_NUMERIC_TYPE,
+        _sink_nand_acceleration_module._NATIVE_NUMERIC_TYPE,
         _sink_dram_module.DramCore, _sink_nand_module.NandCore))
 _SINK_RUNTIME_METHODS = tuple((name, value) for name, value in vars(PhysicalRuntimeContext).items()
                               if callable(value))
@@ -1680,9 +1793,9 @@ def _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns
         if type(core) is _sink_nand_module.NandCore:
             if (type(core._nand_numeric_enabled) is not bool or not core._nand_numeric_enabled
                     or not _sink_nand_acceleration_module._generic_resident_writers(core)
-                    or type(core._nand_numeric_state) is not _sink_nand_acceleration_module._DEFER_NUMERIC_TYPE
+                    or type(core._nand_numeric_state) is not _sink_nand_acceleration_module._NATIVE_NUMERIC_TYPE
                     or type(core._nand_numeric_state.arrays) is not tuple
-                    or not _sink_nand_acceleration_module._deferred_batch_qualified(core, (), _core_only=True)
+                    or not _sink_nand_acceleration_module._native_sink_qualified(core)
                     or any(type(array) is not _sink_numpy.ndarray or array.dtype.hasobject
                            for array in core._nand_numeric_state.arrays)):
                 return False
@@ -1809,8 +1922,18 @@ def physical_task_transaction_owners(task: TaskSpec):
     name their entire memory footprint, including L2 backing allocations.
     """
     metadata = task.metadata
-    if metadata.get("hbf_host_staging_by_owner"):
-        return None
+    staging = metadata.get("hbf_host_staging_by_owner")
+    if staging:
+        # Keep host-staging tasks in the bounded owner transaction as well.
+        # The binding names the NAND controller; its host controller is part
+        # of the same rollback scope and is included when authored.
+        owners = {str(owner) for owner in staging}
+        for binding in staging.values():
+            if isinstance(binding, Mapping):
+                host_owner = binding.get("host_owner") or binding.get("host_physical_owner")
+                if host_owner:
+                    owners.add(str(host_owner))
+        return frozenset(owners)
     default = metadata.get("physical_owner")
     owners = {str(default)} if default else set()
     for rows in (_memory_accesses(metadata), _physical_allocations(metadata)):

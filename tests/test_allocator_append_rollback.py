@@ -11,9 +11,11 @@ CandidateAllocator = PhysicalAddressAllocator
 
 
 class _ReferenceAllocator(PhysicalAddressAllocator):
-    # Oracle below is extracted verbatim from the original source function.
+    # Oracle below is extracted from the original source function, plus the
+    # high-water mark that a rollback now restores.
     def rollback_transaction(self, save: "_AllocationSave") -> None:
         self._close(save)
+        self.peak_end_bytes = save.peak
         changed = False
         for key, (previous, order) in save.entries.items():
             if (self._allocations.get(key) is previous
@@ -452,6 +454,7 @@ def test_unknown_checkpoint_type_does_not_read_author_native_marker():
     allocator.allocate('new-workspace', 64, 1)
     observed = []
     class AuthorSave:
+        peak = 64  # the high-water mark when the checkpoint was taken
         @property
         def _native_born(self):
             raise AssertionError('unknown checkpoint marker must not be read')
@@ -462,6 +465,7 @@ def test_unknown_checkpoint_type_does_not_read_author_native_marker():
     allocator.rollback_transaction(AuthorSave())
     assert observed == [False]
     assert ('new-workspace', 1) not in allocator._allocations
+    assert allocator.peak_end_bytes == 64
 
 
 def test_checkpoint_copy_and_pickle_are_conservative_before_close():
@@ -509,3 +513,13 @@ def test_memo_replaced_next_ordinal_keeps_original_sort_callbacks():
     expected = _ordinal_memo_scenario(_ReferenceAllocator)
     actual = _ordinal_memo_scenario(CandidateAllocator)
     assert expected and actual == expected
+
+
+def test_a_rolled_back_trial_leaves_no_high_water_mark():
+    allocator = CandidateAllocator(1024, 64)
+    allocator.allocate('live', 16)
+    save = allocator.begin_transaction()
+    allocator.allocate('trial', 200)
+    assert allocator.peak_end_bytes == 64 + 200
+    allocator.rollback_transaction(save)
+    assert allocator.peak_end_bytes == 16

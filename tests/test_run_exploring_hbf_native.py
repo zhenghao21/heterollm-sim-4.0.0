@@ -419,7 +419,10 @@ def test_aggregate_native_maverick_pd_sram_window_reaches_runner_metrics():
     assert not any(component.normalized_kind == "hbm" for component in result.scenario.hardware.components)
     traffic = run.traffic_result(result)
     assert traffic["external_kv_ingress"]["imported_logical_bytes"] > 0
-    assert traffic["combined_physical_traffic"]["NAND"]["physical_write_bytes"] > 0
+    # Imports and decode rows reach the NAND write path, but this miniature
+    # never fills a 4 KiB page: every tail waits in the logic-die store.
+    nand = traffic["combined_physical_traffic"]["NAND"]
+    assert nand["logical_write_bytes"] > 0 and nand["physical_write_bytes"] == 0
     assert traffic["combined_physical_traffic"]["SRAM"]["physical_read_bytes"] > 0
     final = next(row for row in reversed(observations) if row.stage == "serving_complete")
     counters = final.metadata["cumulative_progress"]

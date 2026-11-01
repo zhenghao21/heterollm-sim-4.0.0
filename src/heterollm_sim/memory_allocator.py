@@ -61,12 +61,15 @@ _NATIVE_ALLOCATION_COPY_CONTRACT = (
 class _AllocationSave:
     """Before-images of changed keys, retained as long as the caller needs them."""
 
-    __slots__ = ("entries", "allocator", "_native_born", "__weakref__")
+    __slots__ = ("entries", "allocator", "peak", "_native_born", "__weakref__")
 
     def __init__(self, allocator):
         self._native_born = True
         self.entries = {}
         self.allocator = allocator
+        # The high-water mark is allocator state too: a rolled-back trial
+        # allocation must not stay in it.
+        self.peak = allocator.peak_end_bytes
 
     def __deepcopy__(self, memo):
         result = type(self).__new__(type(self))
@@ -74,15 +77,16 @@ class _AllocationSave:
         result._native_born = False
         result.allocator = deepcopy(self.allocator, memo)
         result.entries = deepcopy(self.entries, memo)
+        result.peak = self.peak
         result.allocator._saves.add(result)
         return result
 
     def __getstate__(self):
-        return self.allocator, self.entries
+        return self.allocator, self.entries, self.peak
 
     def __setstate__(self, state):
         self._native_born = False
-        self.allocator, self.entries = state
+        self.allocator, self.entries, self.peak = state
         if "_saves" not in vars(self.allocator):
             self.allocator._saves = WeakSet()
         self.allocator._saves.add(self)
@@ -114,6 +118,8 @@ class PhysicalAddressAllocator:
         self._address_keys = []
         self._address_rows = []
         self._largest_allocation = 0
+        # Highest end address ever occupied (a first-fit high-water mark).
+        self.peak_end_bytes = 0
         self._aliases_by_target = {}
         self._free_extents = [(0, capacity_bytes)]
         # The free extents whose first aligned address lies inside them. An
@@ -191,6 +197,7 @@ class PhysicalAddressAllocator:
 
     def rollback_transaction(self, save: "_AllocationSave") -> None:
         self._close(save)
+        self.peak_end_bytes = save.peak
         changed = False
         restore_existing = False
         for key, (previous, order) in save.entries.items():
@@ -293,6 +300,9 @@ class PhysicalAddressAllocator:
         self._address_keys.insert(position, address_key)
         self._address_rows.insert(position, allocation)
         self._largest_allocation = max(self._largest_allocation, allocation.size_bytes)
+        if allocation.alias_of is None and type(allocation.base_address) is int:
+            self.peak_end_bytes = max(getattr(self, "peak_end_bytes", 0),
+                                      allocation.base_address + allocation.size_bytes)
         self._allocations[key] = allocation
         if key not in self._allocation_order:
             self._allocation_order[key] = self._next_order

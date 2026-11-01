@@ -53,9 +53,9 @@ class NativeTrace:
         self.gate = data_motion._native_multiowner_resource_sink.__code__
         self.task = data_motion.execute_prepared_physical_task.__code__
         self.submit = NandCore.submit.__code__
-        self.bulk = _nand_acceleration.execute_buffered_full_pages.__code__
+        self.batch = _nand_acceleration.execute_read_batch.__code__
         self.scalar = NandCore._submit_resident_scalar.__code__
-        self.gates, self.submits, self.bulk_calls, self.scalar_ids, self.bills = [], [], [], [], []
+        self.gates, self.submits, self.batches, self.scalar_ids, self.bills = [], [], [], [], []
 
     def observe(self, frame, event, value):
         if event != "return":
@@ -69,11 +69,11 @@ class NativeTrace:
             self.submits.append((local["request"].request_id,
                 local.get("_resource_sink") is not None,
                 tuple(name for name in RESOURCE_FIELDS if name in value.counters)))
-        elif code is self.bulk and value is not None:
-            self.bulk_calls.append((local["request"].request_id,
-                local.get("_resource_sink") is not None,
-                local.get("deferred") is not None,
-                tuple(name for name in RESOURCE_FIELDS if name in (local.get("_metrics") or {}))))
+        elif code is self.batch and value is not None:
+            sink = local.get("_resource_sink") is not None
+            self.batches.append((len(value), sink))
+            self.submits.extend((row.request_id, sink,
+                tuple(name for name in RESOURCE_FIELDS if name in row.counters)) for row in value)
         elif code is self.scalar and value is not None:
             self.scalar_ids.append(local["request"].request_id)
         elif code is self.task and value is not None:
@@ -178,7 +178,7 @@ def observe_run(kernel, task, enabled=True):
 
 def assert_actual_hit(trace):
     assert trace.gates and all(accepted and scope for accepted, scope in trace.gates), trace.gates
-    assert any(sink and deferred and not fields for _, sink, deferred, fields in trace.bulk_calls), trace.bulk_calls
+    assert trace.batches and all(sink for _, sink in trace.batches), trace.batches
     assert trace.submits and all(sink and not fields for _, sink, fields in trace.submits), trace.submits
 
 
@@ -211,8 +211,10 @@ def test_real_owned_mixed_task_hits_sink_and_matches_complete_task_bits():
     actual, trace = observe_run(candidate, candidate_task)
     assert_actual_hit(trace)
     assert not any(accepted for accepted, _ in baseline.gates)
-    assert trace.scalar_ids == ["sink-request:8"]
-    assert len(trace.bulk_calls) > 16  # fast before and after the scalar, then A again.
+    # The one-page read joins its group's batch; no request leaves to the
+    # scalar machine. A, the single page and A again, then A after HBM.
+    assert trace.scalar_ids == []
+    assert [count for count, _ in trace.batches] == [17, 8]
     assert bits(actual) == bits(expected)
     assert state_bits(candidate) == state_bits(reference)
     compare_physical_state(candidate, reference)
@@ -346,8 +348,6 @@ def test_post_task_exception_rolls_back_after_real_private_consumption(monkeypat
     assert_actual_hit(traces[1])
     assert state_bits(candidate) == before == state_bits(reference)
     assert candidate.physical_runtime.timeline._owned_metric_orders is None
-    for kernel in (reference, candidate):
-        assert "_nand_request_metric_orders" not in kernel.physical_runtime.runtimes[NAND_OWNER].core.__dict__
     # Re-enter the ordinary kernel after rollback. No task-local sink is
     # attached to either Core or timeline and no failed partial bill survives.
     resumed = []
@@ -360,19 +360,19 @@ def test_post_task_exception_rolls_back_after_real_private_consumption(monkeypat
     compare_physical_state(candidate, reference)
 
 
-def test_real_finite_overflow_restores_the_task_after_a_private_successful_prefix():
+def test_real_finite_overflow_restores_the_task_and_its_private_sink():
     cases = []
     for enabled in (False, True):
         kernel, task, _ = make_fixture(count=10, scalar=False)
         runtime = kernel.physical_runtime
         core = runtime.runtimes[NAND_OWNER].core
         # Keep the already-warmed resident geometry. Only its read timing
-        # changes, just as the existing deferred-calendar finite test does.
-        core.config = replace(core.config, page_read_ns=1e307)
+        # changes; the batch fails inside the native controller.
+        core.config = replace(core.config, page_read_ns=1e308)
         runtime._owner_config_cache[NAND_OWNER] = tuple(
-            replace(value, page_read_ns=1e307) for value in runtime._owner_config_cache[NAND_OWNER])
+            replace(value, page_read_ns=1e308) for value in runtime._owner_config_cache[NAND_OWNER])
         configs = dict(task.metadata["physical_memory_configs"])
-        configs[NAND_OWNER] = replace(configs[NAND_OWNER], page_read_ns=1e307)
+        configs[NAND_OWNER] = replace(configs[NAND_OWNER], page_read_ns=1e308)
         task = replace(task, metadata={**task.metadata,
             "physical_memory_config": configs[NAND_OWNER], "physical_memory_configs": configs})
         before = state_bits(kernel)
@@ -381,10 +381,9 @@ def test_real_finite_overflow_restores_the_task_after_a_private_successful_prefi
                 drain(kernel, task)
         assert state_bits(kernel) == before
         assert runtime.timeline._owned_metric_orders is None
-        assert "_nand_request_metric_orders" not in core.__dict__
         cases.append((kernel, trace, type(error.value), str(error.value)))
-    assert_actual_hit(cases[1][1])
-    assert len(cases[1][1].submits) >= 10
+    assert cases[1][1].gates and all(accepted and scope for accepted, scope in cases[1][1].gates)
+    assert not any(accepted for accepted, _ in cases[0][1].gates)
     assert cases[0][2:] == cases[1][2:]
     assert state_bits(cases[0][0]) == state_bits(cases[1][0])
 

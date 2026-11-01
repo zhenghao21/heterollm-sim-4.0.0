@@ -19,6 +19,7 @@ from b200_hbm_hbf_scan_config import build_scan_scenario
 from exploring_hbf_compare import _add_hbm_for_intermediates, _set_memory
 from exploring_hbf_native_models import build_native_paper_model
 from exploring_hbf_paper_config import (
+    LOGIC_DIE_SRAM_LATENCY_NS, MB, STACK_INTERFACE_GB_S,
     build_paper_hbm_config, build_paper_nand_config, default_research_assumptions,
     hardware_by_id, workload_catalog,
 )
@@ -138,35 +139,59 @@ def gpu_reference(component_id: str):
     return _gpu_profile_from_dict(raw)
 
 
-def sram_reference() -> SramConfig:
-    return SramConfig(capacity_bytes=320_000_000, burst_bytes=64,
-        interface_bandwidth_gb_s=80000., read_bandwidth_gb_s=80000.,
-        write_bandwidth_gb_s=80000., read_latency_ns=1., write_latency_ns=1.,
-        ports=8, max_outstanding_requests=256, metadata={
+def sram_reference(host_owner: str = "hbf0.memory", stacks: int = 8) -> SramConfig:
+    """Table I's logic-die SRAM: one 40 MB partition per HBF stack.
+
+    Each port is a stack's partition behind that stack's host channel, so
+    GPU traffic to it shares the 1.6 TB/s per direction with the stack's
+    NAND reads and writes. Activations interleave 64 B bursts over stacks;
+    staged KV tail pages live in NandCore's per-stack staging accounting,
+    whose valid bytes share each partition with the activations.
+    """
+    rate = stacks * STACK_INTERFACE_GB_S
+    return SramConfig(capacity_bytes=stacks * 40 * MB, burst_bytes=64,
+        interface_bandwidth_gb_s=rate, read_bandwidth_gb_s=rate,
+        write_bandwidth_gb_s=rate, read_latency_ns=LOGIC_DIE_SRAM_LATENCY_NS,
+        write_latency_ns=LOGIC_DIE_SRAM_LATENCY_NS,
+        ports=stacks, max_outstanding_requests=256, metadata={
+            "port_resource_ids": {direction: [f"{host_owner}:nand:host:{stack}:{direction}"
+                                              for stack in range(stacks)]
+                                  for direction in ("read", "write")},
             "source_capacity": "paper: 8 stacks x 40 decimal MB per stack",
-            "research_organization": "pooled 8-port byte-interleaved SRAM; stack-private arenas are not modeled",
-            "research_timing": "10 TB/s per stack, 1 ns pipeline latency, 64B burst, 256 combined credits; not paper measurements"})
+            "research_organization": "one 40 MB partition per stack on its logic die; activations interleave 64 B "
+                                     "bursts over stacks; each port is that stack's host channel",
+            "research_timing": "stack host channel 1.6 TB/s per direction shared with NAND, 1 ns pipeline latency, "
+                               "64B burst, 256 combined credits; not paper measurements"})
 
 
 def _add_sram(template):
-    config = sram_reference()
+    hbf = template.hardware.get_component("hbf0")
+    host_owner = str(hbf.metadata.get("memory_service_owner") or "hbf0.memory")
+    stacks = require_physical_memory_config(hbf).host_channels
+    config = sram_reference(host_owner, stacks)
     owner = "sram0.sram_fabric"
-    profile = HostMemoryProfile(bandwidth_gb_s=80000., efficiency=1.,
-        read_bandwidth_gb_s=80000., write_bandwidth_gb_s=80000.,
-        read_latency_ns=1., write_latency_ns=1., transaction_bytes=64,
-        max_outstanding_requests=256, parallel_lanes=8, resource_id=owner,
+    rate = config.read_bandwidth_gb_s
+    profile = HostMemoryProfile(bandwidth_gb_s=rate, efficiency=1.,
+        read_bandwidth_gb_s=rate, write_bandwidth_gb_s=rate,
+        read_latency_ns=config.read_latency_ns, write_latency_ns=config.write_latency_ns,
+        transaction_bytes=64, max_outstanding_requests=256, parallel_lanes=stacks, resource_id=owner,
         name="native logic-die SRAM research reference")
-    port = PortSpec("host", "SRAM", role="endpoint", version="1", lanes=8,
-                    bandwidth_gbps=640000., payload="streaming")
+    port = PortSpec("host", "SRAM", role="endpoint", version="1", lanes=stacks,
+                    bandwidth_gbps=rate * 8, payload="streaming")
     sram = ComponentSpec("sram0", "sram", cost_profile_id="native-sram",
-        ports=(port,), capacity_bytes=config.capacity_bytes, bandwidth_gbps=640000.,
-        read_bandwidth_gbps=640000., write_bandwidth_gbps=640000.,
+        ports=(port,), capacity_bytes=config.capacity_bytes, bandwidth_gbps=rate * 8,
+        read_bandwidth_gbps=rate * 8, write_bandwidth_gbps=rate * 8,
         metadata={"physical_memory_config": config, "memory_service_owner": owner,
                   "cost_profile_template": asdict(profile), "writable": True})
+    # Staged KV tails share each stack's partition with these activations.
+    nand = require_physical_memory_config(hbf)
+    hbf = replace(hbf, metadata={**hbf.metadata, "physical_memory_config": replace(
+        nand, metadata={**nand.metadata, "page_staging_shared_owner": owner})})
     components = tuple(replace(c, ports=c.ports + (replace(port, port_id="sram0", role="controller"),))
-                       if c.component_id == "gpu0" else c for c in template.hardware.components)
-    link = LinkSpec("gpu-sram", "gpu0", "sram0", "sram0", "host", "SRAM", "1", 8,
-                    640000., 0., payload="streaming")
+                       if c.component_id == "gpu0" else hbf if c.component_id == "hbf0" else c
+                       for c in template.hardware.components)
+    link = LinkSpec("gpu-sram", "gpu0", "sram0", "sram0", "host", "SRAM", "1", stacks,
+                    rate * 8, 0., payload="streaming")
     profiles = {kind: dict(registry) for kind, registry in template.component_profiles.items()}
     profiles.setdefault("host_memory", {})["native-sram"] = profile
     return replace(template, hardware=replace(template.hardware, components=components + (sram,),

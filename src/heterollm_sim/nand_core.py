@@ -1,6 +1,7 @@
 """Shared page-level NAND core for SSD and HBF configurations."""
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from heapq import heapify, heappop, heappush
@@ -176,6 +177,18 @@ class _ReadCacheSlot:
     last_use: int = 0
 
 
+def _merge_ranges(ranges):
+    """Union of half-open byte ranges, ascending and coalesced."""
+    merged = []
+    for left, right in sorted(ranges):
+        if merged and left <= merged[-1][1]:
+            if right > merged[-1][1]:
+                merged[-1] = (merged[-1][0], right)
+        else:
+            merged.append((left, right))
+    return tuple(merged)
+
+
 def _copy_nand_read_cache(cache, memo=None):
     """Copy page buffers directly while retaining extension aliases/cycles."""
     if memo is None:
@@ -253,6 +266,22 @@ class _NandTransaction:
         self.buffer_frontiers = None if lazy_frontiers else dict(self.frontier_roots[1])
         self.numeric_at_begin = core._nand_numeric_state
         self.numeric = None
+        # Staged tail pages are journaled per page; the runtime snapshot
+        # copies their small per-channel counters and in-flight programs.
+        self.tail_pages = {}
+        self.tail_scopes = None
+        self.tail_counters = (core._tail_valid, core._tail_peak, list(core._tail_flushing),
+                              core._tail_full_page_fills, core._tail_flush_started_pages,
+                              core._tail_flush_discarded_pages)
+
+    def remember_tail(self, core, page):
+        if page not in self.tail_pages:
+            self.tail_pages[page] = core._tail_pages.get(page)
+
+    def remember_tail_scopes(self, core):
+        if self.tail_scopes is None:
+            self.tail_scopes = {scope: set(pages)
+                                for scope, pages in core._tail_full_scopes.items()}
 
     def capture_numeric(self, packed):
         if packed is self.numeric_at_begin and self.numeric is None:
@@ -348,6 +377,21 @@ class _NandTransaction:
         if self.numeric is not None:
             self.numeric_at_begin.restore(self.numeric)
         core._nand_numeric_state = self.numeric_at_begin
+        core._tail_valid, core._tail_peak = self.tail_counters[:2]
+        core._tail_flushing = list(self.tail_counters[2])
+        (core._tail_full_page_fills, core._tail_flush_started_pages,
+         core._tail_flush_discarded_pages) = self.tail_counters[3:]
+        if self.tail_pages:
+            pages = core._tail_pages
+            for page, previous in self.tail_pages.items():
+                if previous is None:
+                    pages.pop(page, None)
+                else:
+                    pages[page] = previous
+            core._tail_index = None
+        if self.tail_scopes is not None:
+            core._tail_full_scopes = {scope: set(pages)
+                                      for scope, pages in self.tail_scopes.items()}
 
 
 class NandCore:
@@ -406,7 +450,27 @@ class NandCore:
         self._nand_numeric_enabled = False
         self._nand_state_exposed = False
         self._observation_events: list[dict] = []
+        self._last_media_queue_wait_ns = 0.0
         self._observe_media = bool(config.detailed_observability or config.wear_model)
+        # Page staging: page index -> (valid ranges, valid bytes, data ready,
+        # program end or -1 while filling, host channel). Valid bytes count
+        # against their channel until the page's program completes.
+        self._tail_pages: Dict[int, tuple] = {}
+        self._tail_valid = (0,) * config.host_channels
+        self._tail_peak = (0,) * config.host_channels
+        self._tail_flushing: list[tuple[float, int]] = []
+        self._tail_index = None
+        # Full pages may be held by an attention-scoped background task.  The
+        # scope index lets a flush touch only its own pages; there is no timer
+        # heap or global page scan.
+        self._tail_full_scopes: dict[str, set[int]] = {}
+        self._tail_defer_scope: Optional[str] = None
+        self._tail_full_page_fills = 0
+        self._tail_flush_started_pages = 0
+        self._tail_flush_discarded_pages = 0
+        # Bytes per channel of other data interleaved over the same store
+        # (logic-die SRAM activations); the physical runtime refreshes it.
+        self._tail_shared = 0
 
     def begin_transaction(self):
         """Protect program-order, wear and read buffers; caller owns other state."""
@@ -434,9 +498,6 @@ class NandCore:
             token.materialize_cache(self)
 
     def _nand_publish_numeric(self, *, exposed=False):
-        if "_nand_request_metric_orders" in self.__dict__:
-            from ._nand_acceleration import _flush_deferred_calendar
-            _flush_deferred_calendar(self)
         packed = self.__dict__.get("_nand_numeric_state")
         if exposed:
             self.__dict__["_nand_numeric_enabled"] = False
@@ -1073,9 +1134,7 @@ class NandCore:
         try:
             if _resource_sink is None:
                 return self._submit_live(request)
-            result = self._submit_live(request, _resource_sink=_resource_sink)
-            # A scalar decline is consumed before the next native request,
-            # retaining fast/scalar/fast order inside one submit_many call.
+            result = self._submit_live(request)
             fields = ("resource_busy_ns", "resource_bytes", "resource_last_intervals")
             if any(name in result.counters for name in fields):
                 from ._resource_ledger import consume_task_resource_sink
@@ -1089,39 +1148,50 @@ class NandCore:
             self.timeline._finish_core_accounting(depth)
 
     def submit_many(self, requests, *, _resource_sink=None):
-        """Submit in request order, reusing native calendars and metric ordinals.
+        """Submit requests that arrive together as one controller window.
 
-        The scope ends before returning to the caller: public map edits,
-        reordering, snapshots and undo callbacks retain their normal checks.
-        Admission and all per-request IEEE counter differences stay separate.
+        A native generic READ batch is scheduled by the out-of-order
+        controller: host credits are still taken in request order, but
+        channels and the host link serve pages as they become ready, so one
+        request's busy plane no longer holds back the others. Other batches
+        are submitted one request at a time.
         """
-        from ._nand_acceleration import (_generic_resident_writers,
-            _deferred_batch_qualified, _flush_deferred_calendar)
-
         requests = tuple(requests)
-        qualified = (len(requests) >= 2 and self._nand_numeric_enabled
-            and all(type(request) is AccessRequest and request.operation is Operation.READ for request in requests)
-            and _generic_resident_writers(self))
-        if not qualified:
-            if _resource_sink is None:
-                return tuple(self.submit(request) for request in requests)
-            return tuple(self.submit(request, _resource_sink=_resource_sink) for request in requests)
-        self.__dict__["_nand_request_metric_orders"] = ({"pack_pages": sum(
-            (request.address + request.byte_count - 1) // 4096 - request.address // 4096 + 1
-            for request in requests)} if len(requests) >= 8 else {})
-        scope = self.__dict__["_nand_request_metric_orders"]
-        try:
-            scope["defer_candidate"] = _deferred_batch_qualified(self, requests)
-            if _resource_sink is None:
-                return tuple(self.submit(request) for request in requests)
-            return tuple(self.submit(request, _resource_sink=_resource_sink) for request in requests)
-        finally:
-            try:
-                _flush_deferred_calendar(self)
-            finally:
-                self.__dict__.pop("_nand_request_metric_orders", None)
+        native_window = (len(requests) >= 2 and self._nand_numeric_enabled
+                         and all(type(request) is AccessRequest and request.operation is Operation.READ
+                                 for request in requests))
+        if (len(requests) >= 2 and self._nand_numeric_enabled
+                and all(type(request) is AccessRequest and request.operation is Operation.READ
+                        for request in requests)):
+            from ._nand_acceleration import execute_read_batch
+            results = execute_read_batch(self, requests, _resource_sink=_resource_sink)
+            if results is not None:
+                results = list(results)
+                return tuple(results)
+        if _resource_sink is None:
+            results = tuple(self.submit(request) for request in requests)
+        else:
+            results = tuple(self.submit(request, _resource_sink=_resource_sink) for request in requests)
+        return results
 
-    def _submit_live(self, request: AccessRequest, *, _resource_sink=None) -> TransactionResult:
+    def _submit_live(self, request: AccessRequest) -> TransactionResult:
+        if self.config.page_staging != "none" and type(request) is AccessRequest:
+            result = self._submit_staged(request)
+            if result is not None:
+                return result
+        # A native batch executor may decline a single request that is wholly
+        # served by deferred pages.  Its scalar staging branch does not need
+        # the packed NAND calendars, so keep those arrays resident instead of
+        # publishing every bank merely to account for a host transfer.
+        if (self._nand_numeric_state is not None
+                and type(request) is AccessRequest
+                and request.operation is Operation.READ):
+            first = request.address // self.config.page_bytes
+            last = (request.address + request.byte_count - 1) // self.config.page_bytes
+            readable = self._tail_readable(first, last, request.arrival_ns)
+            if len(readable) == last - first + 1:
+                self._validate_request(request)
+                return self._submit_scalar_request(request)
         # Ordinary native requests can bill the packed cumulative calendars
         # directly. The outer physical transaction still owns their undo;
         # an additional per-request timeline transaction is unnecessary.
@@ -1137,19 +1207,16 @@ class NandCore:
                     and (self._nand_numeric_state is None
                          or self._nand_numeric_state.scalar_resource_contract == self._resident_resource_contract())):
                 self._validate_request(request)
-                result = (self._submit_generic_summary(request) if _resource_sink is None else
-                          self._submit_generic_summary(request, _resource_sink=_resource_sink))
+                result = self._submit_generic_summary(request)
                 if result is not None:
                     return result
-        # A declined native request can enter authored scalar code. No
-        # ordinal assumptions survive that boundary for later batch members.
-        if "_nand_request_metric_orders" in self.__dict__:
-            from ._nand_acceleration import _flush_deferred_calendar
-            _flush_deferred_calendar(self)
-        self.__dict__.pop("_nand_request_metric_orders", None)
         # GC interleaves a scalar read and PROGRAM with bulk page execution.
         # Hand only that bank to the unchanged scalar state machine instead
         # of publishing and repacking all banks for every copied page.
+        # A staged read can fall back from the native batch executor to the
+        # one-bank scalar bridge.  Keep that bridge resident while deferred
+        # pages are still below both gates; publishing all banks here would
+        # turn every such submission into a full numeric-state round trip.
         if (self._nand_numeric_state is not None
                 and "_resident_scalar_eligible" not in self.__dict__
                 and type(self)._resident_scalar_eligible is _RESIDENT_SCALAR_METHODS["_resident_scalar_eligible"]
@@ -1244,7 +1311,7 @@ class NandCore:
                                     result.completion_ns, request.operation)
         return result
 
-    def _submit_generic_summary(self, request, *, _resource_sink=None):
+    def _submit_generic_summary(self, request):
         """Keep host admission exact while billing native calendar deltas."""
         from ._nand_acceleration import execute_buffered_full_pages
         from .memory_transfer import _OWNED_TIMELINE_TOKEN_TYPE, _OWNED_TIMELINE_REMEMBER
@@ -1263,11 +1330,7 @@ class NandCore:
         count = (request.address + request.byte_count - 1) // 4096 - request.address // 4096 + 1
         effective_request = (request if effective == request.arrival_ns else
                              replace(request, arrival_ns=effective))
-        if _resource_sink is None:
-            result = execute_buffered_full_pages(self, effective_request, count, _metrics=metrics)
-        else:
-            result = execute_buffered_full_pages(self, effective_request, count,
-                _metrics=metrics, _resource_sink=_resource_sink)
+        result = execute_buffered_full_pages(self, effective_request, count, _metrics=metrics)
         if result is None:
             return None
         # No write buffer, staged pages, media observations or authored
@@ -1492,23 +1555,14 @@ class NandCore:
                     ready[bank, index], readers[bank, index] = slot.ready_ns, slot.reader_completion_ns
                     uses[bank, index] = slot.last_use
 
-    def _submit_resident_generic(self, request):
-        """Hand only the addressed banks to the original generic request path.
+    def _resident_handoff(self, banks, units):
+        """Publish only these resident banks and units to their Python slots.
 
-        Short multi-page and unaligned spans have the same admission and
-        exact page machine as before. Other banks remain in private arrays;
-        the temporary handoff does not fabricate future controller state.
+        The numeric arrays stay authoritative for every other bank. Journals
+        capture the resident preimage first, just as for a complete
+        publication. The returned callable writes the scalar state back.
         """
-        packed, config = self._nand_numeric_state, self.config
-        base_units = (config.channels * config.targets_per_channel
-                      * config.dies_per_target * config.luns_per_die)
-        bank_count = base_units * config.planes_per_lun
-        first = request.address // 4096
-        last = (request.address + request.byte_count - 1) // 4096
-        banks = tuple((first + offset) % bank_count
-                      for offset in range(min(last - first + 1, bank_count)))
-        units = tuple(dict.fromkeys(bank if config.planes_independent else bank % base_units
-                                   for bank in banks))
+        packed = self._nand_numeric_state
         arrays, buffers, tags, ready, readers, uses, present = packed.arrays
         bank_keys, prefixes, array_names, pages_per_block = packed.layout
         array_values = self.__dict__["_array_ready"]
@@ -1536,14 +1590,8 @@ class NandCore:
                 slot.page_key = None if page < 0 else (*prefixes[bank], *divmod(page, pages_per_block))
                 slot.ready_ns, slot.reader_completion_ns, slot.last_use = (
                     float(ready[bank, index]), float(readers[bank, index]), int(uses[bank, index]))
-        enabled = self._nand_numeric_enabled
-        self._nand_numeric_state = None
-        self._nand_numeric_enabled = False
-        try:
-            return self._submit_scalar_request(request)
-        finally:
-            self._nand_numeric_state = packed
-            self._nand_numeric_enabled = enabled
+
+        def write_back():
             # Preserve even a failing page machine's exact partial state;
             # an outer transaction still owns restoration of its preimage.
             for unit in units:
@@ -1563,6 +1611,503 @@ class NandCore:
                     tags[bank, index] = -1 if page is None else page[-2] * pages_per_block + page[-1]
                     ready[bank, index], readers[bank, index], uses[bank, index] = (
                         slot.ready_ns, slot.reader_completion_ns, slot.last_use)
+        return write_back
+
+    def _submit_resident_generic(self, request):
+        """Hand only the addressed banks to the original generic request path.
+
+        Short multi-page and unaligned spans have the same admission and
+        exact page machine as before. Other banks remain in private arrays;
+        the temporary handoff does not fabricate future controller state.
+        """
+        packed, config = self._nand_numeric_state, self.config
+        base_units = (config.channels * config.targets_per_channel
+                      * config.dies_per_target * config.luns_per_die)
+        bank_count = base_units * config.planes_per_lun
+        first = request.address // 4096
+        last = (request.address + request.byte_count - 1) // 4096
+        banks = tuple((first + offset) % bank_count
+                      for offset in range(min(last - first + 1, bank_count)))
+        units = tuple(dict.fromkeys(bank if config.planes_independent else bank % base_units
+                                   for bank in banks))
+        write_back = self._resident_handoff(banks, units)
+        enabled = self._nand_numeric_enabled
+        self._nand_numeric_state = None
+        self._nand_numeric_enabled = False
+        try:
+            return self._submit_scalar_request(request)
+        finally:
+            self._nand_numeric_state = packed
+            self._nand_numeric_enabled = enabled
+            write_back()
+
+    # Page staging. A partial page is held in the intermediate store and
+    # reaches the media only once all of its bytes are valid; reads of a
+    # staged page are served from the store until that program completes.
+
+    def _tail_channel(self, page):
+        config = self.config
+        base_units = config.channels * config.targets_per_channel * config.dies_per_target * config.luns_per_die
+        return (page % base_units) // (base_units // config.channels) % config.host_channels
+
+    def _tail_remember(self, page):
+        for token in self._nand_transactions:
+            token.remember_tail(self, page)
+
+    def _tail_scope_remember(self):
+        for token in self._nand_transactions:
+            token.remember_tail_scopes(self)
+
+    def set_staging_scope(self, scope):
+        """Select the decode layer/rank scope whose full pages remain staged."""
+        if scope is not None and (not isinstance(scope, str) or not scope):
+            raise ValueError("staging scope must be a non-empty string or None")
+        self._tail_defer_scope = scope
+
+    def flush_staged_pages(self, scope, now, pages=()):
+        """Program full pages for one attention scope after its read wave."""
+        if self.config.page_staging != "logic_die":
+            return {"programs": 0, "physical_write_bytes": 0,
+                    "internal_transfer_bytes": 0, "host_transfer_bytes": 0}
+        scope = str(scope)
+        self._tail_scope_remember()
+        selected = self._tail_full_scopes.get(scope, set())
+        if pages:
+            wanted = {int(page) for page in pages}
+            selected = selected.intersection(wanted)
+        if not selected:
+            return {"programs": 0, "physical_write_bytes": 0,
+                    "internal_transfer_bytes": 0, "host_transfer_bytes": 0}
+        before = self.timeline._core_metrics_snapshot(
+            max_intervals=self.config.max_expanded_segments if self.capture_details else 0)
+        programs = internal_bytes = host_bytes = 0
+        active_pages, active_entries, ready_times, start_times = [], [], [], []
+        for page in tuple(sorted(selected)):
+            entry = self._tail_pages.get(page)
+            if entry is None or entry[3] >= 0:
+                selected.discard(page)
+                continue
+            active_pages.append(page)
+            active_entries.append(entry)
+            start = max(float(now), float(entry[2]))
+            ready_times.append(self._tail_program_channel_start(entry[2], start))
+            start_times.append(start)
+            self._tail_remember(page)
+        batch = None
+        if active_pages:
+            from ._nand_acceleration import execute_staged_flush_batch
+            batch = execute_staged_flush_batch(self, active_pages, ready_times, start_times)
+        if batch is not None:
+            ends = batch["ends"]
+            self._tail_flushing.extend((float(end), page)
+                                        for page, end in zip(active_pages, ends.tolist()))
+            heapify(self._tail_flushing)
+            for page, entry, end in zip(active_pages, active_entries, ends.tolist()):
+                self._tail_pages[page] = (entry[0], entry[1], entry[2], float(end), entry[4])
+                selected.discard(page)
+            programs = len(active_pages)
+            internal_bytes = int(batch["internal_transfer_bytes"])
+            self._tail_flush_started_pages += programs
+        else:
+            for page, entry, start in zip(active_pages, active_entries, start_times):
+                mapping = map_nand_address(self.config, page * self.config.page_bytes)
+                end, moved_internal, moved_host = self._tail_program(
+                    page, mapping, entry[2], [], start_override=start)
+                self._tail_pages[page] = (entry[0], entry[1], entry[2], end, entry[4])
+                heappush(self._tail_flushing, (end, page))
+                selected.discard(page)
+                programs += 1
+                internal_bytes += moved_internal
+                host_bytes += moved_host
+        if not selected:
+            self._tail_full_scopes.pop(scope, None)
+        else:
+            self._tail_full_scopes[scope] = selected
+        metrics = self.timeline._core_metrics_delta(before)
+        return {"programs": programs, "physical_write_bytes": programs * self.config.page_bytes,
+                "internal_transfer_bytes": internal_bytes, "host_transfer_bytes": host_bytes,
+                **metrics}
+
+    def _tail_release(self, now):
+        """Retire staged copies whose page program completed by ``now``."""
+        heap = self._tail_flushing
+        if not heap or heap[0][0] > now:
+            return
+        pages, valid = self._tail_pages, list(self._tail_valid)
+        while heap and heap[0][0] <= now:
+            end, page = heappop(heap)
+            entry = pages.get(page)
+            if entry is not None and entry[3] == end:
+                self._tail_remember(page)
+                del pages[page]
+                valid[entry[4]] -= entry[1]
+        self._tail_valid = tuple(valid)
+        self._tail_index = None
+
+    def _tail_staged(self, first, last):
+        """Staged page indexes in [first, last], ascending."""
+        pages = self._tail_pages
+        if not pages:
+            return ()
+        if last - first < 32:
+            return tuple(page for page in range(first, last + 1) if page in pages)
+        index = self._tail_index
+        if index is None:
+            index = self._tail_index = tuple(sorted(pages))
+        return index[bisect_left(index, first):bisect_right(index, last)]
+
+    def _tail_readable(self, first, last, arrival):
+        """Staged pages a read arriving at ``arrival`` takes from the store."""
+        pages = self._tail_pages
+        return tuple(page for page in self._tail_staged(first, last)
+                     if pages[page][3] < 0 or pages[page][3] > arrival)
+
+    def _tail_check_read(self, page, start, end):
+        """A staged page serves only bytes that some write put in the store."""
+        base = page * self.config.page_bytes
+        lo, hi = max(start, base) - base, min(end, base + self.config.page_bytes) - base
+        if not any(a <= lo and hi <= b for a, b in self._tail_pages[page][0]):
+            raise ValueError("read of bytes [{}, {}) of staged NAND page {} that no write "
+                             "put in the store".format(lo, hi, page))
+
+    def _tail_shared_bytes(self):
+        """Per-channel share of other data in the same store (interleaved)."""
+        return self._tail_shared
+
+    def page_staging_state(self):
+        """Valid staged bytes and their peaks per host channel."""
+        return {"staged_pages": len(self._tail_pages), "valid_bytes": list(self._tail_valid),
+                "peak_bytes": list(self._tail_peak), "shared_bytes": self._tail_shared_bytes(),
+                "capacity_bytes": self.config.page_staging_bytes_per_host_channel,
+                "deferred_pages": sum(len(pages) for pages in self._tail_full_scopes.values()),
+                "deferred_scopes": len(self._tail_full_scopes),
+                "full_page_fills": int(self._tail_full_page_fills),
+                "started_programs": int(self._tail_flush_started_pages),
+                "discarded_pages": int(self._tail_flush_discarded_pages),
+                "pages_programmed": int(self._tail_flush_started_pages)}
+
+    def discard_tail_pages(self, address, byte_count):
+        """Drop staged copies of a released allocation; their bytes are dead.
+
+        A program already scheduled for a filled page is not cancelled.
+        """
+        page_bytes = self.config.page_bytes
+        staged = self._tail_staged(address // page_bytes, (address + byte_count - 1) // page_bytes)
+        if not staged:
+            return 0
+        pages, valid = self._tail_pages, list(self._tail_valid)
+        discarded = 0
+        for page in staged:
+            self._tail_remember(page)
+            entry = pages.pop(page)
+            if entry[3] < 0:
+                self._tail_scope_remember()
+                for scope, scoped_pages in tuple(self._tail_full_scopes.items()):
+                    scoped_pages.discard(page)
+                    if not scoped_pages:
+                        self._tail_full_scopes.pop(scope, None)
+                self._tail_flush_discarded_pages += 1
+                discarded += 1
+            valid[entry[4]] -= entry[1]
+        self._tail_valid = tuple(valid)
+        self._tail_index = None
+        return len(staged)
+
+    def _submit_staged(self, request):
+        """Route a request that touches staged pages; None keeps the normal path."""
+        page_bytes = self.config.page_bytes
+        start, end = request.address, request.address + request.byte_count
+        first, last = start // page_bytes, (end - 1) // page_bytes
+        if request.operation is Operation.READ:
+            readable = self._tail_readable(first, last, request.arrival_ns)
+            if not readable and not self._tail_flushing:
+                return None
+            self._validate_request(request)
+            if self._nand_numeric_enabled:
+                from ._nand_acceleration import execute_read_batch
+                results = execute_read_batch(self, (request,))
+                if results is not None:
+                    return results[0]
+            return None  # The scalar page machine serves staged pages.
+        if request.operation is not Operation.WRITE:
+            return None
+        pages = self._tail_pages
+        staged = {page for page in self._tail_staged(first, last) if pages[page][3] < 0}
+        if start % page_bytes:
+            staged.add(first)
+        if end % page_bytes:
+            staged.add(last)
+        if not staged:
+            return None
+        self._validate_request(request)
+        runs, cursor = [], start
+        for page in sorted(staged):
+            lo, hi = max(start, page * page_bytes), min(end, (page + 1) * page_bytes)
+            if cursor < lo:
+                runs.append((False, cursor, lo))
+            if runs and runs[-1][0] and runs[-1][2] == lo:
+                runs[-1] = (True, runs[-1][1], hi)
+            else:
+                runs.append((True, lo, hi))
+            cursor = hi
+        if cursor < end:
+            runs.append((False, cursor, end))
+        if len(runs) == 1:
+            return self._submit_tail_write(request)
+        results = []
+        for index, (tail, lo, hi) in enumerate(runs):
+            part = replace(request, request_id=f"{request.request_id}:{index}", address=lo, byte_count=hi - lo)
+            results.append(self._submit_tail_write(part) if tail else self._submit_live(part))
+        return self._merge_split(request, results)
+
+    def _submit_tail_write(self, request):
+        """Merge a write into staged pages; a page that fills is programmed.
+
+        The write is acknowledged once its bytes reach the store. Logic-die
+        staging moves them over the page's host channel; external staging is
+        billed by the memory that holds the tail. A full page then programs
+        without a read-modify-write, after the acknowledgement.
+        """
+        config, timeline = self.config, self.timeline
+        self._observation_events = []
+        effective, admitted, host_channel = self._admit_host_request(request)
+        before = timeline._core_metrics_snapshot(
+            max_intervals=config.max_expanded_segments if self.capture_details else 0)
+        arrival = effective + config.front_ns
+        self._tail_release(arrival)
+        page_bytes, burst = config.page_bytes, config.page_staging_burst_bytes
+        latency, logic = config.page_staging_latency_ns, config.page_staging == "logic_die"
+        limit = config.page_staging_bytes_per_host_channel
+        shared = self._tail_shared_bytes() if limit else 0
+        pages, valid, peak = self._tail_pages, list(self._tail_valid), list(self._tail_peak)
+        end = request.address + request.byte_count
+        first, last = request.address // page_bytes, (end - 1) // page_bytes
+        completion = arrival
+        host_bytes = flush_host_bytes = internal_bytes = programs = 0
+        stages, mappings = [], []
+        for page in range(first, last + 1):
+            base = page * page_bytes
+            lo, hi = max(request.address, base) - base, min(end, base + page_bytes) - base
+            channel = self._tail_channel(page)
+            entry = pages.get(page)
+            if entry is None or entry[3] >= 0:
+                # Staged pages are append-only (KV tails): the bytes before a
+                # page's first staged write were written earlier and wait in
+                # the store too, e.g. an unpaid seed history or rows before a
+                # sampled window. A page is programmed only once all are valid.
+                ranges, held, ready = ((0, hi),), 0, 0.
+                if entry is not None:
+                    # A refill supersedes the copy whose program is running.
+                    valid[entry[4]] -= entry[1]
+            else:
+                ranges, held, ready = _merge_ranges(entry[0] + ((lo, hi),)), entry[1], entry[2]
+            filled = sum(right - left for left, right in ranges)
+            staged = valid[channel] + filled - held
+            if limit and staged + shared > limit:
+                # Hold-until-full staging cannot drain without more rows, so
+                # an overfull store is a batch capacity limit, like KV.
+                from .memory_allocator import AllocationError
+                raise AllocationError(
+                    "unable to allocate {} bytes in capacity {} of NAND page staging on host channel {} "
+                    "({} staged + {} shared)".format(staged + shared, limit, channel, staged, shared))
+            mapping = map_nand_address(config, base)
+            if self.capture_details:
+                mappings.append(mapping)
+            data = arrival + latency
+            if logic:
+                moved = -(-hi // burst) * burst - lo // burst * burst
+                host = timeline.transfer(self._host_id(mapping, Operation.WRITE), moved, arrival,
+                                         self._host_bandwidth(Operation.WRITE), direction="write")
+                if self.capture_details:
+                    stages.append(StageTiming("STAGING_WRITE", host.start_ns, host.end_ns, host.resource_id, host.bytes))
+                data = host.end_ns + latency
+                host_bytes += moved
+            ready = max(ready, data)
+            completion = max(completion, data)
+            flush = -1.
+            if ranges == ((0, page_bytes),):
+                self._tail_full_page_fills += 1
+                if logic and self._tail_defer_scope is not None:
+                    self._tail_scope_remember()
+                    self._tail_full_scopes.setdefault(self._tail_defer_scope, set()).add(page)
+                else:
+                    flush, moved_internal, moved_host = self._tail_program(page, mapping, ready, stages)
+                    programs += 1
+                    internal_bytes += moved_internal
+                    flush_host_bytes += moved_host
+            self._tail_remember(page)
+            pages[page] = (ranges, filled, ready, flush, channel)
+            valid[channel] = staged
+            peak[channel] = max(peak[channel], staged + shared)
+            if flush >= 0:
+                heappush(self._tail_flushing, (flush, page))
+        self._tail_valid, self._tail_peak, self._tail_index = tuple(valid), tuple(peak), None
+        count = last - first + 1
+        result = TransactionResult(
+            request_id=request.request_id, operation=Operation.WRITE, arrival_ns=request.arrival_ns,
+            completion_ns=completion, logical_bytes=request.byte_count, transfer_bytes=internal_bytes,
+            mapping=tuple(mappings), stages=tuple(stages), counters={
+                "host_transfer_bytes": host_bytes + flush_host_bytes,
+                "internal_transfer_bytes": internal_bytes,
+                "physical_read_bytes": 0, "physical_write_bytes": programs * page_bytes,
+                "pages_read": 0, "pages_programmed": programs,
+                "merge_bytes": 0, "merged_pages": 0, "staging_write_pages": count,
+                "staging_read_hits": 0, "staging_read_merges": 0,
+                "read_cache_hits": 0, "read_cache_misses": 0, "erase_operations": 0,
+                "page_count": count, "details_truncated": False,
+                "page_staging_write_bytes": host_bytes, "page_staging_flush_programs": programs,
+                "page_staging_peak_bytes": max(peak),
+                "bandwidth_ceiling_gb_s": config.host_bandwidth_for(Operation.WRITE),
+                "bandwidth_ceiling_scope": "directional host upper bound for staged writes; "
+                                           "a filled page programs after the acknowledgement",
+                "array_units": config.array_units,
+                "write_completion": "page_staging_ack_pending_full_page_program",
+                "host_ack_completion_ns": completion, "media_drain_completion_ns": None,
+                "pages_touched": count, "read_operations": 0, "program_operations": programs,
+                "rmw_read_operations": 0, "page_access_payload_bytes": request.byte_count,
+                "page_access_capacity_bytes": count * page_bytes, "host_admission_samples": 1,
+                "host_outstanding_at_admission_peak": len(admitted) + 1,
+                "host_read_outstanding_at_admission_peak": admitted.reads,
+                "host_write_outstanding_at_admission_peak": admitted.writes + 1,
+                "host_admission_depth_scope": self._admission_depth_scope(),
+                "queue_wait_ns": effective - request.arrival_ns,
+                "write_buffer_wait_ns": 0.0, "write_buffer_bytes": 0,
+                "write_buffer_occupancy_bytes": 0, "write_buffer_peak_bytes": 0,
+                "write_buffer_draining_bytes": 0, "buffered_write_mode": self._buffered_write_mode,
+                **timeline._core_metrics_delta(before), **self._observations(),
+            })
+        self._record_host_admission(host_channel, effective, admitted, completion, Operation.WRITE)
+        return result
+
+    def _tail_program(self, page, mapping, ready, stages, *, start_override=None):
+        """Program one filled staged page from ``ready`` without an RMW read.
+
+        Logic-die staging feeds the die channel directly; external staging
+        first moves the page over its host channel.
+        """
+        config, timeline = self.config, self.timeline
+        write_back = None
+        if self._nand_numeric_state is not None:
+            base_units = (config.channels * config.targets_per_channel
+                          * config.dies_per_target * config.luns_per_die)
+            bank = page % (base_units * config.planes_per_lun)
+            write_back = self._resident_handoff(
+                (bank,), (bank if config.planes_independent else bank % base_units,))
+        try:
+            self._invalidate_cache(mapping)
+            array_id = self._array_id(mapping)
+            earliest, host_bytes = self._tail_program_channel_start(ready, start_override), 0
+            if config.page_staging == "external":
+                host = timeline.transfer(self._host_id(mapping, Operation.WRITE), config.page_bytes, earliest,
+                                         self._host_bandwidth(Operation.WRITE), direction="write")
+                if self.capture_details:
+                    stages.append(StageTiming("STAGING_FLUSH_HOST", host.start_ns, host.end_ns,
+                                              host.resource_id, host.bytes))
+                earliest, host_bytes = host.end_ns, config.page_bytes
+            array_front = self.__dict__["_array_ready"].get(array_id, 0.0)
+            buffer_front = self.__dict__["_buffer_ready"].get(array_id, 0.0)
+            internal_earliest = max(earliest, buffer_front)
+            if start_override is not None:
+                # A deferred logic-die flush is a background task that is
+                # released by attention.  Its die-channel transfer must not
+                # be reserved before that release just because the page was
+                # filled earlier.
+                internal_earliest = max(internal_earliest, float(start_override))
+            internal = timeline.transfer(
+                self._channel_id(mapping), config.transfer_page_bytes,
+                internal_earliest,
+                config.internal_bandwidth_gb_s, direction="write")
+            # A deferred page may have been ready while the plane was idle.
+            # Keep the internal transfer on its normal channel calendar, then
+            # reserve the array program at the calculated idle slot whenever
+            # that slot is still free.
+            program_start = max(internal.end_ns,
+                                self.__dict__["_array_ready"].get(array_id, 0.0))
+            if start_override is not None:
+                program_start = max(program_start, float(start_override))
+            program = self._media_stage("PAGE_PROGRAM", mapping, program_start,
+                                        config.page_program_ns, eligible_ns=internal.end_ns)
+            if self.capture_details:
+                stages.append(StageTiming("STAGING_FLUSH_INTERNAL", internal.start_ns, internal.end_ns,
+                                          internal.resource_id, internal.bytes))
+                stages.append(program)
+            self._touch_frontiers(array_id)
+            self.__dict__["_array_ready"][array_id] = program.end_ns
+            self.__dict__["_buffer_ready"][array_id] = program.end_ns
+            self.timeline._remember_resource(array_id)
+            self.timeline.ready_ns[array_id] = program.end_ns
+            self._tail_flush_started_pages += 1
+        finally:
+            if write_back is not None:
+                write_back()
+        return program.end_ns, internal.bytes, host_bytes
+
+    @staticmethod
+    def _tail_program_channel_start(ready, start_override=None):
+        """Return the shared channel-transfer origin for scalar and batch flushes.
+
+        Deferred flushes gate the plane PROGRAM with ``start_override``; the
+        channel copy keeps the original page-ready origin so scalar and native
+        batch paths retain the established physical timing.
+        """
+        return float(ready)
+
+    def _merge_split(self, request, results):
+        """One result for a write split into direct and staged page runs."""
+        additive = ("host_transfer_bytes", "internal_transfer_bytes", "physical_read_bytes",
+                    "physical_write_bytes", "pages_read", "pages_programmed", "staging_write_pages",
+                    "page_staging_write_bytes", "page_staging_flush_programs", "read_cache_hits",
+                    "read_cache_misses", "erase_operations", "page_count", "pages_touched",
+                    "read_operations", "program_operations", "rmw_read_operations",
+                    "page_access_capacity_bytes", "host_admission_samples", "queue_wait_ns")
+        peaks = ("host_outstanding_at_admission_peak", "host_read_outstanding_at_admission_peak",
+                 "host_write_outstanding_at_admission_peak", "page_staging_peak_bytes")
+        counters = dict(results[0].counters)
+        for result in results[1:]:
+            other = result.counters
+            for key in additive:
+                if key in other:
+                    counters[key] = counters.get(key, 0) + other[key]
+            for key in peaks:
+                if key in other:
+                    counters[key] = max(counters.get(key, 0), other[key])
+            for key in ("resource_busy_ns", "resource_bytes"):
+                if key in other:
+                    merged = dict(counters.get(key, {}))
+                    for rid, value in other[key].items():
+                        merged[rid] = merged.get(rid, 0) + value
+                    counters[key] = merged
+            if "resource_last_intervals" in other:
+                merged = dict(counters.get("resource_last_intervals", {}))
+                for rid, interval in other["resource_last_intervals"].items():
+                    previous = merged.get(rid)
+                    if previous is None or (interval[1], interval[0]) > (previous[1], previous[0]):
+                        merged[rid] = interval
+                counters["resource_last_intervals"] = merged
+            for key in ("resource_intervals", "resource_interval_payloads"):
+                if key in other:
+                    merged = dict(counters.get(key, {}))
+                    for rid, values in other[key].items():
+                        merged[rid] = tuple(merged.get(rid, ())) + tuple(values)
+                    counters[key] = merged
+            counters["intervals_truncated"] = bool(counters.get("intervals_truncated")) or bool(
+                other.get("intervals_truncated"))
+            counters["details_truncated"] = bool(counters.get("details_truncated")) or bool(
+                other.get("details_truncated"))
+            drains = [value for value in (counters.get("media_drain_completion_ns"),
+                                          other.get("media_drain_completion_ns")) if value is not None]
+            counters["media_drain_completion_ns"] = max(drains) if drains else None
+        acknowledgements = [result.counters["host_ack_completion_ns"] for result in results
+                            if result.counters.get("host_ack_completion_ns") is not None]
+        counters["host_ack_completion_ns"] = max(acknowledgements) if acknowledgements else None
+        counters["write_completion"] = "page_staging_ack_pending_full_page_program"
+        counters["page_access_payload_bytes"] = request.byte_count
+        return TransactionResult(
+            request_id=request.request_id, operation=request.operation, arrival_ns=request.arrival_ns,
+            completion_ns=max(result.completion_ns for result in results), logical_bytes=request.byte_count,
+            transfer_bytes=sum(result.transfer_bytes for result in results),
+            mapping=tuple(item for result in results for item in result.mapping),
+            stages=tuple(item for result in results for item in result.stages), counters=counters)
 
     def submit_read_pages(self, addresses, arrival_ns, *, link_program=()):
         """Execute full-page reads interleaved with external links in order.
@@ -1651,6 +2196,9 @@ class NandCore:
 
         base = effective_arrival + config.front_ns
         dependency = max(base, self.__dict__["_array_ready"].get(array_id, 0.), self.__dict__["_buffer_ready"].get(array_id, 0.))
+        lane_frontier = min(timeline.lane_available.get(array_resource, (0.,)))
+        inherited_frontier = max(dependency, float(lane_frontier))
+        media_queue_wait_ns = 0.0
         host_bytes = request.byte_count  # Strict requests are already 64-byte aligned.
         internal_bytes = config.transfer_page_bytes
         host_ns = host_bytes / self._host_bandwidth(request.operation)
@@ -1665,6 +2213,7 @@ class NandCore:
                 read_cache_hits = 1
             else:
                 read_cache_misses = int(slot is not None)
+                media_queue_wait_ns = max(0.0, inherited_frontier - base)
                 read_end = reserve(array_resource, dependency, config.page_read_ns)
                 internal_end = reserve(channel, max(read_end, slot.reader_completion_ns if slot else 0.),
                                        internal_ns, "read", internal_bytes)
@@ -1709,6 +2258,7 @@ class NandCore:
                 for resource in timeline._touched if timeline.busy_ns[resource] != before_busy[resource]}
         self._record_host_admission(host_channel, effective_arrival, admitted,
                                     completion, request.operation)
+        self._last_media_queue_wait_ns = float(media_queue_wait_ns)
         return TransactionResult(
             request_id=request.request_id, operation=request.operation, arrival_ns=request.arrival_ns,
             completion_ns=completion, logical_bytes=request.byte_count, transfer_bytes=internal_bytes,
@@ -1747,6 +2297,7 @@ class NandCore:
                 "resource_last_intervals": {resource: timeline.last_intervals[resource] for resource in timeline._touched},
                 "resource_intervals": {}, "resource_interval_payloads": {},
                 "intervals_truncated": timeline._intervals_truncated,
+                "media_queue_wait_ns": float(media_queue_wait_ns),
             },
         )
 
@@ -1775,6 +2326,7 @@ class NandCore:
             and request.operation is not Operation.ERASE
             and page_count >= 128
             and not self._staged_pages
+            and not self._tail_pages
             # Positive write buffers are admitted at request granularity so
             # every buffered write observes the same capacity gate.
             and not (
@@ -1798,6 +2350,20 @@ class NandCore:
         logical_bytes = 0
         host_bytes = internal_bytes = 0
         pages_read = pages_programmed = erases = 0
+        media_queue_wait_ns = 0.0
+        # Read-wait is an observation of work inherited by this request.  The
+        # scalar page loop mutates the same array/buffer/lane calendars as it
+        # goes, so snapshot the lane frontiers once and retain each logical
+        # array's initial front before the first page can change it.  This
+        # keeps same-request page serialization out of the metric while
+        # preserving a real frontier left by an earlier request.
+        inherited_array_frontiers = {}
+        inherited_lane_frontiers = {
+            resource: min(lanes)
+            for resource, lanes in self.timeline.lane_available.items()
+            if lanes
+        }
+        inherited_ready_frontiers = dict(self.timeline.ready_ns)
         merge_bytes = 0
         merged_pages = 0
         staging_write_pages = 0
@@ -1816,6 +2382,16 @@ class NandCore:
             array_resource = self._array_resource_id(m)
             array_ready = self.__dict__["_array_ready"].get(array_id, 0.0)
             buffer_ready = self.__dict__["_buffer_ready"].get(array_id, 0.0)
+            if array_id not in inherited_array_frontiers:
+                inherited_array_frontiers[array_id] = max(
+                    array_ready,
+                    buffer_ready,
+                    inherited_lane_frontiers.get(
+                        array_resource,
+                        inherited_ready_frontiers.get(array_resource, 0.0),
+                    ),
+                )
+            inherited_frontier = inherited_array_frontiers[array_id]
             dependency = max(request.arrival_ns + self.config.front_ns, array_ready, buffer_ready)
             if request.operation is Operation.ERASE:
                 self._invalidate_cache(m, block=True)
@@ -1833,6 +2409,45 @@ class NandCore:
             host_bytes += segment.host_transfer_bytes
             internal_bytes += segment.internal_transfer_bytes
             partial = segment.logical_bytes != self.config.page_bytes
+            tail = (self._tail_pages.get(segment.address // self.config.page_bytes)
+                    if request.operation is Operation.READ and self._tail_pages else None)
+            tail_lo = max(request.address, segment.address) - segment.address
+            tail_hi = min(request.address + request.byte_count,
+                          segment.address + self.config.page_bytes) - segment.address
+            tail_covered = (tail is not None and any(
+                left <= tail_lo and tail_hi <= right for left, right in tail[0]))
+            if (request.operation is Operation.READ and tail is not None
+                    and (tail[3] < 0 or tail[3] > request.arrival_ns)
+                    and not tail_covered
+                    and not (tail_lo == 0 and tail_hi == self.config.page_bytes)):
+                self._tail_check_read(
+                    segment.address // self.config.page_bytes,
+                    request.address,
+                    request.address + request.byte_count,
+                )
+            if (tail_covered and (tail[3] < 0 or tail[3] > request.arrival_ns)):
+                # The staged copy serves the read: no array read or die
+                # transfer, only the store and, on a logic die, its channel.
+                self._tail_check_read(segment.address // self.config.page_bytes,
+                                      request.address, request.address + request.byte_count)
+                host_bytes -= segment.host_transfer_bytes
+                internal_bytes -= segment.internal_transfer_bytes
+                data = max(request.arrival_ns + self.config.front_ns + self.config.page_staging_latency_ns,
+                           tail[2])
+                if self.config.page_staging == "logic_die":
+                    burst = self.config.page_staging_burst_bytes
+                    lo = max(request.address, segment.address) - segment.address
+                    hi = min(request.address + request.byte_count,
+                             segment.address + self.config.page_bytes) - segment.address
+                    host = self.timeline.transfer(
+                        self._host_id(m, Operation.READ), -(-hi // burst) * burst - lo // burst * burst,
+                        data, self._host_bandwidth(Operation.READ), direction="read")
+                    record(StageTiming("STAGING_READ", host.start_ns, host.end_ns, host.resource_id, host.bytes))
+                    host_bytes += host.bytes
+                    data = host.end_ns
+                completion = max(completion, data)
+                staging_read_hits += 1
+                continue
             if request.operation is Operation.WRITE:
                 self._invalidate_cache(m)
             if (
@@ -1863,6 +2478,10 @@ class NandCore:
                 # persistent page cache.
                 read = self._media_stage("RMW_PAGE_READ", m, dependency, self.config.page_read_ns,
                                          eligible_ns=request.arrival_ns+self.config.front_ns)
+                media_queue_wait_ns = max(
+                    media_queue_wait_ns,
+                    max(0.0, inherited_frontier - (request.arrival_ns + self.config.front_ns)),
+                )
                 record(read)
                 dependency = read.end_ns
                 read_xfer = self.timeline.transfer(
@@ -1917,6 +2536,10 @@ class NandCore:
                 read_cache_misses += int(cache_slot is not None)
                 read = self._media_stage("PAGE_READ", m, dependency, self.config.page_read_ns,
                                          eligible_ns=request.arrival_ns+self.config.front_ns)
+                media_queue_wait_ns = max(
+                    media_queue_wait_ns,
+                    max(0.0, inherited_frontier - (request.arrival_ns + self.config.front_ns)),
+                )
                 record(read)
                 pages_read += 1
                 dependency = read.end_ns
@@ -1949,11 +2572,14 @@ class NandCore:
                     cache_slot.reader_completion_ns = host.end_ns
                 completion = max(completion, host.end_ns)
                 self._touch_frontiers(array_id)
-                self.__dict__["_array_ready"][array_id] = read.end_ns
+                self.__dict__["_array_ready"][array_id] = max(
+                    read.end_ns, self.__dict__["_array_ready"].get(array_id, 0.))
                 self._touch_frontiers(array_id)
-                self.__dict__["_buffer_ready"][array_id] = internal.end_ns
+                self.__dict__["_buffer_ready"][array_id] = max(
+                    internal.end_ns, self.__dict__["_buffer_ready"].get(array_id, 0.))
                 self.timeline._remember_resource(array_id)
-                self.timeline.ready_ns[array_id] = read.end_ns
+                self.timeline.ready_ns[array_id] = max(self.__dict__["_array_ready"].get(array_id, 0.),
+                                                       self.timeline.ready_ns.get(array_id, 0.))
             else:
                 if self.config.protocol_mode == "ocp_hbf_0_7" and m.page == 0:
                     self._invalidate_cache(m, block=True)
@@ -1994,51 +2620,54 @@ class NandCore:
                 self.timeline.ready_ns[array_id] = program.end_ns
                 if self.config.protocol_mode == "ocp_hbf_0_7":
                     self._set_program_frontier(self._block_key(m), m.page + 1)
+        counters = {
+            "host_transfer_bytes": host_bytes,
+            "internal_transfer_bytes": internal_bytes,
+            "physical_read_bytes": pages_read * self.config.page_bytes,
+            "physical_write_bytes": pages_programmed * self.config.page_bytes,
+            "pages_read": pages_read,
+            "pages_programmed": pages_programmed,
+            "merge_bytes": merge_bytes,
+            "merged_pages": merged_pages,
+            "staging_write_pages": staging_write_pages,
+            "staging_read_hits": staging_read_hits,
+            "staging_read_merges": staging_read_merges,
+            "read_cache_hits": read_cache_hits,
+            "read_cache_misses": read_cache_misses,
+            "erase_operations": erases,
+            "page_count": segment_count,
+            "details_truncated": details_truncated,
+            "bandwidth_ceiling_gb_s": (
+                self.config.host_bandwidth_for(request.operation)
+                if staging_write_pages or staging_read_hits or read_cache_hits
+                else self._bandwidth_ceiling_gb_s(request.operation)
+            ),
+            "bandwidth_ceiling_scope": (
+                "directional host upper bound for transactions using cached/staged data; host acknowledgement is not media drain"
+                if staging_write_pages or staging_read_hits or read_cache_hits
+                else "device transfer upper bound: min(directional host, summed independent channels); excludes array latency"
+            ),
+            "array_units": self.config.array_units,
+            "write_completion": (
+                "host_buffer_ack_pending_media_drain"
+                if request.operation is Operation.WRITE and staging_write_pages
+                else "media_program_complete" if request.operation is Operation.WRITE else "n/a"
+            ),
+            "host_ack_completion_ns": completion if staging_write_pages else None,
+            "media_drain_completion_ns": (
+                None if staging_write_pages
+                else completion if request.operation is Operation.WRITE else None
+            ),
+            "media_queue_wait_ns": float(media_queue_wait_ns),
+        }
+        self._last_media_queue_wait_ns = float(media_queue_wait_ns)
         return TransactionResult(
             request_id=request.request_id, operation=request.operation,
             arrival_ns=request.arrival_ns, completion_ns=completion,
             logical_bytes=logical_bytes,
             transfer_bytes=internal_bytes,
             mapping=tuple(mappings), stages=tuple(stages),
-            counters={
-                "host_transfer_bytes": host_bytes,
-                "internal_transfer_bytes": internal_bytes,
-                "physical_read_bytes": pages_read * self.config.page_bytes,
-                "physical_write_bytes": pages_programmed * self.config.page_bytes,
-                "pages_read": pages_read,
-                "pages_programmed": pages_programmed,
-                "merge_bytes": merge_bytes,
-                "merged_pages": merged_pages,
-                "staging_write_pages": staging_write_pages,
-                "staging_read_hits": staging_read_hits,
-                "staging_read_merges": staging_read_merges,
-                "read_cache_hits": read_cache_hits,
-                "read_cache_misses": read_cache_misses,
-                "erase_operations": erases,
-                "page_count": segment_count,
-                "details_truncated": details_truncated,
-                "bandwidth_ceiling_gb_s": (
-                    self.config.host_bandwidth_for(request.operation)
-                    if staging_write_pages or staging_read_hits or read_cache_hits
-                    else self._bandwidth_ceiling_gb_s(request.operation)
-                ),
-                "bandwidth_ceiling_scope": (
-                    "directional host upper bound for transactions using cached/staged data; host acknowledgement is not media drain"
-                    if staging_write_pages or staging_read_hits or read_cache_hits
-                    else "device transfer upper bound: min(directional host, summed independent channels); excludes array latency"
-                ),
-                "array_units": self.config.array_units,
-                "write_completion": (
-                    "host_buffer_ack_pending_media_drain"
-                    if request.operation is Operation.WRITE and staging_write_pages
-                    else "media_program_complete" if request.operation is Operation.WRITE else "n/a"
-                ),
-                "host_ack_completion_ns": completion if staging_write_pages else None,
-                "media_drain_completion_ns": (
-                    None if staging_write_pages
-                    else completion if request.operation is Operation.WRITE else None
-                ),
-            },
+            counters=counters,
         )
 
     def _execute_accelerated_accepted(self, request: AccessRequest, page_count: int) -> TransactionResult:
@@ -2069,6 +2698,7 @@ class NandCore:
                         "internal_transfer_bytes": result["internal_transfer_bytes"],
                         "pages_read": count if request.operation is Operation.READ else 0,
                         "pages_programmed": count if request.operation is Operation.WRITE else 0,
+                        "media_queue_wait_ns": result.get("media_queue_wait_ns", 0.0),
                     },
                 ))
                 cursor += count * page
@@ -2078,6 +2708,11 @@ class NandCore:
         pages_programmed = sum(part.counters["pages_programmed"] for part in parts)
         host_bytes = sum(part.counters["host_transfer_bytes"] for part in parts)
         internal_bytes = sum(part.counters["internal_transfer_bytes"] for part in parts)
+        media_queue_wait_ns = max(
+            (float(part.counters.get("media_queue_wait_ns", 0.0)) for part in parts),
+            default=0.0,
+        )
+        self._last_media_queue_wait_ns = media_queue_wait_ns
         return TransactionResult(
             request_id=request.request_id, operation=request.operation,
             arrival_ns=request.arrival_ns, completion_ns=max(part.completion_ns for part in parts),
@@ -2093,6 +2728,7 @@ class NandCore:
                 "bandwidth_ceiling_scope": "device transfer upper bound: min(directional host, summed independent channels); excludes array latency",
                 "array_units": self.config.array_units,
                 "write_completion": "media_program_complete" if request.operation is Operation.WRITE else "n/a",
+                "media_queue_wait_ns": media_queue_wait_ns,
             },
         )
 
@@ -2153,7 +2789,8 @@ _RESIDENT_SCALAR_METHODS = {name: getattr(NandCore, name) for name in (
     "_admit_host_request", "_record_host_admission", "_submit_scalar_request", "_cache_slot", "_invalidate_cache",
     "_array_id", "_array_resource_id", "_channel_id", "_host_id", "_host_bandwidth",
     "_staged_key", "_bank_key", "_block_key", "_set_program_frontier", "_touch_cache_bank",
-    "_bandwidth_ceiling_gb_s", "_admission_depth_scope", "_resident_resource_contract")}
+    "_bandwidth_ceiling_gb_s", "_admission_depth_scope", "_resident_resource_contract",
+    "_resident_handoff")}
 
 
 def nand_service(config: NandConfig, request: AccessRequest, *, timeline: Optional[ResourceTimeline] = None) -> TransactionResult:

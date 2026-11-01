@@ -60,6 +60,16 @@ def _structure_digest(tasks):
     return len(rows), hashlib.sha256(repr(rows).encode()).hexdigest()[:16]
 
 
+def _kv_storage(scenario, ranks):
+    """Physical owners holding the ranks' KV: the KV pool on each rank's cache
+    component, and the rank-local HBM slot of the open page under external
+    page staging."""
+    from heterollm_sim.data_motion import resolve_service
+    return {owner for rank in ranks for owner in (
+        "{}.memory".format(planner._kv_components(scenario, rank)[0]),
+        resolve_service(planner._component(scenario, rank.memory_component_id)).physical_owner)}
+
+
 def _item(request_id, phase, tokens, context, *, owner):
     """One batch item; group 0 is the default so a single-group batch matches."""
 
@@ -94,14 +104,18 @@ def _tasks(scenario, kind, batch, *, ep_degree=1):
 
 def test_ep1_toy_lowering_is_byte_identical_to_the_single_group_graph():
     build = lambda: native_toy.toy_scenario(layer_count=2, batch_size=4)
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "cb7f83abda8671fc")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "1b226b301f496788")
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "1b243248334be272")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "06bd78477e684ba6")
 
 
 def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     build = lambda: _maverick()
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "0608110c342865a8")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "04cf4f137dde6f40")
+    # The planner now records the layer's final NAND-read (or KV fallback)
+    # anchor in each deferred tail branch.  That intentional dependency-field
+    # change updates the structural digest while leaving task cardinality
+    # unchanged.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "2ca4ca887a943e1d")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "546b4aba9fb3b987")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():
@@ -166,11 +180,7 @@ def test_ep2_kv_buffers_live_only_on_the_owner_groups_ranks():
     ids = [request.request_id for request in scenario.workload.requests][:4]
 
     def group_storage(ep_rank):
-        # ``physical_owner`` names the KV pool on each rank's memory component.
-        return {
-            "{}.memory".format(planner._kv_components(scenario, rank)[0])
-            for rank in plan.tp_group(0, ep_rank)
-        }
+        return _kv_storage(scenario, plan.tp_group(0, ep_rank))
 
     assert set(owners) == set(ids)
     for index, request_id in enumerate(ids):
@@ -312,10 +322,7 @@ def test_ep2_ingress_inventory_matches_the_full_lowering_on_owner_ranks_only():
         assert actual == expected
         assert len(inventory["contracts"]) == len(contracts)
         assert all(contract in contracts for contract in inventory["contracts"])
-        assert {key[0] for key in actual} == {
-            "{}.memory".format(planner._kv_components(scenario, rank)[0])
-            for rank in plan.tp_group(0, owner)
-        }
+        assert {key[0] for key in actual} == _kv_storage(scenario, plan.tp_group(0, owner))
 
 
 def test_ep2_ingress_inventory_validates_the_owner_group():

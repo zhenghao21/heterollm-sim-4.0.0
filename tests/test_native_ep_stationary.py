@@ -708,7 +708,7 @@ def test_two_ep_groups_run_through_prepare_and_sample_both_groups(monkeypatch):
     monkeypatch.setattr(stationary, "prepare_stationary", prepare)
     monkeypatch.setattr(stationary, "sample_stationary", sample)
     scenario = native_toy.slow_pd_ingress(native_toy.maverick_pattern_scenario(
-        8, batch_size=4, output=6, warmup=5, measurement=10, ep=2), .1)
+        8, batch_size=4, output=6, warmup=5, measurement=10, ep=2), .3)
     fast = run_scenario(replace(scenario, simulation=SimulationConfig(mode="fast",
         native_window=NativeWindowFastConfig(calibration_layers=4, holdout_layers=4))),
         retention_policy="aggregate")
@@ -721,8 +721,9 @@ def test_two_ep_groups_run_through_prepare_and_sample_both_groups(monkeypatch):
     assert sorted(row["destination_group"] for row in seen["imports"]) == [0, 1]
     assert sorted(row.role for row in fast.layer_window_samples) == [
         "calibration", "entry", "exit", "holdout", "pd_import", "pd_import"]
-    # Over 0.1 Gb/s PD links the Maverick toy's imports outlast a step (as
-    # with one group): rejected, not extrapolated.
+    # Over 0.3 Gb/s PD links the Maverick toy's imports outlast a step (as
+    # with one group): rejected, not extrapolated. (A write phase must still
+    # end inside the short sample window, or the import sample is invalid.)
     assert fast.native_window_forecast is None
     assert "native_stationary_refill_not_always_ready" in fast.approximation["rejection_reasons"]
 

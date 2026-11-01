@@ -116,7 +116,7 @@ def test_storage_guard_resumes_the_same_runtime_to_detailed_completion(monkeypat
     assert "hbf_program_headroom_may_require_gc:hbf0" in outcome.diagnostics["fallback_reasons"]
 
 
-def test_unobserved_hbf_page_flush_period_cannot_be_predicted(monkeypatch):
+def test_unobserved_hbf_page_period_cannot_be_predicted(monkeypatch):
     scenario, request, runners = harness(monkeypatch)
     projection = NS(safe=True, safety_reasons=(),
         hbf_devices=({"physical_owner": "hbf0.memory"},),

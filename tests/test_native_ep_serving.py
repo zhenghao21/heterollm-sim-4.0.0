@@ -196,10 +196,15 @@ def test_external_destination_ranges_place_kv_only_on_the_owner_group():
     runtime._assign_ep_group(state, 1)
     destinations = runtime._external_destination_ranges(state)
     assert {row["component_id"] for row in destinations} == {"hbf2", "hbf3"}
+    # Each rank's open page is mirrored into its own HBM (external staging).
+    mirrors = {row["hbm_mirror"]["component_id"] for row in destinations if "hbm_mirror" in row}
+    assert mirrors == {"hbm2", "hbm3"}
+    from heterollm_sim.data_motion import resolve_service
+    components = {component.component_id: component for component in scenario.hardware.components}
     owned = runtime._execution_resource_kernel._request_physical_buffers[state.spec.request_id]
     assert owned and {owner for owner, _buffer, _generation in owned} <= {
-        service.physical_owner for component, service in runtime._external_executor.services.items()
-        if component in {"hbf2", "hbf3"}}
+        resolve_service(components[component]).physical_owner
+        for component in ("hbf2", "hbf3", "hbm2", "hbm3")}
 
 
 def test_inventory_receives_the_owner_group_and_a_failed_import_returns_it(monkeypatch):

@@ -6,6 +6,8 @@ enforce the aggregate directional and total ceilings. The port pipeline
 latency precedes service; it does not serialize every byte on a fake row or
 page cycle. An access is coalesced into at most ``ports`` reservations, so a
 large workspace does not allocate one event for every 64-byte burst.
+Metadata ``port_resource_ids`` may bind each port, per direction, to an
+existing interface calendar (a logic-die SRAM behind each stack's link).
 """
 from __future__ import annotations
 
@@ -63,6 +65,8 @@ class SramCore:
         stop = (request.address + request.byte_count + c.burst_bytes - 1) // c.burst_bytes
         count = stop - first
         prefix = str(c.metadata.get("port_resource_prefix", "sram:port"))
+        bound = c.metadata.get("port_resource_ids")
+        bound = bound[request.operation.value] if bound else None
         rate = c.directional_bandwidth_gb_s(request.operation) / c.ports
         # Plan first: invalid resource calendars or overflow cannot partially
         # publish a successful prefix. Aliases may fold authored ports, but
@@ -72,7 +76,7 @@ class SramCore:
             port = (first + offset) % c.ports
             bursts = 1 + (count - offset - 1) // c.ports
             amount = bursts * c.burst_bytes
-            resource = timeline.canonical_resource_id(f"{prefix}:{port}")
+            resource = timeline.canonical_resource_id(bound[port] if bound else f"{prefix}:{port}")
             lanes = timeline.lane_available.get(resource)
             if lanes is not None and len(lanes) != 1:
                 raise ValueError("one SRAM port must have exactly one physical service lane")

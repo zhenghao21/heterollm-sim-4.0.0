@@ -551,6 +551,10 @@ class FusedAttentionWorkload:
     kv_hidden_size: Optional[int] = None
     kv_input_bits: Optional[int] = None
     kv_read_tokens: Optional[int] = None
+    # Bytes from rank-local HBM tail-page mirrors.  These are physical backing
+    # reads in addition to the logical KV ranges still served by the cache
+    # component; ordinary configurations leave this at zero.
+    kv_tail_read_bytes: int = 0
     kv_physical_contract: Optional[FusedAttentionKVPhysicalContract] = None
     score_heads: int = 1
     qk_scale: Optional[float] = None
@@ -627,6 +631,7 @@ class FusedAttentionWorkload:
             _require_positive_int("kv_input_bits", self.kv_input_bits)
         if self.kv_read_tokens is not None:
             _require_non_negative_int("kv_read_tokens", self.kv_read_tokens)
+        _require_non_negative_int("kv_tail_read_bytes", self.kv_tail_read_bytes)
         if self.kv_physical_contract is not None and not isinstance(
             self.kv_physical_contract, FusedAttentionKVPhysicalContract
         ):
@@ -786,7 +791,7 @@ class FusedAttentionWorkload:
     @property
     def read_bytes(self) -> int:
         # Q plus persisted K and V.  Score tiles never spill to backing memory.
-        return self.query_read_bytes + self.kv_read_bytes
+        return self.query_read_bytes + self.kv_read_bytes + self.kv_tail_read_bytes
 
     @property
     def kv_read_bytes(self) -> int:

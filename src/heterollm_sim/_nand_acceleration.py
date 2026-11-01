@@ -57,7 +57,111 @@ def _buffered_layout_contract(array_names, array_resources, channels, hosts, nam
     return valid, tuple(int(name in buses) for name in names)
 
 
-def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _resource_sink=None):
+def execute_staged_flush_batch(core, pages, ready_times, start_times):
+    """Run one logic-die scope flush through the resident numeric controller.
+
+    The caller has already selected full pages belonging to one layer/rank.
+    This bridge only packs the shared fabric once, reserves all channel and
+    array work in ``run_generic_flush_batch``, then publishes the touched
+    calendars back.  It returns ``None`` before mutation when an authored or
+    unusual timeline cannot be represented by the native arrays; the scalar
+    flush remains the exact fallback for those cases.
+    """
+    import numpy as np
+    from .nand_core import NandCore
+    from ._nand_execution import _geometry_plan
+    from ._nand_pack import pack_single_lane, pack_multi_lane, publish_timeline
+    from ._compiled_nand import run_generic_flush_batch
+
+    config, timeline = core.config, core.timeline
+    if (type(core) is not NandCore or type(timeline) is not ResourceTimeline
+            or config.page_staging != "logic_die"
+            or core.capture_details or core._observe_media
+            or core._nand_numeric_state is None
+            or not core._nand_numeric_enabled
+            or not has_native_timeline_hooks()):
+        return None
+    pages = np.asarray(pages, dtype=np.int64)
+    ready_times = np.asarray(ready_times, dtype=np.float64)
+    start_times = np.asarray(start_times, dtype=np.float64)
+    if (pages.ndim != 1 or ready_times.ndim != 1 or start_times.ndim != 1
+            or len(pages) == 0 or len(pages) != len(ready_times)
+            or len(pages) != len(start_times)):
+        return None
+    if (np.any(pages < 0) or np.any(~np.isfinite(ready_times))
+            or np.any(~np.isfinite(start_times))):
+        return None
+    base_units = config.channels * config.targets_per_channel * config.dies_per_target * config.luns_per_die
+    banks = base_units * config.planes_per_lun
+    units = banks if config.planes_independent else base_units
+    per_channel = base_units // config.channels
+    (bank_keys, prefixes, array_names, array_resources, channels, hosts, names,
+     array_ids, channel_ids, _host_ids) = _geometry_plan(
+        core, Operation.WRITE, banks, units, per_channel)
+    # A logic-die flush touches only array and die-channel resources.  Keeping
+    # host links out of this pack lets the kernel work even when a host lane
+    # was never materialized by the preceding read wave.
+    names = tuple(dict.fromkeys((*array_resources, *channels)))
+    lookup = {name: index for index, name in enumerate(names)}
+    array_ids = np.asarray([lookup[array_resources[unit]] for unit in range(units)], dtype=np.int64)
+    channel_ids = np.asarray([lookup[name] for name in channels], dtype=np.int64)
+    direction_names = [None, "read", "write"]
+    packed_timeline = pack_single_lane(timeline, names, len(pages), config.transfer_page_bytes)
+    single_lane = packed_timeline is not None
+    if packed_timeline is None:
+        packed_timeline = pack_multi_lane(
+            timeline, names, len(pages), config.transfer_page_bytes,
+            direction_names, {name: index for index, name in enumerate(direction_names)})
+    if packed_timeline is None:
+        return None
+    starts, lane_counts, lanes, lane_directions, state, moved, direction_values = packed_timeline
+    starts = np.asarray(starts, dtype=np.int64)
+    lane_counts = np.asarray(lane_counts, dtype=np.int64)
+    lanes = np.asarray(lanes, dtype=np.float64)
+    lane_directions = np.asarray(lane_directions, dtype=np.int64)
+    state = np.asarray(state, dtype=np.float64)
+    moved = np.asarray(moved, dtype=np.int64)
+    direction_values = np.asarray(direction_values, dtype=np.int64)
+    packed = core._nand_numeric_state
+    layout = (bank_keys, prefixes, array_names, config.pages_per_block)
+    if packed.layout != layout:
+        return None
+    arrays, buffers, tags, _cache_ready, _readers, _uses, _present = packed.arrays
+    if not all(np.all(np.isfinite(values)) and np.all(values >= 0)
+               for values in (arrays, buffers, state, lanes)):
+        return None
+    before = packed.checkpoint()
+    for token in core._nand_transactions:
+        token.capture_numeric(packed)
+    geometry = np.array((base_units, config.planes_per_lun,
+                         int(config.planes_independent), per_channel,
+                         config.host_channels), dtype=np.int64)
+    internal_ns = config.transfer_page_bytes / config.internal_bandwidth_gb_s
+    try:
+        ends, touched, active_units, active_banks = run_generic_flush_batch(
+            pages, ready_times, start_times, geometry, config.page_program_ns,
+            internal_ns, int(config.transfer_page_bytes), array_ids, channel_ids,
+            arrays, buffers, tags, starts, lane_counts, lanes, lane_directions,
+            state, moved, direction_values)
+    except BaseException:
+        packed.restore(before)
+        raise
+    packed.dirty_units |= active_units
+    packed.dirty_banks |= active_banks
+    resource_indexes = np.flatnonzero(touched)
+    resources = {names[index] for index in resource_indexes.tolist()}
+    publish_timeline(
+        timeline, names, state.tolist(), moved.tolist(), direction_values.tolist(),
+        lanes.tolist(), lane_directions.tolist(), starts.tolist(), lane_counts.tolist(),
+        resources, (), [int(name in resources and name in channels) for name in names],
+        direction_names, single_lane)
+    timeline._touched.update(resources)
+    timeline._intervals_truncated = bool(resources) or timeline._intervals_truncated
+    core._nand_numeric_state = packed
+    return {"pages": pages, "ends": ends, "internal_transfer_bytes": int(len(pages) * config.transfer_page_bytes)}
+
+
+def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
     """Strict native generic-NAND pages with the existing two-slot buffers.
 
     This is a compiled form of the scalar page loop, not the affine shortcut
@@ -78,8 +182,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
                             validate_buffered_cache, pack_buffered_cache, publish_buffered_cache,
                             publish_active_timeline, generic_request_resource_indexes,
                             pack_selected_single_lane, generic_metrics_delta,
-                            publish_generic_controller, defer_active_timeline,
-                            generic_deferred_metrics_delta)
+                            publish_generic_controller)
     from ._compiled_nand import run_generic_full_pages
 
     config, timeline = core.config, core.timeline
@@ -103,6 +206,9 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
     if any(type(getattr(timeline, name)) is not dict for name in (
             "ready_ns", "directions", "busy_ns", "bytes_moved", "last_intervals",
             "lane_available", "lane_directions")):
+        return None
+    # Staged pages are served by the staging store, page by page.
+    if core._tail_staged(request.address // 4096, (request.address + request.byte_count - 1) // 4096):
         return None
     base_units = config.channels * config.targets_per_channel * config.dies_per_target * config.luns_per_die
     banks = base_units * config.planes_per_lun
@@ -135,18 +241,8 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
             or any(name in names for name in set(array_names) - set(array_resources))):
         return None
     directions = [None, "read", "write"]
-    scope = core.__dict__.get("_nand_request_metric_orders") if _metrics is not None else None
-    shared_pack = scope is not None and "pack_pages" in scope
-    calendar = scope.get("calendar") if shared_pack else None
     packed = None
-    if calendar is not None:
-        packed, single_lane = calendar
-    elif shared_pack:
-        # A submit_many scope has no external callbacks. Pack the complete
-        # immutable resource layout once; later requests execute against the
-        # same live arrays that were just published to the public calendars.
-        packed = pack_single_lane(timeline, names, scope["pack_pages"], config.transfer_page_bytes)
-    elif (bus_mask is not None and core._nand_transactions
+    if (bus_mask is not None and core._nand_transactions
             and core._nand_transactions[-1].native_timeline_qualified):
         selected = generic_request_resource_indexes(request.address // 4096, page_count,
             base_units, config.planes_per_lun, config.planes_independent, per_channel,
@@ -154,8 +250,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
         packed = pack_selected_single_lane(timeline, names, selected, page_count, config.transfer_page_bytes)
     if packed is None:
         packed = pack_single_lane(timeline, names, page_count, config.transfer_page_bytes)
-    if calendar is None:
-        single_lane = packed is not None
+    single_lane = packed is not None
     if packed is None:
         packed = pack_multi_lane(timeline, names, page_count, config.transfer_page_bytes,
                                  directions, {name: index for index, name in enumerate(directions)})
@@ -189,16 +284,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
         return None
     start_values, lane_counts = np.asarray(starts, dtype=np.int64), np.asarray(lane_counts, dtype=np.int64)
     lanes, lane_directions = np.asarray(lanes, dtype=np.float64), np.asarray(lane_directions, dtype=np.int64)
-    if shared_pack and calendar is None:
-        scope["calendar"] = ((start_values, lane_counts, lanes, lane_directions, state, moved, direction_values), single_lane)
-    if shared_pack:
-        _start_deferred_calendar(core, scope, names, array_names, array_resources, bus_mask,
-            single_lane, (start_values, lane_counts, lanes, lane_directions, state, moved, direction_values))
-    deferred = scope.get("deferred") if shared_pack else None
     host_bandwidth = core._host_bandwidth(request.operation)
-    timing = np.array((config.page_read_ns, config.page_program_ns,
-                       config.transfer_page_bytes / config.internal_bandwidth_gb_s,
-                       4096 / host_bandwidth, config.transfer_page_bytes))
     # split_nand_request's host span of the first and last page.
     granularity, end = config.host_granularity_bytes, request.address + request.byte_count
     head_end = min(end, (request.address // 4096 + 1) * 4096)
@@ -215,12 +301,11 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
     if packed is not None:
         for token in core._nand_transactions:
             token.capture_numeric(packed)
-    calendar_before = (tuple(value.copy() for value in deferred["calendar"][2:])
-                       if deferred is not None else None)
-    if deferred is not None:
-        deferred["request_checkpoint"] = (deferred["publication_serial"], calendar_before)
+    timing = np.array((config.page_read_ns, config.page_program_ns,
+                       config.transfer_page_bytes / config.internal_bandwidth_gb_s,
+                       4096 / host_bandwidth, config.transfer_page_bytes))
     try:
-        completion, hits, misses, rmw_reads, clock, touched, active_units, active_banks, resource_order = run_generic_full_pages(
+        completion, hits, misses, rmw_reads, clock, touched, active_units, active_banks, resource_order, max_read_wait = run_generic_full_pages(
             request.address // 4096, page_count, request.operation is Operation.READ,
             request.arrival_ns + config.front_ns, geometry, timing, array_ids, channel_ids, host_ids,
             arrays, buffers, tags, ready, readers, uses, present, core._cache_use,
@@ -232,8 +317,6 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
     except BaseException:
         if before is not None:
             packed.restore(before)
-        if deferred is not None:
-            _restore_deferred_calendar(deferred, calendar_before)
         raise
     if packed is not None:
         packed.dirty_units |= active_units
@@ -246,34 +329,18 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
         # newly introduced directional host or an as-yet untouched bank.
         resource_indexes = resource_order
     resources = {names[index] for index in resource_indexes.tolist()}
-    if deferred is not None:
-        publication_serial = deferred["publication_serial"]
-        try:
-            defer_active_timeline(timeline, names, state, resource_indexes, resources, scope)
-        except BaseException:
-            # Numeric/controller state is already successful at this stage;
-            # only calendars still expose the preceding published prefix.
-            if deferred["publication_serial"] == publication_serial:
-                _restore_deferred_calendar(deferred, calendar_before)
-            raise
-    elif bus_mask is not None:
+    if bus_mask is not None:
         publish_active_timeline(timeline, names, state, moved, direction_values,
             lanes, lane_directions, start_values, lane_counts, resource_indexes,
-            resources, bus_mask, directions, single_lane, _metrics is not None,
-            scope if shared_pack else None)
+            resources, bus_mask, directions, single_lane, _metrics is not None)
     else:
         publish_timeline(timeline, names, state.tolist(), moved.tolist(), direction_values.tolist(),
                          lanes.tolist(), lane_directions.tolist(), start_values.tolist(), lane_counts.tolist(),
                          resources, (), [int(name in resources and name in channels + hosts) for name in names],
                          directions, single_lane)
-    # A qualified READ miss stores the same end in arrays[unit] and the
-    # single-lane array calendar. That calendar can publish its ready value
-    # once at the existing batch/public boundary. Resident controller maps
-    # already contain every key, so this publisher would only repeat ready.
-    if deferred is None:
-        unit_indexes = np.flatnonzero(active_units)
-        publish_generic_controller(core, array_names, unit_indexes, arrays, buffers,
-                                   packed is not None, resources, _metrics is not None)
+    unit_indexes = np.flatnonzero(active_units)
+    publish_generic_controller(core, array_names, unit_indexes, arrays, buffers,
+                               packed is not None, resources, _metrics is not None)
     if packed is None:
         publish_buffered_cache(core, cache, bank_keys, prefixes, config.pages_per_block,
                                tags, ready, readers, uses, active_banks, _ReadCacheSlot)
@@ -292,20 +359,12 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
         timeline._touched.update(resources)
     timeline._intervals_truncated = bool(resources) or timeline._intervals_truncated
     if _metrics is not None:
-        if deferred is None:
-            _metrics.update(generic_metrics_delta(timeline, names, resource_indexes, before_busy, before_moved,
-                core.__dict__.get("_nand_request_metric_orders")))
-        else:
-            if _resource_sink is None:
-                _metrics.update(generic_deferred_metrics_delta(timeline, names, state, moved, touched,
-                    before_busy, before_moved, deferred))
-            else:
-                _metrics.update(generic_deferred_metrics_delta(timeline, names, state, moved, touched,
-                    before_busy, before_moved, deferred, _resource_sink=_resource_sink))
+        _metrics.update(generic_metrics_delta(timeline, names, resource_indexes, before_busy, before_moved))
     read = request.operation is Operation.READ
     programmed = 0 if read else page_count
     pages_read = int(misses) + int(rmw_reads)
     internal_bytes = (pages_read + programmed) * config.transfer_page_bytes
+    core._last_media_queue_wait_ns = float(max_read_wait)
     return TransactionResult(request.request_id, request.operation, request.arrival_ns, float(completion),
         request.byte_count, internal_bytes, counters={
             "host_transfer_bytes": host_bytes, "internal_transfer_bytes": internal_bytes,
@@ -324,13 +383,309 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None, _re
                 "device transfer upper bound: min(directional host, summed independent channels); excludes array latency",
             "array_units": config.array_units, "write_completion": "n/a" if read else "media_program_complete",
             "host_ack_completion_ns": None, "media_drain_completion_ns": None if read else float(completion),
+            "media_queue_wait_ns": float(max_read_wait),
         })
 
 
+def execute_read_batch(core, requests, *, _resource_sink=None):
+    """Schedule one submit_many READ batch on the out-of-order controller.
+
+    The batch is one controller window (run_generic_read_batch): requests
+    still take host credits in order and every page keeps its buffer
+    decision, but channels and the host link serve pages as they become
+    ready instead of in request order. Each request's host admission is
+    then recorded exactly as a sequential submit would, from the scheduled
+    completions. Returns results in input order, or None before any
+    mutation when the core is not a native generic controller.
+    """
+    import numpy as np
+    from .nand_core import NandCore, _ReadCacheSlot
+    from .memory_types import AccessRequest, TransactionResult
+    from .memory_transfer import _OWNED_TIMELINE_TOKEN_TYPE, _OWNED_TIMELINE_REMEMBER
+    from ._nand_execution import _geometry_plan, _NandNumericState
+    from ._nand_pack import (pack_single_lane, pack_multi_lane, validate_buffered_cache,
+                            pack_buffered_cache, publish_active_timeline, publish_generic_controller)
+    from ._compiled_nand import run_generic_read_batch, read_batch_request_metrics, read_batch_sink_totals
+
+    config, timeline = core.config, core.timeline
+    if (type(core) is not NandCore or type(timeline) is not ResourceTimeline
+            or not core._nand_numeric_enabled or core._nand_state_exposed
+            or 4096 % config.host_granularity_bytes
+            or core._write_buffer_pending or core._write_buffer_occupancy
+            or type(core._cache_use) is not int
+            or not has_native_timeline_hooks() or not _generic_resident_writers(core)):
+        return None
+    if any(name in core.__dict__ for name in (
+            "_array_id", "_array_resource_id", "_channel_id", "_host_id", "_host_bandwidth",
+            "_cache_slot", "_invalidate_cache", "_media_stage", "_staged_key", "_bank_key",
+            "_admit_host_request", "_record_host_admission", "_validate_request")):
+        return None
+    # Undo journals are written by the ordinary native publishers below.
+    if any(type(token) is not _OWNED_TIMELINE_TOKEN_TYPE or token.accounting
+           or getattr(token.remember, "__func__", token.remember) is not _OWNED_TIMELINE_REMEMBER
+           for token in timeline._owned_transactions):
+        return None
+    if any(type(request) is not AccessRequest or request.operation is not Operation.READ
+           or request.byte_count <= 0 for request in requests):
+        return None
+    counts = [(request.address + request.byte_count - 1) // 4096 - request.address // 4096 + 1
+              for request in requests]
+    pages = sum(counts)
+    base_units = config.channels * config.targets_per_channel * config.dies_per_target * config.luns_per_die
+    banks = base_units * config.planes_per_lun
+    units = banks if config.planes_independent else base_units
+    if (banks > 65536 or config.effective_capacity_bytes < banks * 4096
+            or not 0 <= core._cache_use <= 2**63 - 1 - pages):
+        return None
+    for request in requests:
+        core._validate_request(request)
+    per_channel = base_units // config.channels
+    (bank_keys, prefixes, array_names, array_resources, channels, hosts, names,
+     array_ids, channel_ids, host_ids) = _geometry_plan(core, Operation.READ, banks, units, per_channel)
+    valid, bus_mask = _buffered_layout_contract(array_names, array_resources, channels, hosts,
+        names, tuple(timeline.resource_aliases.items()))
+    if not valid:
+        return None
+    directions = [None, "read", "write"]
+    calendar = pack_single_lane(timeline, names, pages, config.transfer_page_bytes)
+    single_lane = calendar is not None
+    if calendar is None:
+        calendar = pack_multi_lane(timeline, names, pages, config.transfer_page_bytes,
+                                   directions, {name: index for index, name in enumerate(directions)})
+    if calendar is None:
+        return None
+    starts, lane_counts, lanes, lane_directions, state, moved, direction_values = calendar
+    cache = core.__dict__["_read_cache"]
+    layout = (bank_keys, prefixes, array_names, config.pages_per_block)
+    packed = core._nand_numeric_state
+    if packed is not None and packed.layout != layout:
+        core._nand_publish_numeric()
+        packed = None
+    resident = packed is not None
+    if not resident:
+        rows = validate_buffered_cache(cache, bank_keys, prefixes, _ReadCacheSlot, config.pages_per_block, isfinite)
+        if rows is None:
+            return None
+        packed = _NandNumericState(layout, (
+            np.array([core.__dict__["_array_ready"].get(name, 0.) for name in array_names], dtype=np.float64),
+            np.array([core.__dict__["_buffer_ready"].get(name, 0.) for name in array_names], dtype=np.float64),
+            *pack_buffered_cache(rows, banks, config.pages_per_block)))
+        packed.scalar_resource_contract = core._resident_resource_contract()
+    arrays, buffers, tags, ready, readers, uses, present = packed.arrays
+    if not all(np.all(np.isfinite(values)) and np.all(values >= 0) for values in (arrays, buffers, state)):
+        return None
+    # Preserve only frontiers inherited from work before this batch.  The
+    # numeric kernel mutates ``arrays``/``buffers`` as pages are dispatched;
+    # using this snapshot keeps same-batch queueing out of the wait metric.
+    initial_frontier = np.maximum(arrays.copy(), buffers.copy())
+    start_values, lane_counts = np.asarray(starts, dtype=np.int64), np.asarray(lane_counts, dtype=np.int64)
+    lanes, lane_directions = np.asarray(lanes, dtype=np.float64), np.asarray(lane_directions, dtype=np.int64)
+    for unit, resource in enumerate(array_ids):
+        first = int(start_values[resource])
+        stop = first + int(lane_counts[resource])
+        lane_frontier = float(np.min(lanes[first:stop]))
+        if lane_frontier > initial_frontier[unit]:
+            initial_frontier[unit] = lane_frontier
+    host_bandwidth = core._host_bandwidth(Operation.READ)
+    granularity = config.host_granularity_bytes
+    # Pages a staging store holds at each request's arrival. A staged
+    # boundary page moves only its burst-rounded span; an external store
+    # bills its own reads, so its pages cross no NAND resource.
+    staging_host = config.page_staging == "logic_die"
+    staged_ready = np.full(pages, -1., dtype=np.float64)
+    staged_counts = [0] * len(requests)
+    staged_host_bytes = [0] * len(requests)
+    head_bytes, tail_bytes = [], []
+    offset = 0
+    for index, request in enumerate(requests):
+        end = request.address + request.byte_count
+        first, last = request.address // 4096, (end - 1) // 4096
+        staged = core._tail_readable(first, last, request.arrival_ns) if core._tail_pages else ()
+        head_end = min(end, (first + 1) * 4096)
+        tail_start = max(request.address, last * 4096)
+        unit_head = config.page_staging_burst_bytes if first in staged else granularity
+        unit_tail = config.page_staging_burst_bytes if last in staged else granularity
+        head_bytes.append(-(-head_end // unit_head) * unit_head - request.address // unit_head * unit_head)
+        tail_bytes.append(-(-end // unit_tail) * unit_tail - tail_start // unit_tail * unit_tail)
+        for page in staged:
+            entry = core._tail_pages[page]
+            base = page * 4096
+            lo, hi = max(request.address, base) - base, min(end, base + 4096) - base
+            if not any(left <= lo and hi <= right for left, right in entry[0]):
+                # The scalar page machine can merge a partially staged page
+                # with media bytes; the native batch kernel only handles a
+                # complete staged span.
+                return None
+            core._tail_check_read(page, request.address, end)
+            staged_ready[offset + page - first] = core._tail_pages[page][2]
+            if not staging_host:
+                staged_host_bytes[index] += (head_bytes[-1] if page == first else
+                                             tail_bytes[-1] if page == last else 4096)
+        staged_counts[index] = len(staged)
+        offset += counts[index]
+    head_bytes = np.array(head_bytes, dtype=np.int64)
+    tail_bytes = np.array(tail_bytes, dtype=np.int64)
+    page_counts = np.array(counts, dtype=np.int64)
+    population = core.__dict__["_inflight_operations"]
+    prior_ends = np.sort(np.array([end for end, _operation in population], dtype=np.float64))
+    geometry = np.array((base_units, config.planes_per_lun, config.planes_independent,
+                         per_channel, config.host_channels), dtype=np.int64)
+    timing = np.array((config.page_read_ns, config.transfer_page_bytes / config.internal_bandwidth_gb_s,
+                       4096 / host_bandwidth, config.transfer_page_bytes))
+    before = packed.checkpoint() if resident else None
+    if resident:
+        for token in core._nand_transactions:
+            token.capture_numeric(packed)
+    try:
+        (admissions, completions, hits, misses, clock, touched, active_units, active_banks,
+         offsets, page_hit, page_unit, page_channel, read_start, channel_start, host_start,
+         read_eligible) = run_generic_read_batch(
+            np.array([request.address // 4096 for request in requests], dtype=np.int64), page_counts,
+            np.array([request.arrival_ns for request in requests], dtype=np.float64),
+            head_bytes, head_bytes / host_bandwidth, tail_bytes, tail_bytes / host_bandwidth,
+            staged_ready, config.page_staging_latency_ns, staging_host,
+            core._acceptance_ns, prior_ends, config.max_outstanding_requests, config.front_ns,
+            geometry, timing, array_ids, channel_ids, host_ids,
+            arrays, buffers, tags, ready, readers, uses, present, core._cache_use,
+            start_values, lane_counts, lanes, lane_directions, state, moved, direction_values)
+        if not np.all(np.isfinite(state)) or not np.all(np.isfinite(completions)):
+            raise ValueError("resource reservation exceeds finite timing range")
+    except BaseException:
+        if before is not None:
+            packed.restore(before)
+        raise
+    packed.dirty_units |= active_units
+    packed.dirty_banks |= active_banks
+    core._nand_numeric_state = packed
+    core._observation_events = []
+    timeline._reset_metric_recorder(0)
+    resource_indexes = np.flatnonzero(touched)
+    resources = {names[index] for index in resource_indexes.tolist()}
+    publish_active_timeline(timeline, names, state, moved, direction_values,
+        lanes, lane_directions, start_values, lane_counts, resource_indexes,
+        resources, bus_mask, directions, single_lane, True)
+    publish_generic_controller(core, array_names, np.flatnonzero(active_units), arrays, buffers,
+                               True, resources, True)
+    for bank in np.flatnonzero(active_banks).tolist():
+        key = bank_keys[bank]
+        if key not in cache:
+            if core._nand_transactions:
+                core._touch_cache_bank(key)
+            cache[key] = [_ReadCacheSlot(), _ReadCacheSlot()]
+    core._cache_use = int(clock)
+    timeline._touched.update(resources)
+    timeline._intervals_truncated = bool(resources) or timeline._intervals_truncated
+    truncated = timeline._intervals_truncated
+
+    request_offsets, ids, busy, byte_counts, first, last, read_wait = read_batch_request_metrics(
+        offsets, page_counts, page_hit, page_unit, page_channel, read_start, read_eligible, channel_start,
+        host_start, head_bytes, head_bytes / host_bandwidth, tail_bytes, tail_bytes / host_bandwidth,
+        timing, config.host_channels, array_ids, channel_ids, host_ids, initial_frontier, len(names))
+    if _resource_sink is not None:
+        # Fold the per-request bills into the task and owner bills with the
+        # same request-ordered additions as consuming each request's maps,
+        # without building those maps. A latest interval equal to the
+        # published one is that published tuple.
+        task_busy, task_bytes, task_last, owner_busy, owner_bytes, owner_last = _resource_sink
+        task_values = np.zeros(len(names), dtype=np.float64)
+        owner_values = np.zeros(len(names), dtype=np.float64)
+        for index in resource_indexes.tolist():
+            task_values[index] = task_busy.get(names[index], 0.0)
+            owner_values[index] = owner_busy.get(names[index], 0.0)
+        order, byte_totals, last_first, last_end = read_batch_sink_totals(
+            ids, busy, byte_counts, first, last, task_values, owner_values, len(names))
+        published = timeline.last_intervals
+        for index in order.tolist():
+            rid = names[index]
+            task_busy[rid] = float(task_values[index])
+            owner_busy[rid] = float(owner_values[index])
+            payload = int(byte_totals[index])
+            if payload:
+                task_bytes[rid] = task_bytes.get(rid, 0) + payload
+                owner_bytes[rid] = owner_bytes.get(rid, 0) + payload
+            interval = published[rid]
+            if interval != (last_first[index], last_end[index]):
+                interval = (float(last_first[index]), float(last_end[index]))
+            for bill in (task_last, owner_last):
+                previous = bill.get(rid)
+                if previous is None or (interval[1], interval[0]) > (previous[1], previous[0]):
+                    bill[rid] = interval
+        request_metrics = None
+    else:
+        request_metrics = (request_offsets.tolist(), [names[rid] for rid in ids.tolist()],
+                           busy.tolist(), byte_counts.tolist(), first.tolist(), last.tolist())
+
+    hit_ceiling = config.host_bandwidth_for(Operation.READ)
+    core._last_media_queue_wait_ns = float(np.max(read_wait)) if len(read_wait) else 0.0
+    miss_ceiling = core._bandwidth_ceiling_gb_s(Operation.READ)
+    depth_scope = core._admission_depth_scope()
+    admission_values, completion_values = admissions.tolist(), completions.tolist()
+    hit_values, miss_values = hits.tolist(), misses.tolist()
+    results = []
+    for index, request in enumerate(requests):
+        effective, admitted, host_channel = core._admit_host_request(request)
+        if effective != admission_values[index]:
+            raise RuntimeError("native NAND read batch admission diverged from the host queue")
+        completion, hit_count, miss_count, count = (completion_values[index], hit_values[index],
+                                                    miss_values[index], counts[index])
+        host_bytes = (int(head_bytes[index]) if count == 1
+                      else int(head_bytes[index]) + int(tail_bytes[index]) + (count - 2) * 4096)
+        host_bytes -= staged_host_bytes[index]
+        staged_count = staged_counts[index]
+        internal_bytes = miss_count * config.transfer_page_bytes
+        if request_metrics is None:
+            metrics = {"resource_intervals": {}, "resource_interval_payloads": {},
+                       "intervals_truncated": truncated}
+        else:
+            request_offsets, rid_names, busy, byte_counts, first, last = request_metrics
+            span = range(request_offsets[index], request_offsets[index + 1])
+            metrics = {
+                "resource_busy_ns": {rid_names[at]: busy[at] for at in span},
+                "resource_bytes": {rid_names[at]: byte_counts[at] for at in span if byte_counts[at]},
+                "resource_last_intervals": {rid_names[at]: (first[at], last[at]) for at in span},
+                "resource_intervals": {}, "resource_interval_payloads": {},
+                "intervals_truncated": truncated}
+        results.append(TransactionResult(request.request_id, Operation.READ, request.arrival_ns,
+            completion, request.byte_count, internal_bytes, counters={
+                "host_transfer_bytes": host_bytes, "internal_transfer_bytes": internal_bytes,
+                "physical_read_bytes": miss_count * 4096, "physical_write_bytes": 0,
+                "pages_read": miss_count, "pages_programmed": 0,
+                "merge_bytes": 0, "merged_pages": 0, "staging_write_pages": 0,
+                "staging_read_hits": staged_count, "staging_read_merges": 0,
+                "read_cache_hits": hit_count, "read_cache_misses": miss_count,
+                "erase_operations": 0, "page_count": count,
+                "details_truncated": count > config.max_expanded_segments,
+                "native_fullpage_pages": count,
+                "bandwidth_ceiling_gb_s": hit_ceiling if hit_count or staged_count else miss_ceiling,
+                "bandwidth_ceiling_scope":
+                    "directional host upper bound for transactions using cached/staged data; host acknowledgement is not media drain" if hit_count or staged_count else
+                    "device transfer upper bound: min(directional host, summed independent channels); excludes array latency",
+                "array_units": config.array_units, "write_completion": "n/a",
+                "host_ack_completion_ns": None, "media_drain_completion_ns": None,
+                "pages_touched": count, "read_operations": miss_count, "program_operations": 0,
+                "rmw_read_operations": 0, "page_access_payload_bytes": request.byte_count,
+                "page_access_capacity_bytes": count * config.page_bytes,
+                "host_admission_samples": 1,
+                "host_outstanding_at_admission_peak": len(admitted) + 1,
+                "host_read_outstanding_at_admission_peak": admitted.reads + 1,
+                "host_write_outstanding_at_admission_peak": admitted.writes,
+                "host_admission_depth_scope": depth_scope,
+                "queue_wait_ns": effective - request.arrival_ns,
+                "media_queue_wait_ns": float(read_wait[index]),
+                "write_buffer_wait_ns": 0.0, "write_buffer_bytes": 0,
+                "write_buffer_occupancy_bytes": 0, "write_buffer_peak_bytes": 0,
+                "write_buffer_draining_bytes": 0,
+                "buffered_write_mode": core._buffered_write_mode,
+                **metrics,
+            }))
+        core._record_host_admission(host_channel, effective, admitted, completion, Operation.READ)
+    return tuple(results)
 
 
-def _deferred_numeric_qualified(core):
-    """Prove only descriptors and buffers read while calendars are private."""
+
+
+def _native_numeric_qualified(core):
+    """Prove the resident controller arrays and layout are the native ones."""
     import numpy as np
     from ._nand_execution import _geometry_plan
 
@@ -388,12 +743,16 @@ def _deferred_numeric_qualified(core):
     return contract == core._resident_resource_contract()
 
 
-def _deferred_batch_qualified(core, requests, *, _core_only=False):
-    """Only closed, already resident native READ batches may hide calendars."""
+def _native_sink_qualified(core):
+    """A resident native READ core whose batches bill a task sink directly.
+
+    Physical task billing hands this core a private resource sink. Prove
+    that its constructor, admission and validation callbacks, controller
+    arrays and undo tokens are the native ones before doing so.
+    """
     from . import nand_core as owner
     from .memory_transfer import _OWNED_TIMELINE_TOKEN_TYPE, _OWNED_TIMELINE_TOKEN_METHODS
-    if ((not _core_only and len(requests) < 8)
-            or type(core._nand_numeric_state) is not _DEFER_NUMERIC_TYPE
+    if (type(core._nand_numeric_state) is not _NATIVE_NUMERIC_TYPE
             or type(core.config) is not _FOOTPRINT_CONFIG_TYPE
             or not _footprint_namespace_matches(_FOOTPRINT_CORE_TYPE, _FOOTPRINT_CORE_ITEMS)
             or any(type(getattr(core, name)) is not bool for name in (
@@ -402,8 +761,8 @@ def _deferred_batch_qualified(core, requests, *, _core_only=False):
             or type(core._staged_pages) is not dict
             or core.config.parallel_units is not None
             or not _footprint_namespace_matches(_FOOTPRINT_CONFIG_TYPE, _FOOTPRINT_CONFIG_ITEMS)
-            or any(not _footprint_namespace_matches(cls, items) for cls, items in _DEFER_CLASSES)
-            or any(getattr(module, name) is not value for module, name, value in _DEFER_BINDINGS)):
+            or any(not _footprint_namespace_matches(cls, items) for cls, items in _NATIVE_CLASSES)
+            or any(getattr(module, name) is not value for module, name, value in _NATIVE_BINDINGS)):
         return False
     if any(type(key) is not str for key in core.config.metadata):
         return False
@@ -413,14 +772,8 @@ def _deferred_batch_qualified(core, requests, *, _core_only=False):
         if not (value is None or type(value) is str or type(value) is int
                 or type(value) is float or type(value) is bool):
             return False
-    if not _deferred_numeric_qualified(core):
+    if not _native_numeric_qualified(core):
         return False
-    for request in requests:
-        if (type(request) is not _DEFER_REQUEST or request.operation is not Operation.READ
-                or type(request.request_id) is not str or type(request.address) is not int
-                or type(request.byte_count) is not int
-                or (type(request.arrival_ns) is not int and type(request.arrival_ns) is not float)):
-            return False
     if ((type(core._acceptance_ns) is not int and type(core._acceptance_ns) is not float)
             or type(core._write_buffer_occupancy) is not int
             or type(core._write_buffer_pending) is not list
@@ -455,7 +808,7 @@ def _deferred_batch_qualified(core, requests, *, _core_only=False):
         "lane_available", "directions", "lane_directions")) + (
             core.__dict__["_array_ready"], core.__dict__["_buffer_ready"], core.__dict__["_read_cache"])
     for token in core._nand_transactions:
-        # Only missing native cache banks call remember_cache in this READ
+        # Only missing native cache banks call remember_cache in the READ
         # executor; cache_slots is not read when the previous bank is absent.
         if (type(token.cache_banks) is not dict
                 or any(token.cache_banks is item for item in public_roots)
@@ -475,7 +828,7 @@ def _deferred_batch_qualified(core, requests, *, _core_only=False):
                 or any(type(key) is not int for key in token.objects)):
             return False
         # Recorder roots are replaced before execution; only these seven
-        # persistent calendar journals are queried inside the private scope.
+        # persistent calendar journals are queried by native publication.
         for name in ("ready_ns", "busy_ns", "bytes_moved", "last_intervals",
                      "lane_available", "directions", "lane_directions"):
             saved = token.entries.get(name)
@@ -483,102 +836,6 @@ def _deferred_batch_qualified(core, requests, *, _core_only=False):
                 return False
     return True
 
-
-def _deferred_calendar_eligible(core, names, array_names, array_resources, bus_mask, single_lane):
-    """No new public key, aliased map or shared physical array in this scope."""
-    import numpy as np
-    from ._nand_pack import can_own_timeline
-    timeline = core.timeline
-    columns = tuple(getattr(timeline, name) for name in (
-        "ready_ns", "busy_ns", "bytes_moved", "last_intervals",
-        "lane_available", "directions", "lane_directions"))
-    # Frontier membership executes inside the controller publisher. Authored
-    # containers/keys can inspect every calendar there, so they must retain
-    # immediate publication, not merely the original controller publisher.
-    # These checks occur once when this submit_many scope first qualifies.
-    frontiers = (core.__dict__["_array_ready"], core.__dict__["_buffer_ready"])
-    cache = core.__dict__["_read_cache"]
-    if (not single_lane or core.config.parallel_units is not None
-            or tuple(array_names) != tuple(array_resources)
-            or len(set(array_names)) != len(array_names)
-            or any(type(column) is not dict for column in (*columns, *frontiers, cache))
-            or len({id(column) for column in (*columns, *frontiers, cache)}) != len(columns) + 3
-            or any(type(key) is not str for column in (*columns, *frontiers) for key in column)
-            or any(type(key) is not tuple or any(type(part) is not int for part in key) for key in cache)
-            or not can_own_timeline(timeline, tuple(names))
-            or any(name in timeline.lane_directions for name in names)
-            or len({id(value) for value in timeline.lane_available.values()}) != len(timeline.lane_available)):
-        return False
-    # All output-order keys are stable for the whole batch. A missing key
-    # retains the existing publisher so later batches may qualify naturally.
-    for index, name in enumerate(names):
-        if (name not in timeline.ready_ns or name not in timeline.busy_ns
-                or name not in timeline.last_intervals or name not in timeline.lane_available
-                or len(timeline.lane_available[name]) != 1
-                or bus_mask[index] and (name not in timeline.bytes_moved or name not in timeline.directions)):
-            return False
-    if any(name not in core.__dict__["_array_ready"]
-           or name not in core.__dict__["_buffer_ready"] for name in array_names):
-        return False
-    # The current native pack has already validated scalar values/unique
-    # one-element lanes. Controller arrays must not carry authored ndarray hooks.
-    return all(type(array) is np.ndarray for array in core._nand_numeric_state.arrays)
-
-
-def _start_deferred_calendar(core, scope, names, array_names, array_resources, bus_mask,
-                             single_lane, calendar):
-    import numpy as np
-    if (scope is None or not scope.get("defer_candidate")
-            or scope.get("defer_checked")):
-        return
-    scope["defer_checked"] = True
-    if not _deferred_calendar_eligible(core, names, array_names, array_resources, bus_mask, single_lane):
-        return
-    lookup = {name: index for index, name in enumerate(names)}
-    scope["deferred"] = {
-        "names": names, "arrays": frozenset(array_names), "bus_mask": bus_mask,
-        "calendar": calendar, "seen": np.zeros(len(names), dtype=np.bool_),
-        "intervals": {name: core.timeline.last_intervals[name] for name in names},
-        "publication_serial": 0, "controller_ready_complete": False,
-        "busy_order": np.array([lookup[name] for name in core.timeline.busy_ns if name in lookup], dtype=np.int64),
-        "moved_order": np.array([lookup[name] for name in core.timeline.bytes_moved if name in lookup], dtype=np.int64),
-    }
-
-
-def _restore_deferred_calendar(deferred, before):
-    # The native kernel mutates shared calendars in place. Controller undo
-    # does not include them. Preserve the previous public-success prefix.
-    for target, saved in zip(deferred["calendar"][2:], before):
-        target[:] = saved
-
-
-def _flush_deferred_calendar(core):
-    """Publish this batch's union without changing the current recorder."""
-    import numpy as np
-    from ._nand_pack import publish_active_timeline
-    scope = core.__dict__.get("_nand_request_metric_orders")
-    deferred = None if scope is None else scope.pop("deferred", None)
-    if deferred is None:
-        return
-    scope["defer_candidate"] = False
-    checkpoint = deferred.get("request_checkpoint")
-    if checkpoint is not None and checkpoint[0] == deferred["publication_serial"]:
-        _restore_deferred_calendar(deferred, checkpoint[1])
-    indexes = np.flatnonzero(deferred["seen"])
-    if not len(indexes):
-        return
-    starts, counts, lanes, lane_directions, state, moved, directions = deferred["calendar"]
-    names = deferred["names"]
-    resources = {names[index] for index in indexes.tolist()}
-    # The qualified READ calendar also owns array ready until this boundary.
-    # Its successful prefix supplies the same miss end as the controller.
-    # Do not retain numeric-array pointers: restore() may replace them after
-    # a failed request. Untouched/hit-only arrays are absent from the union.
-    skip_ready = deferred["arrays"] if deferred["controller_ready_complete"] else ()
-    publish_active_timeline(core.timeline, names, state, moved, directions,
-        lanes, lane_directions, starts, counts, indexes, resources,
-        deferred["bus_mask"], [None, "read", "write"], True,
-        _remember=False, _last_intervals=deferred["intervals"], _skip_ready=skip_ready)
 
 def full_page_period(config):
     units = config.channels * config.targets_per_channel * config.dies_per_target * config.luns_per_die
@@ -596,7 +853,8 @@ def execute_full_pages(core, request, first_page, page_count):
     # state. Those configurations execute the same detailed NAND state
     # machine; never skip their protocol/cache transitions.
     if (config.protocol_mode != "generic_nand" or config.host_channels != 1
-            or config.host_full_duplex or config.read_cache_pages_per_bank):
+            or config.host_full_duplex or config.read_cache_pages_per_bank
+            or config.page_staging != "none"):
         return None
     period = full_page_period(config)
     # Bound compilation independently of unusual user-defined geometry.
@@ -662,6 +920,14 @@ def execute_full_pages(core, request, first_page, page_count):
     # Compile stable page geometry once.  Durations use the same per-page
     # float division as ResourceTimeline.transfer, before exact accumulation.
     page_program = [(a, r, c, count, ticks(count / host_bandwidth)) for a, r, c, count in pages]
+    # Match the compiled page runner's inherited-frontier metric.  Snapshot
+    # the resource state before this invocation so serialization introduced by
+    # later pages in the same affine batch is not reported as media wait.
+    max_read_wait_ticks = 0
+    if request.operation is Operation.READ:
+        for array, resource, _channel, _count, _host_ns in page_program:
+            inherited = max(state["array", array], state["buffer", array], state["lane", resource])
+            max_read_wait_ticks = max(max_read_wait_ticks, inherited - base_ticks)
     for _, resource, channel, count, host_ns in page_program:
         busy[resource] += ticks(read_ns if request.operation is Operation.READ else program_ns)
         busy[channel] += ticks(internal_ns)
@@ -758,6 +1024,7 @@ def execute_full_pages(core, request, first_page, page_count):
         "internal_transfer_bytes": cycles * period * config.transfer_page_bytes,
         "accelerated_pages": skipped,
         "tail_pages": tail,
+        "media_queue_wait_ns": float(max_read_wait_ticks / scale),
     }
 
 
@@ -841,16 +1108,18 @@ def _footprint_cache_key(core):
     return _physical_content_key((vars(core.config), aliases))
 
 _OWNED_NAND_FUNCTIONS = tuple((name, globals()[name]) for name in (
-    "execute_buffered_full_pages", "execute_full_pages", "full_page_period", "_generic_resident_writers",
-    "_buffered_layout_contract", "_deferred_numeric_qualified", "_deferred_batch_qualified", "_deferred_calendar_eligible",
-    "_start_deferred_calendar", "_restore_deferred_calendar", "_flush_deferred_calendar"))
+    "execute_buffered_full_pages", "execute_read_batch", "execute_full_pages", "full_page_period",
+    "_generic_resident_writers", "_buffered_layout_contract", "_native_numeric_qualified",
+    "_native_sink_qualified"))
 _OWNED_NAND_PACK_FUNCTIONS = tuple((name, getattr(_owned_pack_module, name)) for name in (
     "pack_single_lane", "pack_multi_lane", "publish_timeline", "validate_buffered_cache",
     "pack_buffered_cache", "publish_buffered_cache", "can_own_resource_aliases", "publish_active_timeline",
     "generic_request_resource_indexes", "pack_selected_single_lane", "generic_metrics_delta",
-    "publish_generic_controller", "remember_generic_resources", "generic_ordered_metric_touches",
-    "defer_active_timeline", "generic_deferred_metrics_delta"))
-_OWNED_NAND_NUMERIC_ENTRY = _owned_numeric_module.run_generic_full_pages
+    "publish_generic_controller", "remember_generic_resources"))
+_OWNED_NAND_NUMERIC_ENTRIES = tuple((name, getattr(_owned_numeric_module, name)) for name in (
+    "run_generic_full_pages", "run_generic_read_batch", "run_generic_flush_batch",
+    "read_batch_request_metrics",
+    "read_batch_sink_totals"))
 _OWNED_NAND_GEOMETRY_PLAN = _owned_execution_module._geometry_plan
 
 
@@ -861,36 +1130,36 @@ def has_native_timeline_hooks():
     for name, original in _OWNED_NAND_PACK_FUNCTIONS:
         if getattr(_owned_pack_module, name) is not original:
             return False
-    return (_owned_numeric_module.run_generic_full_pages is _OWNED_NAND_NUMERIC_ENTRY
+    return (all(getattr(_owned_numeric_module, name) is original for name, original in _OWNED_NAND_NUMERIC_ENTRIES)
             and _owned_execution_module._geometry_plan is _OWNED_NAND_GEOMETRY_PLAN)
 
-# These actual constructor/admission/validation callbacks execute inside a
-# deferred batch. Public replacements keep ordinary immediate publication.
-from . import nand_core as _defer_owner_module
-from . import memory_types as _defer_types_module
-from . import _resource_ledger as _defer_ledger_module
-_DEFER_REQUEST = _defer_types_module.AccessRequest
-_DEFER_NUMERIC_TYPE = _owned_execution_module._NandNumericState
-_DEFER_CLASSES = tuple((cls, tuple((name, value) for name, value in vars(cls).items()
+# These actual constructor/admission/validation callbacks execute while a
+# native READ core bills a private task sink (_native_sink_qualified).
+from . import nand_core as _native_owner_module
+from . import memory_types as _native_types_module
+from . import _resource_ledger as _native_ledger_module
+_NATIVE_REQUEST = _native_types_module.AccessRequest
+_NATIVE_NUMERIC_TYPE = _owned_execution_module._NandNumericState
+_NATIVE_CLASSES = tuple((cls, tuple((name, value) for name, value in vars(cls).items()
     if name != "__slotnames__")) for cls in (
-        _defer_types_module.AccessRequest, _defer_types_module.TransactionResult,
-        _defer_owner_module._HostPopulation, _defer_owner_module._HostAdmission,
-        _defer_owner_module._HostCompletions, _defer_owner_module._NandTransaction,
-        _defer_owner_module._ReadCacheSlot, _owned_execution_module._NandNumericState))
-_DEFER_BINDINGS = (
-    (_owned_execution_module, "_NandNumericState", _DEFER_NUMERIC_TYPE),
-    *tuple((_defer_ledger_module, name, getattr(_defer_ledger_module, name)) for name in (
+        _native_types_module.AccessRequest, _native_types_module.TransactionResult,
+        _native_owner_module._HostPopulation, _native_owner_module._HostAdmission,
+        _native_owner_module._HostCompletions, _native_owner_module._NandTransaction,
+        _native_owner_module._ReadCacheSlot, _owned_execution_module._NandNumericState))
+_NATIVE_BINDINGS = (
+    (_owned_execution_module, "_NandNumericState", _NATIVE_NUMERIC_TYPE),
+    *tuple((_native_ledger_module, name, getattr(_native_ledger_module, name)) for name in (
         "remember_owned_timeline_resources", "_get", "_put", "_remember_owned_resource")
-        if hasattr(_defer_ledger_module, name)),
+        if hasattr(_native_ledger_module, name)),
     *tuple((_owned_pack_module, name, getattr(_owned_pack_module, name)) for name in (
         "can_own_timeline", "_native_timeline_columns", "_can_own_native_columns",
         "_get", "_put", "_item", "_double") if hasattr(_owned_pack_module, name)),
-    *tuple((_defer_owner_module, name, getattr(_defer_owner_module, name)) for name in (
+    *tuple((_native_owner_module, name, getattr(_native_owner_module, name)) for name in (
         "validate_nand_request", "map_nand_address", "replace", "_generic_bulk_span", "_bulk_min_pages",
         "_HostPopulation", "_HostAdmission", "_HostCompletions", "_NandTransaction", "_ReadCacheSlot",
         "heappop", "heappush", "heapify")),
     *tuple((_footprint_mapping_module, name, getattr(_footprint_mapping_module, name)) for name in (
         "validate_nand_request", "_check_address")),
-    *tuple((_defer_types_module, name, getattr(_defer_types_module, name)) for name in (
+    *tuple((_native_types_module, name, getattr(_native_types_module, name)) for name in (
         "AccessRequest", "TransactionResult", "_positive_int", "_nonnegative")),
 )

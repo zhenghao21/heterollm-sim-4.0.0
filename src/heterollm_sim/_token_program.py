@@ -281,11 +281,19 @@ def drain_token_program(kernel, chunk, layout, *, validate_tasks=True,
         from .data_motion import is_physical_task, physical_task_transaction_owners
         owners = set()
         has_physical = False
+        has_unbounded_physical = False
         for task in chunk:
             if is_physical_task(task):
                 has_physical = True
-                owners.update(physical_task_transaction_owners(task))
-        if has_physical and owners:
+                task_owners = physical_task_transaction_owners(task)
+                if task_owners is None:
+                    # Host-staged HBF tasks may mutate a controller through
+                    # their staging binding, so they cannot share a bounded
+                    # owner transaction with ordinary descriptors.
+                    has_unbounded_physical = True
+                else:
+                    owners.update(task_owners)
+        if has_physical and owners and not has_unbounded_physical:
             shared_snapshot = kernel.physical_runtime.begin_transaction(
                 owners=owners, _owned_timeline=True)
     try:

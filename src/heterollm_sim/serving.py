@@ -6220,6 +6220,7 @@ class _OnlineRuntime:
         inventory = native_kv_ingress_inventory(scenario, state.spec.request_id, history,
             ep_group=state.ep_group, execution_control=self.execution_control)
         configs, contracts = inventory["physical_memory_configs"], inventory["contracts"]
+        tail_slots = inventory.get("tail_slots", ())
         declarations = {(row["physical_owner"], row["buffer_id"], row.get("generation", 0)): row
             for row in inventory["physical_allocations"]}
         if not declarations:
@@ -6275,7 +6276,49 @@ class _OnlineRuntime:
             for start, end in merged:
                 destinations.append({"component_id": component_by_owner[owner], "buffer_id": identity,
                     "generation": generation, "offset_bytes": start, "size_bytes": end-start})
-        return destinations
+        # The final partial page is mirrored into the request's persistent HBM
+        # tail slot.  Keep the HBF destination stream as the accounting source
+        # and annotate only the corresponding byte subranges for the extra
+        # native HBM write.
+        tails_by_identity = {}
+        for slot in tail_slots:
+            if slot.get("request_id") != state.spec.request_id:
+                continue
+            tail_bytes = (history % int(slot["tokens_per_page"])) * int(slot["row_bytes"])
+            if tail_bytes <= 0:
+                continue
+            hbf_identity = slot["hbf_buffer_id"]
+            tails_by_identity[hbf_identity] = (slot, tail_bytes)
+        mirrored = []
+        for row in destinations:
+            tail_info = tails_by_identity.get(row["buffer_id"])
+            if tail_info is None:
+                mirrored.append(row)
+                continue
+            slot, tail_bytes = tail_info
+            page_base = int(slot["tail_page"]) * int(slot["page_bytes"])
+            row_start, row_end = int(row["offset_bytes"]), int(row["offset_bytes"]) + int(row["size_bytes"])
+            mirror_lo = max(row_start, page_base)
+            mirror_hi = min(row_end, page_base + tail_bytes)
+            cuts = [row_start]
+            if row_start < mirror_lo < row_end:
+                cuts.append(mirror_lo)
+            if row_start < mirror_hi < row_end:
+                cuts.append(mirror_hi)
+            cuts.append(row_end)
+            for lo, hi in zip(cuts, cuts[1:]):
+                piece = {**row, "offset_bytes": lo, "size_bytes": hi - lo}
+                if mirror_lo <= lo and hi <= mirror_hi:
+                    piece["hbm_mirror"] = {
+                        "component_id": slot["hbm_component_id"],
+                        "physical_owner": slot["hbm_physical_owner"],
+                        "buffer_id": slot["hbm_buffer_id"],
+                        "generation": 0,
+                        "offset_bytes": lo - page_base,
+                        "size_bytes": hi - lo,
+                    }
+                mirrored.append(piece)
+        return mirrored
 
     def _preload_warmup_seed_kv(self):
         """Install warmup-seed KV histories as already resident, unpaid.

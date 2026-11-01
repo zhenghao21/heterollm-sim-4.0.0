@@ -237,10 +237,11 @@ def test_short_stack_and_slow_refill_are_rejected_not_extrapolated():
     assert short.native_window_forecast is None
     assert short.approximation["rejection_reasons"] == ["native_stationary_stack_too_short_for_disjoint_runs"]
     # Maverick layer classes (dense, MoE chunked, MoE full) each step in
-    # both runs; over 0.1 Gb/s PD links its imports outlast a step, so a
-    # slot would wait.
+    # both runs; over 0.3 Gb/s PD links its imports outlast a step, so a
+    # slot would wait. (A write phase must still end inside the short
+    # sample window, or the import sample itself is invalid.)
     slow = _fast(native_toy.slow_pd_ingress(native_toy.maverick_pattern_scenario(
-        8, batch_size=4, output=6, warmup=5, measurement=10), .1), 4, 4)
+        8, batch_size=4, output=6, warmup=5, measurement=10), .3), 4, 4)
     assert slow.native_window_forecast is None
     assert "native_stationary_refill_not_always_ready" in slow.approximation["rejection_reasons"]
     assert len(slow.approximation["error_budget"]["step"]["classes"]) == 3

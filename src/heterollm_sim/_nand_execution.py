@@ -273,7 +273,8 @@ def execute_pages(core, addresses, arrival_ns, link_program, *, operation=Operat
                       numeric_offsets, numeric_ids, durations, payloads, link_dirs,
                       nand_busy, nand_bytes, link_busy, link_moved)
         (completions, counters, cache_clock, admitted_count, acceptance, touched, arrays_touched,
-         banks_touched, link_arrivals, link_completions, link_last) = answer
+         banks_touched, link_arrivals, link_completions, link_last,
+         max_read_wait, last_read_wait) = answer
         hosts_touched = host_admission_mask(
             banks_touched, arrays_touched, base_units, per_channel, config.host_channels)
         if not np.all(np.isfinite(state)) or not np.all(np.isfinite(completions)):
@@ -370,7 +371,9 @@ def execute_pages(core, addresses, arrival_ns, link_program, *, operation=Operat
             "buffered_write_mode": False, "resource_busy_ns": busy, "resource_bytes": byte_counts,
             "resource_last_intervals": last, "resource_intervals": {}, "resource_interval_payloads": {},
             "intervals_truncated": True,
+            "media_queue_wait_ns": float(max_read_wait),
         })
+    core._last_media_queue_wait_ns = float(last_read_wait)
     links = []
     for link, (owner, _, _) in enumerate(link_program):
         busy, byte_counts, last = {}, {}, {}

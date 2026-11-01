@@ -285,6 +285,73 @@ def _ep_groups(runtime, cohort):
             "component_group": _component_groups(scenario) if degree > 1 else {}}
 
 
+def page_staging_occupancy(runtime, cohort, shared_peaks=None):
+    """Staged KV tail bytes per stack of every rank at this step, against its store.
+
+    A sampled window runs a few layers, so its NAND cores hold only those
+    layers' tail pages. The step's occupancy follows from the positions: per
+    KV layer, K/V and request of the rank's EP group, the bytes of the page
+    holding its newest row, a filled page whole until it is programmed.
+    Tail pages rotate over a rank's stacks with their page index, so they
+    spread evenly; activations interleaved over the same logic-die SRAM take
+    their share, at the highest extent the source or a window
+    (``shared_peaks``: owner -> bytes) reached. A rank whose store cannot
+    hold them refuses the batch with an allocation error (the backpressure
+    that caps the batch).
+    """
+    from .ir import model_graph_execution_layers
+    from .memory_allocator import AllocationError
+    from .memory_types import NandConfig
+    from .physical_contract import require_physical_memory_config
+    from .planner import _kv_components, _kv_tensor_bytes, _parallel_plan
+    scenario = runtime.plan.scenario
+    plan = _parallel_plan(scenario)
+    layers = [layer for layer in model_graph_execution_layers(scenario.model.graph)
+              if layer.sequence_mixer != "linear_attention" and layer.kv_heads]
+    positions = defaultdict(list)
+    for item in cohort.items:
+        positions[item.ep_group].append(item.context_tokens - 1)
+    allocators = runtime._execution_resource_kernel.physical_runtime.allocators
+    occupancy = {}
+    for rank in plan.ranks:
+        config, staged = None, 0
+        pending_tail_pages = 0
+        for layer in layers:
+            if plan.stage_for_layer(layer) != rank.pp_rank:
+                continue
+            cache = _kv_components(scenario, rank, rank.component_id, layer)[0]
+            physical = require_physical_memory_config(scenario.hardware.get_component(cache))
+            if (not isinstance(physical, NandConfig) or physical.page_staging != "logic_die"
+                    or not physical.page_staging_bytes_per_host_channel):
+                continue
+            config, row, page = physical, _kv_tensor_bytes(scenario, layer, plan.tp_degree, 1), physical.page_bytes
+            chunk = layer.attention_chunk_size
+            for position in positions.get(rank.ep_rank, ()):
+                tail_bytes = ((position % chunk if chunk else position) + 1) * row % page or page
+                staged += 2 * tail_bytes
+                if tail_bytes == page:
+                    # Logic-die full pages remain resident until the
+                    # attention-scoped background program starts.
+                    pending_tail_pages += 2
+        if config is None:
+            continue
+        channels, limit = config.host_channels, config.page_staging_bytes_per_host_channel
+        per_channel = -(-staged // channels)
+        owner = config.metadata.get("page_staging_shared_owner")
+        extent = max(getattr(allocators.get(owner), "peak_end_bytes", 0), (shared_peaks or {}).get(owner, 0))
+        shared = -(-extent // channels)
+        occupancy[rank.rank] = {"staged_bytes_per_stack": per_channel, "shared_bytes_per_stack": shared,
+                                "pending_pages_per_stack": -(-pending_tail_pages // channels),
+                                "pending_page_bytes_per_stack": -(-pending_tail_pages // channels) * page,
+                                "capacity_bytes_per_stack": limit}
+        if per_channel + shared > limit:
+            raise AllocationError(
+                "unable to allocate {} bytes in capacity {} of NAND page staging per stack on rank {} "
+                "({} staged KV tails + {} shared)".format(per_channel + shared, limit, rank.rank,
+                                                         per_channel, shared))
+    return occupancy
+
+
 def _import_pool_occupancy(runtime, degree):
     """Prepared imports (in flight or ready) held for each ep group."""
     held = (*runtime._external_pending, *runtime._external_ready)
@@ -502,6 +569,7 @@ def prepare_stationary(runtime, cohort, stages, request_ready_ns, control, cost,
     started = time.perf_counter()
     control.raise_if_cancelled()
     groups = _ep_groups(runtime, cohort)
+    staging = page_staging_occupancy(runtime, cohort)
     parallel = runtime.plan.scenario.placement.parallel
     if parallel.pp_degree > 1 or parallel.pipeline_microbatches > 1:
         prepared = _pipeline_boundary(runtime, cohort, stages, request_ready_ns,
@@ -521,7 +589,7 @@ def prepare_stationary(runtime, cohort, stages, request_ready_ns, control, cost,
 
     guard = _query_decode_guard(runtime, cohort, stages, before_decode=drop_dead_records)
     control.raise_if_cancelled()
-    return {**prepared, "record_layers": kept, "ep_groups": groups,
+    return {**prepared, "record_layers": kept, "ep_groups": groups, "page_staging_occupancy": staging,
             "import_pool_occupancy_by_group": _import_pool_occupancy(runtime, groups["degree"]),
             "query_decode_guard_ns": guard, "preparation_wall_seconds": time.perf_counter() - started}
 
@@ -1564,6 +1632,14 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
             else:
                 samples = sample_stationary(runtime, prepared, sample_control, layers, records,
                     pd_concurrency_envelope=options.pd_concurrency_envelope)
+                # Every layer's KV tails with the activations the windows reached.
+                peaks = {}
+                for record in records:
+                    for owner, extent in (record.physical_observations or {}).get(
+                            "allocator_peak_end_bytes", {}).items():
+                        peaks[owner] = max(peaks.get(owner, 0), extent)
+                diagnostics["page_staging_occupancy"] = page_staging_occupancy(
+                    runtime, prepared["cohort"], peaks)
                 budget = _checked_budget(evaluate_stationary(runtime, prepared, samples, options))
         except NativeFastWallBudgetError:
             budget = {"accepted": False, "reasons": ["native_stationary_sample_wall_budget_exhausted"]}

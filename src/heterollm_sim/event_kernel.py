@@ -1319,13 +1319,14 @@ class UnifiedEventKernel:
                 if allocator is None:
                     self._pending_physical_releases.pop((owner, buffer_id, generation), None)
                     continue
+                allocation = allocator.get_allocation(buffer_id, generation)
                 try:
                     allocator.release(buffer_id, generation)
                 except (AllocationError, KeyError):
                     deferred.add((owner, buffer_id, generation))
                     continue
                 self.physical_runtime.release_staging_buffer(
-                    owner, buffer_id, generation, arrival_ns=arrival_ns)
+                    owner, buffer_id, generation, arrival_ns=arrival_ns, allocation=allocation)
                 self._pending_physical_releases.pop((owner, buffer_id, generation), None)
                 # Once a serving temporary is dead its dirty lines have no
                 # live backing destination.  Invalidate them together so a

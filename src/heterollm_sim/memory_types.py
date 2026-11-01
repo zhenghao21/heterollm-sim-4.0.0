@@ -219,6 +219,13 @@ class SramConfig:
             _nonnegative(name, getattr(self, name))
         if not isinstance(self.metadata, Mapping):
             raise ValueError("SRAM metadata must be a mapping")
+        bound = self.metadata.get("port_resource_ids")
+        if bound is not None and (not isinstance(bound, Mapping) or set(bound) != {"read", "write"}
+                                  or any(isinstance(bound[name], (str, bytes))
+                                         or len(bound[name]) != self.ports
+                                         or not all(isinstance(item, str) and item for item in bound[name])
+                                         for name in ("read", "write"))):
+            raise ValueError("SRAM port_resource_ids must name one read and one write resource per port")
 
     @property
     def effective_capacity_bytes(self) -> int:
@@ -699,6 +706,16 @@ class NandConfig:
     # behavior; positive values model finite page-merging buffering without
     # adding an FTL or garbage-collection state machine.
     write_buffer_bytes: int = field(default=0, kw_only=True)
+    # Partial-page staging in an intermediate store, flushed only as full
+    # pages. "logic_die": SRAM behind each host channel (one per stack);
+    # staged bytes cross that channel and a full page programs inside the
+    # die. "external": another memory holds the tail and bills its own
+    # accesses; a full page then crosses the host channel to be programmed.
+    # The capacity bounds valid staged bytes per host channel (0: unbounded).
+    page_staging: str = field(default="none", kw_only=True)
+    page_staging_bytes_per_host_channel: int = field(default=0, kw_only=True)
+    page_staging_latency_ns: float = field(default=0.0, kw_only=True)
+    page_staging_burst_bytes: int = field(default=64, kw_only=True)
     wear_model: Optional[NandWearConfig | Mapping[str, Any]] = field(default=None, kw_only=True)
     detailed_observability: bool = field(default=False, kw_only=True)
     partial_page_policy: str = "read_modify_write"
@@ -808,6 +825,19 @@ class NandConfig:
             object.__setattr__(self, "capacity_bytes", self.computed_capacity_bytes)
         if self.write_buffer_bytes > self.effective_capacity_bytes:
             raise ValueError("write_buffer_bytes cannot exceed device capacity")
+        if self.page_staging not in {"none", "logic_die", "external"}:
+            raise ValueError("page_staging must be none, logic_die or external")
+        if (isinstance(self.page_staging_bytes_per_host_channel, bool)
+                or not isinstance(self.page_staging_bytes_per_host_channel, int)
+                or self.page_staging_bytes_per_host_channel < 0):
+            raise ValueError("page_staging_bytes_per_host_channel must be a non-negative integer")
+        _positive_int("page_staging_burst_bytes", self.page_staging_burst_bytes)
+        _nonnegative("page_staging_latency_ns", self.page_staging_latency_ns)
+        if self.page_staging != "none":
+            if self.protocol_mode != "generic_nand" or self.write_buffer_bytes:
+                raise ValueError("page staging requires generic_nand without a host write buffer")
+            if self.page_bytes % self.page_staging_burst_bytes:
+                raise ValueError("page_staging_burst_bytes must divide page_bytes")
 
     @property
     def array_units(self) -> int:
@@ -847,7 +877,6 @@ class NandConfig:
     def buffered_write_mode(self) -> bool:
         """A positive staging capacity enables host-ack/page-merge semantics."""
         return self.write_buffer_bytes > 0
-
 
 @dataclass(frozen=True)
 class AddressMapping:

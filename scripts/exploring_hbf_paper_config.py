@@ -30,6 +30,14 @@ from heterollm_sim.physical_presets import resolve_physical_config
 GB = 1_000_000_000
 MB = 1_000_000
 PAGE_BYTES = 4096
+# Each HBF stack's host interface, per direction: an HBM4-class PHY
+# (Table I: HBM4 12.8 TB/s over 8 stacks; HBF/HBF+ read 1.6 TB/s per stack).
+# Table I's NAND read/write rates are the array ceilings (planes x 4 KiB /
+# tR or tPROG), which the page timings enforce on their own.
+STACK_INTERFACE_GB_S = 1600.
+# Logic-die SRAM latency and burst of the intermediate store (research values).
+LOGIC_DIE_SRAM_LATENCY_NS = 1.
+LOGIC_DIE_SRAM_BURST_BYTES = 64
 PAPER_URL = "https://arxiv.org/html/2608.13868v1"
 PAPER_DOI = "https://doi.org/10.1109/LCA.2026.3705817"
 PAPER_ID = "son_exploring_hbf_2608_13868_v1"
@@ -223,7 +231,7 @@ def default_research_assumptions(configuration_id: str) -> NandResearchAssumptio
         host_full_duplex=True, host_granularity_bytes=PAGE_BYTES,
         partial_page_policy="read_modify_write",
         basis="Local mechanism control only: 256 pages/block, whole-block covering capacity, 2 ms erase, "
-              "100 GB/s per die-channel, one aggregate full-duplex host link, 4096 global combined credits "
+              "100 GB/s per die-channel, one full-duplex host channel per stack, 4096 global combined credits "
               "with writes sharing those credits, 4 KiB host-transfer granularity and paid read-modify-write "
               "for partial program pages. These are local choices, not parameters sourced from "
               "this paper; OCP is not selected.")
@@ -265,14 +273,19 @@ def build_paper_nand_config(configuration_id: str, *,
     """Construct genuine NandCore input with geometry-derived array resources.
 
     Native two-page bank buffers retain fill and reader lifetimes. They are
-    media read buffers, not the separate 40-MB intermediate SRAM. This does
-    not claim OCP control, a paper FTL or steady-state continuous batching.
+    media read buffers, not the intermediate store. Each stack has its own
+    host channel; die channel c belongs to stack c mod stacks. Partial pages
+    (KV tails) are staged in the intermediate store and programmed only as
+    full pages: in the stack's logic-die SRAM (HBF+/CONV+, 40 MB per stack)
+    or in the HBM stack (HBF/CONV). This does not claim OCP control, a paper
+    FTL or steady-state continuous batching.
     """
     hardware = hardware_by_id(configuration_id)
     if not isinstance(assumptions, NandResearchAssumptions):
         raise TypeError("assumptions must be explicit NandResearchAssumptions")
     if not hardware.hbf_stacks:
         return None
+    logic_die = hardware.intermediate_storage == "logic_die_SRAM"
     cache_bytes_per_stack = (hardware.dies_per_hbf_stack
         * hardware.planes_per_hbf_die * 2 * PAGE_BYTES)
     buffer_basis = (
@@ -293,17 +306,21 @@ def build_paper_nand_config(configuration_id: str, *,
         "pages_per_block": assumptions.pages_per_block, "page_bytes": PAGE_BYTES,
         "host_granularity_bytes": assumptions.host_granularity_bytes, "internal_transfer_bytes": PAGE_BYTES,
         "capacity_bytes": hardware.hbf_capacity_bytes,
-        "host_bandwidth_gb_s": max(hardware.hbf_read_gb_s, hardware.hbf_write_gb_s),
-        "host_read_bandwidth_gb_s": hardware.hbf_read_gb_s,
-        "host_write_bandwidth_gb_s": hardware.hbf_write_gb_s,
+        "host_bandwidth_gb_s": hardware.hbf_stacks * STACK_INTERFACE_GB_S,
+        "host_read_bandwidth_gb_s": hardware.hbf_stacks * STACK_INTERFACE_GB_S,
+        "host_write_bandwidth_gb_s": hardware.hbf_stacks * STACK_INTERFACE_GB_S,
         "internal_bandwidth_gb_s": assumptions.internal_bandwidth_gb_s,
         "page_read_ns": hardware.page_read_ns, "page_program_ns": hardware.page_program_ns,
         "block_erase_ns": assumptions.block_erase_ns, "front_ns": 0.,
-        "host_channels": 1, "host_full_duplex": assumptions.host_full_duplex,
+        "host_channels": hardware.hbf_stacks, "host_full_duplex": assumptions.host_full_duplex,
         "read_cache_pages_per_bank": 2, "queue_scope": "device",
         "max_outstanding_requests": assumptions.max_outstanding_requests,
         "max_outstanding_write_requests": assumptions.max_outstanding_write_requests,
         "write_buffer_bytes": 0, "partial_page_policy": assumptions.partial_page_policy,
+        "page_staging": "logic_die" if logic_die else "external",
+        "page_staging_bytes_per_host_channel": hardware.intermediate_sram_bytes_per_stack if logic_die else 0,
+        "page_staging_latency_ns": LOGIC_DIE_SRAM_LATENCY_NS if logic_die else 0.,
+        "page_staging_burst_bytes": LOGIC_DIE_SRAM_BURST_BYTES,
         "metadata": {
             "paper_id": PAPER_ID, "paper_configuration_id": configuration_id,
             "source_url": PAPER_URL, "source_section": "p2 Table I/Figure 2/Section III",
@@ -314,7 +331,14 @@ def build_paper_nand_config(configuration_id: str, *,
             "geometry_status": "published_die_plane_counts_with_explicit_block_assumptions",
             "geometry_basis": "published stack/die/plane counts; local per-die channel mapping and block organization",
             "parallelism_basis": "stack count * 16 actual die resources * published planes/die; never bandwidth-fitted",
-            "bandwidth_basis": "Table I aggregate directional ceilings; not a claim of measured sustained throughput",
+            "bandwidth_basis": "one host channel per stack at the HBM4-class 1.6 TB/s per direction; Table I NAND "
+                               "read/write rates are the plane x 4 KiB / tR or tPROG ceilings the page timings enforce",
+            "page_staging_basis": ("partial pages wait in the stack's logic-die SRAM partition (Table I 40 MB, valid "
+                                   "bytes shared with interleaved activations) and cross its host channel; a full "
+                                   "page programs inside the die" if logic_die else
+                                   "partial pages wait in the HBM stack, which bills their accesses; a full page "
+                                   "crosses the stack's host channel to be programmed"),
+            "logic_die_flush_assumption": "主机在本层最后一个 NAND 读完成后发起刷写；一层没有 NAND 读时回退到本层真正的 KV 读任务。刷写任务不进入读任务或层串行链。",
             "timing_basis": "paper 1/3 us read and 100 us program; explicitly supplied local erase/front assumptions",
             "protocol_basis": "generic_nand; the article does not specify OCP",
             "paper_page_basis": "4 KiB read page is explicit; same program-page unit is a local modeling assumption",
@@ -335,10 +359,10 @@ def build_paper_nand_config(configuration_id: str, *,
             "paper_intermediate_sram_execution": "native SramCore and ordinary allocator/workspace lifetime; authored by exploring_hbf_native_config, not this NAND-only builder",
             "research_assumptions": asdict(assumptions),
             "additional_research_assumptions": [
-                "one core channel per actual die; stack membership represented by consecutive groups of 16 channels",
-                "one aggregate host link; explicit host-transfer granularity; zero fixed front delay",
-                "two native read-cache pages per actual die/plane, no host-ack write staging; "
-                "partial programs use the explicitly selected paid RMW/reject policy",
+                "one core channel per actual die; die channel c belongs to stack c mod stacks",
+                "one full-duplex host channel per stack; explicit host-transfer granularity; zero fixed front delay",
+                "two native read-cache pages per actual die/plane; partial pages staged until full, "
+                "with no read-modify-write",
                 buffer_basis,
                 "generic direct-address page service; no automatic erases, write-order enforcement or GC",
                 "whole-block covering capacity is not a disclosed reserve or overprovisioning ratio"],

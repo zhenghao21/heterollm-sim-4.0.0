@@ -21,7 +21,6 @@ from .memory_allocator import PhysicalAddressAllocator
 
 _TP_ALLOCATOR_NAMESPACE = tuple((k,v) for k,v in vars(PhysicalAddressAllocator).items() if k != "__slotnames__")
 
-
 _IDENTITY_FIELDS = frozenset(("layer_id", "name", "label", "operator_id", "source_operator_id"))
 
 
@@ -80,20 +79,33 @@ def layer_inventory(scenario, specs):
 
 def _graph_facts(specs, inventory):
     """Prove serial layer composition on the actual dependency graph."""
-    by_id = {task.task_id: task for task in specs}
-    if len(by_id) != len(specs):
+    # External HBM page-program tasks are sampled physical work, but they are
+    # deliberately asynchronous with respect to attention and the next layer.
+    # Exclude only those background branches from the serial-composition proof;
+    # the caller still keeps them in each sampled layer's task list so their
+    # NAND/HBM costs are executed and observed.
+    serial_specs = tuple(task for task in specs
+                         if not task.metadata.get("native_background"))
+    by_id = {task.task_id: task for task in serial_specs}
+    if len(by_id) != len(serial_specs):
         raise ValueError("native layer graph contains duplicate Task ids")
     layer_indices = {row["layer_id"]: row["layer_index"] for row in inventory}
-    groups = {task.task_id: task.metadata.get("layer_id") for task in specs}
+    groups = {task.task_id: task.metadata.get("layer_id") for task in serial_specs}
+    serial_dependencies = {
+        task.task_id: tuple(parent for parent in task.dependencies if parent in by_id)
+        for task in serial_specs
+    }
+    background_ids = {task.task_id for task in specs if task.task_id not in by_id}
     children = defaultdict(list)
     indegree = {}
-    for task in specs:
-        if any(parent not in by_id for parent in task.dependencies):
+    for task in serial_specs:
+        if any(parent not in by_id and parent not in background_ids
+               for parent in task.dependencies):
             raise ValueError("native layer sampler requires the original closed cohort graph")
-        indegree[task.task_id] = len(task.dependencies)
-        for parent in task.dependencies:
+        indegree[task.task_id] = len(serial_dependencies[task.task_id])
+        for parent in serial_dependencies[task.task_id]:
             children[parent].append(task.task_id)
-    queue = deque(task.task_id for task in specs if not indegree[task.task_id])
+    queue = deque(task.task_id for task in serial_specs if not indegree[task.task_id])
     order = []
     while queue:
         identity = queue.popleft()
@@ -102,14 +114,14 @@ def _graph_facts(specs, inventory):
             indegree[child] -= 1
             if not indegree[child]:
                 queue.append(child)
-    if len(order) != len(specs):
+    if len(order) != len(serial_specs):
         raise ValueError("native layer Task graph is cyclic")
     roots, terminals = defaultdict(list), defaultdict(list)
-    for task in specs:
+    for task in serial_specs:
         layer = groups[task.task_id]
         if layer is None:
             continue
-        if not any(groups[parent] == layer for parent in task.dependencies):
+        if not any(groups[parent] == layer for parent in serial_dependencies[task.task_id]):
             roots[layer].append(task.task_id)
         if not any(groups[child] == layer for child in children[task.task_id]):
             terminals[layer].append(task.task_id)
@@ -125,7 +137,7 @@ def _graph_facts(specs, inventory):
     masks, layer_before = {}, {}
     for identity in order:
         mask, before = 0, 0
-        for parent in by_id[identity].dependencies:
+        for parent in serial_dependencies[identity]:
             mask |= masks[parent] | terminal_bits.get(parent, 0)
             before |= layer_before[parent]
             parent_layer = groups[parent]
@@ -148,7 +160,7 @@ def _graph_facts(specs, inventory):
             failures.append({"before": previous["layer_id"], "after": current["layer_id"],
                              "reason": "not_all_previous_terminals_precede_every_next_root"})
     boundary = defaultdict(list)
-    for task in specs:
+    for task in serial_specs:
         if groups[task.task_id] is not None:
             continue
         before, after = layer_before[task.task_id], layer_after[task.task_id]
@@ -163,7 +175,7 @@ def _graph_facts(specs, inventory):
     for kind, ids in boundary.items():
         wanted = frozenset(ids)
         boundary_roots = [identity for identity in ids
-                          if not any(parent in wanted for parent in by_id[identity].dependencies)]
+                          if not any(parent in wanted for parent in serial_dependencies[identity])]
         boundary_terminals = [identity for identity in ids
                               if not any(child in wanted for child in children[identity])]
         if kind == "before_first_layer":
@@ -173,7 +185,7 @@ def _graph_facts(specs, inventory):
             ancestry = {}
             for identity in order:
                 mask = 0
-                for parent in by_id[identity].dependencies:
+                for parent in serial_dependencies[identity]:
                     mask |= ancestry[parent] | bits.get(parent, 0)
                 ancestry[identity] = mask
             required_mask = (1 << len(bits))-1
@@ -283,6 +295,82 @@ class _ConcurrentImports:
             raise NativeLayerSamplingGuardError("native PD import is not in flight: "+", ".join(missing))
         self.states = [states[identity] for identity in request_ids]
         self.writes, self.submitted = [], 0
+        self.nand_bills = []
+        self._nand_bill_cursors = {
+            id(state): len(state.get("native_nand_bills", ())) for state in self.states}
+
+    def _collect_nand_bills(self, state):
+        bills = state.get("native_nand_bills", ())
+        cursor = self._nand_bill_cursors.get(id(state), 0)
+        if cursor < len(bills):
+            self.nand_bills.extend(bills[cursor:])
+            self._nand_bill_cursors[id(state)] = len(bills)
+
+    def mark_boundary(self):
+        """Exclude phases that completed before this sampled window began."""
+        self.nand_bills.clear()
+        self._nand_bill_cursors = {
+            id(state): len(state.get("native_nand_bills", ())) for state in self.states}
+
+    def nand_task_records(self):
+        """Expose callback-submitted NAND bills as sampler-local task rows."""
+        from types import SimpleNamespace
+        records = []
+        for index, row in enumerate(self.nand_bills):
+            bill = dict(row["bill"])
+            # The complete external bill is retained separately in the import
+            # ledger. Keep only explicit attention-scoped staging programs in
+            # the sampled storage ledger.
+            flushed = int(bill.get("page_staging_flush_programs", 0) or 0)
+            if flushed <= 0:
+                continue
+            bill["kind"] = row["kind"]
+            bill["operation"] = "write"
+            bill["pages_programmed"] = flushed
+            bill["program_operations"] = flushed
+            bill["page_staging_flush_programs"] = flushed
+            bill["physical_write_bytes"] = flushed * int(row["page_bytes"])
+            bill["physical_bytes"] = bill["physical_write_bytes"]
+            bill["logical_bytes"] = bill["physical_write_bytes"]
+            bill["logical_write_bytes"] = bill["physical_write_bytes"]
+            bill["physical_read_bytes"] = 0
+            bill["logical_read_bytes"] = 0
+            bill["pages_read"] = 0
+            bill["resource_busy_ns"] = {}
+            bill["resource_bytes"] = {}
+            resource_bytes = bill.get("resource_bytes", {})
+            demands = tuple(
+                SimpleNamespace(resource_id=str(resource_id),
+                                bytes_moved=int(resource_bytes.get(resource_id, 0)))
+                for resource_id in bill.get("resource_busy_ns", {})
+            )
+            records.append(SimpleNamespace(
+                task_id="native-external-nand-{:08d}".format(index),
+                metadata={"physical_execution_by_owner": {row["owner"]: bill}},
+                demands=demands,
+            ))
+        return tuple(records)
+
+    def nand_bill_summary(self):
+        totals = {key: 0 for key in (
+            "pages_programmed", "program_operations", "physical_write_bytes",
+            "page_staging_flush_programs")}
+        flush_totals = {key: 0 for key in totals}
+        components = {}
+        for row in self.nand_bills:
+            component = str(row["component"])
+            component_row = components.setdefault(component, {key: 0 for key in totals})
+            for key in totals:
+                value = int(row["bill"].get(key, 0) or 0)
+                totals[key] += value
+                component_row[key] += value
+            flushed = int(row["bill"].get("page_staging_flush_programs", 0) or 0)
+            flush_totals["pages_programmed"] += flushed
+            flush_totals["program_operations"] += flushed
+            flush_totals["page_staging_flush_programs"] += flushed
+            flush_totals["physical_write_bytes"] += flushed * int(row["page_bytes"])
+        return {"totals": totals, "idle_flush_totals": flush_totals,
+                "components": components, "bill_count": len(self.nand_bills)}
 
     def advance_until(self, time_ns):
         from ._resource_ledger import publish_owner_frontiers, publish_timeline_frontiers
@@ -298,6 +386,7 @@ class _ConcurrentImports:
             if mirror is not None:
                 mirror.invalidate(kernel)
             self.executor._advance_external_phase(state, state["phase_token"])
+            self._collect_nand_bills(state)
             if state["last_write"] is not None:
                 self.writes.append((*state["last_write"], state["request_id"]))
             self.submitted += 1
@@ -320,6 +409,7 @@ class _ConcurrentImports:
     def observation(self, start_ns, end_ns):
         inside = [row for row in self.writes if start_ns < row[0] <= end_ns]
         identities = [state["request_id"] for state in self.states]
+        bill_summary = self.nand_bill_summary()
         return {"request_ids": identities,
             "submitted_phases": self.submitted,
             "written_bytes_in_window": sum(row[1] for row in inside),
@@ -329,11 +419,14 @@ class _ConcurrentImports:
                                          for identity in identities},
             "write_phases_by_request": {identity: sum(row[2] == identity for row in inside)
                                         for identity in identities},
+            "nand_bill_count": len(self.nand_bills),
+            "nand_bill_totals": bill_summary["totals"],
+            "nand_bill_idle_flush_totals": bill_summary["idle_flush_totals"],
+            "nand_bill_components": bill_summary["components"],
             "final_reached": [state["request_id"] for state in self.states if state["final"]],
             "import_spans_ns": {state["request_id"]: (state["start_ns"], state["completion_ns"])
                                 for state in self.states if state["final"]},
             "scope": "real_in_flight_native_PD_continued_on_the_sample_copy; destination_commit_not_performed"}
-
 
 def remaining_import_bytes(state):
     """Logical bytes of a live import plan whose target write is not yet submitted."""
@@ -931,6 +1024,64 @@ class _TPRankMirror:
         return result
 
 
+def _allocator_peaks(kernel):
+    """Each physical owner's first-fit high-water mark reached in this window."""
+    return {owner: getattr(allocator, "peak_end_bytes", 0)
+            for owner, allocator in kernel.physical_runtime.allocators.items()}
+
+
+def _page_staging_snapshot(kernel):
+    """Capture NAND page-staging counters on the independent window copy."""
+    from .nand_core import NandCore
+    from .memory_mapping import map_nand_address
+    snapshot = {}
+    for owner, active in kernel.physical_runtime.runtimes.items():
+        core = active.core
+        if type(core) is not NandCore or core.config.page_staging == "none":
+            continue
+        pending = []
+        base_units = (core.config.channels * core.config.targets_per_channel
+                      * core.config.dies_per_target * core.config.luns_per_die)
+        bank_count = base_units * core.config.planes_per_lun
+        for scope, pages in core._tail_full_scopes.items():
+            for page in pages:
+                entry = core._tail_pages.get(page)
+                if entry is None:
+                    continue
+                mapping = core._array_id(map_nand_address(core.config, page * core.config.page_bytes))
+                pending.append({"scope": str(scope), "page": int(page),
+                                "ready_ns": float(entry[2]),
+                                "array_id": mapping, "bank": int(page) % bank_count})
+        snapshot[owner] = {"state": core.page_staging_state(),
+                           "pending": tuple(sorted(pending, key=lambda row: row["page"]))}
+    return snapshot
+
+
+def _page_staging_window_delta(before, kernel):
+    """Return per-window deltas plus the true end-of-window pending pages."""
+    after = _page_staging_snapshot(kernel)
+    rows = []
+    for owner in sorted(set(before) | set(after)):
+        left = before.get(owner, {"state": {}, "pending": ()})["state"]
+        right = after.get(owner, {"state": {}, "pending": ()})["state"]
+        def delta(name):
+            return int(right.get(name, 0)) - int(left.get(name, 0))
+        valid = right.get("valid_bytes", ())
+        rows.append({
+            "owner": owner,
+            "full_page_fills": delta("full_page_fills"),
+            "started_programs": delta("started_programs"),
+            "deferred_pages": int(right.get("deferred_pages", 0)),
+            "discarded_pages": delta("discarded_pages"),
+            "pending_pages": int(right.get("deferred_pages", 0)),
+            "pending_bytes": int(sum(valid) + right.get("shared_bytes", 0)),
+            "peak_bytes": int(max(right.get("peak_bytes", (0,)), default=0)),
+            "capacity_bytes": int(right.get("capacity_bytes", 0)),
+            "pending": after.get(owner, {"pending": ()})["pending"],
+        })
+    return tuple(rows)
+
+
 def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, sample_id,
                     concurrent_imports=None, row_terms=None, tp_symmetry=None):
     """Run the selected tasks on an independent copy of ``source``.
@@ -960,6 +1111,7 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
         imports = _ConcurrentImports(kernel, executor, concurrent_imports[1])
         # Reach the window boundary with every earlier PD phase submitted.
         imports.advance_until(origin_ns)
+        imports.mark_boundary()
     clone_wall = time.perf_counter()-started
     selected = []
     omitted = set()
@@ -994,11 +1146,13 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
                                    allow_ep_groups=mode in ("quiet", "all"))
             if mirror.pairs:
                 kernel._native_tp_mirror = mirror
+    page_staging_before = _page_staging_snapshot(kernel)
     # The source is read only throughout independent window execution.
     metrics = LiveCohortMetrics(resource_owners=kernel.resource_owners, origin_ns=origin_ns)
     first, last, count, physical = None, origin_ns, 0, 0
     layer_ends = {}
     layer_starts = {}
+    scheduler_read_wait_ns_by_layer = {}
     stage_ends = {}
     stage_starts = {}
     pipeline_transfer_ends = {}
@@ -1018,7 +1172,7 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
         first = event.start_ns if first is None else min(first, event.start_ns)
         last = max(last, event.end_ns)
         layer_id = event.task.metadata.get("layer_id")
-        if layer_id is not None:
+        if layer_id is not None and not event.task.metadata.get("native_background"):
             layer_starts[layer_id] = min(layer_starts.get(layer_id, event.start_ns), event.start_ns)
             layer_ends[layer_id] = max(layer_ends.get(layer_id, event.end_ns), event.end_ns)
         stage_id = event.task.metadata.get("execution_stage_id")
@@ -1026,6 +1180,21 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
             stage_starts[stage_id] = min(stage_starts.get(stage_id, event.start_ns), event.start_ns)
             stage_ends[stage_id] = max(stage_ends.get(stage_id, event.end_ns), event.end_ns)
         md = event.task.metadata
+        by_owner = md.get("physical_execution_by_owner", {})
+        if isinstance(by_owner, Mapping):
+            layer_key = str(layer_id) if layer_id is not None else "<unscoped>"
+            for raw in by_owner.values():
+                if not isinstance(raw, Mapping) or str(raw.get("operation", "")).lower() != "read":
+                    continue
+                # NAND native kernels publish the actual array-plane queue
+                # wait separately from host admission queue_wait_ns.  Keep
+                # this metric tied to media reads; do not substitute a host
+                # credit wait when the media field is absent.
+                wait = raw.get("media_queue_wait_ns", 0.0)
+                if not isinstance(wait, (int, float)):
+                    wait = 0.0
+                scheduler_read_wait_ns_by_layer[layer_key] = max(
+                    scheduler_read_wait_ns_by_layer.get(layer_key, 0.0), float(wait or 0.0))
         if (md.get("event_kind") == "pipeline_activation"
                 and type(md.get("source_stage")) is int
                 and type(md.get("target_stage")) is int
@@ -1058,9 +1227,22 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
     kernel._drain_prevalidated_compiled(selected, layout, event_observer=observe,
         index_physical_allocations=True, owned_physical_frontiers=True,
         before_step=None if imports is None else imports.before_step)
+    if mirror is not None:
+        # A mirrored native transition updates the follower's timeline and
+        # defers its controller copy until the next real writer.  Publish the
+        # final pending copies before taking window observations so auxiliary
+        # state such as staged NAND pages remains symmetric too.
+        mirror.materialize(kernel)
     physical_wall = time.perf_counter()-physical_started
     metadata_started = time.perf_counter()
     metadata = metrics.metadata()
+    if imports is not None:
+        external_records = imports.nand_task_records()
+        if external_records:
+            from .planner import _summarize_nand_task_traffic
+            metadata["storage_traffic"] = _summarize_nand_task_traffic(
+                (*metrics.summary().execution_records, *external_records),
+                resource_owners=kernel.resource_owners)
     metadata_wall = time.perf_counter()-metadata_started
     terminal = wanted - {parent for task in selected for parent in task.dependencies}
     row_state = None if facts is None else first_access_ns(
@@ -1086,8 +1268,12 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
         "physical_task_count": physical,
         "visible_output_tokens": 0, "full_cohort_committed": False,
         "sample_state": "independent_native_kernel_copy_not_full_cohort_prefix",
-        "physical_observations": {key: metadata.get(key) for key in (
+        "physical_observations": {**{key: metadata.get(key) for key in (
             "storage_traffic", "dram_traffic", "sram_traffic", "resource_busy_ns", "category_time_ns")},
+             "allocator_peak_end_bytes": _allocator_peaks(kernel),
+              "page_staging": _page_staging_window_delta(page_staging_before, kernel),
+              "scheduler_read_wait_ns_by_layer": scheduler_read_wait_ns_by_layer,
+              "external_import_nand_billing": None if imports is None else imports.nand_bill_summary()},
         "input_boundary": {"qualified": True,
                            "qualification_scope": "native_logical_inputs_of_complete_selected_subgraph; controller_phase_bounded_separately",
                            "initial_carry_upper_ns": carry,
@@ -1183,5 +1369,6 @@ def _execute_transition_window(source, all_specs, tail_ids, head_ids, *, origin_
             "first_access_ns": row_state, "task_count": total, "wall_seconds": time.perf_counter() - started,
             "visible_output_tokens": 0, "full_cohort_committed": False,
             "sample_state": "independent_native_kernel_copy_two_phase_chunk_transition",
-            "physical_observations": {key: metadata.get(key) for key in (
-                "storage_traffic", "dram_traffic", "sram_traffic", "resource_busy_ns", "category_time_ns")}}
+            "physical_observations": {**{key: metadata.get(key) for key in (
+                "storage_traffic", "dram_traffic", "sram_traffic", "resource_busy_ns", "category_time_ns")},
+                "allocator_peak_end_bytes": _allocator_peaks(kernel)}}

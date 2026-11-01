@@ -304,6 +304,8 @@ def _io_memory(io, execution: _IOExecutionState, owner, config, operation, addre
         result = active.core.submit(request)
     active.clock_ns = max(active.clock_ns, result.completion_ns)
     execution.records.append((operation, owner, config, result))
+    if getattr(active.core.config, "protocol_mode", None) == "ocp_hbf_0_7":
+        active.core._last_media_queue_wait_ns = 0.0
     return result.completion_ns
 
 def _io_flush_before_media(io, execution: _IOExecutionState, core, operation, link_resources=(), *, request=None):
@@ -406,6 +408,11 @@ def _io_flash_pages(io, execution: _IOExecutionState, operation, addresses, arri
     completions, media, links = result
     active.clock_ns = max(active.clock_ns, media.completion_ns)
     execution.records.append((operation, execution.owner, execution.state["config"], media))
+    # The page batch's bill carries the diagnostic wait value.  The core field
+    # is scratch state for direct NAND calls; HBF staging snapshots keep it
+    # clear so compiled and scalar staging paths remain identical.
+    if getattr(active.core.config, "protocol_mode", None) == "ocp_hbf_0_7":
+        active.core._last_media_queue_wait_ns = 0.0
     for owner, link in links:
         # Like scalar _io_transfer in aggregate mode, the stream retains
         # only the final reservation per resource, not its interval history.
