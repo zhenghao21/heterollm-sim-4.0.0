@@ -514,6 +514,11 @@ def test_unknown_and_host_memory_errors_are_not_device_capacity_rejections():
     assert not run.capacity_error(ValueError("GDDR allocation 486127488 exceeds physical capacity 320000000"))
 
 
+def test_prefill_tp_steps_past_a_kv_block_larger_than_the_cache_the_weights_leave():
+    # 405B at TP1: what the weights leave of HBM4 holds no 256-token block.
+    assert run.prefill_tp("llama3_405b", "LONG", 1, 1, 1) == 4
+
+
 def test_real_physical_allocation_capacity_error_rejects_candidate_and_reduces_search_batch(tmp_path):
     from heterollm_sim.planner import ScenarioValidationError, _gddr_stable_address
 

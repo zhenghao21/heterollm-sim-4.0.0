@@ -667,7 +667,7 @@ def traffic_result(result):
 
 
 CAPACITY_MARKERS = ("exceeds available capacity", "exceeds physical capacity", "exceeds effective capacity",
-    "insufficient capacity", "超过有效容量", "超出可用容量", "内存容量不足")
+    "insufficient capacity", "exceeding cache capacity", "超过有效容量", "超出可用容量", "内存容量不足")
 
 
 def _capacity_diagnostic(row):
