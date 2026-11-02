@@ -74,12 +74,12 @@ def test_prefill_gets_one_separate_manager_timed_budget(tmp_path, monkeypatch):
     progress(tmp_path, value, phase="decode", started=1999.)
     assert run._poll_candidate(tmp_path, identity(value), value, "fast") is None
     progress(tmp_path, value, started=1999., phase_started=1999.)
-    clock[0] = 200. + 3000. + .001
+    clock[0] = 200. + run.PREFILL_WALL_BUDGET_SECONDS + .001
     assert run._poll_candidate(tmp_path, identity(value), value, "fast") == 137
     assert value["watchdog_phase_started"] == 200.
     row = run.read_candidate(tmp_path, identity(value))
     assert row["process_watchdog"]["phase"] == "prefill"
-    assert row["prefill_wall_seconds"] == pytest.approx(3000.001)
+    assert row["prefill_wall_seconds"] == pytest.approx(run.PREFILL_WALL_BUDGET_SECONDS + .001)
 
 
 @pytest.mark.parametrize("started", [99., 1000., None])
@@ -114,9 +114,9 @@ def test_delayed_poll_after_decode_deadline_accepts_timely_prefill_without_extra
     assert run._poll_candidate(tmp_path, identity(value), value, "fast") is None
     assert not value["process"].killed
     assert value["watchdog_phase"] == "prefill" and value["watchdog_phase_started"] == 200.
-    clock[0] = 3200.001
+    clock[0] = 200. + run.PREFILL_WALL_BUDGET_SECONDS + .001
     assert run._poll_candidate(tmp_path, identity(value), value, "fast") == 137
-    assert value["process_watchdog"]["phase_wall_seconds"] == pytest.approx(3000.001)
+    assert value["process_watchdog"]["phase_wall_seconds"] == pytest.approx(run.PREFILL_WALL_BUDGET_SECONDS + .001)
 
 
 def test_watchdog_uses_the_jobs_actual_candidate_budget(tmp_path, monkeypatch):

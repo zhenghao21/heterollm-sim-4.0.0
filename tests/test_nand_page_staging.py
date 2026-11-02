@@ -4,7 +4,6 @@ import random
 
 import pytest
 
-from heterollm_sim.memory_allocator import AllocationError
 from heterollm_sim.memory_transfer import ResourceTimeline
 from heterollm_sim.memory_types import AccessRequest, NandConfig, Operation, SramConfig
 from heterollm_sim.nand_core import NandCore
@@ -129,18 +128,69 @@ def test_a_write_with_full_pages_programs_them_directly_and_stages_its_tail():
     assert nand.page_staging_state()["staged_pages"] == 1
 
 
-def test_staging_capacity_counts_valid_bytes_and_the_shared_store():
-    nand = core(capacity=2 * PAGE)
+@pytest.mark.parametrize("numeric", [False, True])
+def test_a_tail_that_does_not_fit_spills_to_the_array_with_a_read_modify_write(numeric):
+    nand = core(numeric=numeric, capacity=2 * PAGE)
     write(nand, "a", 0 * PAGE, 3000, 0.)       # channel 0
     write(nand, "b", 4 * PAGE, 3000, 0.)       # page 4: channel 4 -> host 0
     assert nand.page_staging_state()["valid_bytes"][0] == 6000
-    with pytest.raises(AllocationError, match="unable to allocate 9000 bytes in capacity 8192"):
-        write(nand, "c", 8 * PAGE, 3000, 0.)   # page 8: host 0 again
-    shared = core(capacity=2 * PAGE)
-    shared._tail_shared = 3000  # interleaved activations' share per channel
-    write(shared, "a", 0, 3000, 0.)
-    with pytest.raises(AllocationError, match=r"6000 staged \+ 3000 shared"):
-        write(shared, "b", 4 * PAGE, 3000, 0.)
+    spilled = write(nand, "c", 8 * PAGE, 3000, 0.)   # page 8: host 0 again, 9000 > 8192
+    assert spilled.pages_programmed == 1 and spilled.counters["staging_write_pages"] == 0
+    state = nand.page_staging_state()
+    assert (state["valid_bytes"][0], state["staged_pages"], state["spilled_pages"]) == (6000, 2, 1)
+    # Its later rows stay on the array page and read-modify-write it.
+    more = write(nand, "c2", 8 * PAGE + 3000, 500, 200000.)
+    assert more.pages_programmed == 1 and more.physical_read_bytes == PAGE
+    back = read(nand, "back", 8 * PAGE, 3500, 900000.)
+    assert (back.staging_read_hits, back.pages_read) == (0, 1)
+    # A released allocation's pages may be staged again.
+    nand.discard_tail_pages(8 * PAGE, PAGE)
+    nand.discard_tail_pages(0, PAGE)
+    again = write(nand, "d", 8 * PAGE, 3000, 1000000.)
+    assert again.pages_programmed == 0 and nand.page_staging_state()["staged_pages"] == 2
+
+
+@pytest.mark.parametrize("numeric", [False, True])
+def test_a_staged_tail_that_outgrows_the_store_is_programmed_and_continues_on_the_array(numeric):
+    nand = core(numeric=numeric, capacity=2 * PAGE)
+    nand._tail_shared = 3000  # interleaved activations' share per channel
+    write(nand, "a", 0, 3000, 0.)
+    write(nand, "b", 4 * PAGE, 3000, 0.)       # 6000 staged + 3000 shared: spills
+    assert nand.page_staging_state()["staged_pages"] == 1
+    write(nand, "a2", 3000, 500, 10.)          # 3500 + 3000 still fits
+    nand._tail_shared = 5000                   # the activations grew
+    grown = write(nand, "a3", 3500, 100, 20.)
+    state = nand.page_staging_state()
+    assert (state["evicted_pages"], state["spilled_pages"]) == (1, 2)
+    assert grown.pages_programmed >= 1
+    # The evicted copy's program runs; the page is read from the array.
+    late = read(nand, "late", 0, 3600, 900000.)
+    assert (late.staging_read_hits, late.pages_read) == (0, 1)
+
+
+def test_a_sampled_run_keeps_the_steps_stored_share_of_new_tail_pages():
+    nand = core()
+    nand._tail_fraction = .25
+    for page in range(400):
+        write(nand, f"row{page}", page * PAGE + 2048, 512, 0.)
+    state = nand.page_staging_state()
+    assert 70 <= state["staged_pages"] <= 130 and state["staged_pages"] + state["spilled_pages"] == 400
+    # A kept page keeps growing in the store; a spilled one stays on the array.
+    kept = min(nand._tail_pages)
+    grown = write(nand, "grow", kept * PAGE + 2560, 512, 10.)
+    assert grown.counters["staging_write_pages"] == 1 and nand._tail_pages[kept][1] == 3072
+    spilled = min(nand._tail_spilled)
+    assert write(nand, "rmw", spilled * PAGE + 2560, 512, 10.).physical_read_bytes == PAGE
+
+
+def test_spilled_pages_roll_back_with_a_transaction():
+    nand = core(capacity=PAGE)
+    write(nand, "a", 0, 3000, 0.)
+    token = nand.begin_transaction()
+    write(nand, "b", 4 * PAGE, 3000, 10.)      # spills
+    assert nand._tail_spilled == {4}
+    nand.rollback_transaction(token)
+    assert nand._tail_spilled == set() and nand.page_staging_state()["spilled_pages"] == 0
 
 
 def test_discard_and_rollback_restore_the_staged_pages():

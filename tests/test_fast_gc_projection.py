@@ -646,7 +646,7 @@ def test_formal_1_5b_host_state_service_is_qualified_after_bootstrap_without_req
     runner = NS(lowerer=TopologyAwareBatchCostProvider(scenario, defer_physical_execution=True),
         plan=NS(scenario=scenario), _execution_resource_kernel=bootstrap.kernel,
         _state_values=(NS(cached_tokens=262172, spec=scenario.workload.requests[0]),))
-    rows = [{"buffer_id": f"kv:scan-request:{layer.layer_id}:rank0:tp0:pp0:{part}",
+    rows = [{"buffer_id": f"kv:pool:{layer.layer_id}:rank0:tp0:pp0:{part}",
              "physical_owner": "hbf0.memory", "component_id": "hbf0", "bytes_per_token": 512}
             for layer in _execution_layers(scenario) for part in ("k", "v")]
     geometry = _fixed_decode_write_geometry(runner, rows, 263167)

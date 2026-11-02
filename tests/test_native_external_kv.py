@@ -171,7 +171,7 @@ def test_inventory_matches_native_full_graph_declarations_without_compiling_oper
     expected, contracts = {}, []
     for task in schedule.tasks:
         for row in task.metadata.get("physical_allocations", ()):
-            if str(row["buffer_id"]).startswith("kv:" + request.request_id + ":"):
+            if str(row["buffer_id"]).startswith(("kv:pool:", "kv:" + request.request_id + ":")):
                 owner = row.get("physical_owner") or task.metadata["physical_owner"]
                 expected[(owner,row["buffer_id"],row.get("generation",0))] = {**row,"physical_owner":owner}
         contract = task.metadata.get("generic_kv_storage")
@@ -210,7 +210,11 @@ def test_external_compact_phase_ledger_keeps_real_totals_and_commit_is_idempoten
             topology=runtime._external_executor.topology,namespace="comparison",
             retain_phase_details=retain)
         runtime._external_executor = executor
-        destinations = runtime._external_destination_ranges(runtime.states["r0"])
+        state = runtime.states["r0"]
+        # The import's history blocks come from the ledger, as when serving starts it.
+        runtime._assign_ep_group(state, 0)
+        assert runtime.ledger.resize(state, runtime._external_kv_pages(state))
+        destinations = runtime._external_destination_ranges(state)
         plan = executor.prepare_external_import(source_component="hostmem0",destinations=destinations,
             buffer_bytes=512,chunk_bytes=256,request_id="r0",arrival_ns=runtime.now)
         while plan.advance is not None:

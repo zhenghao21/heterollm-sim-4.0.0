@@ -10,11 +10,13 @@ from __future__ import annotations
 
 from .kernel_memory import bind_l2_invocation
 
-from collections import Counter, OrderedDict
+from array import array
+from collections import Counter, OrderedDict, deque
 from collections.abc import Mapping as _ABCMapping, Sequence as _ABCSequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 import bisect
+import hashlib
 import heapq
 import math
 import copy
@@ -1780,9 +1782,9 @@ class KVCacheMetrics:
     context_shift_count: int = 0
     capacity_failure_count: int = 0
     capacity_failure_reason: Optional[str] = None
-    requested_allocation_policy: str = "lazy"
-    effective_allocation_policy: str = "lazy"
-    allocation_policy_reason: Optional[str] = None
+    # Blocks in each KV group's per-rank, per-layer pools of one EP group;
+    # empty without physical block-paged KV.
+    physical_block_pool_blocks: Mapping[str, int] = field(default_factory=dict)
     # With EP attention data parallelism the page fields above are per group:
     # ``peak_used_pages`` is the busiest group's peak, comparable with the
     # per-group ``capacity_pages``.
@@ -3286,6 +3288,183 @@ def _kv_policy_component_usage(policy: KVCachePolicy, pages: int, group: int = 0
     return result
 
 
+# Stationary refill cycles the FIFO free lists run through before a stationary
+# workload's seeds take their blocks; they are fully mixed long before this.
+KV_BLOCK_SETTLE_CYCLES = 512
+
+
+def _settled_free_list(free, ages, prompt, output, pool, tokens_per_block, limit):
+    """A free list reordered as a long stationary refill run leaves it, or None if it runs out.
+
+    Every slot cycles through ages 0..output-1 in step: before age a's step it
+    holds prompt + a - 1 rows. A finished slot appends its blocks in logical
+    order, the oldest prepared import lands in it, and a new import takes its
+    history. The result lists the seeds' tables (in ``ages`` order), the
+    prepared imports' tables, then the blocks left, so taking them from the
+    head in that order reproduces the state after ``KV_BLOCK_SETTLE_CYCLES``.
+    """
+    def blocks(tokens):
+        count = -(-tokens // tokens_per_block)
+        return count if limit is None else min(count, limit)
+
+    free = list(free)
+    history = blocks(prompt - 1)
+    need = [blocks(prompt + age) - blocks(prompt + age - 1) for age in range(output)]
+    growing = [age for age in range(output - 1, -1, -1) if need[age]]
+    wanted = sum(blocks(prompt + age % output - 1) for age in ages) + pool * history
+    if wanted > len(free):
+        return None
+    head = 0
+    tables, by_phase = [], [[] for _ in range(output)]
+    for age in ages:
+        count = blocks(prompt + age % output - 1)
+        tables.append(free[head:head + count])
+        head += count
+        by_phase[age % output].append(len(tables) - 1)
+    prepared = deque()
+    for _ in range(pool):
+        prepared.append(free[head:head + history])
+        head += history
+    for step in range(KV_BLOCK_SETTLE_CYCLES * output):
+        for age in growing:
+            count = need[age]
+            for slot in by_phase[(age - step) % output]:
+                if head + count > len(free):
+                    return None
+                tables[slot].extend(free[head:head + count])
+                head += count
+        finished = by_phase[(output - 1 - step) % output]
+        for slot in finished:
+            free.extend(tables[slot])
+            if head + history > len(free):
+                return None
+            if pool:
+                tables[slot] = prepared.popleft()
+                prepared.append(free[head:head + history])
+            else:
+                tables[slot] = free[head:head + history]
+            head += history
+        if head > 65536:
+            del free[:head]
+            head = 0
+    settled = [block for table in tables for block in table]
+    for table in prepared:
+        settled.extend(table)
+    settled.extend(free[head:])
+    return settled
+
+
+def stationary_refill_contract(runtime):
+    """(ages by EP group, prompt, output, group's import pool) of a stationary
+    seed workload on block-paged KV, else None.
+
+    Seeds keep their staggered ages in their EP groups (seed k in group
+    k % ep); fresh requests share one prompt and output length.
+    """
+    ingress = runtime._external_ingress
+    if runtime._kv_block_layout is None or not (ingress or {}).get("preload_warmup_seed_kv", False):
+        return None
+    seeds = [state for state in runtime._state_values if state.spec.metadata.get("warmup_seed", False)]
+    fresh = {(state.spec.prompt_tokens, state.spec.output_tokens) for state in runtime._state_values
+             if not state.spec.metadata.get("warmup_seed", False)}
+    if len(fresh) != 1 or not seeds:
+        return None
+    (prompt, output), = fresh
+    degree = runtime._ep_degree
+    ages_by_group = [[] for _ in range(degree)]
+    for index, state in enumerate(seeds):
+        ages_by_group[index % degree].append(output - state.spec.output_tokens)
+    return ages_by_group, prompt, output, ingress.get("max_inflight_requests", 2) // degree
+
+
+class _KVBlockTables:
+    """Physical KV block ids of every request, vLLM style.
+
+    A block holds ``tokens_per_page`` tokens of one request in every KV layer
+    of its EP group: the id indexes each (rank, layer, K/V) pool of the group.
+    Each (EP group, KV group) has one FIFO free list, initially in ascending
+    id order; a release appends the freed blocks in their logical order and an
+    allocation takes from the head. The ``chunk`` KV group serves the layers
+    with chunked attention as a ring of at most ``ring`` blocks per request.
+    """
+
+    __slots__ = ("counts", "ring", "free", "head", "tables")
+
+    def __init__(self, groups: int, counts: Mapping[str, int], ring: int = 0) -> None:
+        self.counts = dict(counts)
+        self.ring = int(ring)
+        self.free = {(group, kind): array("q", range(count))
+                     for group in range(groups) for kind, count in self.counts.items()}
+        self.head = dict.fromkeys(self.free, 0)
+        self.tables: Dict[str, Dict[str, array]] = {}
+
+    def __deepcopy__(self, memo):
+        result = type(self).__new__(type(self))
+        memo[id(self)] = result
+        result.counts, result.ring = dict(self.counts), self.ring
+        result.free = {key: value[:] for key, value in self.free.items()}
+        result.head = dict(self.head)
+        result.tables = {request: {kind: blocks[:] for kind, blocks in table.items()}
+                         for request, table in self.tables.items()}
+        return result
+
+    def settle(self, ages_by_group, prompt: int, output: int, group_pool: int, tokens_per_block: int) -> None:
+        """Start every free list in the order a stationary refill run reaches."""
+        for (group, kind), free in self.free.items():
+            settled = _settled_free_list(free[self.head[group, kind]:], ages_by_group[group], prompt, output,
+                                         group_pool, tokens_per_block, self.ring if kind == "chunk" else None)
+            # A pool the cycle overflows is rejected at the seeds' admission.
+            if settled is not None:
+                self.free[group, kind] = array("q", settled)
+                self.head[group, kind] = 0
+
+    def blocks_for_pages(self, kind: str, pages: int) -> int:
+        return min(pages, self.ring) if kind == "chunk" else pages
+
+    def can_resize(self, group: int, request_id: str, pages: int) -> bool:
+        table = self.tables.get(request_id, {})
+        return all(self.blocks_for_pages(kind, pages) - len(table.get(kind, ()))
+                   <= len(self.free[group, kind]) - self.head[group, kind] for kind in self.counts)
+
+    def resize(self, group: int, request_id: str, pages: int, previous: int):
+        """Grow from the free lists' heads or free to their tails.
+
+        Returns, per KV group that freed blocks, the freed block that held
+        the request's newest row (``previous`` pages): its staged tail page
+        is dead data now.
+        """
+        table = self.tables.get(request_id)
+        if table is None:
+            if pages <= 0:
+                return {}
+            table = self.tables[request_id] = {kind: array("q") for kind in self.counts}
+        freed = {}
+        for kind, blocks in table.items():
+            key, target = (group, kind), self.blocks_for_pages(kind, pages)
+            if target > len(blocks):
+                free, head = self.free[key], self.head[key]
+                end = head + target - len(blocks)
+                if end > len(free):
+                    raise RuntimeError("KV block free list is exhausted")
+                blocks.extend(free[head:end])
+                if end > 65536 and 2 * end > len(free):
+                    del free[:end]
+                    end = 0
+                self.head[key] = end
+            elif target < len(blocks):
+                newest = (previous - 1) % len(blocks) if previous > 0 else -1
+                if newest >= target:
+                    freed[kind] = blocks[newest]
+                self.free[key].extend(blocks[target:])
+                del blocks[target:]
+        if pages <= 0:
+            del self.tables[request_id]
+        return freed
+
+    def table(self, request_id: str) -> Mapping[str, Tuple[int, ...]]:
+        return {kind: tuple(blocks) for kind, blocks in self.tables.get(request_id, {}).items()}
+
+
 class _KVLedger:
     def __init__(
         self, policy: KVCachePolicy, physical: _PhysicalCapacityLedger
@@ -3305,6 +3484,11 @@ class _KVLedger:
         self.offload_used_bytes = 0
         self.offload_peak_bytes = 0
         self.paged_pool: Optional[DynamicKVPool] = None
+        # Physical block-paged KV (``enable_blocks``): block ids per request.
+        # ``release_hook(request_id, group, freed)`` discards the dead staged
+        # tail of each freed newest-row block; snapshots leave it out.
+        self.blocks: Optional[_KVBlockTables] = None
+        self.release_hook = None
         # EP attention data parallelism: a request charges only its own EP
         # group's components and page budget, so page counters are kept per
         # group.  One group is just ``used_pages``/``peak_pages``.  Without
@@ -3341,6 +3525,26 @@ class _KVLedger:
             self.group_used_pages[group] = used
             if used > self.group_peak_pages[group]:
                 self.group_peak_pages[group] = used
+
+    def enable_blocks(self, counts: Mapping[str, int], ring: int = 0) -> None:
+        """Back every KV page with a physical block of the EP group's pools."""
+        self.blocks = _KVBlockTables(self.groups, counts, ring)
+
+    def _resize_blocks(self, request: _MutableRequest, pages: int, previous: int) -> None:
+        if self.blocks is None or (self.groups > 1 and request.ep_group is None):
+            return
+        group = self._group_of(request)
+        freed = self.blocks.resize(group, request.spec.request_id, pages, previous)
+        if freed and self.release_hook is not None:
+            self.release_hook(request.spec.request_id, group, freed)
+
+    def _blocks_fit(self, request: _MutableRequest, pages: int) -> bool:
+        if self.blocks is None or (self.groups > 1 and request.ep_group is None):
+            return True
+        return self.blocks.can_resize(self._group_of(request), request.spec.request_id, pages)
+
+    def block_table(self, request_id: str) -> Mapping[str, Tuple[int, ...]]:
+        return {} if self.blocks is None else self.blocks.table(request_id)
 
     @property
     def max_group_used_pages(self) -> int:
@@ -3397,7 +3601,7 @@ class _KVLedger:
             "ledger": copy.deepcopy({
                 key: value
                 for key, value in self.__dict__.items()
-                if key not in {"policy", "physical", "paged_pool"}
+                if key not in {"policy", "physical", "paged_pool", "release_hook"}
             }),
             "physical": copy.deepcopy(self.physical.__dict__),
             "pool": pool_state,
@@ -3478,6 +3682,7 @@ class _KVLedger:
             return True
         return (
             self._group_used(request) + pages - request.kv_pages <= self.policy.capacity_pages
+            and self._blocks_fit(request, pages + request.temporary_kv_pages)
             and self.physical.can_adjust_many(self._request_deltas(request, pages))
         )
 
@@ -3521,6 +3726,8 @@ class _KVLedger:
         delta = pages - request.kv_pages
         if not self.physical.adjust_many(self._request_deltas(request, pages)):
             return False
+        self._resize_blocks(request, pages + request.temporary_kv_pages,
+                            request.kv_pages + request.temporary_kv_pages)
         self.used_pages += delta
         self.persistent_used_pages += delta
         self._track_group_pages(request, delta)
@@ -3574,11 +3781,13 @@ class _KVLedger:
         group = self._group_of(request)
         if (
             self._group_used(request) + temporary_pages > self.policy.capacity_pages
+            or not self._blocks_fit(request, target_total_pages)
             or not self.physical.can_adjust_many(self._active_deltas(delta_bytes, group))
         ):
             return False
         if not self.physical.adjust_many(self._active_deltas(delta_bytes, group)):
             return False
+        self._resize_blocks(request, target_total_pages, request.kv_pages)
         request.temporary_kv_pages = temporary_pages
         self.used_pages += temporary_pages
         self._track_group_pages(request, temporary_pages)
@@ -3611,6 +3820,7 @@ class _KVLedger:
             self.temporary_releases += 1
             return
         self.physical.adjust_many(self._active_deltas(-byte_count, self._group_of(request)))
+        self._resize_blocks(request, request.kv_pages, request.kv_pages + temporary_pages)
         self.used_pages -= temporary_pages
         self._track_group_pages(request, -temporary_pages)
         self.temporary_used_pages -= temporary_pages
@@ -3670,6 +3880,7 @@ class _KVLedger:
             byte_count,
         ):
             return False
+        self._resize_blocks(request, 0, pages)
         self.used_pages -= pages
         self.persistent_used_pages -= pages
         if self.used_pages < 0 or self.persistent_used_pages < 0:
@@ -3866,6 +4077,8 @@ class _KVLedger:
             return False
         if self.offload_used_bytes < byte_count:
             return False
+        if not self._blocks_fit(request, target):
+            return False
         if self.paged_pool is not None:
             target_component = self.policy.cache_component
             if not target_component:
@@ -3952,6 +4165,7 @@ class _KVLedger:
             extra_pages * self.policy.bytes_per_page,
         ):
             return False
+        self._resize_blocks(request, target, resident_pages)
         self.used_pages += target
         self.persistent_used_pages += target
         self.peak_pages = max(self.peak_pages, self.used_pages)
@@ -5771,30 +5985,21 @@ class _OnlineRuntime:
             raise TypeError("execution_kernel must be a UnifiedEventKernel")
         if execution_kernel is not None and execution_kernel.has_active_tasks:
             raise ValueError("execution_kernel must be drained before serving append")
-        self._requested_kv_allocation_policy = plan.kv_policy.allocation_policy
-        self._kv_allocation_policy_reason = None
         cache_components = set(plan.kv_policy.component_bytes_per_page)
         if plan.kv_policy.cache_component:
             cache_components.add(plan.kv_policy.cache_component)
-        physical_contiguous_kv = (
-            isinstance(lowerer, TopologyAwareBatchCostProvider)
-            and plan.scenario.llama_cpp_config is None
-            and not plan.scenario.workload.metadata.get("llama_cpp_runtime")
-            and plan.kv_policy.layout_mode == "legacy_single"
-            and plan.kv_policy.bytes_per_page > 0
-            and any(
-                (component := plan.scenario.hardware.get_component(component_id))
-                .metadata.get("physical_memory_config") is not None
-                for component_id in cache_components
-            )
-        )
-        if physical_contiguous_kv and plan.kv_policy.allocation_policy == "lazy":
-            # Generic physical KV uses a stable contiguous request buffer.
-            # It cannot grow/relocate between token steps. Match admission to
-            # that real allocation instead of over-admitting prompt-only pages
-            # and later surfacing a raw AllocationError in physical dispatch.
-            plan = replace(plan, kv_policy=replace(plan.kv_policy, allocation_policy="eager"))
-            self._kv_allocation_policy_reason = "physical_contiguous_request_buffer_requires_full_live_token_reservation"
+        # Physical KV lives in per-rank, per-layer block pools; every KV page
+        # of the ledger is one block of its request's table.
+        self._kv_block_layout = None
+        if (isinstance(lowerer, TopologyAwareBatchCostProvider)
+                and plan.scenario.llama_cpp_config is None
+                and not plan.scenario.workload.metadata.get("llama_cpp_runtime")
+                and plan.kv_policy.layout_mode == "legacy_single"
+                and plan.kv_policy.bytes_per_page > 0
+                and any(plan.scenario.hardware.get_component(component_id)
+                        .metadata.get("physical_memory_config") is not None
+                        for component_id in cache_components)):
+            plan, self._kv_block_layout = _with_kv_block_pools(plan)
         self.plan = plan
         self._llama_engine_boundary_enabled = (
             bool(plan.scenario.workload.metadata.get("llama_cpp_runtime"))
@@ -5878,6 +6083,8 @@ class _OnlineRuntime:
         self.physical_ledger = _PhysicalCapacityLedger(physical_limits)
         self.ledger = _KVLedger(plan.kv_policy, self.physical_ledger)
         self.ledger.configure_paged_pool(plan.scenario)
+        if self._kv_block_layout is not None:
+            self.ledger.enable_blocks(self._kv_block_layout["pool_blocks"], self._kv_block_layout["ring"])
         self._paged_pool_event_cursor = 0
         self.state_ledger = _LinearStateLedger(
             plan.linear_state_policy, self.physical_ledger
@@ -6045,6 +6252,9 @@ class _OnlineRuntime:
             execution_kernel.ensure_resource_capacities(resource_capacities)
             self._execution_resource_kernel = execution_kernel
         self._paged_pool_transfer_executor = None
+        self._kv_pool_rows_by_group: Dict[int, Tuple[Tuple[str, str, int, str], ...]] = {}
+        if self._kv_block_layout is not None:
+            self.ledger.release_hook = self._discard_kv_block_tails
         paged_pool = self.ledger.paged_pool
         if paged_pool is not None:
             from .communication import TopologyRouter
@@ -6157,6 +6367,9 @@ class _OnlineRuntime:
         self._external_preloaded_requests = 0
         self._external_preloaded_bytes = 0
         self._external_buffer_peak_bytes = 0
+        contract = stationary_refill_contract(self)
+        if contract is not None:
+            self.ledger.blocks.settle(*contract, self._kv_block_layout["tokens_per_block"])
         self._decode_window = {}
         if self._external_ingress is None:
             return
@@ -6206,11 +6419,45 @@ class _OnlineRuntime:
             "measured_decode_cohorts": 0, "start_ns": None, "end_ns": None, "complete": False,
             "scope": "same native runtime; fixed Decode-cohort window including paid admission gaps; no final queue drain"}
 
+    def _physical_kv_blocks(self, request_ids):
+        """The block layout and these requests' tables, as the planner addresses them."""
+        layout = self._kv_block_layout
+        if layout is None:
+            return None
+        tables = {request_id: self.ledger.block_table(request_id) for request_id in request_ids}
+        digest = hashlib.blake2b(digest_size=16)
+        for request_id, table in tables.items():
+            digest.update(request_id.encode("utf-8"))
+            for kind in sorted(table):
+                digest.update(kind.encode("ascii"))
+                digest.update(array("q", table[kind]).tobytes())
+        return {"tokens_per_block": layout["tokens_per_block"], "pool_blocks": layout["pool_blocks"],
+                "tables": tables, "digest": digest.hexdigest()}
+
+    def _kv_pool_rows(self, group):
+        """(owner, pool, block bytes, KV group) of every staged KV pool of an EP group."""
+        rows = self._kv_pool_rows_by_group.get(group)
+        if rows is None:
+            from .planner import kv_block_pools
+            rows = self._kv_pool_rows_by_group[group] = tuple(
+                (row["physical_owner"], row["buffer_id"], row["block_bytes"], row["kind"])
+                for row in kv_block_pools(self.plan.scenario, group, self._kv_block_layout["tokens_per_block"])
+                if row["page_staging"] not in (None, "none"))
+        return rows
+
+    def _discard_kv_block_tails(self, request_id, group, freed):
+        """A freed block's staged tail page is dead data: drop it, never program it."""
+        runtime = self._execution_resource_kernel.physical_runtime
+        for owner, buffer_id, block_bytes, kind in self._kv_pool_rows(group):
+            block = freed.get(kind)
+            if block is not None:
+                runtime.discard_staged_range(owner, buffer_id, block * block_bytes, block_bytes)
+
     def _external_destination_ranges(self, state):
         """Read exact native KV identities/geometry; never execute this inventory."""
         from .contracts import TaskSpec
         from .data_motion import register_physical_allocations
-        from .planner import native_kv_ingress_inventory
+        from .planner import _kv_block_runs as kv_block_runs, native_kv_ingress_inventory
         scenario = self.plan.scenario
         history = state.spec.prompt_tokens - 1
         if state.ep_group is None:
@@ -6218,7 +6465,8 @@ class _OnlineRuntime:
             # covers a direct inventory query for a request nobody placed yet.
             self._assign_ep_group(state, self._least_loaded_ep_group(range(self._ep_degree)))
         inventory = native_kv_ingress_inventory(scenario, state.spec.request_id, history,
-            ep_group=state.ep_group, execution_control=self.execution_control)
+            ep_group=state.ep_group, blocks=self._physical_kv_blocks((state.spec.request_id,)),
+            execution_control=self.execution_control)
         configs, contracts = inventory["physical_memory_configs"], inventory["contracts"]
         tail_slots = inventory.get("tail_slots", ())
         declarations = {(row["physical_owner"], row["buffer_id"], row.get("generation", 0)): row
@@ -6234,7 +6482,10 @@ class _OnlineRuntime:
                 "physical_memory_config": configs[first_owner], "physical_memory_configs": configs,
                 "physical_allocations": tuple(declarations.values())})
         register_physical_allocations(task, self._execution_resource_kernel.physical_runtime)
-        self._execution_resource_kernel.register_request_physical_buffers(state.spec.request_id, declarations)
+        # The layer pools are shared and resident; the request owns only its
+        # HBM tail slots.
+        self._execution_resource_kernel.register_request_physical_buffers(
+            state.spec.request_id, inventory["request_buffers"])
         component_by_owner = {service.physical_owner: component
             for component, service in self._external_executor.services.items()}
         keys_by_identity = {}
@@ -6243,7 +6494,6 @@ class _OnlineRuntime:
         spans = {}
         for contract in contracts:
             self.execution_control.raise_if_cancelled()
-            row_bytes = int(contract["row_bytes"])
             for owner in contract["owners"]:
                 if owner["request_id"] != state.spec.request_id:
                     continue
@@ -6257,14 +6507,13 @@ class _OnlineRuntime:
                         continue
                     if logical_length != physical_length:
                         raise ValueError("native external KV range maps disagree")
+                    runs = kv_block_runs(contract, owner, ((physical_start+start-logical_start, end-start),))
                     for part in ("k", "v"):
-                        identity = owner["id"] + ":" + part
-                        keys = keys_by_identity.get(identity, ())
+                        keys = keys_by_identity.get(contract["pool_ids"][part], ())
                         if len(keys) != 1:
                             raise ValueError("native external KV identity does not select one private owner")
-                        key = keys[0]
-                        spans.setdefault(key, set()).add(((physical_start+start-logical_start)*row_bytes,
-                            (physical_start+end-logical_start)*row_bytes))
+                        spans.setdefault(keys[0], set()).update(
+                            (offset, offset + size) for offset, size in runs)
         destinations = []
         for (owner, identity, generation), intervals in spans.items():
             merged = []
@@ -6296,7 +6545,7 @@ class _OnlineRuntime:
                 mirrored.append(row)
                 continue
             slot, tail_bytes = tail_info
-            page_base = int(slot["tail_page"]) * int(slot["page_bytes"])
+            page_base = int(slot["tail_offset_bytes"])
             row_start, row_end = int(row["offset_bytes"]), int(row["offset_bytes"]) + int(row["size_bytes"])
             mirror_lo = max(row_start, page_base)
             mirror_hi = min(row_end, page_base + tail_bytes)
@@ -6319,6 +6568,13 @@ class _OnlineRuntime:
                     }
                 mirrored.append(piece)
         return mirrored
+
+    def _external_kv_pages(self, state):
+        """KV pages an imported or preloaded request holds: its prompt history
+        (lazy; later rows grow block by block), or its maximal live context (eager)."""
+        if self.plan.kv_policy.allocation_policy == "eager":
+            return self.ledger.pages_for_tokens(_max_live_kv_tokens(state.spec.prompt_tokens, state.spec.output_tokens))
+        return self.ledger.pages_for_tokens(state.spec.prompt_tokens - 1)
 
     def _preload_warmup_seed_kv(self):
         """Install warmup-seed KV histories as already resident, unpaid.
@@ -6351,7 +6607,7 @@ class _OnlineRuntime:
                 placed_here = state.ep_group is None
                 if placed_here:
                     self._assign_ep_group(state, seed_index % self._ep_degree)
-                pages = self.ledger.pages_for_tokens(_max_live_kv_tokens(state.spec.prompt_tokens, state.spec.output_tokens))
+                pages = self._external_kv_pages(state)
                 if not self.ledger.can_resize(state, pages):
                     if placed_here:
                         self._release_ep_group(state)
@@ -6402,7 +6658,7 @@ class _OnlineRuntime:
                 self._assign_ep_group(state, self._least_loaded_ep_group(open_groups))
             elif inflight[state.ep_group] >= group_limit:
                 continue
-            pages = self.ledger.pages_for_tokens(_max_live_kv_tokens(state.spec.prompt_tokens, state.spec.output_tokens))
+            pages = self._external_kv_pages(state)
             if not self.ledger.can_resize(state, pages):
                 if placed_here:
                     self._release_ep_group(state)
@@ -16139,7 +16395,7 @@ class _OnlineRuntime:
         }
         ledger_snapshot = copy.deepcopy({
             key: value for key, value in self.ledger.__dict__.items()
-            if key not in {"paged_pool", "physical", "policy"}
+            if key not in {"paged_pool", "physical", "policy", "release_hook"}
         })
         paged_pool = self.ledger.paged_pool
         paged_pool_snapshot = None
@@ -16312,6 +16568,9 @@ class _OnlineRuntime:
             cohort = replace(cohort, metadata={**cohort.metadata,
                 "physical_kv_page_table": {"tokens_per_page": pool.tokens_per_page,
                     "requests": table}})
+        if self._kv_block_layout is not None and cohort.items:
+            cohort = replace(cohort, metadata={**cohort.metadata,
+                "physical_kv_blocks": self._physical_kv_blocks(dict.fromkeys(cohort.request_ids))})
         self.execution_control.raise_if_cancelled()
         self.execution_control.report("cohort_lowering", len(self.batches),
             simulated_time_ns=self.now, message="正在生成原生批次任务图")
@@ -17187,9 +17446,8 @@ class _OnlineRuntime:
             prefetch_execution_mode=("asynchronous_physical_copy" if
                 self.plan.kv_policy.prefetch_distance > 0 and self._paged_pool_transfer_executor is not None
                 else "disabled"),
-            requested_allocation_policy=self._requested_kv_allocation_policy,
-            effective_allocation_policy=self.plan.kv_policy.allocation_policy,
-            allocation_policy_reason=self._kv_allocation_policy_reason,
+            physical_block_pool_blocks=(dict(self._kv_block_layout["pool_blocks"])
+                                        if self._kv_block_layout else {}),
             prefetch_distance_modeled=(
                 self.plan.kv_policy.prefetch_distance > 0
                 and self.ledger.paged_pool is not None
@@ -18411,6 +18669,52 @@ def _max_live_kv_tokens(prompt_tokens: int, output_tokens: int) -> int:
     """Maximum committed KV entries for ordinary autoregressive serving."""
 
     return max(0, int(prompt_tokens)) + max(0, int(output_tokens) - 1)
+
+
+def _with_kv_block_pools(plan: ServingPlan):
+    """Size each EP group's physical KV block pools; the ledger's pages are their blocks.
+
+    ``kv_policy.pool_blocks``/``chunk_pool_blocks`` declare the pools (the
+    native comparison declares its stationary peak). Zero sizes them from the
+    scheduler's demand: ``max_num_seqs`` requests at their largest live
+    context plus the prepared external imports at their prompt history. The
+    KV capacity pages bound either; when the pools, at their padded block
+    strides, exceed a component's KV budget, both KV groups shrink in
+    proportion. Layers with chunked attention keep a ring of at most
+    ceil(chunk / tokens_per_page) blocks per request in their own pools.
+    """
+    from .planner import kv_block_pools
+
+    policy = plan.kv_policy
+    spec = plan.scenario.placement.kv_policy
+    per_block = int(policy.tokens_per_page)
+    chunks = {int(layer.attention_chunk_size) for layer in _execution_layers(plan.scenario)
+              if not layer.is_linear_attention and layer.attention_chunk_size}
+    if len(chunks) > 1:
+        raise ValueError("physical block-paged KV supports one attention chunk size")
+    ring = -(-next(iter(chunks)) // per_block) if chunks else 0
+    requests = materialize_requests(plan.scenario)
+    live = max((-(-_max_live_kv_tokens(request.prompt_tokens, request.output_tokens) // per_block)
+                for request in requests), default=0)
+    history = max((-(-(request.prompt_tokens - 1) // per_block) for request in requests), default=0)
+    ingress = plan.scenario.workload.metadata.get("external_kv_ingress") or {}
+    imports = int(ingress.get("max_inflight_requests", 0)) if ingress else 0
+    sequences = int(plan.scheduler.max_num_seqs)
+    full = min(policy.capacity_pages, spec.pool_blocks or sequences * live + imports * history)
+    chunk = min(policy.capacity_pages, spec.chunk_pool_blocks
+                or sequences * min(live, ring) + imports * min(history, ring)) if ring else 0
+    counts = {"full": full, **({"chunk": chunk} if ring else {})}
+    usage: Dict[str, int] = {}
+    for row in kv_block_pools(plan.scenario, 0, per_block):
+        usage[row["component_id"]] = usage.get(row["component_id"], 0) + counts[row["kind"]] * row["block_bytes"]
+    budgets = policy.capacity_bytes_by_component
+    scale = min((budgets[component] / used for component, used in usage.items()
+                 if used and component in budgets), default=1.)
+    if scale < 1.:
+        counts = {kind: int(count * scale) for kind, count in counts.items()}
+    plan = replace(plan, kv_policy=replace(policy, capacity_pages=counts["full"],
+                                           capacity_bytes=counts["full"] * policy.bytes_per_page))
+    return plan, {"tokens_per_block": per_block, "pool_blocks": counts, "ring": ring}
 
 
 def _model_max_sequence_length(scenario: ScenarioConfig) -> int:

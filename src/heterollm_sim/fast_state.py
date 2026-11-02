@@ -14,7 +14,8 @@ from math import ceil, gcd, lcm
 from typing import Any, Mapping, TYPE_CHECKING
 
 from .data_motion import resolve_service
-from .planner import _execution_layers, _kv_components, _kv_tensor_bytes, _parallel_plan
+from .planner import (_execution_layers, _kv_components, _kv_tensor_bytes, _parallel_plan,
+                      kv_block_geometry, kv_pool_buffer_id)
 
 if TYPE_CHECKING:
     from .serving import _OnlineRuntime
@@ -594,6 +595,21 @@ def project_fast_tail(
     buffers: list[Mapping[str, Any]] = []
     rows_by_owner: dict[str, list[Mapping[str, Any]]] = {}
     physical = runtime._execution_resource_kernel.physical_runtime
+    # The projection appends rows at contiguous pool offsets: the request's
+    # blocks must be the pool's first ones and its growth the next free ones.
+    layout = runtime._kv_block_layout
+    if layout is None:
+        reasons.append("fast_tail_requires_physical_block_kv")
+    else:
+        blocks = runtime.ledger.blocks
+        needed = -(-final // layout["tokens_per_block"])
+        for kind in layout["pool_blocks"]:
+            table = runtime.ledger.block_table(state.spec.request_id).get(kind, ())
+            want = blocks.blocks_for_pages(kind, needed)
+            head = blocks.head[0, kind]
+            growth = tuple(blocks.free[0, kind][head:head + want - len(table)])
+            if table + growth != tuple(range(want)):
+                reasons.append("fast_tail_requires_contiguous_kv_blocks")
     for layer in _execution_layers(scenario):
         if layer.is_linear_attention:
             reasons.append("linear_attention_requires_detailed_execution")
@@ -609,10 +625,13 @@ def project_fast_tail(
             continue
         component = scenario.hardware.get_component(component_id)
         owner = resolve_service(component).physical_owner
+        if layout is not None:
+            _row, stride, _per_page = kv_block_geometry(scenario, parallel, rank, layer,
+                                                        layout["tokens_per_block"])
+            if stride != layout["tokens_per_block"] * row_bytes:
+                reasons.append("fast_tail_requires_unpadded_kv_blocks")
         for part in ("k", "v"):
-            buffer_id = "kv:{}:{}:rank{}:tp{}:pp{}:{}".format(
-                state.spec.request_id, layer.layer_id, rank.rank,
-                rank.tp_rank, rank.pp_rank, part)
+            buffer_id = kv_pool_buffer_id(layer.layer_id, rank, part)
             start, stop = current * row_bytes, final * row_bytes
             row = {
                 "buffer_id": buffer_id, "layer_id": layer.layer_id, "part": part,

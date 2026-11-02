@@ -17,27 +17,37 @@ def runtime(loaded=(0, 1, 2), degree=2):
              for index in range(4)]
     fresh = [NS(spec=NS(request_id=f"f{index}", metadata={}, arrival_ns=0., output_tokens=8),
                 ep_group=None) for index in range(2)]
+    for state in fresh:
+        state.spec.prompt_tokens = 40
     return NS(plan=NS(scheduler=NS(max_num_seqs=4)), now=10., _ep_degree=degree,
-              _state_values=tuple(seeds + fresh),
-              _external_ingress={"preload_warmup_seed_kv": True},
+              _state_values=tuple(seeds + fresh), _kv_block_layout=None,
+              _external_ingress={"preload_warmup_seed_kv": True, "max_inflight_requests": 2},
               _external_preloaded_requests=len(loaded),
               _external_initialized={f"s{index}" for index in loaded} | {"f0"})
 
 
-@pytest.mark.parametrize("loaded,expected", [
-    ((), [0, 0]), ((0,), [1, 0]), ((0, 1), [1, 1]), ((0, 1, 2), [2, 1])])
-def test_short_preloaded_batch_reports_per_group_capacity_including_zero(loaded, expected):
+@pytest.mark.parametrize("loaded", [(), (0,), (0, 1), (0, 1, 2)])
+def test_short_preloaded_batch_is_a_capacity_rejection(loaded):
     active, diagnostics = runtime(loaded), {}
     with pytest.raises(NativeLayerSamplingGuardError, match="first_cohort_not_a_full_batch"):
         stationary._preloaded_seed_admission(active, diagnostics)
-    assert diagnostics == {"physical_admission_cutoff_ns": 10., "kv_requests_held_by_group": expected}
+    assert diagnostics == {"physical_admission_cutoff_ns": 10.}
 
 
-def test_single_group_capacity_counts_only_initialized_seeds():
-    active, diagnostics = runtime(degree=1), {}
-    with pytest.raises(NativeLayerSamplingGuardError, match="first_cohort_not_a_full_batch"):
+@pytest.mark.parametrize("pool_blocks,reason", [(8, "kv_block_peak_exceeds_capacity"),
+                                                (9, "first_cohort_not_a_full_batch")])
+def test_a_refill_cycle_beyond_the_pools_is_rejected_before_any_seed_check(pool_blocks, reason):
+    # Seeds at ages 0, 2 and 1, 3 of 8 in two groups, prompt 40, 16-token
+    # blocks: every slot holds 3 blocks at every age, plus one prepared
+    # import's 3 history blocks per group.
+    active, diagnostics = runtime(degree=2), {}
+    active._kv_block_layout = {"tokens_per_block": 16, "pool_blocks": {"full": pool_blocks}, "ring": 0}
+    peaks = stationary.kv_block_peak([[0, 2], [1, 3]], 40, 8, 1, 16)
+    assert peaks == {"full": [9, 9]}
+    with pytest.raises(NativeLayerSamplingGuardError, match=reason):
         stationary._preloaded_seed_admission(active, diagnostics)
-    assert diagnostics["kv_requests_held_by_group"] == [3]
+    assert diagnostics["kv_block_peak_by_group"] == peaks
+    assert diagnostics["kv_block_capacity"] == {"full": pool_blocks}
 
 
 @pytest.mark.parametrize("contract", ["not_preloaded", "seed_count", "fresh_lengths", "no_fresh", "future_seed"])
@@ -125,8 +135,8 @@ def test_default_boundary_has_no_guard_or_extra_state():
                      "_start_external_imports", "_fill_slots", "_prefetch_waiting"]
 
 
-@pytest.mark.parametrize("loaded,expected", [(0, [0, 0]), (3, [2, 1])])
-def test_real_native_preload_capacity_stops_before_lower_guard_imports_or_samples(monkeypatch, loaded, expected):
+@pytest.mark.parametrize("loaded", [0, 3])
+def test_real_native_preload_capacity_stops_before_lower_guard_imports_or_samples(monkeypatch, loaded):
     from heterollm_sim.reporting import run_scenario
 
     scenario = native_toy.moe_toy_scenario(8, batch_size=4, output=6, warmup=5, measurement=10, ep=2)
@@ -153,7 +163,7 @@ def test_real_native_preload_capacity_stops_before_lower_guard_imports_or_sample
         retention_policy="aggregate")
     diagnostics = result.approximation
     assert diagnostics["rejection_reasons"] == ["native_stationary_first_cohort_not_a_full_batch"]
-    assert diagnostics["kv_requests_held_by_group"] == expected
+    assert not diagnostics["kv_block_peak_exceeds_capacity"]
     assert diagnostics["physical_ingress_accounting"]["preloaded_seed_requests"] == loaded
     assert diagnostics["physical_boundary_accounting"]["source_pending_carry_upper_ns"] is None
     assert diagnostics["physical_boundary_accounting"]["layer_composition"] == {}

@@ -105,9 +105,10 @@ def _tasks(scenario, kind, batch, *, ep_degree=1):
 def test_ep1_toy_lowering_is_byte_identical_to_the_single_group_graph():
     build = lambda: native_toy.toy_scenario(layer_count=2, batch_size=4)
     # The digest covers each task's serialized physical config: the HBM4 queue
-    # fields and assumed turnaround timings changed it, not the graph.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "e5ec379fd83a462c")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "0b9a2c722dcff120")
+    # fields and assumed turnaround timings changed it, then the per-layer KV
+    # block pools (buffer ids and offsets) and their 256-token blocks, not the graph.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "62901e60b885f9b5")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "b72f9460651a4bfa")
 
 
 def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
@@ -115,9 +116,10 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # The planner now records the layer's final NAND-read (or KV fallback)
     # anchor in each deferred tail branch.  That intentional dependency-field
     # change updates the structural digest while leaving task cardinality
-    # unchanged. The serialized HBM4 queue fields and timings changed it again.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "ba44482dcc40fad7")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "0525f8098185dc9c")
+    # unchanged. The serialized HBM4 queue fields and timings changed it again,
+    # and the per-layer KV block pools and their 256-token blocks once more.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "9e68c6776fb2c921")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "bd12fe4b8289d34c")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():
@@ -172,13 +174,20 @@ def test_ep_group_names_are_suffixed_only_when_the_plan_has_several_groups():
 def test_ep2_kv_buffers_live_only_on_the_owner_groups_ranks():
     scenario = _maverick(ep=2, batch_size=4)
     plan = planner._parallel_plan(scenario)
+    tasks = list(_tasks(scenario, "decode", 4, ep_degree=2))
+    pools = {row["buffer_id"]: row.get("physical_owner") or task.metadata["physical_owner"]
+             for task in tasks for row in task.metadata.get("physical_allocations", ())
+             if str(row["buffer_id"]).startswith("kv:pool:")}
+    # A request's KV: its blocks in the pools its contracts bind, and the
+    # HBM slot of its open page.
     owners = {}
-    for task in _tasks(scenario, "decode", 4, ep_degree=2):
-        for row in task.metadata.get("physical_allocations", ()):
-            buffer_id = str(row["buffer_id"])
-            if buffer_id.startswith("kv:"):
-                owner = row.get("physical_owner") or task.metadata["physical_owner"]
-                owners.setdefault(buffer_id.split(":")[1], set()).add(owner)
+    for task in tasks:
+        contract = task.metadata.get("generic_kv_storage")
+        for item in (contract or {}).get("owners", ()):
+            storage = owners.setdefault(item["request_id"], set())
+            storage.update(pools[pool] for pool in contract["pool_ids"].values())
+            if item.get("external_hbm_tail"):
+                storage.add(str(item["external_hbm_tail"]["physical_owner"]))
     ids = [request.request_id for request in scenario.workload.requests][:4]
 
     def group_storage(ep_rank):
@@ -309,7 +318,7 @@ def test_ep2_ingress_inventory_matches_the_full_lowering_on_owner_ranks_only():
         expected, contracts = {}, []
         for task in schedule.tasks:
             for row in task.metadata.get("physical_allocations", ()):
-                if str(row["buffer_id"]).startswith("kv:" + request.request_id + ":"):
+                if str(row["buffer_id"]).startswith(("kv:pool:", "kv:" + request.request_id + ":")):
                     key = (row.get("physical_owner") or task.metadata["physical_owner"],
                            row["buffer_id"], row.get("generation", 0))
                     expected[key] = {**row, "physical_owner": key[0]}

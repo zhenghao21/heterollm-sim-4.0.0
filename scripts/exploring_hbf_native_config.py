@@ -36,6 +36,11 @@ from heterollm_sim.simulation_options import SimulationConfig
 
 GPU_REFERENCE_ID = "rubin_public_peak_native_structural_reference_v1"
 PD_BUFFER_BYTES = 64 * 1024**2
+# Tokens of one physical KV block. FIFO free lists mix fully over a long run, so
+# a block is about a request's contiguous extent in a settled layout. Measured at
+# HBM4 SHORT B322: 16 tokens (vLLM's default) 95.6 ms, 256 tokens 43.6 ms, for
+# about 6% more pool capacity.
+NATIVE_KV_BLOCK_TOKENS = 256
 PHYSICAL_WINDOW_ASSUMPTION = (
     "Bounded physical execution has no sampled suffix; the fast path reports its conditional sampling interval "
     "separately and does not use external hardware verification as an acceptance target.")
@@ -90,21 +95,55 @@ def native_import_pool(layers, prompt, output, batch_size, tp, pp, ep, published
     return ep * math.ceil(batch_size // ep / output) * (1 + math.ceil(4 * seconds / slo_tpot_s))
 
 
-def native_capacity_batch(requests_per_group, batch_size, pool, output, ep):
-    """Largest per-replica batch whose seeds and import pool fit the KV a group held.
+def native_seed_ages_by_group(batch_size, output, ep):
+    """The warmup seeds' ages, seed k in EP group k % ep (as serving places them)."""
+    groups = [[] for _ in range(ep)]
+    for index in range(batch_size):
+        groups[index % ep].append((2 * index + 1) * output // (2 * batch_size))
+    return groups
 
-    Every seed and every prepared import reserves the same max-live KV
-    (prompt + output - 1 tokens), so a group that held ``requests_per_group``
-    when KV refused one more fits B/ep seeds plus its pool share. The pool's
-    depth per freed slot is read off ``pool``, sized by ``native_import_pool``
-    for ``batch_size``; it does not depend on the batch. Returns 0 if not
-    even one request per group fits.
+
+def native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool, tokens_per_block=NATIVE_KV_BLOCK_TOKENS):
+    """Each EP group's KV block peak over one stationary refill cycle, per KV group.
+
+    The physical KV pools hold exactly this many blocks (``kv_policy.pool_blocks``):
+    paged KV allocates by actual occupancy, and the rest of the device stays
+    free for activations. Chunked-attention layers keep a ring of
+    ceil(chunk / tokens_per_block) blocks per request in their own pools.
+    """
+    from heterollm_sim.native_stationary import kv_block_peak
+    chunks = {layer.attention_chunk_size for layer in layers
+              if layer.sequence_mixer != "linear_attention" and layer.kv_heads and layer.attention_chunk_size}
+    ring = -(-max(chunks) // tokens_per_block) if chunks else 0
+    return kv_block_peak(native_seed_ages_by_group(batch_size, output, ep), prompt, output,
+                         pool // ep, tokens_per_block, ring)
+
+
+def native_capacity_batch(capacity, batch_size, pool, layers, prompt, output, ep, quantum,
+                          tokens_per_block=NATIVE_KV_BLOCK_TOKENS):
+    """Largest per-replica batch below ``batch_size`` whose cycle peak fits the pools' ``capacity``.
+
+    ``capacity`` maps each KV group to the blocks its pools hold at most.
+    The import pool keeps its depth per freed slot, read off ``pool`` sized
+    for ``batch_size``. The peak grows with the batch, so the largest
+    fitting multiple of ``quantum`` is bisected. Returns 0 if none fits.
     """
     depth = pool // (ep * math.ceil(batch_size // ep / output))
-    group = requests_per_group
-    while group > 0 and group + math.ceil(group / output) * depth > requests_per_group:
-        group -= 1
-    return group * ep
+
+    def fits(units):
+        batch = units * quantum
+        peaks = native_kv_block_peaks(layers, prompt, output, batch, ep,
+                                      ep * math.ceil(batch // ep / output) * depth, tokens_per_block)
+        return all(max(peaks[kind]) <= capacity[kind] for kind in peaks)
+
+    low, high = 0, (batch_size - 1) // quantum
+    while low < high:
+        middle = (low + high + 1) // 2
+        if fits(middle):
+            low = middle
+        else:
+            high = middle - 1
+    return low * quantum
 
 
 def validate_native_layout(layers, batch_size, ep):
@@ -254,6 +293,8 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
     # The old scan builder supplies only CPU/HOST wiring. Discard its model,
     # tensor targets, source identity and rank contracts below.
     template = build_scan_scenario("qwen2_5-0_5b", "HBM" if hardware_id == "HBM4" else "HBF", 2, 2)
+    template = replace(template, placement=replace(template.placement, kv_policy=replace(
+        template.placement.kv_policy, tokens_per_page=NATIVE_KV_BLOCK_TOKENS)))
     if hardware_id != "HBM4" and published.hbm_stacks:
         template = _add_hbm_for_intermediates(template)
     if published.hbm_stacks:
@@ -321,6 +362,8 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
         for b in range(a + 1, world):
             # Eight-GPU node: a ring gives each GPU two directional 900 GB/s
             # ports. No all-to-all collection of free full-bandwidth links.
+            # Ring collectives over more than two GPUs send half of every
+            # chunk each way round (communication._ring_rounds).
             if a // 8 == b // 8 and (b == a + 1 or (a % 8 == 0 and b == min(world - 1, a + 7))):
                 links.append(LinkSpec(f"nvlink-{a}-{b}", f"gpu{a}", "peer", f"gpu{b}", "peer",
                     "NVLink", "6.0", 1, 7200., 500., payload="streaming"))
@@ -343,6 +386,8 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
     # slots), so the producer holds one per pool entry.
     pool = (native_import_pool(layers, prompt, output, batch_size, tp, pp, ep, published)
             if import_pool is None else import_pool)
+    kv_peaks = native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool,
+                                     template.placement.kv_policy.tokens_per_page)
     pd_physical = replace(pd_source, capacity_bytes=pool * PD_BUFFER_BYTES, channels=channels,
         interface_bandwidth_gb_s=pd_bandwidth_gb_s, read_bandwidth_gb_s=pd_bandwidth_gb_s,
         write_bandwidth_gb_s=pd_bandwidth_gb_s,
@@ -408,7 +453,9 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
         runtime_profile=ControllerProfile(gpu_controllers={f"gpu{i}": GPUControllerProfile() for i in range(world)}),
         placement=replace(template.placement, hardware_name=hardware.name, model_name=model.name,
             parallel=parallel, tensor_to_component={}, tensor_bytes={}, op_to_component={}, metadata=metadata,
-            kv_policy=replace(template.placement.kv_policy, cache_component=weight0, allocation_policy="lazy", dtype="bf16")),
+            kv_policy=replace(template.placement.kv_policy, cache_component=weight0, allocation_policy="lazy",
+                              dtype="bf16", pool_blocks=max(kv_peaks["full"]),
+                              chunk_pool_blocks=max(kv_peaks.get("chunk", [0])))),
         workload=replace(template.workload, name="native-decode-node-continuous",
             requests=tuple(requests),
             request_count=batch_size * 4, scheduler=scheduler, metadata={"native_paper_comparison": True,

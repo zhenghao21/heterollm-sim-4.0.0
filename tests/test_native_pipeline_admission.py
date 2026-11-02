@@ -24,7 +24,7 @@ def test_real_pp_first_cohort_rejects_a_native_pool_reservation_shortfall(monkey
         native_window=NativeWindowFastConfig(max_wall_seconds=120))), retention_policy="aggregate")
     diagnostics = result.approximation
     assert diagnostics["rejection_reasons"] == ["native_stationary_import_pool_not_full_at_cutoff"]
-    assert diagnostics["kv_requests_held_by_group"] == [6]
+    assert not diagnostics["kv_block_peak_exceeds_capacity"]
     assert diagnostics["physical_complete_cohort_count"] == 0
     assert diagnostics["physical_visible_output_token_count"] == 0
     assert diagnostics["physical_ingress_accounting"]["preloaded_seed_requests"] == 4

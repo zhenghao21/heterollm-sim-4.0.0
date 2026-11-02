@@ -30,6 +30,11 @@ existing halving/bisection path is reused, and its final limit is labelled
 native_import_limited. A failed acceptance falls back to the best measured
 passing point.
 
+Once that is settled, a second branch and bound finds the paper's Fig. 3
+metric, the largest per-GPU batch any layout runs within the SLO: the same
+per-layout batch search, pruned when a layout cannot pass above the largest
+passing per-GPU batch measured so far, with one acceptance run.
+
 The plan is a pure function of the screen and the saved candidate rows, so a
 stopped search resumes by replaying it; the incumbent only grows with saved
 rows, so a replay prunes the same layouts or more.
@@ -58,15 +63,16 @@ MIN_STEP = .1
 # by this share (measured adjacent points dropped by at most 7.5%).
 RATE_MARGIN = .1
 # Native TPOT is taken to be at least this share of the bypass TPOT line when
-# a layout is pruned by its bypass bound (367 native points: 1.03x to 7.8x;
-# Maverick PP>1 1.83x and above).
-BYPASS_TPOT_FLOOR = .8
+# a layout is pruned by its bypass bound (791 native points of the 20261028
+# scan: 0.996x and above, no layout's best rate above this bound; 174 points on
+# the current memory physics: 1.016x and above).
+BYPASS_TPOT_FLOOR = .95
 # Beyond a measured point below the SLO, native TPOT is taken to grow at
 # least this share of the bypass TPOT slope, times the case's least
 # native/bypass slope ratio between measured points MIN_STEP apart when that
 # is below 1 (PP>1 intercepts measured 1.8-3.8x the bypass line but slopes
 # 1.05-1.35x; Maverick HBF PP1 slopes fell to 0.40x at large batches).
-SLOPE_FLOOR = BYPASS_TPOT_FLOOR
+SLOPE_FLOOR = .8
 OBJECTIVE = "per_gpu_throughput_under_slo"
 SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_layouts": TOP_LAYOUTS,
             "max_points_per_layout": None, "max_runs_per_layout": None,
@@ -89,11 +95,15 @@ SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_
                         "(rate x (1 + rate_margin)) "
                         "falls below the case's best measured passing rate, or when a point below the SLO cannot reach it "
                         "with TPOT growing at slope_floor x min(1, the case's least native/bypass slope ratio from a point within the SLO) "
-                        "x the bypass slope")}
+                        "x the bypass slope"),
+            "max_batch": ("paper Fig. 3: after the throughput search, the largest per-GPU batch within the SLO by the "
+                          "same branch and bound per layout (bypass batch bound with bypass_tpot_floor, a point above "
+                          "the SLO times 1 + rate_margin, the slope floor), one acceptance run at the best layout's "
+                          "interpolated batch, falling back to the largest measured passing point")}
 # Rejections that say the batch is too big for a native candidate: its wall
 # cap, or its KV capacity.
 _WALL_TOO_BIG = ("wall_budget",)
-CAPACITY_REJECTIONS = ("not_a_full_batch", "import_pool_not_full")
+CAPACITY_REJECTIONS = ("kv_block_peak_exceeds_capacity", "not_a_full_batch", "import_pool_not_full")
 IMPORT_REJECTIONS = ("native_stationary_refill_not_always_ready",)
 
 
@@ -167,6 +177,9 @@ def classify(row):
     if status == "capacity_rejected":
         return "too_big"
     if status == "forecast_rejected":
+        # The Prefill pass does not depend on the batch, so a smaller one cannot rescue it.
+        if (row.get("process_watchdog") or {}).get("phase") == "prefill":
+            return "unusable"
         reason = str(row.get("rejection_reason", ""))
         return "too_big" if any(marker in reason for marker in _WALL_TOO_BIG + CAPACITY_REJECTIONS + IMPORT_REJECTIONS) else "unusable"
     return "failed" if status == "failed" else "pending"
@@ -470,6 +483,114 @@ def _pruner(entry, gpus, slo_ns, incumbent, floor):
     return prune
 
 
+def bypass_batch_bound(entry, slo_ns, limit=None):
+    """Largest batch under the SLO when native TPOT is at least BYPASS_TPOT_FLOOR of the
+    layout's bypass TPOT line, and at most ``limit``; a line that does not rise from a positive
+    intercept bounds nothing."""
+    intercept, slope = entry["bypass"]["tpot_line_ns"]
+    batch = (slo_ns / BYPASS_TPOT_FLOOR - intercept) / slope if intercept > 0 and slope > 0 else math.inf
+    return batch if limit is None else min(batch, limit)
+
+
+def slope_batch_bound(entry, point, slo_ns, floor):
+    """Largest batch under the SLO when TPOT grows beyond ``point`` at least ``floor`` times the bypass slope."""
+    slope = floor * entry["bypass"]["tpot_line_ns"][1]
+    return point["batch"] + (slo_ns - point["tpot_ns"]) / slope if slope > 0 else math.inf
+
+
+def _passing_batch(plan, gpus, slo_ns):
+    """The largest per-GPU batch among a layout's measured points within the SLO, else 0."""
+    return max([point["batch"] / gpus for point in plan.get("points") or ()
+                if point["tpot_upper_ns"] <= slo_ns], default=0.)
+
+
+def _batch_pruner(entry, gpus, slo_ns, incumbent, floor):
+    """Why a layout cannot pass the SLO above ``incumbent`` requests per GPU, else None."""
+    def prune(runs, points):
+        limits = _native_capacities(runs) + [run["batch"] - 1 for run in runs if run["kind"] == "too_big"]
+        capacity = entry["bypass"]["capacity_max_batch"]
+        if not any(point["batch"] >= capacity for point in points):
+            # The search measures no batch above the bypass KV capacity
+            # until a native point reaches it (``_limit``).
+            limits.append(capacity)
+        if bypass_batch_bound(entry, slo_ns, min(limits)) / gpus <= incumbent:
+            return "bypass_batch_bound_not_above_incumbent"
+        if any(point["tpot_upper_ns"] > slo_ns and point["batch"] * (1 + RATE_MARGIN) / gpus <= incumbent
+               for point in points):
+            return "native_point_above_slo_not_above_incumbent"
+        if floor is not None and any(point["tpot_upper_ns"] <= slo_ns
+                                     and slope_batch_bound(entry, point, slo_ns, floor) / gpus <= incumbent
+                                     for point in points):
+            return "native_slope_bound_not_above_incumbent"
+        return None
+    return prune
+
+
+def _max_batch(entries, plan, firsts, lookup, replica_gpus, slo_ns, measured):
+    """Paper Fig. 3: the largest per-GPU batch a layout runs within the SLO, by branch and bound.
+
+    Runs after the throughput search; ``measured`` are its layout plans, whose
+    passing points seed the incumbent. Each layout replays its saved rows from
+    the same first point, pruned once it cannot pass the SLO above the
+    incumbent; the best layout's interpolated batch gets one acceptance run.
+    """
+    count = len(entries)
+
+    def incumbent_of(plans):
+        return max([_passing_batch(plan_, gpus, slo_ns) for plan_, gpus in zip(plans, replica_gpus)], default=0.)
+
+    def planned(incumbent, floor, keep=None):
+        return [keep[index] if keep is not None and index == holder else
+                plan(index, first=firsts[index],
+                     prune=_batch_pruner(entries[index], replica_gpus[index], slo_ns, incumbent, floor))
+                for index in range(count)]
+
+    holder = None
+    incumbent = incumbent_of(measured)
+    layouts = planned(incumbent, slope_floor(measured, slo_ns))
+    # The best passing batch any layout reaches then prunes every other layout.
+    batches = [_passing_batch(plan_, gpus, slo_ns) for plan_, gpus in zip(layouts, replica_gpus)]
+    if max(batches, default=0.) > incumbent:
+        incumbent = max(batches)
+        holder = batches.index(incumbent)
+        layouts = planned(incumbent, slope_floor([*measured, *layouts], slo_ns), layouts)
+    result = {"layouts": [{key: plan_.get(key) for key in ("layout", "runs", "points", "outcome", "next")}
+                          for plan_ in layouts],
+              "next": [(plan_["layout"], plan_["next"]) for plan_ in layouts if "next" in plan_],
+              "incumbent_batch_per_gpu": incumbent, "acceptance": None, "selected": None}
+    if result["next"] or any(plan_["outcome"]["kind"] == "failed" for plan_ in layouts):
+        return result
+    options = [(plan_["outcome"]["batch"] / replica_gpus[index], index) for index, plan_ in enumerate(layouts)
+               if plan_["outcome"]["kind"] in ("interpolated", "limited")]
+    if options:
+        per_gpu, index = max(options)
+        chosen, outcome = layouts[index], layouts[index]["outcome"]
+        acceptance = {"layout": chosen["layout"], "batch": outcome["batch"], "batch_per_gpu": per_gpu,
+                      "kind": outcome["kind"], "reason": outcome.get("reason"), "settled": outcome.get("settled")}
+        if outcome["kind"] == "interpolated":
+            row = lookup(index)(outcome["batch"])
+            if row is None or classify(row) == "pending":
+                result["next"] = [(chosen["layout"], outcome["batch"])]
+                result["acceptance"] = acceptance
+                return result
+            acceptance["status"] = row["status"]
+        result["acceptance"] = acceptance
+        if outcome["kind"] == "limited" or acceptance["status"] == "completed":
+            label = (outcome.get("reason") if outcome["kind"] == "limited"
+                     else outcome.get("settled") or "slo_accepted")
+            result["selected"] = {"layout": chosen["layout"], "batch": outcome["batch"],
+                                  "batch_per_gpu": per_gpu, "result": label}
+            return result
+    # A failed acceptance falls back to the largest measured passing point.
+    best = max(((point["batch"] / replica_gpus[index], index, point["batch"])
+                for plans in (measured, layouts) for index, plan_ in enumerate(plans)
+                for point in plan_.get("points") or () if point["tpot_upper_ns"] <= slo_ns), default=None)
+    if best is not None:
+        result["selected"] = {"layout": entries[best[1]]["layout"], "batch": best[2], "batch_per_gpu": best[0],
+                              "result": "best_measured_point"}
+    return result
+
+
 def _outcome_rate(plan, gpus):
     outcome = plan["outcome"]
     if outcome["kind"] == "interpolated":
@@ -545,7 +666,7 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
         if layouts[index].get("outcome", {}).get("kind") == "pruned":
             layouts[index]["outcome"]["incumbent_tokens_per_second_per_gpu"] = incumbent
     pending = [(plan_["layout"], plan_["next"]) for plan_ in layouts if "next" in plan_]
-    result = {"layouts": layouts, "next": pending, "acceptance": None,
+    result = {"layouts": layouts, "next": pending, "acceptance": None, "max_batch": None,
               "bounds": {"order": order,
                          # None: a bypass line that bounds nothing.
                          "bypass_rate_bounds": [None if math.isinf(bound) else bound for bound in bounds],
@@ -570,6 +691,11 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
         else:
             acceptance["status"] = row["status"]
     result["acceptance"] = acceptance
+    if not result["next"]:
+        # The throughput search is settled; the largest batch is searched next.
+        firsts = [first(index) if index in later else None for index in range(count)]
+        result["max_batch"] = _max_batch(entries, plan, firsts, lookup, replica_gpus, slo_ns, layouts)
+        result["next"] = result["max_batch"]["next"]
     return result
 
 

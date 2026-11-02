@@ -211,7 +211,7 @@ def test_inventory_receives_the_owner_group_and_a_failed_import_returns_it(monke
     from heterollm_sim import planner
     calls = []
 
-    def inventory(scenario, request_id, history, *, ep_group, execution_control=None):
+    def inventory(scenario, request_id, history, *, ep_group, blocks=None, execution_control=None):
         calls.append((request_id, ep_group))
         raise RuntimeError("injected inventory failure")
 

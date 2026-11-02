@@ -46,17 +46,31 @@ _clock_after = njit(cache=True, nogil=True, fastmath=False)(clock_after)
 def _align(value, quantum):
     # Numba converts floor/round to int64. Decline before that conversion
     # leaves the range where adjacent integer ticks remain distinguishable.
-    if abs(value / quantum) >= 2. ** 52:
+    ratio = value / quantum
+    if abs(ratio) >= 2. ** 52:
         raise OverflowError("HBM clock index exceeds compiled exact-integer range")
-    return _align_clock(value, quantum)
+    # align_clock with its one division shared.
+    tick = math.floor(ratio)
+    edge = tick * quantum
+    if edge < value:
+        edge = (tick + 1) * quantum
+    return edge
 
 
 @njit(cache=True, nogil=True, fastmath=False)
 def _after(value, delay, quantum):
-    if ((math.isfinite(value) and abs(value / quantum) >= 2. ** 52)
+    # clock_after with its two divisions shared.
+    if math.isfinite(value) and math.isfinite(delay):
+        value_ratio, delay_ratio = value / quantum, delay / quantum
+        if abs(value_ratio) >= 2. ** 52 or abs(delay_ratio) >= 2. ** 52:
+            raise OverflowError("HBM clock index exceeds compiled exact-integer range")
+        value_tick, delay_tick = round(value_ratio), round(delay_ratio)
+        if value == value_tick * quantum and delay == delay_tick * quantum:
+            return (value_tick + delay_tick) * quantum
+    elif ((math.isfinite(value) and abs(value / quantum) >= 2. ** 52)
             or (math.isfinite(delay) and abs(delay / quantum) >= 2. ** 52)):
         raise OverflowError("HBM clock index exceeds compiled exact-integer range")
-    return _clock_after(value, delay, quantum)
+    return value + delay
 
 
 @njit(cache=True, nogil=True, fastmath=False)
@@ -1381,6 +1395,96 @@ FR_STAT_FIELDS = ("row_hits", "row_misses", "row_conflicts", "activate_commands"
                   "peak_read_queue", "peak_write_queue", "max_read_wait_ns")
 
 
+# Clock delay ticks a kernel precomputes; a delay off the half-clock grid has none.
+_NO_TICK = -(1 << 62)
+
+
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
+def _fr_after(value, delay, delay_tick, half, inverse):
+    """_after for a precomputed delay tick, without its divisions.
+
+    Below 2**50 ticks a represented grid value lies within a few ulps of its
+    integer under either form of the ratio, so both round to the same tick;
+    a value off the grid fails the membership test under both.
+    """
+    ratio = value * inverse
+    if delay_tick != _NO_TICK and abs(ratio) < 2. ** 50:
+        tick = round(ratio)
+        if value == tick * half:
+            return (tick + delay_tick) * half
+        return value + delay
+    return _after(value, delay, half)
+
+
+@njit(cache=True, nogil=True, fastmath=False, inline="always")
+def _fr_tick(delay, half):
+    tick = round(delay / half)
+    return tick if abs(delay / half) < 2. ** 50 and delay == tick * half else _NO_TICK
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_column_start(lane, group, sid, bank_ready, earliest, read, t, ticks, half, inverse, entry_group,
+                     entry_sid, grouped, grid_limit, pc, history, column_bus, data, resources, directions):
+    """_column_start over precomputed group tables.
+
+    Every term only raises ``ready``. A term whose plain sum lies half a clock
+    below it cannot pass it, so its exact clock addition is not computed.
+    """
+    ready = max(earliest, bank_ready, pc[lane, 1], resources[column_bus, 0])
+    op_index = 1 if read else 2
+    same = different = different_sid = previous_read = -1.
+    for entry in range(entry_group.shape[0]):
+        previous_group = entry_group[entry]
+        stamp = history[lane, entry, op_index]
+        if stamp >= 0:
+            if grouped and stamp < grid_limit:
+                if read and entry_sid[entry] != sid:
+                    different_sid = max(different_sid, stamp)
+                elif previous_group == group:
+                    same = max(same, stamp)
+                else:
+                    different = max(different, stamp)
+            else:
+                gap = t[11] if previous_group == group else t[12]
+                if read and entry_sid[entry] != sid:
+                    gap = t[13]
+                ready = max(ready, _after(stamp, gap, half))
+        if read:
+            end = history[lane, entry, 3]
+            if end >= 0:
+                index = 16 if previous_group == group else 17
+                if end + t[index] + half > ready:
+                    ready = max(ready, end if t[index] == 0. else _fr_after(end, t[index], ticks[index], half, inverse))
+        else:
+            previous = history[lane, entry, 1]
+            if previous >= 0:
+                if grouped and previous < grid_limit:
+                    previous_read = max(previous_read, previous)
+                else:
+                    ready = max(ready, _after(previous, t[18], half))
+    if same >= 0 and same + t[11] + half > ready:
+        ready = max(ready, _fr_after(same, t[11], ticks[11], half, inverse))
+    if different >= 0 and different + t[12] + half > ready:
+        ready = max(ready, _fr_after(different, t[12], ticks[12], half, inverse))
+    if different_sid >= 0 and different_sid + t[13] + half > ready:
+        ready = max(ready, _fr_after(different_sid, t[13], ticks[13], half, inverse))
+    if previous_read >= 0 and previous_read + t[18] + half > ready:
+        ready = max(ready, previous_read if t[18] == 0.
+                    else _fr_after(previous_read, t[18], ticks[18], half, inverse))
+    data_ready = resources[data, 0]
+    if directions[data] and directions[data] != (1 if read else 2):
+        turnaround = 25 if read else 24
+        data_ready = _fr_after(data_ready, t[turnaround], ticks[turnaround], half, inverse)
+    data_ready = max(data_ready, pc[lane, 2 if read else 3])
+    latency = 22 if read else 23
+    start = _align(max(ready, _fr_after(data_ready, -t[latency],
+                                        -ticks[latency] if ticks[latency] != _NO_TICK else _NO_TICK,
+                                        half, inverse)), t[0])
+    if _fr_after(start, t[latency], ticks[latency], half, inverse) < data_ready:
+        start = _fr_after(start, t[0], ticks[0], half, inverse)
+    return start
+
+
 @njit(cache=True, nogil=True, fastmath=False)
 def _fr_lane_cursor(first, stop, lane, lanes):
     """First burst of [first, stop) on a lane; the stripe is two bursts wide."""
@@ -1419,6 +1523,288 @@ def _fr_recount(ch, banks, rows, count, head, q, q_bank, q_row, pending_hit, dir
                     slot = 0
 
 
+# A batch mirrors channels when it averages this many bursts per channel, and
+# keeps at most this many simulated channels to mirror from.
+FR_MIRROR_MIN_BURSTS = 64
+FR_MIRROR_SOURCES = 128
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_signature(ch, lanes, firsts, stops, signature):
+    """Each lane's stream per request: its first burst with the lane bits removed, and its length.
+
+    The bank and row of a burst do not depend on its lane, so equal signatures
+    are equal command streams.
+    """
+    position = 0
+    for pseudo in range(2):
+        lane = 2 * ch + pseudo
+        for request in range(firsts.shape[0]):
+            cursor = _fr_lane_cursor(firsts[request], stops[request], lane, lanes)
+            if cursor < 0:
+                signature[position], signature[position + 1] = -1, 0
+            else:
+                span = stops[request] - cursor
+                signature[position] = cursor - 2 * lane
+                signature[position + 1] = 2 * (span // (2 * lanes)) + min(span % (2 * lanes), 2 - (cursor & 1))
+            position += 2
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_first_live(windows, count, frontier, t, half):
+    """Index of the first ACT window entry the row bus frontier has not expired."""
+    index = 0
+    while index < count and _after(windows[index], t[30], half) <= frontier:
+        index += 1
+    return index
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_state_matches(source, ch, lowest, g, t, half, rows, bf, addresses, pc, history, channel, channel_int,
+                      resources, directions, windows, window_counts, sources):
+    """Whether this channel behaves as the source channel did from its saved state.
+
+    Bus and data frontiers must be equal. A timestamp may differ only where
+    no command of the batch can see it: every later edge is at or above
+    ``lowest``, the earlier of the batch's first arrival and the next refresh,
+    so a ready time below that and a stamp whose largest gap ends below it
+    are the same state. Open-row deadlines are checked by the caller.
+    """
+    rows_before, addresses_before, bf_before, pc_before = sources[4], sources[6], sources[8], sources[10]
+    history_before, windows_before, counts_before = sources[12], sources[14], sources[15]
+    channel_before, channel_int_before = sources[18], sources[20]
+    resources_before, directions_before = sources[22], sources[24]
+    lanes, banks = g[0], g[1]
+    channels = lanes // 2
+    first_lane, first_bank = 2 * ch, 2 * ch * banks
+    if channel[ch, 0] != channel_before[source, 0] or channel[ch, 1] != channel_before[source, 1]:
+        return False
+    for index in range(2):
+        offset = first_bank if index == 0 else first_lane
+        value = channel_int[ch, index]
+        if (value - offset if value >= 0 else value) != channel_int_before[source, index]:
+            return False
+    rids = (ch, channels + ch, 2 * channels + first_lane, 2 * channels + first_lane + 1)
+    for index in range(4):
+        if resources[rids[index], 0] != resources_before[source, index, 0]:
+            return False
+    for pseudo in range(2):
+        if directions[rids[2 + pseudo]] != directions_before[source, pseudo]:
+            return False
+    pre_floor = lowest - t[19] - half
+    for pseudo in range(2):
+        lane = first_lane + pseudo
+        if (pc[lane, 2] != pc_before[source, pseudo, 2] or pc[lane, 3] != pc_before[source, pseudo, 3]
+                or max(pc[lane, 1], lowest) != max(pc_before[source, pseudo, 1], lowest)
+                or max(pc[lane, 0], pre_floor) != max(pc_before[source, pseudo, 0], pre_floor)):
+            return False
+    activate_floor = lowest - t[8] + t[0] - half
+    for offset in range(2 * banks):
+        bank = first_bank + offset
+        if (rows[bank] != rows_before[source, offset]
+                or (addresses[bank] >= 0) != (addresses_before[source, offset] >= 0)
+                or max(bf[bank, 0], activate_floor) != max(bf_before[source, offset, 0], activate_floor)):
+            return False
+        for field in range(1, 7):
+            if max(bf[bank, field], lowest) != max(bf_before[source, offset, field], lowest):
+                return False
+    row_floor = lowest - max(t[14], t[15]) - half
+    column_floor = lowest - max(t[11], t[12], t[13], t[18]) - half
+    end_floor = lowest - max(t[16], t[17]) - half
+    for pseudo in range(2):
+        lane = first_lane + pseudo
+        for entry in range(history.shape[1]):
+            if (max(history[lane, entry, 0], row_floor) != max(history_before[source, pseudo, entry, 0], row_floor)
+                    or max(history[lane, entry, 1], column_floor) != max(history_before[source, pseudo, entry, 1], column_floor)
+                    or max(history[lane, entry, 2], column_floor) != max(history_before[source, pseudo, entry, 2], column_floor)
+                    or max(history[lane, entry, 3], end_floor) != max(history_before[source, pseudo, entry, 3], end_floor)):
+                return False
+        # Expired ACT entries leave at the next ACT plan on both channels.
+        frontier = resources[ch, 0]
+        mine = _fr_first_live(windows[lane], window_counts[lane], frontier, t, half)
+        theirs = _fr_first_live(windows_before[source, pseudo], counts_before[source, pseudo], frontier, t, half)
+        if window_counts[lane] - mine != counts_before[source, pseudo] - theirs:
+            return False
+        for index in range(window_counts[lane] - mine):
+            if windows[lane, mine + index] != windows_before[source, pseudo, theirs + index]:
+                return False
+    return True
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_capture_before(source, ch, g, rows, bf, addresses, pc, history, channel, channel_int, resources,
+                       directions, windows, window_counts, sources):
+    source_channel = sources[0]
+    rows_before, addresses_before, bf_before, pc_before = sources[4], sources[6], sources[8], sources[10]
+    history_before, windows_before, counts_before = sources[12], sources[14], sources[15]
+    channel_before, channel_int_before = sources[18], sources[20]
+    resources_before, directions_before = sources[22], sources[24]
+    banks, channels = g[1], g[0] // 2
+    first_lane, first_bank = 2 * ch, 2 * ch * banks
+    source_channel[source] = ch
+    rows_before[source] = rows[first_bank:first_bank + 2 * banks]
+    addresses_before[source] = addresses[first_bank:first_bank + 2 * banks]
+    bf_before[source] = bf[first_bank:first_bank + 2 * banks]
+    pc_before[source] = pc[first_lane:first_lane + 2]
+    history_before[source] = history[first_lane:first_lane + 2]
+    windows_before[source] = windows[first_lane:first_lane + 2]
+    counts_before[source] = window_counts[first_lane:first_lane + 2]
+    channel_before[source] = channel[ch]
+    for index in range(2):
+        offset = first_bank if index == 0 else first_lane
+        value = channel_int[ch, index]
+        channel_int_before[source, index] = value - offset if value >= 0 else value
+    rids = (ch, channels + ch, 2 * channels + first_lane, 2 * channels + first_lane + 1)
+    for index in range(4):
+        resources_before[source, index] = resources[rids[index]]
+    for pseudo in range(2):
+        directions_before[source, pseudo] = directions[rids[2 + pseudo]]
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_capture_after(source, ch, usable, reach_open, reach, g, rows, bf, addresses, pc, history, channel, channel_int, resources,
+                      directions, windows, window_counts, pc_seen, touched, partial_moved, partial_stats,
+                      partial_int, partial_float, partial_counts, sources):
+    (_, source_usable, source_reach, _, _, rows_after, _, addresses_after, _, bf_after, _, pc_after, _, history_after,
+     _, _, windows_after, counts_after, _, channel_after, _, channel_int_after, _, resources_after, _,
+     directions_after, touched_after, seen_after, moved_after, stats_after, int_after, float_after,
+     counts_total) = sources
+    banks, channels = g[1], g[0] // 2
+    first_lane, first_bank = 2 * ch, 2 * ch * banks
+    source_usable[source] = usable
+    source_reach[source, 0], source_reach[source, 1] = reach_open, reach
+    rows_after[source] = rows[first_bank:first_bank + 2 * banks]
+    addresses_after[source] = addresses[first_bank:first_bank + 2 * banks]
+    bf_after[source] = bf[first_bank:first_bank + 2 * banks]
+    pc_after[source] = pc[first_lane:first_lane + 2]
+    history_after[source] = history[first_lane:first_lane + 2]
+    windows_after[source] = windows[first_lane:first_lane + 2]
+    counts_after[source] = window_counts[first_lane:first_lane + 2]
+    channel_after[source] = channel[ch]
+    for index in range(2):
+        offset = first_bank if index == 0 else first_lane
+        value = channel_int[ch, index]
+        channel_int_after[source, index] = value - offset if value >= 0 else value
+    rids = (ch, channels + ch, 2 * channels + first_lane, 2 * channels + first_lane + 1)
+    for index in range(4):
+        resources_after[source, index] = resources[rids[index]]
+        touched_after[source, index] = touched[rids[index]]
+    for pseudo in range(2):
+        directions_after[source, pseudo] = directions[rids[2 + pseudo]]
+        seen_after[source, pseudo] = pc_seen[first_lane + pseudo]
+        moved_after[source, pseudo] = partial_moved[pseudo]
+    stats_after[source] = partial_stats
+    int_after[source] = partial_int
+    float_after[source] = partial_float
+    counts_total[source] = partial_counts
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_merge_tallies(ch, g, saved_busy, partial_busy, partial_moved, partial_stats, partial_int, partial_float,
+                      partial_counts, resources, moved, stats, out_int, out_float, counts):
+    """Add one channel's own tallies to the batch's, in channel order.
+
+    Busy time and bus counters are summed per channel, so a mirrored channel
+    adds exactly what the channel it mirrors added.
+    """
+    channels = g[0] // 2
+    first_lane = 2 * ch
+    rids = (ch, channels + ch, 2 * channels + first_lane, 2 * channels + first_lane + 1)
+    for index in range(4):
+        resources[rids[index], 1] = saved_busy[index] + partial_busy[index]
+    for pseudo in range(2):
+        moved[rids[2 + pseudo]] += partial_moved[pseudo]
+        lane = first_lane + pseudo
+        for field in range(7):
+            stats[lane, field] += partial_stats[pseudo, field]
+        for field in range(7, 10):
+            stats[lane, field] = max(stats[lane, field], partial_stats[pseudo, field])
+    for request in range(out_int.shape[0]):
+        for field in range(3):
+            out_int[request, field] += partial_int[request, field]
+        out_float[request, 0] = max(out_float[request, 0], partial_float[request, 0])
+        out_float[request, 1] = max(out_float[request, 1], partial_float[request, 1])
+    for field in range(7):
+        counts[field] += partial_counts[field]
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_apply_source(source, ch, g, rows, bf, addresses, pc, history, pc_seen, channel, channel_int, resources, moved,
+                     directions, touched, windows, window_counts, stats, out_int, out_float, counts, sources):
+    """Give this channel the source channel's batch, keeping what that batch did not write."""
+    (source_channel, _, _, _, _, rows_after, addresses_before, addresses_after, bf_before, bf_after, pc_before, pc_after,
+     history_before, history_after, windows_before, counts_before, windows_after, counts_after, _, channel_after, _,
+     channel_int_after, resources_before, resources_after, _, directions_after, touched_after, seen_after, moved_after,
+     stats_after, int_after, float_after, counts_total) = sources
+    banks, channels = g[1], g[0] // 2
+    first_lane, first_bank = 2 * ch, 2 * ch * banks
+    # Two bursts of a stripe per lane; first touches of a bank differ by the lane bits.
+    shift = 4 * (ch - source_channel[source]) * g[9]
+    for offset in range(2 * banks):
+        bank = first_bank + offset
+        rows[bank] = rows_after[source, offset]
+        if addresses_before[source, offset] < 0 <= addresses_after[source, offset]:
+            addresses[bank] = addresses_after[source, offset] + shift
+        for field in range(7):
+            if bf_after[source, offset, field] != bf_before[source, offset, field]:
+                bf[bank, field] = bf_after[source, offset, field]
+    for pseudo in range(2):
+        lane = first_lane + pseudo
+        pc_seen[lane] = pc_seen[lane] or seen_after[source, pseudo]
+        for field in range(4):
+            if pc_after[source, pseudo, field] != pc_before[source, pseudo, field]:
+                pc[lane, field] = pc_after[source, pseudo, field]
+        for entry in range(history.shape[1]):
+            for field in range(4):
+                if history_after[source, pseudo, entry, field] != history_before[source, pseudo, entry, field]:
+                    history[lane, entry, field] = history_after[source, pseudo, entry, field]
+        changed = counts_after[source, pseudo] != counts_before[source, pseudo]
+        if not changed:
+            for index in range(counts_after[source, pseudo]):
+                if windows_after[source, pseudo, index] != windows_before[source, pseudo, index]:
+                    changed = True
+                    break
+        if changed:
+            windows[lane] = windows_after[source, pseudo]
+            window_counts[lane] = counts_after[source, pseudo]
+    channel[ch] = channel_after[source]
+    for index in range(2):
+        offset = first_bank if index == 0 else first_lane
+        value = channel_int_after[source, index]
+        channel_int[ch, index] = value + offset if value >= 0 else value
+    rids = (ch, channels + ch, 2 * channels + first_lane, 2 * channels + first_lane + 1)
+    busy = np.empty(4, dtype=np.float64)
+    partial_busy = np.empty(4, dtype=np.float64)
+    for index in range(4):
+        rid = rids[index]
+        busy[index] = resources[rid, 1]
+        partial_busy[index] = resources_after[source, index, 1]
+        resources[rid, 0] = resources_after[source, index, 0]
+        for field in (2, 3):
+            if resources_after[source, index, field] != resources_before[source, index, field]:
+                resources[rid, field] = resources_after[source, index, field]
+        touched[rid] = touched[rid] or touched_after[source, index]
+    for pseudo in range(2):
+        directions[rids[2 + pseudo]] = directions_after[source, pseudo]
+    _fr_merge_tallies(ch, g, busy, partial_busy, moved_after[source], stats_after[source], int_after[source],
+                      float_after[source], counts_total[source], resources, moved, stats, out_int, out_float, counts)
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_open_rows_safe(source, ch, g, t, rows, bf, addresses, half, source_reach):
+    """Whether no row this channel holds open reaches tRASmax while it can still matter.
+
+    The first refresh closes every addressed bank, so those rows only have to
+    outlast the source's first refresh; a row a refresh leaves open has to
+    outlast its whole batch. Rows opened in the batch are the source's own.
+    """
+    if t[29] > 0:
+        for bank in range(2 * ch * g[1], (2 * ch + 2) * g[1]):
+            if rows[bank] >= 0 and _after(bf[bank, 0], t[29], half) <= source_reach[source, 0 if addresses[bank] >= 0 else 1]:
+                return False
+    return True
+
+
 @njit(cache=True, nogil=True, fastmath=False)
 def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc,
                           history, pc_seen, channel, channel_int, resources, moved, directions,
@@ -1439,6 +1825,89 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
     counts = np.zeros(7, dtype=np.float64)
     if requests == 0 or channel_first >= channel_stop:
         return counts
+    inverse = 1. / half
+    ticks = np.empty(t.shape[0], dtype=np.int64)
+    for index in range(t.shape[0]):
+        ticks[index] = _fr_tick(t[index], half)
+    # Runtime divisions on the burst path become these tables and shifts.
+    bank_group = np.empty(banks, dtype=np.int64)
+    bank_entry = np.empty(banks, dtype=np.int64)
+    bank_sid = np.empty(banks, dtype=np.int64)
+    for bank_within in range(banks):
+        bank_group[bank_within] = bank_within // g[4]
+        bank_entry[bank_within] = bank_within // g[10]
+        bank_sid[bank_within] = bank_within // 16
+    entry_group = np.empty(history.shape[1], dtype=np.int64)
+    entry_sid = np.empty(history.shape[1], dtype=np.int64)
+    for entry in range(history.shape[1]):
+        entry_group[entry] = entry * g[10] // g[4]
+        entry_sid[entry] = entry * g[10] // 16
+    group_sid_group = np.empty(g[5], dtype=np.int64)
+    for group in range(g[5]):
+        group_sid_group[group] = group // g[15]
+    grouped = g[12] != 0
+    grid_limit = t[0] * 2. ** 48
+    lane_shift, column_shift, bank_shift, sid_shift = (_binary_shift(g[0]), _binary_shift(g[3]),
+                                                        _binary_shift(g[4]), _binary_shift(g[14]))
+    binary = min(lane_shift, column_shift, bank_shift, sid_shift, _binary_shift(g[15])) >= 0
+    row_mask = ~(1 << g[6]) if g[6] >= 0 else -1
+    # A channel with the traffic and the live state of a simulated one takes
+    # its result. The dyadic idle-refresh fold reads busy totals, so a clock it
+    # can apply to does not mirror.
+    total_bursts = 0
+    for request in range(requests):
+        total_bursts += stops[request] - firsts[request]
+    mirror = (channel_stop - channel_first >= 2 and t[0] * 2 != math.floor(t[0] * 2)
+              and total_bursts >= FR_MIRROR_MIN_BURSTS * (channel_stop - channel_first))
+    capacity_sources = min(FR_MIRROR_SOURCES, channel_stop - channel_first) if mirror else 0
+    span_banks, entries = 2 * banks, history.shape[1]
+    sources = (np.empty(capacity_sources, dtype=np.int64), np.empty(capacity_sources, dtype=np.bool_),
+               np.empty((capacity_sources, 2), dtype=np.float64),
+               np.empty((capacity_sources, 4 * requests), dtype=np.int64),
+               np.empty((capacity_sources, span_banks), dtype=np.int64),
+               np.empty((capacity_sources, span_banks), dtype=np.int64),
+               np.empty((capacity_sources, span_banks), dtype=np.int64),
+               np.empty((capacity_sources, span_banks), dtype=np.int64),
+               np.empty((capacity_sources, span_banks, 7), dtype=np.float64),
+               np.empty((capacity_sources, span_banks, 7), dtype=np.float64),
+               np.empty((capacity_sources, 2, 4), dtype=np.float64),
+               np.empty((capacity_sources, 2, 4), dtype=np.float64),
+               np.empty((capacity_sources, 2, entries, 4), dtype=np.float64),
+               np.empty((capacity_sources, 2, entries, 4), dtype=np.float64),
+               np.empty((capacity_sources, 2, windows.shape[1]), dtype=np.float64),
+               np.empty((capacity_sources, 2), dtype=np.int64),
+               np.empty((capacity_sources, 2, windows.shape[1]), dtype=np.float64),
+               np.empty((capacity_sources, 2), dtype=np.int64),
+               np.empty((capacity_sources, 2), dtype=np.float64),
+               np.empty((capacity_sources, 2), dtype=np.float64),
+               np.empty((capacity_sources, 2), dtype=np.int64),
+               np.empty((capacity_sources, 2), dtype=np.int64),
+               np.empty((capacity_sources, 4, 4), dtype=np.float64),
+               np.empty((capacity_sources, 4, 4), dtype=np.float64),
+               np.empty((capacity_sources, 2), dtype=np.int8),
+               np.empty((capacity_sources, 2), dtype=np.int8),
+               np.empty((capacity_sources, 4), dtype=np.bool_),
+               np.empty((capacity_sources, 2), dtype=np.bool_),
+               np.empty((capacity_sources, 2), dtype=np.int64),
+               np.empty((capacity_sources, 2, stats.shape[1]), dtype=np.float64),
+               np.empty((capacity_sources, requests, 3), dtype=np.int64),
+               np.empty((capacity_sources, requests, 2), dtype=np.float64),
+               np.empty((capacity_sources, 7), dtype=np.float64))
+    source_usable, source_reach, source_signature = sources[1], sources[2], sources[3]
+    source_count = 0
+    signature = np.empty(4 * requests if mirror else 0, dtype=np.int64)
+    first_arrival = math.inf
+    for request in range(requests):
+        first_arrival = min(first_arrival, arrivals[request])
+    tally = np.zeros(7, dtype=np.float64) if mirror else counts
+    ch_int = np.zeros((requests, 3), dtype=np.int64) if mirror else out_int
+    ch_float = np.zeros((requests, 2), dtype=np.float64) if mirror else out_float
+    saved_busy = np.empty(4, dtype=np.float64)
+    partial_busy = np.empty(4, dtype=np.float64)
+    saved_moved = np.empty(2, dtype=np.int64)
+    partial_moved = np.empty(2, dtype=np.int64)
+    saved_stats = np.empty((2, stats.shape[1]), dtype=np.float64)
+    partial_stats = np.empty((2, stats.shape[1]), dtype=np.float64)
     depth = max(q[0], q[1])
     q_bank = np.empty((2, 2, depth), dtype=np.int64)
     q_row = np.empty((2, 2, depth), dtype=np.int64)
@@ -1470,6 +1939,9 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
     plan_start = np.empty(2, dtype=np.float64)
     traffic_floor = np.empty(2, dtype=np.float64)
     recovery = (t[9], _after(_after(t[23], t[26], half), t[10], half))
+    recovery_ticks = (_fr_tick(recovery[0], half), _fr_tick(recovery[1], half))
+    column_duration = t[3] * t[0]
+    column_duration_tick = _fr_tick(column_duration, half)
     for ch in range(channel_first, channel_stop):
         row_bus, column_bus = ch, channels + ch
         reached = False
@@ -1482,6 +1954,47 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                 reached = reached or iter_request[pseudo, direction] >= 0
         if not reached:
             continue
+        capture = -1
+        if mirror:
+            if channel[ch, 1] >= 0:
+                _fr_signature(ch, lanes, firsts, stops, signature)
+                lowest = min(first_arrival, channel[ch, 1])
+                mirrored = False
+                for source in range(source_count):
+                    if not source_usable[source] or not np.array_equal(source_signature[source], signature):
+                        continue
+                    if (_fr_state_matches(source, ch, lowest, g, t, half, rows, bf, addresses, pc, history, channel,
+                                          channel_int, resources, directions, windows, window_counts, sources)
+                            and _fr_open_rows_safe(source, ch, g, t, rows, bf, addresses, half, source_reach)):
+                        _fr_apply_source(source, ch, g, rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
+                                         resources, moved, directions, touched, windows, window_counts, stats,
+                                         out_int, out_float, counts, sources)
+                        mirrored = True
+                        break
+                if mirrored:
+                    continue
+                if source_count < capacity_sources:
+                    capture = source_count
+                    source_count += 1
+                    source_signature[capture] = signature
+                    _fr_capture_before(capture, ch, g, rows, bf, addresses, pc, history, channel, channel_int,
+                                       resources, directions, windows, window_counts, sources)
+            # The channel's own tallies, added to the batch's when it finishes.
+            for pseudo in range(2):
+                lane = 2 * ch + pseudo
+                data = 2 * channels + lane
+                saved_busy[2 + pseudo], resources[data, 1] = resources[data, 1], 0.
+                saved_moved[pseudo], moved[data] = moved[data], 0
+                saved_stats[pseudo] = stats[lane]
+                stats[lane] = 0.
+            saved_busy[0], resources[row_bus, 1] = resources[row_bus, 1], 0.
+            saved_busy[1], resources[column_bus, 1] = resources[column_bus, 1], 0.
+            tally[:] = 0.
+            ch_int[:] = 0
+            ch_float[:, 0] = -math.inf
+            ch_float[:, 1] = 0.
+        reach = reach_open = -math.inf
+        refreshed = deadline_reached = False
         active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
         head[:] = 0
         count[:] = 0
@@ -1519,7 +2032,14 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                     while count[pseudo, direction] < capacity and iter_request[pseudo, direction] >= 0:
                         request = iter_request[pseudo, direction]
                         cursor = iter_cursor[pseudo, direction]
-                        _, bank_within, row, _ = _burst_location(cursor, g, False, 0, 0, 0, 0)
+                        if binary:
+                            # The g[13] arm of _burst_location for non-negative cursors.
+                            block = cursor >> (1 + lane_shift + column_shift)
+                            bank_within = ((block >> bank_shift) & (g[14] - 1)) * g[15] * g[4]
+                            bank_within += ((cursor & 1) & (g[15] - 1)) * g[4] + (block & (g[4] - 1))
+                            row = (block >> (bank_shift + sid_shift)) & row_mask
+                        else:
+                            _, bank_within, row, _ = _burst_location(cursor, g, False, 0, 0, 0, 0)
                         bank = lane * banks + bank_within
                         slot = head[pseudo, direction] + count[pseudo, direction]
                         if slot >= capacity:
@@ -1581,15 +2101,15 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                     if rows[bank] != q_row[pseudo, direction, slot]:
                         continue
                     bank_within = bank - lane * banks
-                    group = bank_within // g[4]
+                    group = bank_group[bank_within]
                     ready = max(floor, bf[bank, 3 if read else 4], q_entry[pseudo, direction, slot])
-                    stamp = history[lane, bank_within // g[10], 1 if read else 2]
+                    stamp = history[lane, bank_entry[bank_within], 1 if read else 2]
                     if stamp >= 0:
                         ready = max(ready, stamp + t[11])
                     if previous >= 0:
                         if previous_group == group:
                             ready = max(ready, previous + t[11])
-                        elif read and previous_group // g[15] != group // g[15]:
+                        elif read and group_sid_group[previous_group] != group_sid_group[group]:
                             ready = max(ready, previous + t[13])
                     if ready < best:
                         best, hit_offset = ready, offset
@@ -1620,9 +2140,10 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                         slot -= capacity
                     bank = q_bank[pseudo, direction, slot]
                     bank_within = bank - lane * banks
-                    start = _column_start(lane, bank, bank_within // g[4], bf[bank, 3 if read else 4],
-                                          q_entry[pseudo, direction, slot], read, g, t, pc, history,
-                                          resources, directions)
+                    start = _fr_column_start(lane, bank_group[bank_within], bank_sid[bank_within],
+                                             bf[bank, 3 if read else 4], q_entry[pseudo, direction, slot], read,
+                                             t, ticks, half, inverse, entry_group, entry_sid, grouped, grid_limit,
+                                             pc, history, column_bus, 2 * channels + lane, resources, directions)
                     kind, chosen = 0, hit_offset
                 if row_offset >= 0:
                     slot = first_slot + row_offset
@@ -1635,7 +2156,7 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                         row_kind = 1
                     else:
                         # The row bus alone bounds later ACTs, so it alone may prune tFAW history.
-                        row_start = _activate_start(lane, bank, (bank - lane * banks) // g[4],
+                        row_start = _activate_start(lane, bank, bank_group[bank - lane * banks],
                                                     max(entry, act_floor[pseudo]), 0., g, t, bf, pc,
                                                     history, resources, windows, window_counts)
                         row_kind = 2
@@ -1667,33 +2188,39 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
             bank, row = q_bank[pseudo, direction, slot], q_row[pseudo, direction, slot]
             request, entry = q_request[pseudo, direction, slot], q_entry[pseudo, direction, slot]
             bank_within = bank - lane * banks
-            group, history_entry = bank_within // g[4], bank_within // g[10]
-            horizon = _after(start, recovery[direction], half) if kind == 0 else start
+            group, history_entry = bank_group[bank_within], bank_entry[bank_within]
+            horizon = (_fr_after(start, recovery[direction], recovery_ticks[direction], half, inverse)
+                       if kind == 0 else start)
             if stale_deadline[ch]:
                 active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
                 stale_deadline[ch] = 0
             maintained = False
+            reach = max(reach, horizon)
             if active_deadlines[ch] <= horizon:
+                deadline_reached = True
                 if g[8] and channel[ch, 1] < 0:
                     channel[ch, 1] = max(t[20], math.floor(entry / t[20]) * t[20])
                 if g[8] and channel[ch, 1] <= active_deadlines[ch]:
                     _refresh_until(lane, channel[ch, 1], entry, g, t, rows, bf, addresses,
-                                   pc, pc_seen, channel, channel_int, resources, touched, counts)
+                                   pc, pc_seen, channel, channel_int, resources, touched, tally)
                 else:
                     _close_expiring(ch, horizon, g, t, rows, bf, addresses, pc, channel,
-                                    channel_int, resources, touched, counts)
+                                    channel_int, resources, touched, tally)
                 maintained = True
             elif _refresh_until(lane, start, entry, g, t, rows, bf, addresses, pc, pc_seen,
-                                channel, channel_int, resources, touched, counts):
+                                channel, channel_int, resources, touched, tally):
                 maintained = True
             if maintained:
+                if not refreshed:
+                    refreshed = True
+                    reach_open = max(reach, resources[row_bus, 0])
                 active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
                 _fr_recount(ch, banks, rows, count, head, q, q_bank, q_row, pending_hit, dirty)
                 stale[:] = True
                 continue
             if kind == 1:
                 _precharge(lane, bank, entry, g, t, rows, bf, pc, channel, channel_int,
-                           resources, touched, counts)
+                           resources, touched, tally)
                 _close_deadline(ch, bank, g, t, rows, bf, addresses, active_deadlines, stale_deadline)
                 stats[lane, 4] += 1
                 early[pseudo, bank_within] = 1
@@ -1707,8 +2234,10 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                 anchor = _after(start, t[0], half)
                 if t[29] > 0:
                     rcd = t[4 if read else 5]
-                    column = _column_start(lane, bank, group, _after(anchor, rcd, half), entry, read,
-                                           g, t, pc, history, resources, directions)
+                    column = _fr_column_start(lane, group, bank_sid[bank_within], _after(anchor, rcd, half), entry,
+                                              read, t, ticks, half, inverse, entry_group, entry_sid, grouped,
+                                              grid_limit, pc, history, column_bus, 2 * channels + lane, resources,
+                                              directions)
                     latest = _after(column, recovery[direction], half)
                     if latest > _after(anchor, t[29], half):
                         if _after(rcd, recovery[direction], half) > t[29]:
@@ -1719,7 +2248,7 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                             _after(_after(latest, -t[29], half), -t[0], half)), t[0])
                         stale[pseudo] = True
                         continue
-                command, _ = _command(ch, 0, start, t[1], True, g, t, resources, touched, counts)
+                command, _ = _command(ch, 0, start, t[1], True, g, t, resources, touched, tally)
                 anchor = _after(command, t[0], half)
                 history[lane, group, 0] = anchor
                 if t[30] > 0:
@@ -1732,7 +2261,7 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                 rows[bank] = row
                 bf[bank, 6] = min(bf[bank, 3], bf[bank, 4])
                 bf[bank, 5] = bf[bank, 2]
-                counts[0] += 1
+                tally[0] += 1
                 stats[lane, 3] += 1
                 if stale_deadline[ch]:
                     active_deadlines[ch] = _next_active_deadline(ch, g, t, rows, bf, addresses)
@@ -1755,23 +2284,32 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                 stale[pseudo] = True
                 last_pseudo = pseudo
                 continue
-            command, _ = _command(ch, 1, start, t[3], True, g, t, resources, touched, counts)
-            counts[2 if read else 3] += 1
+            # _command on the column bus; a rising edge on the command clock either way.
+            command = _align(max(start, resources[column_bus, 0]), t[0])
+            command_end = _fr_after(command, column_duration, column_duration_tick, half, inverse)
+            resources[column_bus, 0] = command_end
+            resources[column_bus, 1] += column_duration
+            resources[column_bus, 2], resources[column_bus, 3] = command, command_end
+            touched[column_bus] = True
+            tally[6] += command_end - command
+            tally[2 if read else 3] += 1
             history[lane, history_entry, 1 if read else 2] = command
             data = 2 * channels + lane
             if directions[data] and directions[data] != (1 if read else 2):
                 stats[lane, 5] += 1
-            data_start = max(_after(command, t[22 if read else 23], half), resources[data, 0])
-            data_end = _after(data_start, t[26], half)
+            data_start = max(_fr_after(command, t[22 if read else 23], ticks[22 if read else 23], half, inverse),
+                             resources[data, 0])
+            data_end = _fr_after(data_start, t[26], ticks[26], half, inverse)
             resources[data, 0] = data_end
             resources[data, 1] += t[26]
             resources[data, 2], resources[data, 3] = data_start, data_end
             moved[data] += g[9]
             directions[data] = 1 if read else 2
             touched[data] = True
-            pc[lane, 2 if read else 3] = _after(data_start, t[27 if read else 28], half)
+            pc[lane, 2 if read else 3] = _fr_after(data_start, t[27 if read else 28], ticks[27 if read else 28],
+                                                   half, inverse)
             if read:
-                bf[bank, 2] = max(bf[bank, 2], _after(command, t[9], half))
+                bf[bank, 2] = max(bf[bank, 2], _fr_after(command, t[9], ticks[9], half, inverse))
                 reads_since[pseudo] += 1
                 # Waits only count time another request's traffic held this lane.
                 own = own_last[request, pseudo]
@@ -1785,15 +2323,15 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                 own_last[request, pseudo] = command
                 lane_request[pseudo] = request
             else:
-                bf[bank, 2] = max(bf[bank, 2], _after(data_end, t[10], half))
+                bf[bank, 2] = max(bf[bank, 2], _fr_after(data_end, t[10], ticks[10], half, inverse))
                 history[lane, history_entry, 3] = data_end
             bf[bank, 5] = bf[bank, 2]
-            out_float[request, 0] = max(out_float[request, 0], data_end)
+            ch_float[request, 0] = max(ch_float[request, 0], data_end)
             outcome = early[pseudo, bank_within]
             early[pseudo, bank_within] = 0
             # Early tags: 0 row hit, 2 opened after a conflict, 3 opened from closed.
             outcome = 0 if outcome == 0 else 2 if outcome == 2 else 1
-            out_int[request, outcome] += 1
+            ch_int[request, outcome] += 1
             stats[lane, outcome] += 1
             pending_hit[pseudo, direction, bank_within] -= 1
             # Remove the entry, keeping the others in age order.
@@ -1817,10 +2355,27 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
             lane = 2 * ch + pseudo
             for request in range(requests):
                 pending_wait = own_wait[request, pseudo]
-                if pending_wait > out_float[request, 1]:
-                    out_float[request, 1] = pending_wait
+                if pending_wait > ch_float[request, 1]:
+                    ch_float[request, 1] = pending_wait
                 if pending_wait > stats[lane, 9]:
                     stats[lane, 9] = pending_wait
+        if mirror:
+            partial_busy[0], partial_busy[1] = resources[row_bus, 1], resources[column_bus, 1]
+            for pseudo in range(2):
+                lane = 2 * ch + pseudo
+                data = 2 * channels + lane
+                partial_busy[2 + pseudo] = resources[data, 1]
+                partial_moved[pseudo] = moved[data]
+                moved[data] = saved_moved[pseudo]
+                partial_stats[pseudo] = stats[lane]
+                stats[lane] = saved_stats[pseudo]
+            if capture >= 0:
+                reach = max(reach, resources[row_bus, 0], resources[column_bus, 0])
+                _fr_capture_after(capture, ch, not deadline_reached, reach_open if refreshed else reach, reach, g, rows, bf, addresses, pc, history, channel,
+                                  channel_int, resources, directions, windows, window_counts, pc_seen, touched,
+                                  partial_moved, partial_stats, ch_int, ch_float, tally, sources)
+            _fr_merge_tallies(ch, g, saved_busy, partial_busy, partial_moved, partial_stats, ch_int, ch_float, tally,
+                              resources, moved, stats, out_int, out_float, counts)
     return counts
 
 

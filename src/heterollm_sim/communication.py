@@ -1110,23 +1110,33 @@ def _ring_rounds(
         "reduce_scatter": count - 1,
         "all_to_all": count - 1,
     }[kind]
+    # Ring reductions and gathers split every chunk over the two ring
+    # directions, one half to each neighbour, so both directions of every
+    # ring edge carry traffic. Two participants already use both directions
+    # of their one edge. Pairwise all-to-all instead rotates the destination
+    # every round so every source reaches every other participant once.
+    bidirectional = kind != "all_to_all" and count > 2
+    halves = ((chunk + 1) // 2, chunk // 2) if bidirectional else (chunk,)
     rounds: List[CollectiveRound] = []
     for round_index in range(round_count):
         transfers = []
         for rank, source in enumerate(participants):
-            # Ring reductions forward chunks to the next hop.  Pairwise
-            # all-to-all instead rotates the destination every round so every
-            # source reaches every other participant exactly once.
-            distance = round_index + 1 if kind == "all_to_all" else 1
-            target = participants[(rank + distance) % count]
-            transfers.append(
-                CollectiveTransfer(
-                    source,
-                    target,
-                    chunk,
-                    router.route(source, target, chunk, policy=routing_policy),
+            for direction, byte_count in enumerate(halves):
+                if byte_count == 0:
+                    continue
+                if kind == "all_to_all":
+                    distance = round_index + 1
+                else:
+                    distance = 1 if direction == 0 else count - 1
+                target = participants[(rank + distance) % count]
+                transfers.append(
+                    CollectiveTransfer(
+                        source,
+                        target,
+                        byte_count,
+                        router.route(source, target, byte_count, policy=routing_policy),
+                    )
                 )
-            )
         rounds.append(CollectiveRound(round_index, tuple(transfers)))
     return tuple(rounds)
 

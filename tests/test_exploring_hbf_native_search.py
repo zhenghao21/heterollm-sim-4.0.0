@@ -364,6 +364,32 @@ def test_throughput_objective_prefers_more_replicas_over_a_larger_replica_batch(
     assert index == 1 and batch == dp2["batch"]
 
 
+def test_the_largest_batch_is_searched_after_the_throughput_search():
+    # DP2_TP4 holds only B=320 per replica (80/GPU) at 37.6 ms: the best
+    # rate. TP8 runs B=1328 (166/GPU) within the SLO at a lower rate; it
+    # is pruned by the throughput search and searched again for Fig. 3.
+    capacity = 320
+    entries = [entry(DP2_TP4, candidate=320, line=(12e6, .08e6), capacity=capacity),
+               entry(TP8, candidate=1400, line=(19e6, .06e6), capacity=1400)]
+    tp8_tpot = lambda b: (20 + .06 * b) * 1e6
+    layouts = [native(lambda b: (12 + .08 * b) * 1e6, lambda b: 1. * b, gpus=4, capacity=capacity,
+                      too_big=lambda b: ("capacity_rejected", "not_a_full_batch") if b > capacity else None),
+               native(tp8_tpot, lambda b: .5 * b)]
+    plan, runs = drive(entries, layouts)
+    assert plan["acceptance"]["layout"] == DP2_TP4 and plan["acceptance"]["batch"] == capacity
+    assert plan["layouts"][1]["outcome"]["kind"] == "pruned"
+    largest = plan["max_batch"]
+    assert largest["layouts"][0]["outcome"]["reason"] == "bypass_batch_bound_not_above_incumbent"
+    # Its second point lands within a search step below the SLO batch (1333).
+    assert [run["batch"] for run in largest["layouts"][1]["runs"]] == [512, 1313]
+    assert largest["selected"] == {"layout": TP8, "batch": 1313, "batch_per_gpu": 1313 / 8,
+                                   "result": "native_capacity_limited"}
+    assert tp8_tpot(1313) * 1.002 <= SLO and 1333 - 1313 < search.MIN_STEP * 1313
+    # The throughput selection is unchanged by the extra points.
+    _row, index, selected_batch = selected(plan, layouts)
+    assert (index, selected_batch) == (0, capacity)
+
+
 def test_branch_and_bound_prunes_layouts_that_cannot_beat_the_incumbent():
     slow = {"dp": 4, "tp": 2, "pp": 1, "ep": 1}
     weak = {"dp": 2, "tp": 2, "pp": 2, "ep": 1}
@@ -382,12 +408,14 @@ def test_branch_and_bound_prunes_layouts_that_cannot_beat_the_incumbent():
     # anchor's best passing rate; it fails far above the SLO and is pruned.
     threshold = math.ceil(bounds["anchor_tokens_per_second_per_gpu"] * 2 * SLO / 1e9)
     assert threshold < search.FIRST_POINT_MAX_BATCH
-    assert [batch for index, batch in runs if index == 1] == [threshold]
+    assert [run["batch"] for run in second["runs"]] == [threshold]
     assert second["outcome"]["kind"] == "pruned"
     assert second["outcome"]["reason"] == "native_point_above_slo_below_incumbent"
-    # The weak layout's bypass line alone bounds it below the incumbent: it never runs.
+    # The weak layout's bypass line alone bounds it below the incumbent: it
+    # never runs, in neither search.
     assert third["outcome"]["reason"] == "bypass_rate_bound_below_incumbent"
     assert third["runs"] == [] and all(index != 2 for index, _batch in runs)
+    assert plan["max_batch"]["layouts"][2]["outcome"]["reason"] == "bypass_batch_bound_not_above_incumbent"
     assert second["outcome"]["incumbent_tokens_per_second_per_gpu"] == bounds["incumbent_tokens_per_second_per_gpu"]
     assert plan["acceptance"]["layout"] == DP2_TP4
 
@@ -406,7 +434,7 @@ def test_a_point_below_the_slo_prunes_by_the_slope_floor():
     assert search.bypass_rate_bound(entries[1], 8, SLO) / search.BYPASS_TPOT_FLOOR > incumbent
     # The anchor's native slope exceeds its bypass slope, so the floor is SLOPE_FLOOR.
     assert bounds["slope_floor"] == search.SLOPE_FLOOR
-    assert [batch for index, batch in runs if index == 1] == [512]
+    assert [run["batch"] for run in plan["layouts"][1]["runs"]] == [512]
     assert outcome["kind"] == "pruned" and outcome["reason"] == "native_slope_bound_below_incumbent"
     # The bound still lies above the pipeline's real best rate (B=1000 at the SLO).
     point = plan["layouts"][1]["points"][0]
@@ -501,3 +529,9 @@ def test_search_manager_runs_each_point_once_and_reports_the_accepted_batch(tmp_
     with pytest.raises(RuntimeError, match="manifest differs"):
         run.run_search_manager(tmp_path, workers=1, spawn=lambda *a: pytest.fail("started"), poll_seconds=0,
                                screen=lambda case: bypass, case_ids=selection[:1])
+
+
+def test_a_prefill_wall_kill_ends_the_layout_but_a_decode_wall_kill_tries_a_smaller_batch():
+    killed = {"status": "forecast_rejected", "rejection_reason": "native_process_wall_budget_exhausted"}
+    assert search.classify({**killed, "process_watchdog": {"phase": "decode"}}) == "too_big"
+    assert search.classify({**killed, "process_watchdog": {"phase": "prefill"}}) == "unusable"

@@ -60,7 +60,8 @@ def test_thirteen_declared_chunks_keep_live_state_and_fixed_ring_geometry(monkey
                     assert access["offset_bytes"] == (context * 16 if layer in {
                         "layer-003", "layer-007"} else 0)
                     if layer not in {"layer-003", "layer-007"}:
-                        assert access["allocation_size_bytes"] == 4 * 16
+                        # The 4-token ring stays inside one 256-token block of the three-block pool.
+                        assert access["allocation_size_bytes"] == 3 * 256 * 16
                 if index:
                     # Full attention reads the whole earlier prompt.
                     assert any(layer == "layer-007" and access["operation"] == "read"

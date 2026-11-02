@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts"), str(ROOT / "tests")]
 from exploring_hbf_native_config import (
     PD_LINK_BYTES_PER_SECOND, build_native_comparison_scenario, native_capacity_batch, native_import_pool,
-    validate_native_layout,
+    native_kv_block_peaks, validate_native_layout,
 )
 from exploring_hbf_native_models import build_native_paper_model
 from exploring_hbf_paper_config import hardware_by_id
@@ -128,13 +128,17 @@ def test_import_pool_is_per_ep_group_and_uses_the_group_batch_for_the_slot_count
         call(6, 8, 1, 4)
 
 
-def test_capacity_batch_fits_seeds_and_the_pool_in_the_requests_a_group_held():
+def test_capacity_batch_is_the_largest_whose_refill_cycle_peak_fits_the_pools():
     layers, hbf = layers_of("llama4_maverick"), hardware_by_id("HBF")
     pool = lambda batch: native_import_pool(layers, 103500, 1100, batch, 8, 1, 2, hbf)
-    batch = native_capacity_batch(1000, 2400, pool(2400), 1100, 2)
-    # Each group holds its B/ep seeds plus its pool share, and one more pair would not fit.
-    assert batch == 1996 and batch // 2 + pool(batch) // 2 <= 1000 < (batch + 2) // 2 + pool(batch + 2) // 2
-    assert native_capacity_batch(2, 2400, pool(2400), 1100, 2) == 0
+    peaks = lambda batch: native_kv_block_peaks(layers, 103500, 1100, batch, 2, pool(batch))
+    # LONG overflows the 8192-token chunk: those layers hold a 32-block ring.
+    assert peaks(2)["chunk"] == [32 * (1 + pool(2) // 2)] * 2
+    capacity = {"full": max(peaks(1000)["full"]), "chunk": 10**9}
+    batch = native_capacity_batch(capacity, 2400, pool(2400), layers, 103500, 1100, 2, 2)
+    fits = lambda b: all(max(peaks(b)[kind]) <= capacity[kind] for kind in capacity)
+    assert batch >= 1000 and fits(batch) and not fits(batch + 2)
+    assert native_capacity_batch({"full": 10, "chunk": 10}, 2400, pool(2400), layers, 103500, 1100, 2, 2) == 0
 
 
 def test_built_pool_matches_the_helper_for_the_scenario_it_describes():

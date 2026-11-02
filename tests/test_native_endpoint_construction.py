@@ -2,6 +2,7 @@
 from dataclasses import replace
 from copy import deepcopy
 from pathlib import Path
+import re
 import sys
 
 import pytest
@@ -142,7 +143,13 @@ def test_native_owner_prefixed_resources_and_one_shared_host_remain_eligible():
 
 
 @pytest.mark.parametrize("case", ["hbm_tp2", "hbf_kv_tp1", "hbf_weights_kv_tp1"])
-def test_live_timing_and_physical_ledger_equal_priced_preview(case):
+def test_live_timing_and_physical_ledger_equal_priced_preview(case, monkeypatch):
+    # The pilot's tiny KV pools would share DRAM rows across ranks; the two
+    # execution orders differ in which rank opens such a row first.
+    from heterollm_sim.memory_allocator import PhysicalAddressAllocator
+    original = PhysicalAddressAllocator.__init__
+    monkeypatch.setattr(PhysicalAddressAllocator, "__init__", lambda self, capacity, alignment=64, **kwargs:
+                        original(self, capacity, max(alignment, 1 << 20), **kwargs))
     scenario = build_pilot_scenario(case)
     scenario = replace(scenario, workload=replace(scenario.workload,
         requests=scenario.workload.requests[:1], request_count=1))
@@ -162,10 +169,14 @@ def _ordered_resource_state(value):
     # Owner/resource identity, rather than unrelated simultaneous host
     # dispatch, defines the physical state. Cold preview removal may change
     # cross-owner ties and therefore a raw dictionary's insertion order.
+    # A bidirectional ring round lands two equal halves on each rank at
+    # once; which of the two buffers the tie dispatches first is a label.
     if type(value) is dict:
         return {key: _ordered_resource_state(value[key]) for key in sorted(value, key=repr)}
     if type(value) in (tuple, list):
         return type(value)(_ordered_resource_state(item) for item in value)
+    if type(value) is str and ".tx" in value:
+        return re.sub(r"(\.round\d+\.tx)\d+", r"\1", value)
     return value
 
 

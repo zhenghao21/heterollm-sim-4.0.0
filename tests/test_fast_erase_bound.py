@@ -297,7 +297,7 @@ def formal_blueprint_runtime(model="qwen2_5-0_5b"):
     state = NS(cached_tokens=65664, spec=scenario.workload.requests[0])
     runner = NS(lowerer=TopologyAwareBatchCostProvider(scenario, defer_physical_execution=True),
                 plan=NS(scenario=scenario), _state_values=(state,))
-    rows = [{"buffer_id": f"kv:scan-request:{layer.layer_id}:rank0:tp0:pp0:{part}",
+    rows = [{"buffer_id": f"kv:pool:{layer.layer_id}:rank0:tp0:pp0:{part}",
              "physical_owner": "hbf0.memory", "component_id": "hbf0"}
             for layer in _execution_layers(scenario) for part in ("k", "v")]
     return runner, rows

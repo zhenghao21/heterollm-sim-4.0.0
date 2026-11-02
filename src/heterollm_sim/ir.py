@@ -2412,10 +2412,18 @@ class KVCachePolicy:
     # executor.  Relays model an explicit staging hop (for example a host
     # DRAM buffer) and are charged for both the write and read leg.
     relay_components: Tuple[str, ...] = ()
+    # Physical KV is paged in blocks of ``tokens_per_page`` tokens, one pool
+    # per rank, KV layer and K/V.  These declare each EP group's pool size in
+    # blocks for full-attention and chunked-attention layers; zero sizes the
+    # pools from the scheduler's demand bound and the KV capacity.
+    pool_blocks: int = 0
+    chunk_pool_blocks: int = 0
 
     def __post_init__(self) -> None:
         _require_optional_name(self.cache_component, "cache_component")
         _require_optional_name(self.offload_component, "offload_component")
+        _require_int(self.pool_blocks, "pool_blocks")
+        _require_int(self.chunk_pool_blocks, "chunk_pool_blocks")
         _require_optional_name(self.dtype, "dtype")
         _require_int(self.tokens_per_page, "tokens_per_page", minimum=1)
         _require_number(self.offload_ratio, "offload_ratio")

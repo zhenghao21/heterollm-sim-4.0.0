@@ -189,6 +189,11 @@ def _merge_ranges(ranges):
     return tuple(merged)
 
 
+def _page_share(page):
+    """A fixed, evenly spread position of a page index in [0, 1) (Fibonacci hashing)."""
+    return (page * 0x9E3779B97F4A7C15 & 0xFFFFFFFFFFFFFFFF) / 18446744073709551616.
+
+
 def _copy_nand_read_cache(cache, memo=None):
     """Copy page buffers directly while retaining extension aliases/cycles."""
     if memo is None:
@@ -270,9 +275,11 @@ class _NandTransaction:
         # copies their small per-channel counters and in-flight programs.
         self.tail_pages = {}
         self.tail_scopes = None
+        self.tail_spilled = None
         self.tail_counters = (core._tail_valid, core._tail_peak, list(core._tail_flushing),
                               core._tail_full_page_fills, core._tail_flush_started_pages,
-                              core._tail_flush_discarded_pages)
+                              core._tail_flush_discarded_pages, core._tail_spilled_pages,
+                              core._tail_evicted_pages)
 
     def remember_tail(self, core, page):
         if page not in self.tail_pages:
@@ -282,6 +289,10 @@ class _NandTransaction:
         if self.tail_scopes is None:
             self.tail_scopes = {scope: set(pages)
                                 for scope, pages in core._tail_full_scopes.items()}
+
+    def remember_tail_spilled(self, core):
+        if self.tail_spilled is None:
+            self.tail_spilled = set(core._tail_spilled)
 
     def capture_numeric(self, packed):
         if packed is self.numeric_at_begin and self.numeric is None:
@@ -380,7 +391,10 @@ class _NandTransaction:
         core._tail_valid, core._tail_peak = self.tail_counters[:2]
         core._tail_flushing = list(self.tail_counters[2])
         (core._tail_full_page_fills, core._tail_flush_started_pages,
-         core._tail_flush_discarded_pages) = self.tail_counters[3:]
+         core._tail_flush_discarded_pages, core._tail_spilled_pages,
+         core._tail_evicted_pages) = self.tail_counters[3:]
+        if self.tail_spilled is not None:
+            core._tail_spilled = set(self.tail_spilled)
         if self.tail_pages:
             pages = core._tail_pages
             for page, previous in self.tail_pages.items():
@@ -468,9 +482,18 @@ class NandCore:
         self._tail_full_page_fills = 0
         self._tail_flush_started_pages = 0
         self._tail_flush_discarded_pages = 0
+        # Pages whose rows go to the array because the store had no room when
+        # they started or grew; they stay there until their allocation is
+        # released (their later rows read-modify-write the array page).
+        self._tail_spilled: set[int] = set()
+        self._tail_spilled_pages = 0
+        self._tail_evicted_pages = 0
         # Bytes per channel of other data interleaved over the same store
         # (logic-die SRAM activations); the physical runtime refreshes it.
         self._tail_shared = 0
+        # Share of new tail pages the store keeps in the step a sampled run
+        # stands for (the stationary sampler sets it); 1 admits by room only.
+        self._tail_fraction = 1.
 
     def begin_transaction(self):
         """Protect program-order, wear and read buffers; caller owns other state."""
@@ -1658,6 +1681,63 @@ class NandCore:
         for token in self._nand_transactions:
             token.remember_tail_scopes(self)
 
+    def _tail_spill(self, page):
+        for token in self._nand_transactions:
+            token.remember_tail_spilled(self)
+        self._tail_spilled.add(page)
+        self._tail_spilled_pages += 1
+
+    def _tail_admit(self, pages, start, end, arrival):
+        """The pages of a write the store can hold; the others spill to the array.
+
+        A page enters the store only if its valid bytes fit beside the shared
+        data. A sampled run stands for a whole step whose other layers' tails
+        hold the rest of the store: there a new page is kept only if its
+        index falls in the step's stored share (``_tail_fraction``), so every
+        layer keeps the same share. A staged page that would overflow is
+        programmed from the store now and its new rows go to the array. A
+        full store therefore costs array programs and read-modify-writes
+        instead of refusing the batch.
+        """
+        config = self.config
+        page_bytes = config.page_bytes
+        self._tail_release(arrival)
+        room = config.page_staging_bytes_per_host_channel - self._tail_shared_bytes()
+        fraction = self._tail_fraction
+        valid, entries, kept = list(self._tail_valid), self._tail_pages, set()
+        for page in pages:
+            base = page * page_bytes
+            lo, hi = max(start, base) - base, min(end, base + page_bytes) - base
+            channel = self._tail_channel(page)
+            entry = entries.get(page)
+            if entry is None or entry[3] >= 0:
+                if fraction < 1. and _page_share(page) >= fraction:
+                    self._tail_spill(page)
+                    continue
+                # A new copy holds the page's whole valid prefix; it replaces
+                # a copy whose program is running.
+                grow = hi - (entry[1] if entry is not None else 0)
+            else:
+                grow = sum(right - left for left, right in _merge_ranges(entry[0] + ((lo, hi),))) - entry[1]
+            if valid[channel] + grow > room:
+                if entry is not None and entry[3] < 0:
+                    self._tail_evict(page, entry, arrival)
+                self._tail_spill(page)
+                continue
+            valid[channel] += grow
+            kept.add(page)
+        return kept
+
+    def _tail_evict(self, page, entry, now):
+        """Program a staged partial page from the store to make room."""
+        mapping = map_nand_address(self.config, page * self.config.page_bytes)
+        end, _internal, _host = self._tail_program(
+            page, mapping, entry[2], [], start_override=max(float(now), float(entry[2])))
+        self._tail_remember(page)
+        self._tail_pages[page] = (entry[0], entry[1], entry[2], end, entry[4])
+        heappush(self._tail_flushing, (end, page))
+        self._tail_evicted_pages += 1
+
     def set_staging_scope(self, scope):
         """Select the decode layer/rank scope whose full pages remain staged."""
         if scope is not None and (not isinstance(scope, str) or not scope):
@@ -1757,10 +1837,14 @@ class NandCore:
         return index[bisect_left(index, first):bisect_right(index, last)]
 
     def _tail_readable(self, first, last, arrival):
-        """Staged pages a read arriving at ``arrival`` takes from the store."""
-        pages = self._tail_pages
+        """Staged pages a read arriving at ``arrival`` takes from the store.
+
+        A spilled page is read from the array: its later rows never entered
+        the store.
+        """
+        pages, spilled = self._tail_pages, self._tail_spilled
         return tuple(page for page in self._tail_staged(first, last)
-                     if pages[page][3] < 0 or pages[page][3] > arrival)
+                     if (pages[page][3] < 0 or pages[page][3] > arrival) and page not in spilled)
 
     def _tail_check_read(self, page, start, end):
         """A staged page serves only bytes that some write put in the store."""
@@ -1784,7 +1868,10 @@ class NandCore:
                 "full_page_fills": int(self._tail_full_page_fills),
                 "started_programs": int(self._tail_flush_started_pages),
                 "discarded_pages": int(self._tail_flush_discarded_pages),
-                "pages_programmed": int(self._tail_flush_started_pages)}
+                "pages_programmed": int(self._tail_flush_started_pages),
+                "spilled_pages": int(self._tail_spilled_pages),
+                "evicted_pages": int(self._tail_evicted_pages),
+                "stored_fraction": float(self._tail_fraction)}
 
     def discard_tail_pages(self, address, byte_count):
         """Drop staged copies of a released allocation; their bytes are dead.
@@ -1792,7 +1879,16 @@ class NandCore:
         A program already scheduled for a filled page is not cancelled.
         """
         page_bytes = self.config.page_bytes
-        staged = self._tail_staged(address // page_bytes, (address + byte_count - 1) // page_bytes)
+        first, last = address // page_bytes, (address + byte_count - 1) // page_bytes
+        spilled = self._tail_spilled
+        if spilled:
+            for token in self._nand_transactions:
+                token.remember_tail_spilled(self)
+            if last - first < len(spilled):
+                spilled.difference_update(range(first, last + 1))
+            else:
+                spilled.difference_update([page for page in spilled if first <= page <= last])
+        staged = self._tail_staged(first, last)
         if not staged:
             return 0
         pages, valid = self._tail_pages, list(self._tail_valid)
@@ -1837,6 +1933,10 @@ class NandCore:
             staged.add(first)
         if end % page_bytes:
             staged.add(last)
+        if self._tail_spilled:
+            staged -= self._tail_spilled
+        if staged and self.config.page_staging_bytes_per_host_channel:
+            staged = self._tail_admit(sorted(staged), start, end, request.arrival_ns)
         if not staged:
             return None
         self._validate_request(request)
@@ -1904,8 +2004,7 @@ class NandCore:
             filled = sum(right - left for left, right in ranges)
             staged = valid[channel] + filled - held
             if limit and staged + shared > limit:
-                # Hold-until-full staging cannot drain without more rows, so
-                # an overfull store is a batch capacity limit, like KV.
+                # _tail_admit spills every page that would not fit.
                 from .memory_allocator import AllocationError
                 raise AllocationError(
                     "unable to allocate {} bytes in capacity {} of NAND page staging on host channel {} "

@@ -17,7 +17,7 @@ import tempfile
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DIRECTORY = ROOT / "artifacts/exploring_hbf_native_20261027_pp_prefill_final4"
+DEFAULT_DIRECTORY = ROOT / "artifacts/exploring_hbf_native_20261102"
 SCHEMA = "exploring-hbf-native-dashboard/v1"
 BEIJING = timezone(timedelta(hours=8))
 LABELS = {"running": "运行中", "pending": "等待", "completed": "完成",
@@ -136,7 +136,11 @@ def _completed_results(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
         tpot = _number(metrics.get("mean_complete_request_tpot_ns"))
         if tps is None or cluster is None or tpot is None or min(tps, cluster, tpot) <= 0:
             continue
+        # Paper Fig. 3: the largest per-GPU batch any layout runs within the SLO.
+        largest = ((point.get("search") or {}).get("max_batch") or {}).get("selected") or {}
         rows.append({"case_id": point.get("case_id", case.get("case_id")),
+            "max_batch_per_gpu": largest.get("batch_per_gpu"), "max_batch_layout": largest.get("layout"),
+            "max_batch_result": largest.get("result"),
             "model": case.get("model"), "hardware": case.get("hardware"),
             "workload": case.get("workload"), "input_tokens": case.get("input_tokens"),
             "output_tokens": case.get("output_tokens"), "gpu_count": case.get("gpu_count"),
@@ -357,14 +361,17 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
             lines.append(f"|{row['candidate_id']}|{STAGE_LABELS.get(phase, '原生内部阶段')}|{_fmt(seconds)}|")
     lines += ["", "上述任务计数仅属于当前cohort，不代表整个候选的完成比例。累计Token和已完成批次不随下一批任务归零。", "",
         "## 已完成配置", "",
-        "|模型|存储|负载|输入/输出Token|选定布局DP/TP/PP/EP|选定批量/副本|tokens/s/GPU|集群tokens/s|TPOT ms|吞吐/HBM4|TPOT/HBM4|",
-        "|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|"]
+        "|模型|存储|负载|输入/输出Token|选定布局DP/TP/PP/EP|选定批量/副本|tokens/s/GPU|集群tokens/s|TPOT ms|吞吐/HBM4|TPOT/HBM4|SLO内最大批量/GPU（布局）|",
+        "|---|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|"]
     for row in snapshot["completed_results"]:
+        layout = row.get("max_batch_layout")
+        largest = ("—" if row.get("max_batch_per_gpu") is None else
+                   f"{_fmt(row['max_batch_per_gpu'])}（{'/'.join(str(layout.get(key, 1)) for key in ('dp', 'tp', 'pp', 'ep'))}）")
         lines.append(f"|{row['model']}|{row['hardware']}|{row['workload']}|"
             f"{row['input_tokens']}/{row['output_tokens']}|"
             f"{'/'.join(str(row[key]) if row[key] is not None else '—' for key in ('dp', 'tp', 'pp', 'ep'))}|{row['batch_size']}|"
             f"{_fmt(row['tokens_per_second_per_gpu'])}|{_fmt(row['cluster_tps'])}|"
-            f"{_fmt(row['tpot_ms'])}|{_fmt(row['throughput_ratio_vs_hbm4'])}|{_fmt(row['tpot_ratio_vs_hbm4'])}|")
+            f"{_fmt(row['tpot_ms'])}|{_fmt(row['throughput_ratio_vs_hbm4'])}|{_fmt(row['tpot_ratio_vs_hbm4'])}|{largest}|")
     if not snapshot["completed_results"]:
         lines += ["", "尚无真实完成配置，吞吐、TPOT及相对HBM4比值均不可用；不以局部批次或历史旁路结果填充。"]
     lines += ["", "## 剩余时间", "", snapshot["eta"]["summary"], "", snapshot["eta"]["method"], ""]

@@ -144,12 +144,10 @@ def test_each_group_needs_its_own_prepared_imports(monkeypatch):
     assert sum(prepared["import_pool_occupancy_by_group"]) >= 4
 
 
-def test_kv_requests_held_count_first_cohort_seeds_and_prepared_imports_per_group(monkeypatch):
+def test_a_first_cohort_short_of_seeds_is_a_capacity_reason(monkeypatch):
     runtime, prepared, _options, _ages = _evaluate_fixture(monkeypatch, degree=2)
-    runtime.states = {f"seed{index}": SimpleNamespace(ep_group=index % 2) for index in range(8)}
     del prepared["context"]["seed3"]
     prepared["import_pool_occupancy_by_group"] = [2, 0]
-    assert stationary.kv_requests_held(runtime, prepared) == [6, 3]
     assert stationary.admission_reasons(runtime, prepared) == ["native_stationary_first_cohort_not_a_full_batch"]
 
 
@@ -202,16 +200,14 @@ def test_groups_must_hold_exactly_batch_over_ep_requests():
 
 def test_a_cohort_short_of_the_batch_is_left_to_the_capacity_admission(monkeypatch):
     # KV refused the last seed: the groups filled in turn are uneven, but
-    # admission must report the capacity shortfall with per-group holdings.
+    # admission must report the capacity shortfall.
     runtime = _plan(2, 4, (0, 0, 1, 1))
     groups = stationary._ep_groups(runtime, _cohort([0, 1, 0]))
     assert groups["requests"] == [2, 1] and groups["mean_context_tokens"] == [101., 101.]
     runtime, prepared, _options, _ages = _evaluate_fixture(monkeypatch, degree=2)
-    runtime.states = {f"seed{index}": SimpleNamespace(ep_group=index % 2) for index in range(8)}
     del prepared["context"]["seed7"]
     prepared["import_pool_occupancy_by_group"] = [1, 1]
     assert stationary.admission_reasons(runtime, prepared) == ["native_stationary_first_cohort_not_a_full_batch"]
-    assert stationary.kv_requests_held(runtime, prepared) == [5, 4]
 
 
 def test_one_group_is_never_unbalanced_and_a_short_cohort_keeps_its_old_reason():
@@ -741,4 +737,5 @@ def test_two_ep_group_forecast_brackets_the_full_native_window():
     step = fast.approximation["error_budget"]["step"]
     assert min(step["entry_first_access_ns"]) > 0 and min(step["exit_first_access_ns"]) > 0
     # Same-class address differences of unsampled layers are an explicit, unbounded assumption.
-    assert fast.approximation["error_budget"]["assumptions"] == [stationary.SAME_CLASS_ADDRESS_ASSUMPTION]
+    assert fast.approximation["error_budget"]["assumptions"] == [stationary.SAME_CLASS_ADDRESS_ASSUMPTION,
+                                                                  stationary.KV_BLOCK_LAYOUT_ASSUMPTION]

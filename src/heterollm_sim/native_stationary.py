@@ -65,7 +65,7 @@ from .native_layer_sampling import (NativeLayerSamplingGuardError, _execute_wind
                                     drop_unsampled_request_records, layer_inventory,
                                     remaining_import_bytes)
 from .planner import _compilation_scope
-from .serving import RequestStatus, _OnlineRuntime, compile_serving_plan
+from .serving import RequestStatus, _OnlineRuntime, compile_serving_plan, stationary_refill_contract
 
 HOLDOUT_SHIFT_NS = 10e6
 SAME_CLASS_ADDRESS_ASSUMPTION = (
@@ -73,6 +73,10 @@ SAME_CLASS_ADDRESS_ASSUMPTION = (
     "same-class layers because their buffer addresses straddle row boundaries differently are "
     "assumed negligible and are not bounded; representative-point full native runs check every "
     "unsampled layer against its class interval.")
+KV_BLOCK_LAYOUT_ASSUMPTION = (
+    "The samples run on one settled KV block layout, the block tables a long stationary refill run "
+    "reaches; the DRAM row openings and NAND bank loads that change as the batch's tables change "
+    "between steps are assumed negligible and are not bounded.")
 _RUN_FIELDS = ("sample_id", "start_ns", "end_ns", "duration_ns", "boundary_origin_ns",
                "elapsed_from_boundary_ns", "task_count", "layer_completion_ns", "first_access_ns",
                "concurrent_imports", "wall_seconds", "physical_observations")
@@ -296,11 +300,11 @@ def page_staging_occupancy(runtime, cohort, shared_peaks=None):
     spread evenly; activations interleaved over the same logic-die SRAM take
     their share, at the highest extent the source or a window
     (``shared_peaks``: owner -> bytes) reached. A rank whose store cannot
-    hold them refuses the batch with an allocation error (the backpressure
-    that caps the batch).
+    hold them keeps the fraction that fits (``stored_fraction``); the other
+    tails spill to the array, whose rows then read-modify-write their page
+    (NandCore._tail_admit). ``kv_layers`` names the rank's staged KV layers.
     """
     from .ir import model_graph_execution_layers
-    from .memory_allocator import AllocationError
     from .memory_types import NandConfig
     from .physical_contract import require_physical_memory_config
     from .planner import _kv_components, _kv_tensor_bytes, _parallel_plan
@@ -314,7 +318,7 @@ def page_staging_occupancy(runtime, cohort, shared_peaks=None):
     allocators = runtime._execution_resource_kernel.physical_runtime.allocators
     occupancy = {}
     for rank in plan.ranks:
-        config, staged = None, 0
+        config, staged, kv_layers = None, 0, set()
         pending_tail_pages = 0
         for layer in layers:
             if plan.stage_for_layer(layer) != rank.pp_rank:
@@ -324,6 +328,7 @@ def page_staging_occupancy(runtime, cohort, shared_peaks=None):
             if (not isinstance(physical, NandConfig) or physical.page_staging != "logic_die"
                     or not physical.page_staging_bytes_per_host_channel):
                 continue
+            kv_layers.add(str(layer.layer_id))
             config, row, page = physical, _kv_tensor_bytes(scenario, layer, plan.tp_degree, 1), physical.page_bytes
             chunk = layer.attention_chunk_size
             for position in positions.get(rank.ep_rank, ()):
@@ -340,16 +345,60 @@ def page_staging_occupancy(runtime, cohort, shared_peaks=None):
         owner = config.metadata.get("page_staging_shared_owner")
         extent = max(getattr(allocators.get(owner), "peak_end_bytes", 0), (shared_peaks or {}).get(owner, 0))
         shared = -(-extent // channels)
+        room = max(0, limit - shared)
         occupancy[rank.rank] = {"staged_bytes_per_stack": per_channel, "shared_bytes_per_stack": shared,
                                 "pending_pages_per_stack": -(-pending_tail_pages // channels),
                                 "pending_page_bytes_per_stack": -(-pending_tail_pages // channels) * page,
-                                "capacity_bytes_per_stack": limit}
-        if per_channel + shared > limit:
-            raise AllocationError(
-                "unable to allocate {} bytes in capacity {} of NAND page staging per stack on rank {} "
-                "({} staged KV tails + {} shared)".format(per_channel + shared, limit, rank.rank,
-                                                         per_channel, shared))
+                                "capacity_bytes_per_stack": limit, "shared_owner": owner,
+                                "stored_fraction": 1. if per_channel <= room else room / per_channel,
+                                "kv_layers": frozenset(kv_layers)}
     return occupancy
+
+
+def staging_reserved(occupancy):
+    """Shared owner -> (shared extent per stack, stored share of new tail pages) for a sampled run.
+
+    The store holds the shared data at the step's high-water extent (the
+    activations peak at the step's exit, after the layers' KV writes), so a
+    run's tail writes see that extent, not only what the run reached so far.
+    A run executes a few layers only, while the step's other KV layers hold
+    the rest of the store; every layer keeps the rank's ``stored_fraction``
+    of its tail pages.
+    """
+    return {row["shared_owner"]: (row["shared_bytes_per_stack"], row["stored_fraction"])
+            for row in occupancy.values() if row["kv_layers"] and row["shared_owner"]}
+
+
+def _execute_staged_window(prepared, *args, **kwargs):
+    """``_execute_window`` with the store share the step leaves the run's KV tails.
+
+    Prefill runs carry no Decode occupancy and see an empty store.
+    """
+    reserved = staging_reserved(prepared.get("page_staging_occupancy") or {})
+    if not reserved:
+        return _execute_window(prepared["source"], *args, **kwargs)
+    runtime = prepared["source"].physical_runtime
+    runtime._tail_reserved = reserved
+    try:
+        return _execute_window(prepared["source"], *args, **kwargs)
+    finally:
+        runtime._tail_reserved = {}
+
+
+def _window_peaks(records):
+    """Highest allocator extent per owner over the sampled runs."""
+    peaks = {}
+    for record in records:
+        for owner, extent in (record.physical_observations or {}).get("allocator_peak_end_bytes", {}).items():
+            peaks[owner] = max(peaks.get(owner, 0), extent)
+    return peaks
+
+
+def _staging_underestimated(before, after):
+    """Whether the runs reached a shared extent that stores fewer tails than they were run with."""
+    return any(row["stored_fraction"] < before[rank]["stored_fraction"] and
+               row["shared_bytes_per_stack"] > before[rank]["shared_bytes_per_stack"]
+               for rank, row in after.items() if rank in before)
 
 
 def _import_pool_occupancy(runtime, degree):
@@ -621,11 +670,11 @@ def run_window(prepared, control, records, role, layer_ids, groups, origin, samp
     by_layer, cohort = prepared["by_layer"], prepared["cohort"]
     ids = [identity for group in groups for identity in group] + [
         identity for layer in layer_ids for identity in by_layer[layer]]
-    record = _execute_window(prepared["source"], prepared["specs"], ids, origin_ns=origin,
-                             control=control, sample_id=sample_id, concurrent_imports=imports,
-                             row_terms=row_terms,
-                             **({"tp_symmetry": prepared["tp_symmetry"]}
-                                 if "tp_symmetry" in prepared else {}))
+    record = _execute_staged_window(prepared, prepared["specs"], ids, origin_ns=origin,
+                                    control=control, sample_id=sample_id, concurrent_imports=imports,
+                                    row_terms=row_terms,
+                                    **({"tp_symmetry": prepared["tp_symmetry"]}
+                                       if "tp_symmetry" in prepared else {}))
     row = {"layer_ids": layer_ids, "origin_ns": origin, **{key: record[key] for key in _RUN_FIELDS}}
     records.append(NativeLayerWindowSample(window_id=row["sample_id"], role=role,
         cohort_id=cohort.cohort_id, cohort_kind=cohort.kind, decode_step=0,
@@ -772,10 +821,10 @@ def _pipeline_window(prepared, control, records, role, keys, origin, sample_id, 
                 for identity, task in block["detached"].items()}
     wanted = frozenset(ids)
     specs = [detached.get(task.task_id, task) for task in prepared["specs"] if task.task_id in wanted]
-    record = _execute_window(prepared["source"], specs, ids, origin_ns=origin, control=control,
-                             sample_id=sample_id, concurrent_imports=imports,
-                             row_terms=None if imports else terms,
-                             **({"tp_symmetry": prepared["tp_symmetry"]} if "tp_symmetry" in prepared else {}))
+    record = _execute_staged_window(
+        prepared, specs, ids, origin_ns=origin, control=control, sample_id=sample_id, concurrent_imports=imports,
+        row_terms=None if imports else terms,
+        **({"tp_symmetry": prepared["tp_symmetry"]} if "tp_symmetry" in prepared else {}))
     cohort = prepared["cohort"]
     records.append(NativeLayerWindowSample(window_id=record["sample_id"], role=role,
         cohort_id=cohort.cohort_id, cohort_kind=cohort.kind, decode_step=0,
@@ -1307,16 +1356,57 @@ def _required_group_pool(ages_by_group, output, pool, warmup, measured, lead):
     return high
 
 
-def kv_requests_held(runtime, prepared):
-    """KV reservations each EP group holds at the cutoff: first-cohort seeds plus prepared imports.
+def _cycle_peak(counts, blocks):
+    """max over s of sum_a counts[a] * blocks[(a + s) % n]: slots of every age advancing together."""
+    n = len(blocks)
+    steps = [(x, blocks[(x + 1) % n] - blocks[x]) for x in range(n) if blocks[(x + 1) % n] != blocks[x]]
+    total = peak = sum(count * value for count, value in zip(counts, blocks))
+    for shift in range(n - 1):
+        total += sum(counts[(x - shift) % n] * change for x, change in steps)
+        peak = max(peak, total)
+    return peak
 
-    Every seed and import reserves the same max-live KV, so when KV refused
-    one more these are the groups' capacities in requests.
+
+def kv_block_peak(ages_by_group, prompt, output, group_pool, tokens_per_block, ring=0):
+    """Most KV blocks each EP group holds over one refill cycle, per KV group.
+
+    A slot at age a holds prompt + a rows once its step writes (the final
+    prompt query at age 0, the last output at age output - 1); a finished
+    slot refills at the next step at age 0, so every slot cycles through all
+    ages in step. Each of the group's ``group_pool`` prepared imports holds
+    its prompt history. Chunked-attention layers hold at most ``ring`` blocks.
     """
-    held = list(prepared["import_pool_occupancy_by_group"])
-    for request_id in prepared["context"]:
-        held[0 if len(held) == 1 else runtime.states[request_id].ep_group] += 1
-    return held
+    kinds = {"full": None, **({"chunk": ring} if ring else {})}
+    peaks = {kind: [] for kind in kinds}
+    for ages in ages_by_group:
+        counts = [0] * output
+        for age in ages:
+            counts[age % output] += 1
+        for kind, limit in kinds.items():
+            def blocks(tokens):
+                count = -(-tokens // tokens_per_block)
+                return count if limit is None else min(count, limit)
+            peaks[kind].append(_cycle_peak(counts, [blocks(prompt + age) for age in range(output)])
+                               + group_pool * blocks(prompt - 1))
+    return peaks
+
+
+def kv_block_admission(runtime):
+    """The refill cycle's KV block peak of every EP group against its pools.
+
+    Returns the diagnostics, with ``kv_block_peak_exceeds_capacity`` when some
+    group's cycle needs more blocks than its pools hold; empty without
+    block-paged KV or a stationary seed contract.
+    """
+    contract = stationary_refill_contract(runtime)
+    if contract is None:
+        return {}
+    ages_by_group, prompt, output, group_pool = contract
+    layout = runtime._kv_block_layout
+    peaks = kv_block_peak(ages_by_group, prompt, output, group_pool, layout["tokens_per_block"], layout["ring"])
+    capacity = dict(layout["pool_blocks"])
+    return {"kv_block_peak_by_group": peaks, "kv_block_capacity": capacity,
+            "kv_block_peak_exceeds_capacity": any(max(peaks[kind]) > capacity[kind] for kind in peaks)}
 
 
 def _preloaded_seed_admission(runtime, diagnostics):
@@ -1328,6 +1418,10 @@ def _preloaded_seed_admission(runtime, diagnostics):
     """
     if not runtime._external_ingress.get("preload_warmup_seed_kv", False):
         return
+    admission = kv_block_admission(runtime)
+    if admission.get("kv_block_peak_exceeds_capacity"):
+        diagnostics.update(physical_admission_cutoff_ns=runtime.now, **admission)
+        raise NativeLayerSamplingGuardError("native_stationary_kv_block_peak_exceeds_capacity")
     batch = runtime.plan.scheduler.max_num_seqs
     if runtime._external_preloaded_requests >= batch:
         return
@@ -1340,7 +1434,6 @@ def _preloaded_seed_admission(runtime, diagnostics):
     if (len(seeds) != batch or len(outputs) != 1
             or any(state.spec.arrival_ns > runtime.now for state in seeds)):
         return
-    held = [0] * runtime._ep_degree
     for state in seeds:
         if state.spec.request_id not in runtime._external_initialized:
             # Pre-admission rejection or another state is not proof that
@@ -1348,14 +1441,11 @@ def _preloaded_seed_admission(runtime, diagnostics):
             if state.status != RequestStatus.WAITING:
                 return
             continue
-        group = state.ep_group
         # An invalid assignment is not evidence of a capacity limit; leave
         # it to the existing cohort/group guard rather than relabeling it.
-        if type(group) is not int or not 0 <= group < len(held):
+        if type(state.ep_group) is not int or not 0 <= state.ep_group < runtime._ep_degree:
             return
-        held[group] += 1
-    diagnostics.update(physical_admission_cutoff_ns=runtime.now,
-                       kv_requests_held_by_group=held)
+    diagnostics.update(physical_admission_cutoff_ns=runtime.now, **admission)
     raise NativeLayerSamplingGuardError("native_stationary_first_cohort_not_a_full_batch")
 
 
@@ -1523,7 +1613,8 @@ def evaluate_stationary(runtime, prepared, samples, options):
             "basis": "stationary_continuous_refill_step; calibration_holdout_layer_hull_widened_by_drift; "
                      "in_situ_step_ends_two_origins; boundary_first_access_row_state_bounds; "
                      "measured_joint_PD_import_extra_per_concurrent_count",
-            "assumptions": [SAME_CLASS_ADDRESS_ASSUMPTION]})
+            "assumptions": [SAME_CLASS_ADDRESS_ASSUMPTION,
+                            *((KV_BLOCK_LAYOUT_ASSUMPTION,) if getattr(runtime, "_kv_block_layout", None) else ())]})
     if "pipeline" in prepared:
         result["error_budget"]["assumptions"] += [PIPELINE_CONCURRENT_STAGE_ASSUMPTION,
                                                   *pipeline_assumptions(prepared)]
@@ -1625,7 +1716,7 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
                 raise RuntimeError("native stationary sampling unexpectedly committed an ordinary cohort")
             prepared["tp_symmetry"] = (scenario, options.tp_rank_symmetry)
             diagnostics["physical_admission_cutoff_ns"] = runtime.now
-            diagnostics["kv_requests_held_by_group"] = kv_requests_held(runtime, prepared)
+            diagnostics.update(kv_block_admission(runtime))
             admission = admission_reasons(runtime, prepared)
             if admission:
                 budget = {"accepted": False, "reasons": admission}
@@ -1633,13 +1724,20 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
                 samples = sample_stationary(runtime, prepared, sample_control, layers, records,
                     pd_concurrency_envelope=options.pd_concurrency_envelope)
                 # Every layer's KV tails with the activations the windows reached.
-                peaks = {}
-                for record in records:
-                    for owner, extent in (record.physical_observations or {}).get(
-                            "allocator_peak_end_bytes", {}).items():
-                        peaks[owner] = max(peaks.get(owner, 0), extent)
-                diagnostics["page_staging_occupancy"] = page_staging_occupancy(
-                    runtime, prepared["cohort"], peaks)
+                occupancy = page_staging_occupancy(runtime, prepared["cohort"], _window_peaks(records))
+                if _staging_underestimated(prepared["page_staging_occupancy"], occupancy):
+                    # The runs wrote their tails before the step's activation
+                    # high-water: sample again with that extent reserved.
+                    diagnostics["page_staging_resampled_from"] = {
+                        rank: {**row, "kv_layers": len(row["kv_layers"])}
+                        for rank, row in prepared["page_staging_occupancy"].items()}
+                    prepared["page_staging_occupancy"] = occupancy
+                    records.clear()
+                    samples = sample_stationary(runtime, prepared, sample_control, layers, records,
+                        pd_concurrency_envelope=options.pd_concurrency_envelope)
+                    occupancy = page_staging_occupancy(runtime, prepared["cohort"], _window_peaks(records))
+                diagnostics["page_staging_occupancy"] = {
+                    rank: {**row, "kv_layers": len(row["kv_layers"])} for rank, row in occupancy.items()}
                 budget = _checked_budget(evaluate_stationary(runtime, prepared, samples, options))
         except NativeFastWallBudgetError:
             budget = {"accepted": False, "reasons": ["native_stationary_sample_wall_budget_exhausted"]}

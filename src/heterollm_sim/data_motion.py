@@ -239,6 +239,10 @@ class PhysicalRuntimeContext:
     _owner_config_cache: dict[str, Any] = field(default_factory=dict, repr=False)
     # NAND owner -> (owner of data sharing its staging store, host channels).
     _staging_shares: dict[str, Any] = field(default_factory=dict, repr=False)
+    # Shared owner -> (floor of the shared data's extent per channel of that
+    # store, share of new KV tail pages it keeps), set by the stationary
+    # sampler for the step its run stands for.
+    _tail_reserved: dict[str, tuple[int, float]] = field(default_factory=dict, repr=False)
     _execution_config_cache: dict[Any, Any] = field(default_factory=dict, repr=False)
     _physical_demand_cache: dict[Any, ResourceDemand] = field(default_factory=dict, repr=False)
 
@@ -275,6 +279,16 @@ class PhysicalRuntimeContext:
         if (allocation is not None and allocation.alias_of is None and active is not None
                 and getattr(active.core.config, "page_staging", "none") != "none"):
             active.core.discard_tail_pages(allocation.base_address, allocation.size_bytes)
+
+    def discard_staged_range(self, owner: str, buffer_id: str, offset_bytes: int, size_bytes: int) -> None:
+        """Discard staged pages of a dead range inside a live allocation (a freed KV block)."""
+        active = self.runtimes.get(owner)
+        allocator = self.allocators.get(owner)
+        if active is None or allocator is None or getattr(active.core.config, "page_staging", "none") == "none":
+            return
+        allocation = allocator.get_allocation(buffer_id, 0)
+        if allocation is not None:
+            active.core.discard_tail_pages(allocation.base_address + offset_bytes, size_bytes)
 
     def __post_init__(self) -> None:
         if self.timeline is None:
@@ -460,7 +474,7 @@ class PhysicalRuntimeContext:
                 if nand_transaction is not None and key in {
                     "_next_program_page", "_block_wear_state", "_nand_transactions", "_read_cache",
                     "_array_ready", "_buffer_ready", "_nand_numeric_state", "_tail_pages",
-                    "_tail_full_scopes"
+                    "_tail_full_scopes", "_tail_spilled"
                 }:
                     continue
                 if key == "_banks" and isinstance(value, dict):
@@ -498,6 +512,8 @@ class PhysicalRuntimeContext:
                     core_state[key] = dict(value)
                 elif key == "_tail_full_scopes":
                     core_state[key] = {scope: set(pages) for scope, pages in value.items()}
+                elif key == "_tail_spilled":
+                    core_state[key] = set(value)
                 elif key == "_read_cache":
                     core_state[key] = _copy_nand_read_cache(value)
                 elif key == "_staged_pages":
@@ -756,7 +772,7 @@ class PhysicalRuntimeContext:
                 journal_state.update({key: active.core.__dict__[key] for key in (
                     "_next_program_page", "_block_wear_state", "_nand_transactions", "_read_cache",
                     "_array_ready", "_buffer_ready", "_nand_numeric_state", "_tail_pages",
-                    "_tail_full_scopes")})
+                    "_tail_full_scopes", "_tail_spilled")})
             active.core.__dict__.clear()
             # Restored live state must not become the rollback point itself.
             # Otherwise another submission mutates the saved bank rows,
@@ -1253,6 +1269,19 @@ def prepare_physical_task(
                 access.get("offset_bytes", 0),
                 "offset_bytes",
             )
+            kv_runs = access.get("kv_runs")
+            if kv_runs is not None:
+                # One row per request until now: its runs execute as rows of their own.
+                run_config = _owner_physical_config(metadata, owner, config, runtime)
+                plain = {key: value for key, value in access.items() if key != "kv_runs"}
+                for run_offset, run_bytes in kv_runs:
+                    run_address = allocator.address(str(buffer_id), run_offset, run_bytes, generation)
+                    if run_address + run_bytes > run_config.capacity_bytes:
+                        raise ValueError("physical access exceeds owner {} capacity".format(owner))
+                    validated.append(({**plain, "offset_bytes": run_offset, "byte_count": run_bytes,
+                                       "address": run_address},
+                                      operation, run_address, run_bytes, owner, run_config))
+                continue
             registered_address = allocator.address(str(buffer_id), offset, byte_count, generation)
             if address is not None and (not address_source or address_source.startswith("explicit")):
                 if type(address) is not int or address != registered_address:
@@ -1422,7 +1451,9 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
         if share is not None:
             # The shared store's first-fit high-water mark, interleaved.
             allocator = runtime.allocators.get(share[0])
-            active.core._tail_shared = -(-getattr(allocator, "peak_end_bytes", 0) // share[1])
+            floor, fraction = runtime._tail_reserved.get(share[0], (0, 1.))
+            active.core._tail_shared = max(-(-getattr(allocator, "peak_end_bytes", 0) // share[1]), floor)
+            active.core._tail_fraction = fraction
         # An authored task may mix staged HBF accesses and a direct access
         # to the same HOST controller. Publish the preceding staged work
         # before the direct core reads the shared resource calendars.
@@ -1436,7 +1467,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             # A controller can choose only among accesses in this task's
             # current owner batch. The core enforces arrival visibility and
             # overlapping read/write dependencies inside its finite window.
-            while stop < min(len(validated), index + 1024):
+            while stop < len(validated):
                 _a, next_op, _addr, _count, next_owner, next_config = validated[stop]
                 if (next_owner != owner or next_config != access_config
                         or next_op not in (Operation.READ, Operation.WRITE)):
@@ -1446,7 +1477,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
                 and operation is Operation.READ):
             # Read/read spans have no intra-group completion dependencies.
             # Keep owner order and let NAND retain admission for each access.
-            while stop < min(len(validated), index + 1024):
+            while stop < len(validated):
                 _a, next_op, _addr, _count, next_owner, next_config = validated[stop]
                 if next_owner != owner or next_config != access_config or next_op is not Operation.READ:
                     break
@@ -1459,7 +1490,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             # depends solely on already executed groups; no intra-batch RAW,
             # WAR or WAW completion is guessed or discarded.
             previous_end = address + byte_count
-            while stop < min(len(validated), index + 1024):
+            while stop < len(validated):
                 _next_access, next_op, next_address, next_bytes, next_owner, _next_config = validated[stop]
                 if (next_owner != owner or next_op is not operation
                         or _next_config != access_config):

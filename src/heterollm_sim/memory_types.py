@@ -6,6 +6,7 @@ are decimal GB/s (so ``bytes / GB/s`` is a duration in ns).
 """
 from __future__ import annotations
 
+from array import array
 from dataclasses import dataclass, field
 from enum import Enum
 import math
@@ -1196,3 +1197,43 @@ __all__ = [
     "parse_physical_memory_config",
     "make_ssd_config", "make_hbf_config",
 ]
+
+
+class KVRuns:
+    """Physical (offset, bytes) runs of one request's KV rows in a shared block pool.
+
+    A fully mixed block table gives a request one run per block. Every layer
+    and rank of an EP group shares one immutable instance, so a lowered cohort
+    holds one access row per request; the rows only expand when a task runs.
+    """
+
+    __slots__ = ("offsets", "sizes", "total", "_hash")
+
+    def __init__(self, runs) -> None:
+        self.offsets = array("q", (run[0] for run in runs))
+        self.sizes = array("q", (run[1] for run in runs))
+        self.total = sum(self.sizes)
+        self._hash = None
+
+    def __len__(self) -> int:
+        return len(self.offsets)
+
+    def __iter__(self):
+        return zip(self.offsets, self.sizes)
+
+    def __eq__(self, other) -> bool:
+        return self is other or (type(other) is KVRuns and self.offsets == other.offsets and self.sizes == other.sizes)
+
+    def __hash__(self) -> int:
+        if self._hash is None:
+            self._hash = hash((self.offsets.tobytes(), self.sizes.tobytes()))
+        return self._hash
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def __repr__(self) -> str:
+        return "KVRuns({} runs, {} bytes)".format(len(self), self.total)

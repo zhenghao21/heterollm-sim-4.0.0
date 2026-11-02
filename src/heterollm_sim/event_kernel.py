@@ -1255,6 +1255,10 @@ class UnifiedEventKernel:
     ) -> None:
         """Record persistent buffers owned by ``request_id``; idempotent per key."""
 
+        keys = tuple(keys)
+        if not keys:
+            # A request owning nothing (its KV in shared block pools) keeps no entry.
+            return
         owned = self._request_physical_buffers.setdefault(request_id, set())
         holders = self._request_buffer_holders
         for key in keys:

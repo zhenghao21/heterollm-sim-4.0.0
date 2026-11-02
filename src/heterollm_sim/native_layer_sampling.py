@@ -211,7 +211,7 @@ def _graph_facts(specs, inventory):
 PER_REQUEST_RECORD_KEYS = (
     "memory_accesses", "physical_address_bindings", "buffer_accesses", "physical_allocations",
     "rhs_buffer_accesses", "kv_writeback_accesses", "persistent_request_buffers",
-    "persistent_buffer_ids", "generic_kv_storage")
+    "persistent_buffer_ids", "kv_pool_buffer_ids", "generic_kv_storage")
 
 
 def drop_unsampled_request_records(metadata_rows, kept_layers):
@@ -825,7 +825,7 @@ class _TPRankMirror:
             # recognizes symmetric collective endpoints that still run in full.
             key = (self.owner_canonical.get(owner, owner), self.tokens.get(owner),
                    task.request_id or task.task_id, float(md['physical_arrival_ns']).hex(),
-                   tuple((i, str(a['operation']), a['address'], a['byte_count'])
+                   tuple((i, str(a['operation']), a['address'], a['byte_count'], a.get('kv_runs'))
                          for i, a in enumerate(accesses)
                          if a.get('physical_owner', md.get('physical_owner')) == owner))
             token = self.transition_tokens.get(key)
@@ -1109,6 +1109,9 @@ def _page_staging_window_delta(before, kernel):
             "started_programs": delta("started_programs"),
             "deferred_pages": int(right.get("deferred_pages", 0)),
             "discarded_pages": delta("discarded_pages"),
+            "spilled_pages": delta("spilled_pages"),
+            "evicted_pages": delta("evicted_pages"),
+            "stored_fraction": float(right.get("stored_fraction", 1.)),
             "pending_pages": int(right.get("deferred_pages", 0)),
             "pending_bytes": int(sum(valid) + right.get("shared_bytes", 0)),
             "peak_bytes": int(max(right.get("peak_bytes", (0,)), default=0)),

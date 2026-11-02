@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from collections.abc import Mapping
 from typing import Optional, Tuple
 
+from .memory_types import KVRuns
+
 
 _PHYSICAL_FIELDS = frozenset({
     "physical_memory_config", "memory_accesses", "physical_memory_component_id",
@@ -125,7 +127,7 @@ class StaticPhysicalBinding:
             for index, row in enumerate(rows):
                 if not isinstance(row, Mapping):
                     return None
-                if any(type(value) not in {str, int, float, bool, type(None)}
+                if any(type(value) not in {str, int, float, bool, type(None), KVRuns}
                        for value in row.values()):
                     return None
                 if identity_is_dynamic is not None:

@@ -8,6 +8,7 @@ optimistic scaling factor.
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 import heapq
 import hashlib
 import math
@@ -22,6 +23,7 @@ from graphlib import CycleError, TopologicalSorter
 from typing import Callable, Dict, FrozenSet, Hashable, Iterator, List, Optional, Sequence, Set, Tuple
 
 from . import __version__
+from .memory_types import KVRuns
 from .memory_service import DRAM_OPTIONAL_COUNTER_FIELDS, DRAM_OPTIONAL_TIME_FIELDS, DRAM_SERVICE_TIME_SCOPE
 from .kernel_query_ledger import summarize_kernel_queries
 from .sram_traffic import summarize_sram_task_traffic
@@ -4359,6 +4361,8 @@ def _direct_backing_descriptors(task, scenario, component, direct):
             descriptor["allocation_size_bytes"] = extent
         if row.get("indexed_lookup_address_model") is not None:
             descriptor["indexed_lookup_address_model"] = row["indexed_lookup_address_model"]
+        if row.get("kv_runs") is not None:
+            descriptor["kv_runs"] = row["kv_runs"]
         alias, alias_generation, alias_offset = _gddr_access_alias(metadata, side)
         if alias is not None:
             descriptor.update(alias_of=alias,
@@ -4372,34 +4376,69 @@ def _direct_backing_descriptors(task, scenario, component, direct):
     return tuple(descriptors), tuple(bindings)
 
 
+def _disjoint_row_intervals(explicit, indices):
+    """(starts, ends, row indices) of rows sorted by offset, or None unless they are plainly disjoint."""
+    rows = []
+    for index in indices:
+        row = explicit[index]
+        offset, size = row.get("offset_bytes"), row.get("size_bytes")
+        if type(offset) is not int or type(size) is not int or offset < 0 or size <= 0:
+            return None
+        rows.append((offset, offset + size, index))
+    rows.sort()
+    if any(left[1] > right[0] for left, right in zip(rows, rows[1:])):
+        return None
+    return [row[0] for row in rows], [row[1] for row in rows], [row[2] for row in rows]
+
+
 def _subtract_direct_buffer_accesses(explicit, remote):
     """Subtract declared remote intervals from a full explicit operand list."""
     if not isinstance(explicit, (tuple, list)) or not all(isinstance(row, Mapping) for row in explicit):
         raise ValueError("buffer_accesses must be a sequence of mappings")
-    # A batched KV operand has distinct K/V buffers per request. Scanning the
-    # whole remaining operand list for every remote range makes lowering
-    # quadratic in batch size. Keep residual pieces in original row slots;
-    # the index selects only rows whose identity/direction can match. Within
+    # A batched KV operand has one row per block run of every request in a
+    # shared pool. Scanning the whole remaining operand list for every remote
+    # range makes lowering quadratic in that. Keep residual pieces in original
+    # row slots; the index selects only rows whose identity/direction can
+    # match, and among disjoint rows only those overlapping the range. Within
     # each slot the original interval subtraction and piece order are intact.
     local = [[dict(row)] for row in explicit]
     by_operand = {}
+    by_runs = {}
     unindexed = []
     for index, rows in enumerate(local):
         row = rows[0]
         identity, operation = row.get("buffer_id"), row.get("operation")
-        if type(identity) is str and type(operation) is str:
+        if row.get("kv_runs") is not None:
+            # A scattered request's row is one whole operand: it subtracts by identity.
+            by_runs.setdefault((identity, operation, row["kv_runs"]), []).append(index)
+        elif type(identity) is str and type(operation) is str:
             by_operand.setdefault((identity, operation), []).append(index)
         else:
             # Noncanonical values may define equality or be unhashable. They
             # still participate in the same comparisons and validation order.
             unindexed.append(index)
+    intervals = {}
     for access in remote:
+        if access.get("kv_runs") is not None:
+            slots = by_runs.get((access["buffer_id"], access["operation"], access["kv_runs"]))
+            if not slots:
+                raise ValueError("direct RHS is not represented by the full buffer_accesses contract")
+            local[slots.pop(0)] = []
+            continue
         start = int(access["offset_bytes"])
         pending = [(start, start + int(access["byte_count"]))]
         if type(access["buffer_id"]) is str and type(access["operation"]) is str:
-            indices = by_operand.get((access["buffer_id"], access["operation"]), ())
+            key = (access["buffer_id"], access["operation"])
+            indices = by_operand.get(key, ())
             if unindexed:
                 indices = sorted((*indices, *unindexed))
+            else:
+                if key not in intervals:
+                    intervals[key] = _disjoint_row_intervals(explicit, indices)
+                if intervals[key] is not None:
+                    starts, ends, slots = intervals[key]
+                    first = bisect_right(ends, start)
+                    indices = slots[first:bisect_left(starts, pending[0][1], first)]
         else:
             indices = range(len(local))
         for index in indices:
@@ -4731,6 +4770,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
         alias_generation: Optional[int] = None,
         alias_offset_bytes: int = 0,
         allocation_arena: Optional[str] = None,
+        kv_runs: Optional[KVRuns] = None,
     ) -> None:
         byte_count = _gddr_non_negative_int(byte_count, "byte_count")
         if byte_count <= 0:
@@ -4786,6 +4826,8 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                 "alias_generation": alias_generation if alias_generation is not None else generation,
                 "alias_offset_bytes": alias_offset_bytes,
             })
+        if kv_runs is not None:
+            descriptor["kv_runs"] = kv_runs
         descriptors.append(descriptor)
         address_bindings.append(
             {
@@ -4903,6 +4945,7 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
                     alias_of=alias_of,
                     alias_generation=alias_generation,
                     alias_offset_bytes=alias_offset,
+                    kv_runs=item.get("kv_runs"),
                 )
     else:
         activation = (
@@ -5172,8 +5215,10 @@ def _attach_hbf_host_staging(task: TaskSpec, scenario: ScenarioConfig) -> TaskSp
     contracts = dict(task.metadata.get("hbf_host_staging_by_owner", {}))
     replaced_link_ids = set(task.metadata.get("hbf_staging_replaced_link_ids", ()))
     preloaded = set(tuple(key) for key in task.metadata.get("hbf_preloaded_buffers", ()))
+    # Runtime KV (request tail slots and the layer block pools) is written by
+    # serving, never preloaded with the weights.
     request_buffers = {identity for identities in task.metadata.get("persistent_request_buffers", {}).values()
-                       for identity in identities}
+                       for identity in identities} | set(task.metadata.get("kv_pool_buffer_ids", ()))
     is_resident = _resident_physical_buffer_lookup(task.metadata)
     if scenario.weights_resident:
         for row in accesses:
@@ -5713,7 +5758,6 @@ class _GenericKVStorageReplayPayload:
     rank: LogicalRank
     tp_degree: int
     part: str = ""
-    access_index: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -7111,7 +7155,8 @@ class _TaskSegmentTemplate:
                     if storage is not None:
                         overwritten.add("generic_kv_storage")
                         if storage.role != "kv_append":
-                            overwritten.update(("persistent_request_buffers", "persistent_buffer_ids"))
+                            overwritten.update(("persistent_request_buffers", "persistent_buffer_ids",
+                                                "kv_pool_buffer_ids"))
                         if storage.role == "fused_attention":
                             overwritten.add("rhs_buffer_accesses")
                         elif storage.role == "kv_materialize":
@@ -15238,7 +15283,7 @@ def _add_rank_fused_attention(
                 phase_count=len(estimate.phases),
             )
         )
-        if (metadata or {}).get("generic_kv_storage", {}).get("schema") == "analytical-token-major-kv/v1":
+        if (metadata or {}).get("generic_kv_storage", {}).get("schema") == "layer-block-kv/v1":
             builder._task_segment_storage_payloads[last] = _GenericKVStorageReplayPayload(
                 "fused_attention", layer, rank, plan.tp_degree)
         prior = (last,)
@@ -16483,10 +16528,11 @@ def _generic_kv_request_capacities(scenario):
 def _generic_kv_owner_contract(builder, scenario, plan, layer, *,
                          token_batch, context_tokens, history_tokens,
                          materialized_tokens, includes_current=False):
-    """Token-major analytical KV storage, distinct from pinned native layouts.
+    """A layer's KV views per request, before block addressing.
 
-    A request is the lifetime owner, never the transient serving cohort/slot.
-    Reusing a scheduler slot for another request therefore cannot alias KV.
+    A request is the lifetime owner, never the transient serving cohort/slot:
+    its logical positions map through its own block table
+    (``_bind_kv_blocks``), so reusing a scheduler slot cannot alias KV.
     """
     row_bytes = _kv_tensor_bytes(scenario, layer, plan.tp_degree, 1)
     if layer.attention_chunk_size and includes_current:
@@ -16542,8 +16588,8 @@ def _generic_kv_owner_contract(builder, scenario, plan, layer, *,
         else:
             request_id, _end, materialized, _ranges = owners[0]
             owners = [(request_id, history_tokens, materialized, [(0, history_tokens)])]
-    result = {"schema": "analytical-token-major-kv/v1", "row_bytes": row_bytes,
-              "layout": "separate_token_major_k_and_v", "read_tokens": 0,
+    result = {"schema": "layer-block-kv/v1", "row_bytes": row_bytes,
+              "layout": "per_layer_k_and_v_block_pools", "read_tokens": 0,
               "materialized_tokens": 0, "owners": []}
     for request_id, end, materialized, ranges in owners:
         coalesced = []
@@ -16576,6 +16622,159 @@ def _generic_kv_owner_contract(builder, scenario, plan, layer, *,
     return result
 
 
+def kv_block_kind(layer):
+    """The KV group whose block table serves ``layer``: chunked attention rings apart."""
+    return "chunk" if layer.attention_chunk_size else "full"
+
+
+def kv_pool_buffer_id(layer_id, rank, part):
+    """One layer's K or V block pool on one rank."""
+    return "kv:pool:{}:rank{}:tp{}:pp{}:{}".format(layer_id, rank.rank, rank.tp_rank, rank.pp_rank, part)
+
+
+def kv_block_geometry(scenario, plan, rank, layer, tokens_per_block):
+    """Row bytes, block stride and logical tokens per NAND page of one rank's layer.
+
+    A block is ``tokens_per_block`` rows of one request; its stride rounds up
+    to the backing store's allocation unit (NAND page, DRAM/SRAM burst), so
+    a NAND page never holds rows of two requests. Logical pages of
+    ``tokens_per_nand_page`` rows map one to one onto the block's NAND pages.
+    """
+    from .memory_types import DramConfig, NandConfig, SramConfig
+    row = _kv_tensor_bytes(scenario, layer, plan.tp_degree, 1)
+    cache, _offload, _ratio = _kv_components(scenario, rank, rank.component_id, layer)
+    component = _component(scenario, cache) if cache else None
+    config = (_cached_physical_memory_config(component)
+              if component is not None and component.metadata.get("physical_memory_config") is not None else None)
+    unit = (config.page_bytes if isinstance(config, NandConfig)
+            else config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else 1)
+    stride = -(-tokens_per_block * row // unit) * unit
+    per_page = tokens_per_block
+    if isinstance(config, NandConfig):
+        per_page = (min(tokens_per_block, config.page_bytes // row)
+                    if row and config.page_bytes % row == 0 else 0)
+        if per_page and tokens_per_block % per_page:
+            raise ValueError("a KV block must hold whole NAND pages of rows")
+    return row, stride, per_page
+
+
+def kv_block_pools(scenario, ep_group, tokens_per_block):
+    """Every K/V block pool of one EP group: layer, KV group, owner and block stride."""
+    from .data_motion import resolve_service
+    from .memory_types import NandConfig
+    rows = []
+    with _compilation_scope(scenario):
+        plan = _parallel_plan(scenario)
+        for layer in _execution_layers(scenario):
+            if layer.is_linear_attention:
+                continue
+            for rank in plan.tp_group(plan.stage_for_layer(layer), ep_group):
+                cache, _offload, _ratio = _kv_components(scenario, rank, rank.component_id, layer)
+                component = _component(scenario, cache)
+                config = _cached_physical_memory_config(component)
+                _row, stride, _per_page = kv_block_geometry(scenario, plan, rank, layer, tokens_per_block)
+                for part in ("k", "v"):
+                    rows.append({"layer_id": layer.layer_id, "kind": kv_block_kind(layer), "part": part,
+                                 "rank": rank.rank, "component_id": cache,
+                                 "physical_owner": resolve_service(component).physical_owner,
+                                 "buffer_id": kv_pool_buffer_id(layer.layer_id, rank, part),
+                                 "block_bytes": stride,
+                                 "page_staging": config.page_staging if isinstance(config, NandConfig) else None})
+    return rows
+
+
+def _generic_kv_canonical_blocks(scenario, tokens_per_block):
+    """Block ranges when no serving allocator assigns blocks.
+
+    Each workload request owns its declared live extent as consecutive blocks,
+    in request order; an owner outside the workload (a unified scan view)
+    sees the whole pool from block zero.
+    """
+    def build():
+        requests, capacities, total = _generic_kv_request_capacities(scenario)
+        offsets, cursor = {}, 0
+        for key in requests:
+            count = -(-capacities[key] // tokens_per_block)
+            offsets[key] = (cursor, count)
+            cursor += count
+        return offsets, max(cursor, -(-total // tokens_per_block), 1)
+    context = _active_compilation_context(scenario)
+    return build() if context is None else context.invariant(
+        ("generic_kv_canonical_blocks", tokens_per_block), build)
+
+
+def _bind_kv_blocks(builder, scenario, plan, rank, layer, result):
+    """Address every owner through its block table in this rank's layer pools."""
+    blocks = getattr(builder, "_physical_kv_blocks", None)
+    kind = kv_block_kind(layer)
+    if blocks is None:
+        tokens_per_block = int(scenario.placement.kv_policy.tokens_per_page)
+        offsets, pool_blocks = _generic_kv_canonical_blocks(scenario, tokens_per_block)
+        everything = (0, pool_blocks)
+        tables = None
+    else:
+        tokens_per_block = int(blocks["tokens_per_block"])
+        pool_blocks = int(blocks["pool_blocks"][kind])
+        tables = blocks["tables"]
+    context = _active_compilation_context(scenario)
+    geometry = lambda: kv_block_geometry(scenario, plan, rank, layer, tokens_per_block)
+    row, stride, per_page = (geometry() if context is None else context.invariant(
+        ("kv_block_geometry", layer.layer_id, rank.rank, tokens_per_block), geometry))
+    for owner in result["owners"]:
+        if tables is None:
+            start, count = offsets.get(owner["request_id"], everything)
+            owner["blocks"] = tuple(range(start, start + count))
+        else:
+            table = tables.get(owner["request_id"])
+            if table is None:
+                raise ValueError("physical KV has no block table for request " + owner["request_id"])
+            # A request without KV rows yet (empty history) holds no blocks.
+            owner["blocks"] = table.get(kind, ())
+    result.update(tokens_per_block=tokens_per_block, block_bytes=stride,
+                  tokens_per_nand_page=per_page, pool_bytes=pool_blocks * stride,
+                  pool_ids={part: kv_pool_buffer_id(layer.layer_id, rank, part) for part in ("k", "v")})
+
+
+def _kv_block_runs(contract, owner, spans):
+    """Physical (offset, bytes) runs of logical token spans, one per contiguous block run."""
+    return _kv_runs(owner["blocks"], spans, contract["tokens_per_block"], contract["row_bytes"], contract["block_bytes"])
+
+
+@lru_cache(maxsize=1 << 15)
+def _kv_shared_runs(blocks, spans, per_block, row, stride):
+    """One immutable run list per request's block table, shared by its layers and ranks."""
+    return KVRuns(_kv_runs(blocks, spans, per_block, row, stride))
+
+
+def _kv_runs(blocks, spans, per_block, row, stride):
+    runs = []
+    for start, length in spans:
+        while length > 0:
+            index, within = divmod(start, per_block)
+            if index >= len(blocks):
+                raise ValueError("KV access exceeds the request's allocated blocks")
+            taken = min(length, per_block - within)
+            offset = blocks[index] * stride + within * row
+            if runs and runs[-1][0] + runs[-1][1] == offset:
+                runs[-1][1] += taken * row
+            else:
+                runs.append([offset, taken * row])
+            start += taken
+            length -= taken
+    return runs
+
+
+def _kv_write_spans(owner):
+    """Contiguous position runs of an owner's materialized rows."""
+    spans = []
+    for position in owner["write_positions"]:
+        if spans and position == spans[-1][0] + spans[-1][1]:
+            spans[-1][1] += 1
+        else:
+            spans.append([position, 1])
+    return spans
+
+
 def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
                          token_batch, context_tokens, history_tokens,
                          materialized_tokens, includes_current=False):
@@ -16604,6 +16803,8 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
          "id": owner["id"] + ":rank{}:tp{}:pp{}".format(rank.rank, rank.tp_rank, rank.pp_rank)}
         for owner in template["owners"]]}
     page_table = getattr(builder, "_physical_kv_page_table", None)
+    if page_table is None:
+        _bind_kv_blocks(builder, scenario, plan, rank, layer, result)
     if page_table is not None:
         if plan.world_size != 1:
             raise ValueError("physical paged KV currently requires a single rank; distributed page layout is not declared")
@@ -16630,7 +16831,7 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
             owner["pages"] = pages
         result.update(schema="physical-paged-kv/v1", tokens_per_page=tokens_per_page,
                       layer_offset_bytes=layer_offset)
-    elif result.get("schema") == "analytical-token-major-kv/v1":
+    elif result.get("schema") == "layer-block-kv/v1":
         # HBF/CONV keep the currently open NAND page in one request/layer/part
         # slot in the rank's HBM.  The slot is a persistent allocation; only
         # its logical page number changes as Decode advances.  HBF+ and CONV+
@@ -16659,11 +16860,7 @@ def _generic_kv_contract(builder, scenario, plan, rank, layer, *,
                 and local_config.kind is MemoryKind.HBM
             )
             if external_hbm:
-                tokens_per_page = cache_config.page_bytes // result["row_bytes"]
-                if tokens_per_page <= 0:
-                    raise ValueError(
-                        "external HBM KV tail page is smaller than one KV row"
-                    )
+                tokens_per_page = result["tokens_per_nand_page"]
                 hbm_owner = resolve_service(local_component).physical_owner
                 for owner in result["owners"]:
                     positions = tuple(owner.get("write_positions", ()))
@@ -16707,43 +16904,52 @@ def _generic_kv_persistence(contract):
         return {"persistent_buffer_ids": tuple(dict.fromkeys(page["buffer_id"] for page in pages)),
             "physical_external_allocations": tuple(dict.fromkeys((page["physical_owner"],
                 page["buffer_id"], page["allocation_generation"]) for page in pages))}
-    request_buffers = {owner["request_id"]: [owner["id"] + ":k", owner["id"] + ":v"]
-                       for owner in contract["owners"]}
-    for owner in contract["owners"]:
-        tail = owner.get("external_hbm_tail")
-        if tail is not None:
-            request_buffers[owner["request_id"]].extend(
-                (tail["k_buffer_id"], tail["v_buffer_id"])
-            )
-    return {"persistent_request_buffers": request_buffers,
-            "persistent_buffer_ids": tuple(value for values in request_buffers.values() for value in values)}
+    # The layer pools are resident for the whole run; only a request's HBM
+    # tail slots live and die with it.
+    pools = tuple(contract["pool_ids"].values())
+    request_buffers = {owner["request_id"]: [tail["k_buffer_id"], tail["v_buffer_id"]]
+                       for owner in contract["owners"]
+                       if (tail := owner.get("external_hbm_tail")) is not None}
+    return {"persistent_request_buffers": request_buffers, "kv_pool_buffer_ids": pools,
+            "persistent_buffer_ids": pools + tuple(value for values in request_buffers.values() for value in values)}
 
 
 def _generic_kv_accesses(contract, part, *, write=False):
     if contract.get("schema") == "physical-paged-kv/v1":
         return _paged_kv_accesses(contract, part, write=write)
-    accesses = []
+    base = {"buffer_id": contract["pool_ids"][part], "operation": "write" if write else "read",
+            "buffer_size_bytes": contract["pool_bytes"], "allocation_generation": 0}
+    return [{**base, "offset_bytes": offset, "size_bytes": size}
+            for owner in contract["owners"]
+            for offset, size in _kv_block_runs(contract, owner,
+                                               _kv_write_spans(owner) if write else owner["read_ranges"])]
+
+
+def _generic_kv_read_rows(contract, part):
+    """One fused attention's reads of a KV part: one row per request.
+
+    A request scattered over several block runs carries them as ``kv_runs``:
+    its offset is the pool's start and its size their total, and the physical
+    task expands it into exactly the rows of ``_generic_kv_accesses``, all in
+    one controller window.
+    """
+    if contract.get("schema") != "layer-block-kv/v1":
+        return _generic_kv_accesses(contract, part)
+    base = {"buffer_id": contract["pool_ids"][part], "operation": "read",
+            "buffer_size_bytes": contract["pool_bytes"], "allocation_generation": 0}
+    per_block, row_bytes, stride = contract["tokens_per_block"], contract["row_bytes"], contract["block_bytes"]
+    rows = []
     for owner in contract["owners"]:
-        base = {"buffer_id": owner["id"] + ":" + part,
-            "operation": "write" if write else "read",
-            "buffer_size_bytes": owner["capacity_tokens"] * contract["row_bytes"],
-            "allocation_generation": 0}
-        if not write:
-            for start, length in owner["read_ranges"]:
-                if length:
-                    accesses.append({**base, "offset_bytes": start * contract["row_bytes"],
-                        "size_bytes": length * contract["row_bytes"]})
-            continue
-        # Coalesce contiguous positions without erasing request ownership.
-        runs = []
-        for position in owner["write_positions"]:
-            if runs and position == runs[-1][1]:
-                runs[-1] = (runs[-1][0], position + 1)
-            else:
-                runs.append((position, position + 1))
-        accesses.extend({**base, "offset_bytes": start * contract["row_bytes"],
-            "size_bytes": (end - start) * contract["row_bytes"]} for start, end in runs)
-    return accesses
+        runs = _kv_shared_runs(owner["blocks"], tuple(map(tuple, owner["read_ranges"])), per_block, row_bytes, stride)
+        if len(runs) == 1:
+            rows.append({**base, "offset_bytes": runs.offsets[0], "size_bytes": runs.sizes[0]})
+        elif runs.total <= contract["pool_bytes"]:
+            if len(runs):
+                rows.append({**base, "offset_bytes": 0, "size_bytes": runs.total, "kv_runs": runs})
+        else:
+            # Overlapping views can read more than the pool holds: no single extent covers them.
+            rows.extend({**base, "offset_bytes": offset, "size_bytes": size} for offset, size in runs)
+    return rows
 
 
 def _external_kv_tail_enabled(scenario):
@@ -16760,10 +16966,9 @@ def _external_kv_tail_enabled(scenario):
 
 def _generic_kv_hbm_tail_accesses(contract, part, *, write=False):
     """Mirror logical accesses that land in the currently open external page."""
-    if contract.get("schema") != "analytical-token-major-kv/v1":
+    if contract.get("schema") != "layer-block-kv/v1":
         return []
     row_bytes = int(contract["row_bytes"])
-    source = _generic_kv_accesses(contract, part, write=write)
     result = []
     for owner in contract["owners"]:
         tail = owner.get("external_hbm_tail")
@@ -16772,59 +16977,53 @@ def _generic_kv_hbm_tail_accesses(contract, part, *, write=False):
         page_start = int(tail["tail_page"]) * int(tail["tokens_per_page"])
         page_end = page_start + int(tail["tokens_per_page"])
         buffer_id = tail["k_buffer_id"] if part == "k" else tail["v_buffer_id"]
-        hbm_rows = []
-        owner_prefix = owner["id"] + ":" + part
-        for access in source:
-            if access.get("buffer_id") != owner_prefix:
-                continue
-            first = int(access["offset_bytes"]) // row_bytes
-            last = (int(access["offset_bytes"]) + int(access["size_bytes"]) + row_bytes - 1) // row_bytes
-            lo, hi = max(first, page_start), min(last, page_end)
-            if hi <= lo:
-                continue
-            hbm_rows.append({
-                "buffer_id": buffer_id,
-                "operation": "write" if write else "read",
-                "buffer_size_bytes": int(tail["page_bytes"]),
-                "allocation_generation": 0,
-                "offset_bytes": (lo - page_start) * row_bytes,
-                "size_bytes": (hi - lo) * row_bytes,
-            })
-        result.extend(hbm_rows)
+        for start, length in (_kv_write_spans(owner) if write else owner["read_ranges"]):
+            lo, hi = max(start, page_start), min(start + length, page_end)
+            if hi > lo:
+                result.append({
+                    "buffer_id": buffer_id,
+                    "operation": "write" if write else "read",
+                    "buffer_size_bytes": int(tail["page_bytes"]),
+                    "allocation_generation": 0,
+                    "offset_bytes": (lo - page_start) * row_bytes,
+                    "size_bytes": (hi - lo) * row_bytes,
+                })
     return result
+
+
+def _kv_tail_completed(owner):
+    """Whether this invocation's writes fill the owner's open external page."""
+    tail = owner.get("external_hbm_tail")
+    if not tail or not owner["write_positions"]:
+        return False
+    per_page = int(tail["tokens_per_page"])
+    return int(tail["tail_page"]) * per_page + per_page - 1 in owner["write_positions"]
 
 
 def _generic_kv_external_write_split(contract, part):
     """Split HBF writes at NAND-page boundaries and isolate page completion."""
-    writes = _generic_kv_accesses(contract, part, write=True)
+    if contract.get("schema") != "layer-block-kv/v1":
+        return _generic_kv_accesses(contract, part, write=True), []
+    base = {"buffer_id": contract["pool_ids"][part], "operation": "write",
+            "buffer_size_bytes": contract["pool_bytes"], "allocation_generation": 0}
     partial, flush = [], []
-    if contract.get("schema") != "analytical-token-major-kv/v1":
-        return writes, flush
-    row_bytes = int(contract["row_bytes"])
-    tails = {
-        owner["id"] + ":" + part: owner.get("external_hbm_tail")
-        for owner in contract["owners"]
-    }
-    for access in writes:
-        tail = tails.get(access.get("buffer_id"))
+    for owner in contract["owners"]:
+        spans = _kv_write_spans(owner)
+        tail = owner.get("external_hbm_tail")
         if not tail:
-            partial.append(access)
+            partial.extend({**base, "offset_bytes": offset, "size_bytes": size}
+                           for offset, size in _kv_block_runs(contract, owner, spans))
             continue
-        page_bytes = int(tail["page_bytes"])
-        tail_page = int(tail["tail_page"])
-        start = int(access["offset_bytes"])
-        remaining = int(access["size_bytes"])
-        while remaining:
-            page = start // page_bytes
-            page_end = (page + 1) * page_bytes
-            count = min(remaining, page_end - start)
-            piece = {**access, "offset_bytes": start, "size_bytes": count}
-            if page == tail_page and start + count == page_end:
-                flush.append(piece)
-            else:
-                partial.append(piece)
-            start += count
-            remaining -= count
+        per_page, tail_page = int(tail["tokens_per_page"]), int(tail["tail_page"])
+        for start, length in spans:
+            while length:
+                page = start // per_page
+                count = min(length, (page + 1) * per_page - start)
+                (offset, size), = _kv_block_runs(contract, owner, ((start, count),))
+                piece = {**base, "offset_bytes": offset, "size_bytes": size}
+                (flush if page == tail_page and (start + count) % per_page == 0 else partial).append(piece)
+                start += count
+                length -= count
     return partial, flush
 
 
@@ -16832,20 +17031,12 @@ def _generic_kv_hbm_tail_flush_accesses(contract, part, flush_writes):
     """Return one full-page HBM read for every page that is about to program."""
     if not flush_writes:
         return []
-    tails = {
-        (owner["id"] + ":" + part): owner.get("external_hbm_tail")
-        for owner in contract.get("owners", ())
-    }
-    seen = set()
     result = []
-    for access in flush_writes:
-        tail = tails.get(access.get("buffer_id"))
-        if not tail:
+    for owner in contract.get("owners", ()):
+        if not _kv_tail_completed(owner):
             continue
+        tail = owner["external_hbm_tail"]
         key = tail["k_buffer_id"] if part == "k" else tail["v_buffer_id"]
-        if key in seen:
-            continue
-        seen.add(key)
         result.append({
             "buffer_id": key,
             "operation": "read",
@@ -16925,12 +17116,17 @@ def _add_external_kv_memory_task(builder, scenario, router, plan, rank,
 
 
 def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
-                                history_tokens: int, *, ep_group: int,
+                                history_tokens: int, *, ep_group: int, blocks=None,
                                 execution_control: Optional[ExecutionControl] = None):
     """Declare the same resident KV buffers as one final-prompt invocation.
 
     ``ep_group`` is the request's attention data-parallel owner: its KV lives
     only on that group's TP ranks, so only those ranks declare buffers.
+    ``blocks`` is the serving block layout (``tokens_per_block``,
+    ``pool_blocks``, ``tables``) holding the request's history blocks; the
+    final prompt row's block is allocated when that query runs. Without it
+    the workload's canonical layout applies, as in any lowering without
+    serving block tables.
 
     This is inventory only: it shares the ordinary serving lane, KV contract,
     access descriptor and allocation lowerer, without constructing compute or
@@ -16966,8 +17162,9 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
         logit_tokens=1, committed_tokens=0, ep_group=ep_group)
     lanes, = _serving_invocation_lanes(SimpleNamespace(kind="prefill", items=(item,)),
         inter_invocation_positions=False)
-    builder = SimpleNamespace(request=request, _attention_invocation_lanes=lanes)
-    declarations, configs, contracts, owners, tail_slots = {}, {}, [], {}, []
+    builder = SimpleNamespace(request=request, _attention_invocation_lanes=lanes,
+                              _physical_kv_blocks=blocks)
+    declarations, configs, contracts, owners, tail_slots, request_buffers = {}, {}, [], {}, [], []
     with _compilation_scope(scenario):
         plan = _parallel_plan(scenario)
         if not 0 <= ep_group < plan.ep_degree:
@@ -16992,11 +17189,13 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
                 owner = owners[component_id]
                 config = component.metadata["physical_memory_config"]
                 configs[owner] = config
-                accesses = list({**_physical_access_from_cache_access(access),
-                    "physical_owner": owner, "allocation_arena": "resident"}
-                    for part in ("k", "v")
-                    for write in (False, True)
-                    for access in _generic_kv_accesses(contract, part, write=write))
+                # One row per pool declares the layer's resident pools; the
+                # caller maps the history through the block table.
+                accesses = [{**_physical_access_from_cache_access({
+                    "buffer_id": contract["pool_ids"][part], "operation": "write",
+                    "buffer_size_bytes": contract["pool_bytes"], "allocation_generation": 0,
+                    "offset_bytes": 0, "size_bytes": contract["row_bytes"]}),
+                    "physical_owner": owner, "allocation_arena": "resident"} for part in ("k", "v")]
                 for part in ("k", "v"):
                     contract_owner = next((item for item in contract["owners"]
                                            if item["request_id"] == request_id
@@ -17021,18 +17220,26 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
                         "physical_owner": hbm_owner,
                         "allocation_arena": "resident",
                     })
+                    request_buffers.append((hbm_owner, buffer_id, 0))
+                    # An open page holds history rows only if the history
+                    # ends inside it; then its block is already allocated.
+                    per_page = int(tail["tokens_per_page"])
+                    tail_offset = (_kv_block_runs(contract, contract_owner,
+                                                  ((int(tail["tail_page"]) * per_page, 1),))[0][0]
+                                   if history_tokens % per_page else None)
                     tail_slots.append({
                         "request_id": request_id,
                         "layer_id": layer.layer_id,
                         "rank": rank.rank,
                         "part": part,
                         "hbf_component_id": component_id,
-                        "hbf_buffer_id": contract_owner["id"] + ":" + part,
+                        "hbf_buffer_id": contract["pool_ids"][part],
+                        "tail_offset_bytes": tail_offset,
                         "hbm_component_id": tail["component_id"],
                         "hbm_physical_owner": hbm_owner,
                         "hbm_buffer_id": buffer_id,
                         "page_bytes": int(tail["page_bytes"]),
-                        "tokens_per_page": int(tail["tokens_per_page"]),
+                        "tokens_per_page": per_page,
                         "tail_page": int(tail["tail_page"]),
                         "row_bytes": int(contract["row_bytes"]),
                     })
@@ -17042,12 +17249,13 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
                     metadata={"physical_owner": owner, "physical_memory_config": config,
                         "memory_accesses": tuple(accesses), **_generic_kv_persistence(contract)}))
                 for row in task.metadata["physical_allocations"]:
-                    declarations[(owner, row["buffer_id"], row.get("generation", 0))] = row
+                    declarations[(str(row.get("physical_owner") or owner), row["buffer_id"],
+                                  row.get("generation", 0))] = row
                 contracts.append(contract)
     control.raise_if_cancelled()
     return {"physical_allocations": tuple(declarations.values()),
         "physical_memory_configs": configs, "contracts": tuple(contracts),
-        "tail_slots": tuple(tail_slots)}
+        "tail_slots": tuple(tail_slots), "request_buffers": tuple(request_buffers)}
 
 
 def _paged_kv_accesses(contract, part, *, write=False):
@@ -17138,30 +17346,29 @@ def _add_generic_kv_writeback(builder, scenario, router, plan, rank, layer,
             "{}.attention.kv_materialize".format(layer.layer_id), name + "." + part,
             dependencies, source_component_id=target_component_id,
             target_component_id=target_component_id, metadata=metadata)
-        if contract.get("schema") == "analytical-token-major-kv/v1":
+        if contract.get("schema") == "layer-block-kv/v1":
             for task in builder.tasks[first_storage_task:]:
                 if task.metadata.get("generic_kv_storage") is contract:
                     builder._task_segment_storage_payloads[task.task_id] = _GenericKVStorageReplayPayload(
                         "kv_materialize", layer, rank, plan.tp_degree, part)
         if cache != local and not direct:
-            prior = copied
-            for index, access in enumerate(all_writes):
-                first_store_task = len(builder.tasks)
-                prior = _add_transfer_tasks(builder, router, local, cache, access["size_bytes"],
-                    (prior,), name=name + ".{}.store{}".format(part, index), routing_policy=plan.routing_policy,
-                    metadata={"event_kind": "kv_store", "layer_id": layer.layer_id,
-                        "coverage_component": "full_attention", "rank": rank.rank,
-                        "generic_kv_storage": contract, "kv_operand": part,
-                        "source_buffer_accesses": [{**access, "operation": "read"}],
-                        "target_buffer_accesses": [access],
-                        **({"defer_page_staging": True, "page_staging_scope": staging_scope}
-                           if logic_die_flush else {})})
-                if contract.get("schema") == "analytical-token-major-kv/v1":
-                    for task in builder.tasks[first_store_task:]:
-                        if task.metadata.get("generic_kv_storage") is contract:
-                            builder._task_segment_storage_payloads[task.task_id] = _GenericKVStorageReplayPayload(
-                                "kv_store", layer, rank, plan.tp_degree, part, index)
-            copied = prior
+            # One store moves every block run of this invocation, so the task
+            # shape does not depend on how the block tables fragment.
+            first_store_task = len(builder.tasks)
+            copied = _add_transfer_tasks(builder, router, local, cache, write_bytes,
+                (copied,), name=name + ".{}.store".format(part), routing_policy=plan.routing_policy,
+                metadata={"event_kind": "kv_store", "layer_id": layer.layer_id,
+                    "coverage_component": "full_attention", "rank": rank.rank,
+                    "generic_kv_storage": contract, "kv_operand": part,
+                    "source_buffer_accesses": [{**access, "operation": "read"} for access in all_writes],
+                    "target_buffer_accesses": list(all_writes),
+                    **({"defer_page_staging": True, "page_staging_scope": staging_scope}
+                       if logic_die_flush else {})})
+            if contract.get("schema") == "layer-block-kv/v1":
+                for task in builder.tasks[first_store_task:]:
+                    if task.metadata.get("generic_kv_storage") is contract:
+                        builder._task_segment_storage_payloads[task.task_id] = _GenericKVStorageReplayPayload(
+                            "kv_store", layer, rank, plan.tp_degree, part)
         # A page program must not sit on the attention critical path.  Once
         # the row is resident in HBM, issue the full-page HBM source read and
         # then the ordinary HBF write/program branch.  NandCore sees the
@@ -17176,12 +17383,11 @@ def _add_generic_kv_writeback(builder, scenario, router, plan, rank, layer,
                 role="kv_tail_flush_read",
                 defer_tail_flush=defer_logic_die,
             )
-            if contract.get("schema") == "analytical-token-major-kv/v1":
+            if contract.get("schema") == "layer-block-kv/v1":
                 for task in builder.tasks[first_storage_task:]:
                     if task.task_id == flush_read:
                         builder._task_segment_storage_payloads[task.task_id] = _GenericKVStorageReplayPayload(
-                            "kv_tail_flush_read", layer, rank, plan.tp_degree,
-                            part, 0)
+                            "kv_tail_flush_read", layer, rank, plan.tp_degree, part)
                         break
 
             flush_write = _add_external_kv_memory_task(
@@ -17192,21 +17398,20 @@ def _add_generic_kv_writeback(builder, scenario, router, plan, rank, layer,
                 role="kv_tail_flush_write",
                 defer_tail_flush=defer_logic_die,
             )
-            if contract.get("schema") == "analytical-token-major-kv/v1":
+            if contract.get("schema") == "layer-block-kv/v1":
                 for task in builder.tasks[first_storage_task:]:
                     if task.task_id == flush_write:
                         builder._task_segment_storage_payloads[task.task_id] = _GenericKVStorageReplayPayload(
-                            "kv_tail_flush_write", layer, rank, plan.tp_degree,
-                            part, 0)
+                            "kv_tail_flush_write", layer, rank, plan.tp_degree, part)
                         break
         if logic_die_flush:
             flush_task = _add_logic_die_kv_flush_task(
                 builder, scenario, plan, rank, layer, contract, part,
                 (copied,), name=name + ".{}.logic_die_flush".format(part),
                 scope=staging_scope, cache_component=cache)
-            if flush_task and contract.get("schema") == "analytical-token-major-kv/v1":
+            if flush_task and contract.get("schema") == "layer-block-kv/v1":
                 builder._task_segment_storage_payloads[flush_task] = _GenericKVStorageReplayPayload(
-                    "logic_die_flush", layer, rank, plan.tp_degree, part, 0)
+                    "logic_die_flush", layer, rank, plan.tp_degree, part)
         endpoints.append(copied)
     byte_count = 2 * contract["row_bytes"] * contract["materialized_tokens"]
     complete = _add_join(builder, name + ".complete", endpoints or dependencies,
@@ -17216,7 +17421,7 @@ def _add_generic_kv_writeback(builder, scenario, router, plan, rank, layer,
             "bytes": byte_count, "physical_bytes": byte_count,
             "logical_bytes": _logical_kv_bytes_per_token_for_rank(scenario, layer, plan.tp_degree, rank.tp_rank) * committed_tokens,
             "resource_accounting": "explicit_kv_materialization", "generic_kv_storage": contract})
-    if contract.get("schema") == "analytical-token-major-kv/v1":
+    if contract.get("schema") == "layer-block-kv/v1":
         builder._task_segment_storage_payloads[complete] = _GenericKVStorageReplayPayload(
             "kv_append", layer, rank, plan.tp_degree)
     return _discard_side_branch_rank_value(builder, complete, rank)
@@ -17548,20 +17753,20 @@ def _add_kv_read(
             local = _add_join(builder, name + ".read.local", prior_dependencies,
                 metadata={**common, "resource_accounting": "included_in_attention_kernel",
                           "resource_transfer_bytes": 0})
-            if access_contract.get("schema") == "analytical-token-major-kv/v1":
+            if access_contract.get("schema") == "layer-block-kv/v1":
                 builder._task_segment_dynamic_payloads[local] = _KVReadTaskReplayPayload(layer, rank, plan.tp_degree)
                 builder._task_segment_storage_payloads[local] = _GenericKVStorageReplayPayload(
                     "kv_read", layer, rank, plan.tp_degree)
             return _discard_side_branch_rank_value(builder, local, rank)
-        prior = prior_dependencies
-        for index, access in enumerate(accesses):
-            end = _add_transfer_tasks(builder, router, cache, access_component, access["size_bytes"], prior,
-                name=name + ".read.range{}".format(index), routing_policy=plan.routing_policy,
-                metadata={**common, "source_buffer_accesses": [access],
-                          "target_buffer_accesses": [{**access, "operation": "write"}],
-                          "resource_accounting": "explicit_remote_transfer"})
-            prior = (end,)
-        return _discard_side_branch_rank_value(builder, prior[0], rank)
+        if not accesses:
+            return _discard_side_branch_rank_value(builder, prior_dependencies[0], rank)
+        end = _add_transfer_tasks(builder, router, cache, access_component,
+            sum(access["size_bytes"] for access in accesses), prior_dependencies,
+            name=name + ".read.ranges", routing_policy=plan.routing_policy,
+            metadata={**common, "source_buffer_accesses": accesses,
+                      "target_buffer_accesses": [{**access, "operation": "write"} for access in accesses],
+                      "resource_accounting": "explicit_remote_transfer"})
+        return _discard_side_branch_rank_value(builder, end, rank)
     task_id = _add_kv_access(
         builder,
         scenario,
@@ -17653,7 +17858,7 @@ def _bind_generic_kv_storage(metadata, payload, replay):
     if payload.role != "kv_append":
         metadata.update(_generic_kv_persistence(contract))
     if payload.role == "fused_attention":
-        reads = _generic_kv_accesses(contract, "k") + _generic_kv_accesses(contract, "v")
+        reads = _generic_kv_read_rows(contract, "k") + _generic_kv_read_rows(contract, "v")
         tail_reads = (_generic_kv_hbm_tail_accesses(contract, "k")
                       + _generic_kv_hbm_tail_accesses(contract, "v"))
         current = metadata["buffer_accesses"]
@@ -17672,38 +17877,36 @@ def _bind_generic_kv_storage(metadata, payload, replay):
                 payload.layer.layer_id, payload.rank.rank)
     elif payload.role == "kv_store":
         writes = _generic_kv_accesses(contract, payload.part, write=True)
-        if type(payload.access_index) is not int or not 0 <= payload.access_index < len(writes):
-            raise ValueError("native KV store replay descriptor is unavailable")
-        access = writes[payload.access_index]
-        metadata["source_buffer_accesses"] = [{**access, "operation": "read"}]
-        metadata["target_buffer_accesses"] = [access]
+        if sum(row["size_bytes"] for row in writes) != sum(
+                row["size_bytes"] for row in metadata["target_buffer_accesses"]):
+            raise ValueError("native KV store replay changes the stored bytes")
+        metadata["source_buffer_accesses"] = [{**access, "operation": "read"} for access in writes]
+        metadata["target_buffer_accesses"] = writes
         if metadata.get("defer_page_staging"):
             metadata["page_staging_scope"] = "{}:rank{:03d}".format(
                 payload.layer.layer_id, payload.rank.rank)
     elif payload.role == "kv_tail_flush_read":
         _partial, flush = _generic_kv_external_write_split(contract, payload.part)
         reads = _generic_kv_hbm_tail_flush_accesses(contract, payload.part, flush)
-        if type(payload.access_index) is not int or not 0 <= payload.access_index < len(reads):
+        if not reads:
             raise ValueError("native KV tail flush read replay descriptor is unavailable")
-        access = reads[payload.access_index]
-        metadata["buffer_accesses"] = [access]
-        metadata["source_buffer_accesses"] = [access]
+        metadata["buffer_accesses"] = reads
+        metadata["source_buffer_accesses"] = reads
         owner = metadata.get("physical_owner")
         resource_id = metadata.get("physical_resource_id", owner)
         metadata["memory_accesses"] = _generic_kv_physical_accesses(
-            [access], owner, resource_id
+            reads, owner, resource_id
         )
     elif payload.role == "kv_tail_flush_write":
         _partial, flush = _generic_kv_external_write_split(contract, payload.part)
-        if type(payload.access_index) is not int or not 0 <= payload.access_index < len(flush):
+        if not flush:
             raise ValueError("native KV tail flush write replay descriptor is unavailable")
-        access = flush[payload.access_index]
-        metadata["buffer_accesses"] = [access]
-        metadata["target_buffer_accesses"] = [access]
+        metadata["buffer_accesses"] = flush
+        metadata["target_buffer_accesses"] = flush
         owner = metadata.get("physical_owner")
         resource_id = metadata.get("physical_resource_id", owner)
         metadata["memory_accesses"] = _generic_kv_physical_accesses(
-            [access], owner, resource_id
+            flush, owner, resource_id
         )
     elif payload.role == "logic_die_flush":
         writes = _generic_kv_accesses(contract, payload.part, write=True)
@@ -22360,9 +22563,9 @@ def _compile_parallel_attention_group(
                 (attention_ready,),
                 metadata={**rank_meta, **flash_audit, **({
                     "generic_kv_storage": generic_kv, **_generic_kv_persistence(generic_kv),
-                    "rhs_buffer_accesses": _generic_kv_accesses(generic_kv, "k") + _generic_kv_accesses(generic_kv, "v"),
-                    "buffer_accesses": [generic_q] + _generic_kv_accesses(generic_kv, "k")
-                        + _generic_kv_accesses(generic_kv, "v")
+                    "rhs_buffer_accesses": _generic_kv_read_rows(generic_kv, "k") + _generic_kv_read_rows(generic_kv, "v"),
+                    "buffer_accesses": [generic_q] + _generic_kv_read_rows(generic_kv, "k")
+                        + _generic_kv_read_rows(generic_kv, "v")
                         + external_hbm_tail_reads
                         + [generic_access("context", fused_attention_workload.write_bytes, "write")],
                 } if generic_kv is not None else {}), **({
@@ -22417,8 +22620,8 @@ def _compile_parallel_attention_group(
                 metadata={**rank_meta, **flash_audit, **({
                     "generic_kv_storage": generic_kv,
                     **_generic_kv_persistence(generic_kv),
-                    "rhs_buffer_accesses": _generic_kv_accesses(generic_kv, "k"),
-                    "buffer_accesses": [generic_q] + _generic_kv_accesses(generic_kv, "k")
+                    "rhs_buffer_accesses": _generic_kv_read_rows(generic_kv, "k"),
+                    "buffer_accesses": [generic_q] + _generic_kv_read_rows(generic_kv, "k")
                         + _generic_kv_hbm_tail_accesses(generic_kv, "k")
                         + [generic_access("score", qk_workload.output_bytes, "write")],
                 } if generic_kv is not None else {}), **({
@@ -22680,7 +22883,7 @@ def _compile_parallel_attention_group(
                 metadata={**rank_meta, **flash_audit, **({
                     "generic_kv_storage": generic_kv,
                     **_generic_kv_persistence(generic_kv),
-                    "rhs_buffer_accesses": _generic_kv_accesses(generic_kv, "v"),
+                    "rhs_buffer_accesses": _generic_kv_read_rows(generic_kv, "v"),
                     "buffer_accesses": [generic_access("probabilities", pv_workload.activation_bytes, "read")]
                         + _generic_kv_accesses(generic_kv, "v")
                         + _generic_kv_hbm_tail_accesses(generic_kv, "v")
@@ -29834,6 +30037,8 @@ def _serving_cohort_cache_key(cohort: object) -> Tuple[object, ...]:
         *scan_prefix_identity,
         *(("physical_kv_pages", repr(metadata["physical_kv_page_table"]))
           if metadata.get("physical_kv_page_table") is not None else ()),
+        *(("physical_kv_blocks", metadata["physical_kv_blocks"]["digest"])
+          if metadata.get("physical_kv_blocks") is not None else ()),
         *(("retained_slot_rows", metadata.get("llama_cpp_kv_occupied_rows"))
           if metadata.get("llama_cpp_retained_kv_bound") is not None else ()),
     )
@@ -32624,6 +32829,7 @@ def _lower_serving_cohort(
     )
     builder = _TaskBuilder(request)
     builder._physical_kv_page_table = cohort.metadata.get("physical_kv_page_table")
+    builder._physical_kv_blocks = cohort.metadata.get("physical_kv_blocks")
     start = builder.add(
         cohort_id + ".start",
         TaskCategory.POLICY,

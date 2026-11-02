@@ -443,3 +443,74 @@ def test_batch_resource_bill_equals_the_sum_of_its_public_resources():
     assert dict(bill.resource_busy_ns) == dict(totals)
     assert accumulated.timeline.bytes_moved == public.timeline.bytes_moved
     assert sum(public.timeline.bytes_moved.get(rid, 0) for rid in public.timeline.bytes_moved) == 4 << 16
+
+
+def mirror_batches(seed, config):
+    """Whole-stripe traffic on every channel, mixed with small requests that age some channels' state."""
+    rng = random.Random(seed)
+    lanes = config.lane_count
+    stripe = 2 * lanes
+    arrival = 1000.
+    for _ in range(30):
+        arrival += rng.choice((0., 50., 400., 2500., 5000., 42000.))
+        count = rng.randint(1, 3)
+        firsts, stops, reads = [], [], []
+        for _ in range(count):
+            first = rng.randrange(1 << 18) * stripe + rng.choice((0, 0, 2 * rng.randrange(lanes), rng.randrange(stripe)))
+            firsts.append(first)
+            stops.append(first + rng.choice((64, 128, 300, 700)) * stripe + rng.choice((0, 0, rng.randrange(stripe))))
+            reads.append(rng.random() < .8)
+        if rng.random() < .5:
+            lane = rng.randrange(lanes)
+            firsts.append(rng.randrange(1 << 18) * stripe + 2 * lane)
+            stops.append(firsts[-1] + rng.randint(1, 40))
+            reads.append(rng.random() < .5)
+        yield (np.array(firsts, dtype=np.int64), np.array(stops, dtype=np.int64),
+               np.full(len(firsts), arrival, dtype=np.float64), np.array(reads, dtype=np.bool_))
+
+
+@pytest.mark.parametrize("seed", range(3))
+@pytest.mark.parametrize("policy", ("all_bank", "disabled"))
+def test_channel_mirror_matches_simulating_every_channel(seed, policy):
+    from heterollm_sim._compiled_hbm import _pack_hbm_numeric
+    from heterollm_sim._hbm_numeric import _run_fr_fcfs_channels
+
+    config = hbm4(refresh_policy=policy)
+    packed = _pack_hbm_numeric(numeric_core(config), request("x", READ, 0, ))
+    channels = config.lane_count // 2
+    whole = [array.copy() for array in packed.arrays]
+    single = [array.copy() for array in packed.arrays]
+    for firsts, stops, arrivals, reads in mirror_batches(seed, config):
+        common = (firsts, stops, arrivals, reads, packed._fr_queue, packed.g, packed.t)
+        outcome = np.zeros((len(firsts), 3), dtype=np.int64), np.zeros((len(firsts), 2), dtype=np.float64)
+        outcome[1][:, 0] = arrivals
+        expected = np.zeros((len(firsts), 3), dtype=np.int64), np.zeros((len(firsts), 2), dtype=np.float64)
+        expected[1][:, 0] = arrivals
+        counts = np.zeros(7)
+        try:
+            for channel in range(channels):
+                counts += _run_fr_fcfs_channels(*common, *single, *expected, channel, channel + 1)
+        except ValueError as error:
+            # Random traffic can hold a row past tRASmax; mirroring must refuse it too.
+            with pytest.raises(ValueError, match=str(error)):
+                _run_fr_fcfs_channels(*common, *whole, *outcome, 0, channels)
+            return
+        mirrored = _run_fr_fcfs_channels(*common, *whole, *outcome, 0, channels)
+        assert outcome[0].tobytes() == expected[0].tobytes()
+        assert outcome[1].tobytes() == expected[1].tobytes()
+        assert mirrored[:5].tobytes() == counts[:5].tobytes()
+        assert mirrored[5:] == pytest.approx(counts[5:], rel=1e-9)
+        for name, left, right in zip(("rows", "bf", "addresses", "pc", "history", "pc_seen", "channel", "channel_int",
+                                      "resources", "moved", "directions", "touched", "windows", "window_counts", "stats"),
+                                     whole, single):
+            if name == "resources":
+                # Busy totals add per channel when mirroring: the same sums, in another order.
+                assert left[:, 1] == pytest.approx(right[:, 1], rel=1e-9)
+                left, right = np.delete(left, 1, axis=1), np.delete(right, 1, axis=1)
+            elif name == "windows":
+                # Slots past an ACT window's count hold nothing.
+                left = [row[:count].tobytes() for row, count in zip(left, whole[13])]
+                right = [row[:count].tobytes() for row, count in zip(right, single[13])]
+                assert left == right, name
+                continue
+            assert left.tobytes() == right.tobytes(), name

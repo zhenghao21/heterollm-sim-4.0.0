@@ -50,7 +50,7 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # Maverick HBM4 EP-group layouts, in addition to the 405B HBM4 exception.
 # v22 executes the NAND out-of-order read batch, KV page staging and the HBM4
 # SID-aware per-PC FR-FCFS controller; v21 results describe older physics.
-FAST_CONTRACT = "native_stationary_layout_fast_v22"
+FAST_CONTRACT = "native_stationary_layout_fast_v23"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # sample a whole prompt by its stage blocks and a chunked one by the
 # conditional chunk forecast; detailed passes retain the complete native
@@ -63,7 +63,7 @@ PREFILL_CONTRACT = "native_prefill_complete_prompt_pass_v2"
 PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
 PIPELINE_FORECAST_CONTRACT = "native_stationary_pp_stage_blocks_v4"
 # Per-GPU throughput under the SLO, layouts searched by branch and bound.
-SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v3"
+SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v4"
 # v3 samples a whole-prompt PP pass by its stage blocks.
 PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_stage_blocks_v3"
 # A fast pass the model's chunked attention splits into several chunks, at
@@ -80,8 +80,9 @@ SLO_NS = 100_000_000.
 FAST_CANDIDATE_WALL_TARGET_SECONDS = 600.
 FAST_CANDIDATE_WALL_BUDGET_SECONDS = 3000.
 # One Prefill pass per model, prompt and layout, outside every
-# candidate cap; the detailed full pass has none.
-PREFILL_WALL_BUDGET_SECONDS = 3000.
+# candidate cap; the detailed full pass has none. Every memory configuration
+# and batch shares the pass (405B LONG TP8: 3066 s on one HBM thread).
+PREFILL_WALL_BUDGET_SECONDS = 7200.
 PROCESS_WALL_BUDGET_GRACE = 1.0
 MAX_WORKERS = os.cpu_count() or 1
 # Physical memory kept free beside the predicted peaks of the running and the
@@ -743,10 +744,20 @@ def native_fast_result(result, params):
         "replica_scaling": {"dp": params["dp"], "gpus_per_replica": replica_gpus(params_layout(params)),
             "scope": "native_window_forecast and approximation hold the single simulated replica; metrics and metric intervals below are scaled to the cluster"}}
     if forecast is None:
+        reasons = tuple(result.approximation.get("rejection_reasons", ()))
         rejected = {"status": "forecast_rejected", "metrics": None,
-            "rejection_reason": ";".join(result.approximation.get("rejection_reasons", ()))
-                or "native_window_projection_unavailable"}
+            "rejection_reason": ";".join(reasons) or "native_window_projection_unavailable"}
         bounds = result.approximation.get("metric_bounds")
+        lower = ((bounds or {}).get("mean_complete_request_tpot_ns") or {}).get("lower")
+        if reasons == ("native_stationary_independent_budget_exceeded",) and _numeric(lower) and lower > SLO_NS:
+            # Only the interval's width missed the target, and even its lower
+            # end exceeds the SLO: the batch fails the SLO either way. The
+            # search may use it as a bracket's failing end, never select it.
+            return {**details, "status": "slo_rejected", "metrics": None,
+                "diagnostics": {"metric_bounds": dp_scaled_bounds(bounds, params), "slo_met": False,
+                    "slo_tpot_ns": SLO_NS, "target_met": False,
+                    "slo_statistic": "conditional_lower_bound_of_mean_complete_fresh_request_tpot"},
+                "rejection_reason": "mean_complete_fresh_request_tpot_lower_bound_exceeds_100ms_outside_budget"}
         if bounds:
             # A budget-rejected point still reports its conditional intervals,
             # marked as missing the target; they never enter selection.
@@ -772,15 +783,18 @@ def native_fast_result(result, params):
 
 
 def native_capacity_max_batch(row, params, scenario):
-    """Largest batch the native KV holds, from the reservations it held when it refused one; None if unknown."""
+    """Largest batch whose refill-cycle KV block peak fits the block pools the native run could hold; None if unknown."""
     from exploring_hbf_native_config import native_capacity_batch
-    held = row["approximation"].get("kv_requests_held_by_group")
-    if not held:
+    from heterollm_sim.ir import model_graph_execution_layers
+    approximation = row["approximation"]
+    if not approximation.get("kv_block_peak_exceeds_capacity"):
         return None
-    batch = native_capacity_batch(min(held), params["batch_size"],
+    batch = native_capacity_batch(approximation["kv_block_capacity"], params["batch_size"],
         scenario.workload.metadata["external_kv_ingress"]["max_inflight_requests"],
-        params["output_tokens"], params["ep"])
-    return batch if batch < params["batch_size"] else None
+        model_graph_execution_layers(scenario.model.graph), params["input_tokens"], params["output_tokens"],
+        params["ep"], params["ep"] * params.get("microbatches", 1),
+        scenario.placement.kv_policy.tokens_per_page)
+    return batch or None
 
 
 @functools.lru_cache(maxsize=None)
@@ -1814,6 +1828,15 @@ def search_case(directory, case, screen):
     acceptance = plan["acceptance"]
     if acceptance and acceptance["kind"] == "interpolated" and (acceptance["layout"], acceptance["batch"]) not in planned:
         planned.append((acceptance["layout"], acceptance["batch"]))
+    max_batch = plan["max_batch"]
+    if max_batch:
+        for layout_plan in max_batch["layouts"]:
+            planned += [(layout_plan["layout"], run["batch"]) for run in layout_plan["runs"] or ()
+                        if (layout_plan["layout"], run["batch"]) not in planned]
+        planned += [item for item in max_batch["next"] if item not in planned]
+        accepted = max_batch["acceptance"]
+        if accepted and (accepted["layout"], accepted["batch"]) not in planned:
+            planned.append((accepted["layout"], accepted["batch"]))
     rows = [row for row in (read_candidate(directory, candidate_id(case, layout, batch))
                             for layout, batch in planned) if row is not None]
     point = select_case(case, [candidate_id(case, layout, batch) for layout, batch in planned], rows, "fast")
@@ -1825,7 +1848,8 @@ def search_case(directory, case, screen):
         "layouts": [{key: layout_plan.get(key) for key in ("layout", "quantum", "bypass", "runs", "points", "outcome",
                                                             "next", "waiting")}
                     for layout_plan in plan["layouts"]],
-        "bounds": plan["bounds"], "acceptance": acceptance, "skipped_layouts": screen["skipped_layouts"],
+        "bounds": plan["bounds"], "acceptance": acceptance, "max_batch": max_batch,
+        "skipped_layouts": screen["skipped_layouts"],
         "coverage": screen.get("coverage", {}),
         "settings": search_plan.SETTINGS,
         "objective": search_plan.OBJECTIVE}

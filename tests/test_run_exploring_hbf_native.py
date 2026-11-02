@@ -253,7 +253,7 @@ def test_prefill_contract_invalidates_old_rejection_without_changing_decode(tmp_
         runner=lambda *a, **k: pytest.fail("current Prefill cache rerun"))
     assert result == again == run.read_json(path) and len(runs) == 1
     assert params == original_params and "prefill_contract" not in params
-    assert params["runner_contract"] == run.FAST_CONTRACT == "native_stationary_layout_fast_v22"
+    assert params["runner_contract"] == run.FAST_CONTRACT == "native_stationary_layout_fast_v23"
 
 
 def test_native_fast_runner_uses_upper_bound_and_keeps_full_traffic_unknown():
@@ -287,6 +287,18 @@ def test_budget_rejected_point_reports_its_intervals_as_missing_the_target(tmp_p
     assert row["status"] == "forecast_rejected" and row["metrics"] is None
     assert row["rejected_metric_bounds"] == {"target_relative_error": .1, "target_met": False,
         "label": "未达到10%目标的条件区间，不是通过验收的结果", "metrics": bounds}
+    # Even the lower end above the SLO: the point fails it either way and
+    # serves the search as a measured failing point, never as a selection.
+    above = {**bounds, "mean_complete_request_tpot_ns": {"estimate": 170e6, "lower": 150e6, "upper": 195e6,
+                                                         "relative_error_budget": .13}}
+    failing = run.native_fast_result(replace(value, approximation={**value.approximation, "metric_bounds": above}),
+                                     params)
+    assert failing["status"] == "slo_rejected" and failing["metrics"] is None
+    assert failing["diagnostics"]["metric_bounds"] == above and not failing["diagnostics"]["target_met"]
+    assert run.search_plan.classify(failing) == "measured"
+    other = replace(value, approximation={**value.approximation, "metric_bounds": above,
+        "rejection_reasons": ["native_stationary_independent_budget_exceeded", "native_stationary_refill_not_always_ready"]})
+    assert run.native_fast_result(other, params)["status"] == "forecast_rejected"
     assert "rejected_metric_bounds" not in run.native_fast_result(_fast_result(accepted=False), params)
     identity = run.candidate_id(case, LAYOUT, 1)
     row = {**row, "parameters": params, "candidate_id": identity, "backend": run.BACKEND}
@@ -732,8 +744,8 @@ def test_progress_keeps_committed_counters_when_next_task_count_resets(tmp_path,
 
 
 # The approved scoped defaults require a separate fast cache contract.
-def test_contracts_keep_detailed_v17_and_separate_current_physics_fast_v22():
-    assert run.CONTRACT.endswith("_v17") and run.FAST_CONTRACT.endswith("_v22")
+def test_contracts_keep_detailed_v17_and_separate_current_physics_fast_v23():
+    assert run.CONTRACT.endswith("_v17") and run.FAST_CONTRACT.endswith("_v23")
     assert "tp8" not in run.CONTRACT and "tp8" not in run.FAST_CONTRACT
     assert run.parameters(run.case_matrix()[0], LAYOUT, 1)["runner_contract"] == run.CONTRACT
     assert run.DEFAULT_DIRECTORY.name != "exploring_hbf_native_20261019"
@@ -742,7 +754,7 @@ def test_contracts_keep_detailed_v17_and_separate_current_physics_fast_v22():
 
 
 @pytest.mark.parametrize("search", [False, True])
-@pytest.mark.parametrize("legacy_contract", ["native_stationary_layout_fast_v17", "native_stationary_layout_fast_v18", "native_stationary_layout_fast_v19", "native_stationary_layout_fast_v20", "native_stationary_layout_fast_v21"])
+@pytest.mark.parametrize("legacy_contract", ["native_stationary_layout_fast_v17", "native_stationary_layout_fast_v18", "native_stationary_layout_fast_v19", "native_stationary_layout_fast_v20", "native_stationary_layout_fast_v21", "native_stationary_layout_fast_v22"])
 def test_scoped_b4_does_not_resume_older_candidates_points_or_manifests(tmp_path, monkeypatch, search, legacy_contract):
     case = run.case_matrix()[0]
     params = run.parameters(case, LAYOUT, 1, "fast")
@@ -1156,14 +1168,23 @@ def test_summary_rows_drop_the_physical_ledgers_and_follow_newer_full_rows(tmp_p
     assert run.read_candidate(tmp_path, "missing") is None
 
 
-def test_capacity_rejection_records_the_largest_batch_the_native_kv_holds():
-    params = run.parameters(run.case_matrix()[0], LAYOUT, 353, "fast")
-    scenario = NS(workload=NS(metadata={"external_kv_ingress": {"max_inflight_requests": 2}}))
-    held = lambda counts: {"approximation": {"kv_requests_held_by_group": counts}}
-    # 405B SHORT: 373 outputs, two pool requests per freed slot: 338 seeds + 2 imports fill 340.
-    assert run.native_capacity_max_batch(held([340]), params, scenario) == 338
+def test_capacity_rejection_records_the_largest_batch_the_native_kv_blocks_hold():
+    from exploring_hbf_native_config import NATIVE_KV_BLOCK_TOKENS, native_kv_block_peaks
+    from exploring_hbf_native_models import build_native_paper_model
+    from heterollm_sim.ir import KVCachePolicy, model_graph_execution_layers
+    params = run.parameters(run.case_matrix()[0], LAYOUT, 357, "fast")
+    model = build_native_paper_model(params["model"])
+    layers = model_graph_execution_layers(model.graph)
+    scenario = NS(model=model, placement=NS(kv_policy=KVCachePolicy(tokens_per_page=NATIVE_KV_BLOCK_TOKENS)),
+                  workload=NS(metadata={"external_kv_ingress": {"max_inflight_requests": 2}}))
+    peak = lambda batch: max(native_kv_block_peaks(layers, params["input_tokens"], params["output_tokens"],
+                                                   batch, 1, 2)["full"])
+    # 405B SHORT: 373 outputs, one freed slot per step, two prepared imports.
+    capacity = peak(353)
+    rejected = {"approximation": {"kv_block_peak_exceeds_capacity": True, "kv_block_capacity": {"full": capacity}}}
+    batch = run.native_capacity_max_batch(rejected, params, scenario)
+    assert batch >= 353 and peak(batch) <= capacity < peak(batch + 1)
     assert run.native_capacity_max_batch({"approximation": {}}, params, scenario) is None
-    assert run.native_capacity_max_batch(held([400]), params, scenario) is None
 
 
 @pytest.mark.parametrize("hardware,workload,expected", [

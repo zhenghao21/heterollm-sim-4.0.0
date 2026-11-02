@@ -1217,6 +1217,8 @@ def kv_policy_from_dict(data: Mapping[str, Any]) -> KVCachePolicy:
             "kv_unified",
             "pool_components",
             "relay_components",
+            "pool_blocks",
+            "chunk_pool_blocks",
         ),
     )
     return KVCachePolicy(
@@ -1243,6 +1245,8 @@ def kv_policy_from_dict(data: Mapping[str, Any]) -> KVCachePolicy:
             str(item)
             for item in _array(data.get("relay_components", ()), "kv_policy relay_components")
         ),
+        pool_blocks=_integer(data.get("pool_blocks", 0), "kv_policy pool_blocks"),
+        chunk_pool_blocks=_integer(data.get("chunk_pool_blocks", 0), "kv_policy chunk_pool_blocks"),
     )
 
 
