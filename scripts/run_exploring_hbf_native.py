@@ -63,7 +63,7 @@ PREFILL_CONTRACT = "native_prefill_complete_prompt_pass_v2"
 PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
 PIPELINE_FORECAST_CONTRACT = "native_stationary_pp_stage_blocks_v4"
 # Per-GPU throughput under the SLO, layouts searched by branch and bound.
-SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v4"
+SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v5"
 # v3 samples a whole-prompt PP pass by its stage blocks.
 PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_stage_blocks_v3"
 # A fast pass the model's chunked attention splits into several chunks, at
@@ -105,7 +105,7 @@ import exploring_hbf_native_search as search_plan
 SEARCH_TOP_LAYOUTS = search_plan.TOP_LAYOUTS
 SEARCH_LABELS = {"slo_accepted": "插值到100ms并通过验收", "acceptance_failed_fallback": "验收未过，退回已测通过点",
     "native_wall_limited": "受仿真开销限制，未到100ms", "native_capacity_limited": "受原生容量限制，未到100ms",
-    "native_import_limited": "受导入速度限制，未到100ms",
+    "native_import_limited": "受导入速度限制，未到100ms", "native_interval_limited": "受预测区间宽度限制，未到100ms",
     "native_memory_limited": "受仿真内存限制，未到100ms",
     "points_exhausted": "批量点用尽，未到100ms", "best_measured_point": "已测最佳通过点"}
 

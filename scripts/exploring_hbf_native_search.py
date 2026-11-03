@@ -27,8 +27,12 @@ reaches it; past it native capacity rejections do. A KV capacity rejection
 reports the largest batch the native KV holds, and the next point goes
 straight there. A refill-not-ready rejection is also a too-big point: the
 existing halving/bisection path is reused, and its final limit is labelled
-native_import_limited. A failed acceptance falls back to the best measured
-passing point.
+native_import_limited. So is a forecast interval wider than its budget, labelled
+native_interval_limited: the width does not grow steadily with the batch, so that
+limit is a lower bound. A target at or past a too-big batch bisects under it from
+the largest passing point below it, so a search never walks down one batch
+quantum at a time. An acceptance run that proves too big joins these points; any
+other failed acceptance falls back to the best measured passing point.
 
 Once that is settled, a second branch and bound finds the paper's Fig. 3
 metric, the largest per-GPU batch any layout runs within the SLO: the same
@@ -82,11 +86,15 @@ SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_
             "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
             "acceptance": ("one fast native run at the best layout's interpolated batch; one above the SLO joins the bracket "
                            "and the batch is interpolated again, settling at the bracket's passing end within a step of a "
-                           "measured batch; falls back to the best measured passing point"),
+                           "measured batch; one that proves too big bisects under it; falls back to the best measured "
+                           "passing point"),
             "no_rising_line": "double the largest point below the SLO, or halve the smallest above it",
             "beyond_native_reach": "largest measured point, marked limited, never extrapolated",
             "capacity": "bypass KV capacity until a native point reaches it, then native capacity rejections; a KV rejection's reported native capacity batch is measured next",
             "import_speed": "native_stationary_refill_not_always_ready is a too-big point; halving/bisection is reused and the limit is native_import_limited",
+            "interval_width": "native_stationary_independent_budget_exceeded is a too-big point; halving/bisection is reused and the limit is native_interval_limited",
+            "too_big": ("a target at or past the smallest too-big batch bisects from the largest passing point below it, "
+                        "after any reported native capacity below that batch has been tried"),
             "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor",
             "stopping": "SLO upper-bound bracket; physical capacity, memory and wall limits remain hard limits",
             "pruning": ("branch and bound in bypass rate-bound order: the anchor searches from its default first point; "
@@ -105,6 +113,8 @@ SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_
 _WALL_TOO_BIG = ("wall_budget",)
 CAPACITY_REJECTIONS = ("kv_block_peak_exceeds_capacity", "not_a_full_batch", "import_pool_not_full")
 IMPORT_REJECTIONS = ("native_stationary_refill_not_always_ready",)
+INTERVAL_REJECTIONS = ("native_stationary_independent_budget_exceeded",)
+TOO_BIG_REJECTIONS = _WALL_TOO_BIG + CAPACITY_REJECTIONS + IMPORT_REJECTIONS + INTERVAL_REJECTIONS
 
 
 def is_pipeline_layout(layout):
@@ -181,7 +191,7 @@ def classify(row):
         if (row.get("process_watchdog") or {}).get("phase") == "prefill":
             return "unusable"
         reason = str(row.get("rejection_reason", ""))
-        return "too_big" if any(marker in reason for marker in _WALL_TOO_BIG + CAPACITY_REJECTIONS + IMPORT_REJECTIONS) else "unusable"
+        return "too_big" if any(marker in reason for marker in TOO_BIG_REJECTIONS) else "unusable"
     return "failed" if status == "failed" else "pending"
 
 
@@ -269,13 +279,19 @@ def plan_layout(entry, lookup, slo_ns, wall_cap_seconds, memory_budget_bytes=Non
 
 
 def _refinement(outcome, lookup, points, slo_ns, q):
-    """The interpolated batch again, as a measured point, when its acceptance run exceeded the SLO."""
+    """The interpolated batch again, as a point, when its acceptance run exceeded the SLO or proved too big."""
     # A failed acceptance is a point above the SLO inside the bracket: it
-    # narrows the bracket and the batch is interpolated again.
+    # narrows the bracket and the batch is interpolated again. A too-big one
+    # caps the bracket, and the search bisects under it.
     if outcome["kind"] != "interpolated" or outcome["batch"] in [point["batch"] for point in points]:
         return None
     row = lookup(outcome["batch"])
-    if row is None or classify(row) != "measured":
+    if row is None:
+        return None
+    kind = classify(row)
+    if kind == "too_big":
+        return outcome["batch"]
+    if kind != "measured":
         return None
     return outcome["batch"] if _point(outcome["batch"], row)["tpot_upper_ns"] > slo_ns else None
 
@@ -300,8 +316,9 @@ def _limit(entry, runs, points, caps, rounded):
         reason = str(smallest["reason"])
         wall = any(marker in reason for marker in _WALL_TOO_BIG)
         import_limited = any(marker in reason for marker in IMPORT_REJECTIONS)
-        label = ("native_wall_limited" if wall else "native_import_limited"
-                 if import_limited else "native_capacity_limited")
+        interval_limited = any(marker in reason for marker in INTERVAL_REJECTIONS)
+        label = ("native_wall_limited" if wall else "native_import_limited" if import_limited
+                 else "native_interval_limited" if interval_limited else "native_capacity_limited")
         limits.append((smallest["batch"] - 1, label))
     known = _native_capacities(runs)
     if known:
@@ -322,19 +339,37 @@ def _limit(entry, runs, points, caps, rounded):
     return min(limits, key=lambda item: item[0])
 
 
+def _smallest_too_big(runs):
+    return min((run["batch"] for run in runs if run["kind"] == "too_big"), default=None)
+
+
+def _interpolated(pair, slo_ns, rounded):
+    """The batch where the TPOT upper bound's line through a bracket reaches the SLO."""
+    low, high = pair
+    share = (slo_ns - low["tpot_upper_ns"]) / (high["tpot_upper_ns"] - low["tpot_upper_ns"])
+    return rounded(low["batch"] + share * (high["batch"] - low["batch"]))
+
+
 def _following(entry, runs, points, slo_ns, caps, rounded):
     """The next batch of a layout's search, or None when it is finished."""
     q = _quantum(entry)
-    if _bracket(points, slo_ns):
-        return None
     last, known, tried = runs[-1], _native_capacities(runs), [run["batch"] for run in runs]
+    big = _smallest_too_big(runs)
+    pair = _bracket(points, slo_ns)
+    if pair:
+        if big is None or _interpolated(pair, slo_ns, rounded) < big:
+            return None
+        # The SLO lies at or past a too-big batch inside the bracket.
+        low = pair[0]["batch"]
+        batch = rounded((low + big) / 2)
+        return batch if batch - low >= _step(low, q) and batch not in tried else None
     if not points:
-        # Too big: a reported native capacity goes there directly, down to
-        # the batch quantum; wall and import-speed rejections use the
-        # existing halving path. An unusable rejection ends the layout.
+        # Too big: a reported native capacity below it goes there directly,
+        # down to the batch quantum; otherwise halve. An unusable rejection
+        # ends the layout.
         if last["kind"] != "too_big" or last["batch"] <= q:
             return None
-        batch = min(known) // q * q if known else rounded(last["batch"] / 2)
+        batch = min(known) // q * q if known and min(known) < last["batch"] else rounded(last["batch"] / 2)
         return batch if batch >= q and batch not in tried else None
     limit, _reason = _limit(entry, runs, points, caps, rounded)
     if len(points) == 1:
@@ -355,11 +390,12 @@ def _following(entry, runs, points, slo_ns, caps, rounded):
         # points above it (native TPOT need not rise between close batches).
         target = (max(point["batch"] for point in points) * 2 if below
                   else min(point["batch"] for point in points) / 2)
-    big = [run["batch"] for run in runs if run["kind"] == "too_big"]
-    if below and big and target >= min(big) and not known:
-        # Bisect between the largest measured point and the smallest too-big
-        # batch; a reported native capacity is the limit itself.
-        target = (max(point["batch"] for point in points) + min(big)) / 2
+    if big is not None and target >= big and not (known and min(known) < big):
+        # Bisect between the largest passing point below the smallest too-big
+        # batch and that batch; a reported native capacity not yet tried is
+        # the limit itself.
+        target = (max((point["batch"] for point in points
+                       if point["tpot_upper_ns"] <= slo_ns and point["batch"] < big), default=0) + big) / 2
     batch = rounded(min(target, limit))
     # Spacing applies between measured points; a too-big batch only bounds
     # the limit, so the next point may sit right below it.
@@ -388,8 +424,12 @@ def _outcome(entry, runs, points, slo_ns, caps, rounded):
     pair = _bracket(points, slo_ns)
     if pair:
         low, high = pair
-        share = (slo_ns - low["tpot_upper_ns"]) / (high["tpot_upper_ns"] - low["tpot_upper_ns"])
-        batch = rounded(low["batch"] + share * (high["batch"] - low["batch"]))
+        batch = _interpolated(pair, slo_ns, rounded)
+        big = _smallest_too_big(runs)
+        if big is not None and batch >= big:
+            # No room left to bisect under a too-big batch inside the bracket.
+            _limit_batch, reason = _limit(entry, runs, points, caps, rounded)
+            return {"kind": "limited", "reason": reason or "slo_not_reached", "batch": low["batch"]}
         tpot = low["tpot_ns"] + (high["tpot_ns"] - low["tpot_ns"]) * (batch - low["batch"]) / (high["batch"] - low["batch"])
         return {"kind": "interpolated", "batch": batch, "bracket": [low["batch"], high["batch"]],
                 "predicted_tpot_ns": tpot}

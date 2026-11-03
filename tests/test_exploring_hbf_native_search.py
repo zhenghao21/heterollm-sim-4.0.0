@@ -134,6 +134,64 @@ def test_refill_not_ready_is_too_big_and_marks_import_limit():
     assert limit == 511 and label == "native_import_limited"
 
 
+def test_a_too_wide_interval_is_too_big_and_marks_interval_limit():
+    reason = "native_stationary_independent_budget_exceeded"
+    assert search.classify({"status": "forecast_rejected", "rejection_reason": reason}) == "too_big"
+    # The Prefill pass does not depend on the batch.
+    assert search.classify({"status": "forecast_rejected",
+                            "rejection_reason": "native_prefill_independent_budget_exceeded"}) == "unusable"
+    layouts = [native(linear, lambda b: .5 * b, too_big=lambda b: ("forecast_rejected", reason) if b >= 400 else None)]
+    plan, runs = drive([entry()], layouts)
+    batches = [batch for _index, batch in runs]
+    assert batches[:2] == [512, 256]
+    assert plan["layouts"][0]["outcome"]["kind"] == "limited"
+    assert plan["layouts"][0]["outcome"]["reason"] == "native_interval_limited"
+
+
+def test_a_wall_kill_at_the_reported_capacity_bisects_instead_of_walking_down():
+    def too_big(batch):
+        if batch > 3660:
+            return ("capacity_rejected", None)
+        return ("forecast_rejected", "native_process_wall_budget_exhausted") if batch >= 2000 else None
+
+    layout = {"dp": 1, "tp": 2, "pp": 1, "ep": 4}
+    layouts = [native(lambda b: (10 + .01 * b) * 1e6, lambda b: .1 * b, too_big=too_big, capacity=3660)]
+    plan, runs = drive([entry(layout, candidate=7744, line=(10e6, .005e6), capacity=8000)], layouts)
+    batches = [batch for _index, batch in runs]
+    assert batches[:4] == [512, 8000, 3660, 2084]
+    assert 3656 not in batches and len(batches) < 10
+    outcome = plan["layouts"][0]["outcome"]
+    assert outcome["kind"] == "limited" and outcome["reason"] == "native_wall_limited"
+    assert 1800 <= outcome["batch"] < 2000
+
+
+def test_a_too_big_batch_below_a_point_above_the_slo_bisects_instead_of_walking_down():
+    reason = "native_stationary_independent_budget_exceeded"
+    layouts = [native(lambda b: (10 + .3 * b) * 1e6, lambda b: .5 * b,
+                      too_big=lambda b: ("forecast_rejected", reason) if 200 <= b <= 340 else None)]
+    plan, runs = drive([entry()], layouts)
+    batches = [batch for _index, batch in runs]
+    assert batches[0] == 512
+    # The bypass line puts the second point inside the rejected range.
+    assert 200 <= batches[1] <= 340 and batches[1] - 1 not in batches
+    outcome = plan["layouts"][0]["outcome"]
+    assert outcome["kind"] == "limited" and outcome["reason"] == "native_interval_limited"
+    assert 180 <= outcome["batch"] < 200
+
+
+def test_an_acceptance_run_that_proves_too_big_bisects_under_it():
+    reason = "native_stationary_independent_budget_exceeded"
+    layouts = [native(linear, lambda b: 1.5 * b,
+                      too_big=lambda b: ("forecast_rejected", reason) if 850 <= b <= 950 else None)]
+    plan, runs = drive([entry()], layouts)
+    batches = [batch for _index, batch in runs]
+    assert 911 in batches
+    outcome = plan["layouts"][0]["outcome"]
+    assert outcome["kind"] == "limited" and outcome["reason"] == "native_interval_limited"
+    assert 750 <= outcome["batch"] < 850
+    assert search.search_result(plan, outcome["batch"], TP8) == "native_interval_limited"
+
+
 def test_reused_screen_with_legacy_ep_quantum_never_plans_illegal_microbatch():
     layout = {"dp": 1, "tp": 4, "pp": 2, "ep": 1, "microbatches": 2}
     legacy = entry(layout, candidate=466, capacity=466)
