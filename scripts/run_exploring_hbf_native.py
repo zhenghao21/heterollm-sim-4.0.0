@@ -1427,7 +1427,11 @@ def write_case_point(directory, case, layout, batches, mode="detailed"):
 
 
 def _memory_status():
-    """(total, available) physical memory in bytes."""
+    """(total physical, available) memory in bytes.
+
+    On Windows an allocation fails at the commit limit however much physical
+    memory is free, so what is available is the smaller of the two.
+    """
     if os.name != "nt":
         return (os.sysconf("SC_PHYS_PAGES")*os.sysconf("SC_PAGE_SIZE"),
                 os.sysconf("SC_AVPHYS_PAGES")*os.sysconf("SC_PAGE_SIZE"))
@@ -1440,7 +1444,7 @@ def _memory_status():
     status = Status(length=ctypes.sizeof(Status))
     if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
         raise OSError("GlobalMemoryStatusEx failed")
-    return status.total_physical, status.available_physical
+    return status.total_physical, min(status.available_physical, status.available_page_file)
 
 
 def available_memory_bytes():
