@@ -76,13 +76,15 @@ TERMINAL = {"completed", "capacity_rejected", "slo_rejected", "all_candidates_re
 CANDIDATE_TERMINAL = {"completed", "capacity_rejected", "slo_rejected", "forecast_rejected", "failed"}
 SLO_NS = 100_000_000.
 # Fast wall caps are absolute per-candidate/per-Prefill limits. The worker
-# factor only controls concurrency and HBM channel-thread partitioning.
+# factor only controls concurrency and HBM channel-thread partitioning. The caps
+# guard against a hung worker: simulation cost must not decide a comparison
+# result, and at 3000 s it left 30 layouts that could still beat their case's best.
 FAST_CANDIDATE_WALL_TARGET_SECONDS = 600.
-FAST_CANDIDATE_WALL_BUDGET_SECONDS = 3000.
+FAST_CANDIDATE_WALL_BUDGET_SECONDS = 21600.
 # One Prefill pass per model, prompt and layout, outside every
 # candidate cap; the detailed full pass has none. Every memory configuration
 # and batch shares the pass (405B LONG TP8: 3066 s on one HBM thread).
-PREFILL_WALL_BUDGET_SECONDS = 7200.
+PREFILL_WALL_BUDGET_SECONDS = 21600.
 PROCESS_WALL_BUDGET_GRACE = 1.0
 MAX_WORKERS = os.cpu_count() or 1
 # Physical memory kept free beside the predicted peaks of the running and the
@@ -304,17 +306,14 @@ def parameters(case, layout, batch, mode="detailed"):
 
 
 def parameters_compatible(saved, expected):
-    """Reuse exact evidence and already-measured non-PP rows after cap-only changes."""
+    """Reuse exact evidence after a cap-only change: a wall budget changes no simulated result."""
     if saved == expected:
         return True
     if not isinstance(saved, dict) or not isinstance(expected, dict):
         return False
     changed = {key for key in set(saved) | set(expected)
                if saved.get(key) != expected.get(key)}
-    return (changed == {"candidate_wall_budget_seconds_per_worker"}
-            and saved.get("candidate_wall_budget_seconds_per_worker") == 1800.
-            and expected.get("candidate_wall_budget_seconds_per_worker") == 3000.
-            and saved.get("pp", 1) == 1 and saved.get("microbatches", 1) == 1)
+    return changed == {"candidate_wall_budget_seconds_per_worker"}
 
 
 def pid_alive(pid):
@@ -1471,10 +1470,14 @@ def _start(queue, active, known, ceiling, directory, mode, spawn):
         budget = (parameters(case, layout, batch, mode)["candidate_wall_budget_seconds_per_worker"]
                   if mode == "fast" else None)
         started = time.perf_counter()
+        # The kernel's outcome does not depend on the thread count: a new worker
+        # takes its share of the logical cores among those running now.
+        threads = max(1, MAX_WORKERS // (len(active) + 1))
         process = (spawn(case, layout, batch, directory) if spawn
-                   else _spawn(case, layout, batch, directory, mode, factor))
+                   else _spawn(case, layout, batch, directory, mode, factor, threads))
         active[candidate_id(case, layout, batch)] = {"process": process, "case": case, "layout": layout,
                                                      "batch": batch, "factor": factor, "peak": peak,
+                                                     "hbm_channel_threads": threads,
                                                      "started_monotonic": started,
                                                      "candidate_wall_budget_seconds": budget,
                                                      "watchdog_phase": "decode",
@@ -1496,13 +1499,12 @@ def candidate_command(case, layout, batch, directory, mode="detailed", wall_fact
             "--mode", mode, "--directory", str(directory), "--wall-factor", str(wall_factor)]
 
 
-def _spawn(case, layout, batch, directory, mode="detailed", wall_factor=1):
+def _spawn(case, layout, batch, directory, mode="detailed", wall_factor=1, threads=1):
     """One fresh subprocess per candidate: a candidate's heap never fragments the next one's."""
     directory = checked_directory(directory)
     log = directory / "logs" / (params_candidate_id(parameters(case, layout, batch, mode)) + ".log")
     log.parent.mkdir(parents=True, exist_ok=True)
-    # Concurrent workers share the cores: each gets its slice of HBM channel threads.
-    env = {**os.environ, "HETEROLLM_HBM_CHANNEL_THREADS": str(max(1, MAX_WORKERS//wall_factor)),
+    env = {**os.environ, "HETEROLLM_HBM_CHANNEL_THREADS": str(threads),
            "PYTHONFAULTHANDLER": "1"}
     with log.open("a", encoding="utf-8") as stdout, log.with_suffix(".err.log").open("a", encoding="utf-8") as stderr:
         return subprocess.Popen(candidate_command(case, layout, batch, directory, mode, wall_factor), cwd=ROOT,
@@ -1630,7 +1632,7 @@ def _saved_terminal(directory, case, layout, batch, mode):
 def _jobs(active):
     return [{"case_id": job["case"]["case_id"], "candidate_id": key, "launcher_pid": job["process"].pid,
              "wall_factor": job["factor"], "worker_limit": job["factor"],
-             "hbm_channel_threads": max(1, MAX_WORKERS // job["factor"]),
+             "hbm_channel_threads": job["hbm_channel_threads"],
              "predicted_peak_bytes": job["peak"]} for key, job in active.items()]
 
 
@@ -1790,6 +1792,12 @@ def case_screen(directory, case, screen=None, *, layout_scope="all_legal", pp_on
     return value
 
 
+def _killed_under_smaller_budget(row, expected):
+    """A wall rejection is evidence only at the budget it ran under."""
+    key = "candidate_wall_budget_seconds_per_worker"
+    return "wall_budget" in str(row.get("rejection_reason", "")) and row["parameters"].get(key, 0.) < expected[key]
+
+
 def _search_lookup(directory, case, layout):
     def lookup(batch):
         physical_quantum = int(layout.get("ep", 1)) * int(layout.get("microbatches", 1))
@@ -1808,6 +1816,8 @@ def _search_lookup(directory, case, layout):
                 and row.get("status") in CANDIDATE_TERMINAL:
             raise RuntimeError("saved candidate parameters/backend differ; historical results cannot be relabeled")
         if not parameters_compatible(saved, expected) or row.get("backend") != BACKEND:
+            return None
+        if _killed_under_smaller_budget(row, expected):
             return None
         return row if row.get("status") in CANDIDATE_TERMINAL else None
     return lookup
@@ -1963,7 +1973,7 @@ def main(argv=None):
         help=f"worker limit 1..{MAX_WORKERS} or auto; candidates are admitted by predicted peak memory; "
              f"K is fixed for this run for concurrency and HBM threads = MAX_WORKERS//K")
     parser.add_argument("--mode", choices=("detailed", "fast"), default="detailed",
-        help="fast candidate and Prefill wall caps are absolute 3000 seconds; the cap covers setup, physical samples and budget")
+        help="fast candidate and Prefill wall caps are absolute 6 hours, guarding against a hung worker; the cap covers setup, physical samples and budget")
     parser.add_argument("--search", action="store_true",
         help="部署搜索：SLO 内单GPU吞吐最大，布局分支定界；忽略--layout/--batch-sizes")
     parser.add_argument("--layout-scope", choices=("all", "pipeline", "expanded", "all_legal"), default="all_legal",

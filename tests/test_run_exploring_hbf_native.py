@@ -332,7 +332,7 @@ def test_fast_runner_contract_keeps_the_budget_and_sample_scope():
     params = run.parameters(run.case_matrix()[0], LAYOUT, 1, "fast")
     assert params["runner_contract"] == run.FAST_CONTRACT != run.CONTRACT
     assert params["target_relative_error"] == .1
-    assert params["candidate_wall_budget_seconds_per_worker"] == 3000.
+    assert params["candidate_wall_budget_seconds_per_worker"] == run.FAST_CANDIDATE_WALL_BUDGET_SECONDS
     value = replace(_fast_result(), layer_window_samples=(layer_sample(),))
     row = run.native_fast_result(value, params)
     assert row["status"] == "completed" and row["sampled_tokens"] == 0
@@ -354,7 +354,7 @@ def test_fast_total_wall_budget_includes_bootstrap_and_user_pause_wins(tmp_path,
     seen = []
     def runner(scenario, **options):
         seen.append(scenario.simulation)
-        clock[0] = 3001.
+        clock[0] = run.FAST_CANDIDATE_WALL_BUDGET_SECONDS + 1.
         if stop:
             (tmp_path / "stop.request").write_text("user_pause", encoding="utf-8")
         return value
@@ -380,7 +380,7 @@ def test_real_progress_writer_uses_native_stop_deadline_and_flushes_queue(tmp_pa
         assert control.progress_queue is writer.queue
         assert control.progress_callback is control.cancellation_callback is None
         assert control.stop_request_path == str(tmp_path / "stop.request")
-        assert control.deadline_monotonic == 3000.
+        assert control.deadline_monotonic == run.FAST_CANDIDATE_WALL_BUDGET_SECONDS
         clock[0] = 2.
         control.report("serving_boundary", 0, metadata={"cumulative_progress": {"visible_output_tokens": 0}})
         clock[0] = 7.
@@ -512,6 +512,24 @@ def test_unknown_and_host_memory_errors_are_not_device_capacity_rejections():
     assert not run.capacity_error(MemoryError("capacity exhausted in host memory"))
     assert not run.capacity_error(RuntimeError("unexpected bug mentioning capacity"))
     assert not run.capacity_error(ValueError("GDDR allocation 486127488 exceeds physical capacity 320000000"))
+
+
+def test_a_budget_change_keeps_saved_rows_and_runs_kills_under_a_smaller_budget_again(tmp_path):
+    case, layout = run.case_matrix()[0], run.make_layout(2, 4, 1, 1)
+    budget = run.FAST_CANDIDATE_WALL_BUDGET_SECONDS
+    killed = {"status": "forecast_rejected", "rejection_reason": "native_process_wall_budget_exhausted"}
+
+    def save(batch, cap, row):
+        run.save_candidate(tmp_path, {**row, "backend": run.BACKEND, "candidate_id": run.candidate_id(case, layout, batch),
+            "parameters": {**run.parameters(case, layout, batch, "fast"), "candidate_wall_budget_seconds_per_worker": cap}})
+
+    lookup = run._search_lookup(tmp_path, case, layout)
+    save(8, 3000., {"status": "slo_rejected"})
+    save(16, 3000., killed)
+    save(32, budget, killed)
+    assert lookup(8)["status"] == "slo_rejected"
+    assert lookup(16) is None
+    assert lookup(32)["rejection_reason"] == killed["rejection_reason"]
 
 
 def test_prefill_tp_steps_past_a_kv_block_larger_than_the_cache_the_weights_leave():
@@ -956,12 +974,13 @@ def test_fast_wall_caps_are_absolute_across_concurrency(tmp_path, monkeypatch):
     seen = []
     def runner(scenario, **options):
         seen.append((options["control"].deadline_monotonic, scenario.simulation.native_window.max_wall_seconds))
-        clock[0] = 3001.
+        clock[0] = run.FAST_CANDIDATE_WALL_BUDGET_SECONDS + 1.
         return value
     row = run.execute_candidate(params, tmp_path, NS(report=lambda p: None), builder=lambda *a, **kw: value.scenario,
                                 runner=runner, prefill=lambda *a: REJECTED_PREFILL, wall_factor=3)
-    assert seen == [(3000., 3000.)]
-    assert row["status"] == "forecast_rejected" and row["wall_factor"] == 3 and row["candidate_wall_budget_seconds"] == 3000.
+    assert seen == [(run.FAST_CANDIDATE_WALL_BUDGET_SECONDS, run.FAST_CANDIDATE_WALL_BUDGET_SECONDS)]
+    assert row["status"] == "forecast_rejected" and row["wall_factor"] == 3
+    assert row["candidate_wall_budget_seconds"] == run.FAST_CANDIDATE_WALL_BUDGET_SECONDS
 
 
 def test_refill_rejection_reruns_the_batch_once_with_the_measured_pool(tmp_path, monkeypatch):

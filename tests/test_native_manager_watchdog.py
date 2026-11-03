@@ -153,7 +153,7 @@ def test_managers_continue_after_watchdog_kill_without_failure_marker(tmp_path, 
     def spawn(*args):
         process = Process()
         spawned.append(process)
-        clock[0] += 3001.
+        clock[0] += run.FAST_CANDIDATE_WALL_BUDGET_SECONDS + 1.
         return process
 
     if search:

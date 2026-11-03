@@ -95,7 +95,9 @@ SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_
             "interval_width": "native_stationary_independent_budget_exceeded is a too-big point; halving/bisection is reused and the limit is native_interval_limited",
             "too_big": ("a target at or past the smallest too-big batch bisects from the largest passing point below it, "
                         "after any reported native capacity below that batch has been tried"),
-            "wall_projection": "measured wall without the Prefill pass, as measured, against the per-worker 1800s projection; no concurrency divisor",
+            "wall_projection": "measured wall without the Prefill pass, as measured, against the candidate wall budget; no concurrency divisor",
+            "wall_budget": ("6 h per candidate and Prefill pass, a guard against a hung worker that must not decide a result: "
+                            "a budget change reuses saved rows, and a row killed under a smaller budget runs again"),
             "stopping": "SLO upper-bound bracket; physical capacity, memory and wall limits remain hard limits",
             "pruning": ("branch and bound in bypass rate-bound order: the anchor searches from its default first point; "
                         "later layouts first run where passing the SLO matches the anchor's best passing rate and are pruned "
