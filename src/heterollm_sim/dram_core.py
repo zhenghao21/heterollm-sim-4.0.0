@@ -1,7 +1,7 @@
 """Shared lightweight DRAM read/write core for DDR, LPDDR, HBM and GDDR."""
 from __future__ import annotations
 
-from bisect import bisect_right, insort
+from bisect import bisect_left, bisect_right, insort
 from dataclasses import dataclass, replace
 from functools import lru_cache
 import math
@@ -16,6 +16,26 @@ from .memory_types import AccessRequest, DramConfig, Operation, StageTiming, Tra
 # Numeric state and mapping tables are sized dynamically. Keep allocation
 # bounded while admitting standard multi-stack HBM3/HBM4 organizations.
 MAX_ACCELERATED_BANKS = 65_536
+
+
+def _intervals_overlap(starts, ends, left, right):
+    """Whether [left, right) overlaps any of the sorted disjoint intervals."""
+    index = bisect_right(starts, left)
+    return (index > 0 and ends[index - 1] > left) or (index < len(starts) and starts[index] < right)
+
+
+def _intervals_add(starts, ends, left, right):
+    """Merge [left, right) into the sorted disjoint intervals."""
+    index = bisect_left(starts, left)
+    if index > 0 and ends[index - 1] >= left:
+        index -= 1
+        left = starts[index]
+    stop = index
+    while stop < len(starts) and starts[stop] <= right:
+        right = max(right, ends[stop])
+        stop += 1
+    starts[index:stop] = (left,)
+    ends[index:stop] = (right,)
 
 
 @dataclass
@@ -540,6 +560,8 @@ class DramCore:
         results = [None] * len(items)
         finished = []
         group = []
+        # The group's address ranges, all and written, as sorted disjoint intervals.
+        all_starts, all_ends, write_starts, write_ends = [], [], [], []
         def run_group():
             nonlocal group
             requests = tuple(items[index] if finished == [] else
@@ -553,14 +575,19 @@ class DramCore:
                 finished.append((request.address, request.address + request.byte_count,
                                  request.operation is Operation.WRITE, result.completion_ns))
             group = []
+            for intervals in (all_starts, all_ends, write_starts, write_ends):
+                intervals.clear()
         any_write = any(request.operation is Operation.WRITE for request in items)
         for index, request in enumerate(items):
-            if any_write and any(
-                    items[other].address < request.address + request.byte_count
-                    and request.address < items[other].address + items[other].byte_count
-                    and (request.operation is Operation.WRITE or items[other].operation is Operation.WRITE)
-                    for other in group):
-                run_group()
+            if any_write:
+                left, right = request.address, request.address + request.byte_count
+                write = request.operation is Operation.WRITE
+                if (_intervals_overlap(all_starts, all_ends, left, right) if write
+                        else _intervals_overlap(write_starts, write_ends, left, right)):
+                    run_group()
+                _intervals_add(all_starts, all_ends, left, right)
+                if write:
+                    _intervals_add(write_starts, write_ends, left, right)
             group.append(index)
         run_group()
         tagged = []

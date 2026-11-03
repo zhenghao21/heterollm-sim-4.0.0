@@ -1,5 +1,6 @@
 """Real layer subgraphs remain isolated native physical work, not Tokens."""
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from enum import Enum
 import sys
 from pathlib import Path
 
@@ -22,6 +23,31 @@ def rows(count):
     return [{"layer_id": f"L{index}", "layer_index": index,
              "class_key": "same", "signature": {"width": 4}}
             for index in range(count)]
+
+
+def test_rank_rename_copy_matches_the_generic_deepcopy_walk():
+    class Kind(Enum):
+        READ = "read"
+
+    @dataclass
+    class Box:
+        name: str
+        items: list
+
+    rename = layer._RankRename({"gpu0": "gpu1"})
+    assert rename.bind("kv:a", "kv:b")
+    shared = ["gpu0.memory", 1.5, None, True, Kind.READ]
+    value = {"gpu0.memory": shared, "again": shared, "kv:a": ("kv:a", "gpu0:x", "gpu01", 3, ()),
+             "demand": ResourceDemand("gpu0.fabric", 2.5, 7, 1.),
+             "box": Box("gpu0", shared), "empty": "", "nested": [[("gpu0",)]]}
+    direct, generic = rename.copy(value), rename._generic(value, {})
+    assert direct == generic and repr(direct) == repr(generic)
+    assert direct["again"] is direct["gpu1.memory"] is direct["box"].items
+    assert direct["gpu1.memory"][0] == "gpu1.memory" and direct["kv:b"][:3] == ("kv:b", "gpu1:x", "gpu01")
+    assert direct["demand"] == ResourceDemand("gpu1.fabric", 2.5, 7, 1.)
+    # A later binding replaces what the cache holds.
+    assert rename.text("kv:c") == "kv:c"
+    assert rename.bind("kv:c", "kv:d") and rename.text("kv:c") == "kv:d"
 
 
 def test_graph_proof_requires_all_rank_terminals_before_next_layer():

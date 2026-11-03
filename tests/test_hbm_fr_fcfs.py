@@ -9,7 +9,7 @@ import pytest
 
 from heterollm_sim._hbm_control import _FrFcfsController, fr_queue_parameters
 from heterollm_sim._hbm_numeric import FR_STAT_FIELDS, _burst_location
-from heterollm_sim.dram_core import DramCore
+from heterollm_sim.dram_core import DramCore, _intervals_add, _intervals_overlap
 from heterollm_sim.memory_mapping import dram_request_channels, map_dram_address
 from heterollm_sim.memory_transfer import ResourceTimeline
 from heterollm_sim.memory_types import AccessRequest, DramConfig, Operation
@@ -18,6 +18,22 @@ from heterollm_sim.physical_presets import resolve_physical_config
 
 READ, WRITE = Operation.READ, Operation.WRITE
 GB = 10 ** 9
+
+
+def test_dependency_intervals_answer_as_the_pairwise_scan_does():
+    rng = random.Random(7)
+    for _trial in range(200):
+        starts, ends, pairs = [], [], []
+        for _step in range(40):
+            left = rng.randrange(400)
+            right = left + rng.randrange(1, 40)
+            assert _intervals_overlap(starts, ends, left, right) == any(
+                other < right and left < end for other, end in pairs)
+            _intervals_add(starts, ends, left, right)
+            pairs.append((left, right))
+            assert all(end < following for end, following in zip(ends, starts[1:]))
+            assert sum(end - start for start, end in zip(starts, ends)) == len(
+                {address for start, end in pairs for address in range(start, end)})
 
 
 def hbm4(**overrides):

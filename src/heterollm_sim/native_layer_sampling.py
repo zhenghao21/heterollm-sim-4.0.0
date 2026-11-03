@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from copy import deepcopy
 from dataclasses import asdict, replace
+from enum import Enum
 import json
 import time
 from typing import Mapping
@@ -17,7 +18,8 @@ from typing import Mapping
 from .event_kernel import CompiledGraphLayout, _validate_event_timing
 from .live_execution_metrics import LiveCohortMetrics
 from .native_row_bounds import first_access_ns
-from .memory_allocator import PhysicalAddressAllocator
+from .contracts import ResourceDemand
+from .memory_allocator import PhysicalAddressAllocator, PhysicalAllocation
 
 _TP_ALLOCATOR_NAMESPACE = tuple((k,v) for k,v in vars(PhysicalAddressAllocator).items() if k != "__slotnames__")
 
@@ -438,6 +440,7 @@ class _RankRename:
 
     def __init__(self, components):
         self.components, self.buffers, self.reverse = components, {}, {}
+        self._texts = {}
 
     def bind(self, left, right):
         if left is None or right is None:
@@ -445,9 +448,17 @@ class _RankRename:
         if self.buffers.get(left, right) != right or self.reverse.get(right, left) != left:
             return False
         self.buffers[left], self.reverse[right] = right, left
+        self._texts.clear()
         return True
 
     def text(self, value):
+        cached = self._texts.get(value)
+        if cached is not None:
+            return cached
+        result = self._texts[value] = self._text(value)
+        return result
+
+    def _text(self, value):
         if value in self.buffers:
             return self.buffers[value]
         for left, right in self.components.items():
@@ -455,18 +466,52 @@ class _RankRename:
                 return right + value[len(left):]
         return value
 
+    def _direct(self, item, memo):
+        """deepcopy's result for plain values, keeping its aliasing; the generic walk otherwise."""
+        kind = type(item)
+        if kind is str:
+            return self.text(item)
+        if kind is float or kind is int or item is None or kind is bool:
+            return item
+        key = id(item)
+        if key in memo:
+            return memo[key]
+        direct = self._direct
+        if kind is dict:
+            result = memo[key] = {}
+            for name, value in item.items():
+                result[direct(name, memo)] = direct(value, memo)
+            return result
+        if kind is list:
+            result = memo[key] = []
+            for value in item:
+                result.append(direct(value, memo))
+            return result
+        if kind is tuple:
+            result = memo[key] = tuple([direct(value, memo) for value in item])
+            return result
+        if kind is ResourceDemand:
+            result = memo[key] = object.__new__(ResourceDemand)
+            object.__setattr__(result, "__dict__", direct(vars(item), memo))
+            return result
+        if isinstance(item, Enum):
+            return item
+        return self._generic(item, memo)
+
     def copy(self, value, memo=None):
-        from enum import Enum
-        from operator import itemgetter
-        from .memory_allocator import PhysicalAllocation
         if type(value) is PhysicalAllocation:
             return replace(value, buffer_id=self.text(value.buffer_id),
                            alias_of=None if value.alias_of is None else self.text(value.alias_of))
-        memo = {} if memo is None else memo
-        pending, seen = [value], set(memo)
+        if memo is None:
+            return self._direct(value, {})
+        return self._generic(value, memo)
+
+    def _generic(self, value, memo):
+        from operator import itemgetter
+        pending, seen = [value], set()
         while pending:
             item = pending.pop()
-            if id(item) in seen:
+            if id(item) in seen or id(item) in memo:
                 continue
             seen.add(id(item))
             if type(item) is str:
