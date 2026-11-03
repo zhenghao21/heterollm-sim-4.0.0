@@ -1522,22 +1522,34 @@ def predicted_peak_bytes(known, case, layout, batch):
 
     The most alike candidates of the model: the layout decides the most, so
     hardware and workload go first; DEFAULT_CANDIDATE_PEAK_BYTES without any.
-    Bounded by PEAK_PREDICTION_CAP. It is the peak of each of the candidate's
-    processes.
+    A single measured batch takes its slope from the next alike candidates: much
+    of a peak does not grow with the batch, and scaling it in proportion held
+    workers back (36 GiB predicted for a point that peaked at 15.5). Bounded by
+    PEAK_PREDICTION_CAP. It is the peak of each of the candidate's processes.
     """
     params = {**case, **layout}
     cap = max(DEFAULT_CANDIDATE_PEAK_BYTES, PEAK_PREDICTION_CAP * max(
         (peak for row, peak, _wall in known if row.get("model") == params.get("model")), default=0.))
     layout_keys = (*LAYOUT_KEYS, "microbatches")
-    for keys in (("model", "hardware", "workload", *layout_keys), ("model", "workload", *layout_keys),
-                 ("model", "hardware", *layout_keys), ("model", *layout_keys), ("model", "tp", "pp", "ep"),
-                 ("model", "hardware", "workload"), ("model", "workload"), ("model",)):
-        points = [(row["batch_size"], peak) for row, peak, _wall in known
-                  if all(row.get(key, 1) == params.get(key, 1) for key in keys)]
+    groups = (("model", "hardware", "workload", *layout_keys), ("model", "workload", *layout_keys),
+              ("model", "hardware", *layout_keys), ("model", *layout_keys), ("model", "tp", "pp", "ep"),
+              ("model", "hardware", "workload"), ("model", "workload"), ("model",))
+
+    def group_points(keys):
+        return [(row["batch_size"], peak) for row, peak, _wall in known
+                if all(row.get(key, 1) == params.get(key, 1) for key in keys)]
+
+    for index, keys in enumerate(groups):
+        points = group_points(keys)
         if not points:
             continue
         if len({b for b, _ in points}) == 1:
-            return min(cap, max(peak for _b, peak in points) * max(1., batch / points[0][0]))
+            measured, base = max(peak for _b, peak in points), points[0][0]
+            if batch <= base:
+                return measured
+            wider = next((row for row in map(group_points, groups[index + 1:]) if len({b for b, _ in row}) > 1), None)
+            return min(cap, measured * batch / base if wider is None
+                       else measured + max(0., search_plan.fit_line(wider)[1]) * (batch - base))
         intercept, slope = search_plan.fit_line(points)
         floor = max((peak for b, peak in points if b <= batch), default=0.)
         return min(cap, max(intercept + max(0., slope) * batch, floor))

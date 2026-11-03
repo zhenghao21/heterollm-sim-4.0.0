@@ -1232,6 +1232,11 @@ def test_peak_prediction_prefers_the_same_layout_and_is_linear_in_the_batch():
     twin = next(row for row in run.case_matrix() if row["model"] == case["model"]
                 and row["workload"] == case["workload"] and row["hardware"] != case["hardware"])
     assert run.predicted_peak_bytes(known, twin, other, 100) == 3 * GiB
+    # One measured batch grows by the slope of the next alike candidates, not in proportion.
+    wider = [(run.parameters(twin, other, 100, "fast"), 3 * GiB, 0.),
+             (run.parameters(case, LAYOUT, 100, "fast"), 6 * GiB, 0.),
+             (run.parameters(case, LAYOUT, 300, "fast"), 8 * GiB, 0.)]
+    assert run.predicted_peak_bytes(wider, twin, other, 200) == pytest.approx(4.75 * GiB)
     # A candidate rejected before any window says nothing.
     row = {"parameters": known[0][0], "peak_memory_bytes": GiB, "wall_seconds": 5.}
     assert run.known_row(row) == (known[0][0], GiB, 5.)
