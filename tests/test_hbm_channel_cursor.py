@@ -70,7 +70,8 @@ def test_complete_numeric_partial_stripes_match_original_cursor_formulas(changes
     old_function.__module__ = __name__
     old_range = njit(nogil=True, fastmath=False)(old_function)
     request = AccessRequest("partial-channel-stripes", "read" if read else "write", 193, 2**20+117, 1e9+.001)
-    packed = _pack_hbm_numeric(DramCore(replace(b200_memory(), **changes), capture_details=False), request)
+    core = DramCore(replace(b200_memory(), **changes), capture_details=False)
+    packed = _pack_hbm_numeric(core, request)
     assert packed is not None
     before = tuple(array.copy() for array in packed.arrays)
     first, stop = request.address // packed.core.config.burst_bytes, (request.address+request.byte_count-1)//packed.core.config.burst_bytes+1

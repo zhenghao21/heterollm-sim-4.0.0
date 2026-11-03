@@ -33,7 +33,8 @@ def test_write_ticks_match_generic_controller_through_direction_and_row_changes(
         AccessRequest("read-after-write", "read", 17, 2 ** 19 + 71, 111.125),
         AccessRequest("late-write", "write", 333, 2 ** 19 + 17, 70000.001),
     )
-    packed = _pack_hbm_numeric(DramCore(config, capture_details=False), requests[0])
+    core = DramCore(config, capture_details=False)
+    packed = _pack_hbm_numeric(core, requests[0])
     assert _hbm_numeric._column_tick_profile(packed.g, packed.t, False)[0] == 1
     before = tuple(array.copy() for array in packed.arrays)
     for request in requests:
@@ -54,14 +55,16 @@ def test_write_ticks_match_generic_controller_through_direction_and_row_changes(
 
 @pytest.mark.parametrize("field", [18, 24])
 def test_unproved_read_to_write_gap_does_not_enable_ticks(field):
-    packed = _pack_hbm_numeric(DramCore(b200_memory(), capture_details=False),
+    core = DramCore(b200_memory(), capture_details=False)
+    packed = _pack_hbm_numeric(core,
                                AccessRequest("write", "write", 0, 32))
     packed.t[field] = .125
     assert _hbm_numeric._column_tick_profile(packed.g, packed.t, False)[0] == 0
 
 
 def test_write_profile_uses_write_latency_and_not_read_sid_gap():
-    packed = _pack_hbm_numeric(DramCore(b200_memory(), capture_details=False),
+    core = DramCore(b200_memory(), capture_details=False)
+    packed = _pack_hbm_numeric(core,
                                AccessRequest("write", "write", 0, 32))
     profile = _hbm_numeric._column_tick_profile(packed.g, packed.t, False)
     assert profile[2] == 8
@@ -79,7 +82,8 @@ def test_group_spanning_sids_declines_write_ticks_and_preserves_direction_histor
         AccessRequest("read-after-write", "read", 17, 2 ** 19 + 71, 111.125),
         AccessRequest("following-write", "write", 333, 2 ** 19 + 17, 70000.001),
     )
-    packed = _pack_hbm_numeric(DramCore(config, capture_details=False), requests[0])
+    core = DramCore(config, capture_details=False)
+    packed = _pack_hbm_numeric(core, requests[0])
     assert packed.g[4] == 32
     assert _hbm_numeric._column_tick_profile(packed.g, packed.t, False)[0] == 0
     assert _hbm_numeric._column_tick_profile(packed.g, packed.t, True)[0] == 1
@@ -101,7 +105,8 @@ def test_late_write_orbit_preserves_busy_sum_rounding_and_data_end_recovery(monk
     monkeypatch.setattr(_hbm_numeric, "_CHANNEL_WORKERS", 1)
     config = replace(b200_memory(), interleave_bytes=128)
     request = AccessRequest("late-write", "write", 193, 2 ** 24 + 117, 2 ** 36 * .512 - 1.)
-    packed = _pack_hbm_numeric(DramCore(config, capture_details=False), request)
+    core = DramCore(config, capture_details=False)
+    packed = _pack_hbm_numeric(core, request)
     packed.arrays[8][:, 1] = np.linspace(.001, 2 ** 54, len(packed.ids))
     initial = tuple(array.copy() for array in packed.arrays)
     packed.g[12] = 0

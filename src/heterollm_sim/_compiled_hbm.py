@@ -6,6 +6,7 @@ import copy
 from functools import lru_cache
 from operator import itemgetter
 from types import MappingProxyType
+import weakref
 import numpy as np
 
 from .memory_types import Operation, TransactionResult
@@ -287,11 +288,28 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     return packed
 
 
+class _CoreLink:
+    """A numeric state's way back to the core that owns it.
+
+    A strong reference would make every core a cycle, leaving each dead copy's
+    arrays and timeline to the cycle collector. A deep copy reaches a state
+    through its core, whose copy is then already registered in the memo.
+    """
+
+    __slots__ = ("core",)
+
+    def __init__(self, core):
+        self.core = weakref.ref(core)
+
+    def __deepcopy__(self, memo):
+        return _CoreLink(memo[id(self.core())])
+
+
 class _HBMNumericState:
     """One packed controller, its FCFS and FR-FCFS numeric executors."""
 
     def __init__(self, core, bank_ids, pc_keys, channel_keys, ids, g, t, run_numeric, arrays):
-        self.core = core
+        self._core_link = _CoreLink(core)
         self.bank_ids, self.pc_keys, self.channel_keys, self.ids = bank_ids, pc_keys, channel_keys, ids
         # Selecting touched resource names by index array avoids a Python
         # generator frame per name on every request publication.
@@ -319,6 +337,10 @@ class _HBMNumericState:
         self._capture_positions = {}
         self._refreshed_resource_ids = ids
         self._fr_queue = np.array(fr_queue_parameters(c), dtype=np.int64)
+
+    @property
+    def core(self):
+        return self._core_link.core()
 
     def validate_aliases(self):
         aliases = self.core.timeline.resource_aliases

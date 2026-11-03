@@ -34,17 +34,15 @@ def test_authored_keep_alive_callback_can_replace_the_enclosing_tuple_memo():
     assert memo[id(destinations)] is sentinel
 
 
-def test_rows_are_independent_ordered_and_keep_float_bits_and_snapshot_values():
+def test_rows_are_independent_ordered_and_keep_float_bits():
     original = row()
     original.update(negative_zero=-0.0,
                     payload_nan=struct.unpack("!d", bytes.fromhex("7ff8000000000042"))[0])
-    rollback = {"public": [1, 2]}
-    saved = _copy_plan_states({4: {"destinations": (original,), "rollback_snapshot": rollback}})
+    saved = _copy_plan_states({4: {"destinations": (original,)}})
     copied = saved[4]["destinations"][0]
     assert copied is not original and list(copied) == list(original)
     for name in ("negative_zero", "payload_nan"):
         assert struct.pack("!d", copied[name]) == struct.pack("!d", original[name])
-    assert saved[4]["rollback_snapshot"] is rollback
     original["size_bytes"] = 999
     for _ in range(2):
         restored = _copy_plan_states(saved)

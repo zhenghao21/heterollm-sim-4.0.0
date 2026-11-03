@@ -27,7 +27,8 @@ def test_read_ticks_match_generic_controller_bitwise(config):
         AccessRequest("repeat", "read", 17, 2 ** 22 + 71, 121.125),
         AccessRequest("late", "read", 333, 2 ** 22 + 17, 70000.001),
     )
-    packed = _pack_hbm_numeric(DramCore(config, capture_details=False), requests[0])
+    core = DramCore(config, capture_details=False)
+    packed = _pack_hbm_numeric(core, requests[0])
     before = tuple(array.copy() for array in packed.arrays)
     for request in requests:
         packed.arrays = tuple(array.copy() for array in before)
@@ -58,7 +59,8 @@ def test_off_grid_restored_column_history_disables_reduction():
 def test_read_tick_gap_rounding_requires_a_provable_margin(clock):
     from heterollm_sim._hbm_numeric import _column_tick_profile
 
-    packed = _pack_hbm_numeric(DramCore(b200_memory(), capture_details=False),
+    core = DramCore(b200_memory(), capture_details=False)
+    packed = _pack_hbm_numeric(core,
                                AccessRequest("read", "read", 0, 32))
     packed.t[0] = clock
     packed.t[11:14] = [5 * clock, 2 * clock, 4 * clock]
@@ -73,7 +75,8 @@ def test_read_tick_gap_rounding_requires_a_provable_margin(clock):
 def test_folded_cycles_keep_serial_float_accumulators_at_late_clock_edges(interleave, arrival):
     config = replace(b200_memory(), interleave_bytes=interleave)
     request = AccessRequest("late-partial", "read", 193, 2 ** 24 + 117, arrival)
-    packed = _pack_hbm_numeric(DramCore(config, capture_details=False), request)
+    core = DramCore(config, capture_details=False)
+    packed = _pack_hbm_numeric(core, request)
     packed.arrays[8][:, 1] = np.linspace(0.001, 2 ** 34 + .3, len(packed.ids))
     before = tuple(array.copy() for array in packed.arrays)
     packed.g[12] = 0

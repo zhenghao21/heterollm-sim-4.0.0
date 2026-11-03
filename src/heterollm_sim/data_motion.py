@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Iterable, Optional, Sequence, Tuple
+import weakref
 
 from .contracts import EvidenceStatus, ResourceDemand, TaskCategory, TaskSpec
 from .ir import ComponentSpec, LinkSpec, OFFLOAD_STORAGE_COMPONENT_KINDS, default_memory_resource_id
@@ -96,43 +97,44 @@ class _OverlapCompletionIndex:
 
     def update(self, address: int, byte_count: int, completion_ns: float) -> None:
         left, right = self._indices(address, byte_count)
-        if right <= left:
-            return
-
-        def visit(node: int, lo: int, hi: int) -> None:
-            if right <= lo or hi <= left:
-                return
-            if left <= lo and hi <= right:
-                self._values[node] = max(self._values[node], completion_ns)
-            else:
-                mid = (lo + hi) // 2
-                visit(node * 2, lo, mid)
-                visit(node * 2 + 1, mid, hi)
-            child_max = 0.0
-            if hi - lo > 1:
-                child_max = max(self._subtree[node * 2], self._subtree[node * 2 + 1])
-            self._subtree[node] = max(self._values[node], child_max)
-
-        visit(1, 0, self._segments)
+        if right > left:
+            _overlap_update(self._values, self._subtree, 1, 0, self._segments, left, right, completion_ns)
 
     def query(self, address: int, byte_count: int) -> float:
         left, right = self._indices(address, byte_count)
         if right <= left:
             return 0.0
+        return _overlap_query(self._values, self._subtree, 1, 0, self._segments, left, right)
 
-        def visit(node: int, lo: int, hi: int) -> float:
-            if right <= lo or hi <= left:
-                return 0.0
-            if left <= lo and hi <= right:
-                return self._subtree[node]
-            mid = (lo + hi) // 2
-            return max(
-                self._values[node],
-                visit(node * 2, lo, mid),
-                visit(node * 2 + 1, mid, hi),
-            )
 
-        return visit(1, 0, self._segments)
+# A nested recursive function is a reference cycle: every call would leave a
+# function, its cells and this index for the cycle collector.
+def _overlap_update(values, subtree, node, lo, hi, left, right, completion_ns):
+    if right <= lo or hi <= left:
+        return
+    if left <= lo and hi <= right:
+        values[node] = max(values[node], completion_ns)
+    else:
+        mid = (lo + hi) // 2
+        _overlap_update(values, subtree, node * 2, lo, mid, left, right, completion_ns)
+        _overlap_update(values, subtree, node * 2 + 1, mid, hi, left, right, completion_ns)
+    child_max = 0.0
+    if hi - lo > 1:
+        child_max = max(subtree[node * 2], subtree[node * 2 + 1])
+    subtree[node] = max(values[node], child_max)
+
+
+def _overlap_query(values, subtree, node, lo, hi, left, right):
+    if right <= lo or hi <= left:
+        return 0.0
+    if left <= lo and hi <= right:
+        return subtree[node]
+    mid = (lo + hi) // 2
+    return max(
+        values[node],
+        _overlap_query(values, subtree, node * 2, lo, mid, left, right),
+        _overlap_query(values, subtree, node * 2 + 1, mid, hi, left, right),
+    )
 
 
 @dataclass
@@ -416,8 +418,7 @@ class PhysicalRuntimeContext:
 
     def snapshot(self, *, transactional: bool = False,
                  owners: Optional[Iterable[str]] = None,
-                 _owned_timeline: bool = False,
-                 _immutable_timeline: bool = False) -> dict[str, Any]:
+                 _owned_timeline: bool = False) -> dict[str, Any]:
         """Capture a transaction-local rollback point without copying history.
 
         Physical tasks are submitted one at a time.  The old implementation
@@ -582,9 +583,6 @@ class PhysicalRuntimeContext:
                 for resource, directions in timeline.lane_directions.items()
             },
         })
-        if _immutable_timeline and timeline_token is None:
-            from ._timeline_history import _freeze_timeline_columns
-            _freeze_timeline_columns(timeline_state)
         snapshot = {
             "runtimes": dict(self.runtimes),
             "runtime_state": runtime_state,
@@ -602,9 +600,6 @@ class PhysicalRuntimeContext:
             # Transactions keep the high-water mark in their allocator save.
             snapshot["allocator_peaks"] = {owner: allocator.peak_end_bytes
                                            for owner, allocator in self.allocators.items()}
-        if _immutable_timeline and not transactional:
-            from ._timeline_history import _freeze_allocation_state
-            _freeze_allocation_state(snapshot["allocator_state"], snapshot["allocators"])
         return snapshot
 
     def _can_own_timeline(self, owners, *, _hooks_checked=False, _native_footprints=None) -> bool:
@@ -789,8 +784,6 @@ class PhysicalRuntimeContext:
             active.core.timeline = self.timeline
         for owner, allocations in snapshot["allocator_state"].items():
             allocator = self.allocators[owner]
-            if type(allocations) is _ImmutableAllocationColumn:
-                allocations = allocations._plain()
             if type(allocations) is dict:
                 allocator._restore_allocations(allocations)
                 allocator.peak_end_bytes = snapshot["allocator_peaks"][owner]
@@ -826,10 +819,6 @@ class PhysicalRuntimeContext:
         self._committed_owners.update(snapshot["committed_owners"])
         from .hbf_staging_runtime import restore
         self.hbf_staging = restore(snapshot["hbf_staging"])
-
-
-_NATIVE_TIMELINE_HISTORY_SNAPSHOT = PhysicalRuntimeContext.snapshot
-from ._timeline_history import _ImmutableAllocationColumn
 
 
 def _physical_runtime(
@@ -1706,6 +1695,11 @@ _SINK_HBM_UNDO_METHOD_NAMES = tuple(name for name, value in vars(_sink_hbm_trans
                                   if callable(value))
 
 
+_SINK_PLAIN_CONFIGS = {}
+_SINK_PLAIN_CONFIG_LIMIT = 4096
+_SINK_PROVEN_TIMELINES = {}
+
+
 def _sink_plain_value(value, ancestors):
     kind = type(value)
     if value is None or kind in (str, int, bool):
@@ -1727,12 +1721,38 @@ def _sink_plain_value(value, ancestors):
 def _sink_plain_config(config):
     if type(config) not in (_sink_types_module.DramConfig, _sink_types_module.NandConfig):
         return False
+    # Every multi-owner task asks about the same frozen configs. The entry
+    # owns its config, so an id cannot be recycled.
+    known = _SINK_PLAIN_CONFIGS.get(id(config))
+    if known is not None:
+        return known[1]
     try:
-        return (type(config.kind) is _sink_types_module.MemoryKind
-                and all(type(key) is str and (key == "kind" or _sink_plain_value(value, set()))
-                        for key, value in vars(config).items()))
+        plain = (type(config.kind) is _sink_types_module.MemoryKind
+                 and all(type(key) is str and (key == "kind" or _sink_plain_value(value, set()))
+                         for key, value in vars(config).items()))
     except RecursionError:
+        plain = False
+    if len(_SINK_PLAIN_CONFIGS) >= _SINK_PLAIN_CONFIG_LIMIT:
+        _SINK_PLAIN_CONFIGS.clear()
+    _SINK_PLAIN_CONFIGS[id(config)] = (config, plain)
+    return plain
+
+
+def _sink_columns_proven(timeline):
+    """Prove a timeline's resource columns once, not before every task.
+
+    The proof walks every resource of the run (milliseconds at thousands of
+    NAND banks), and the checks before it hold each writer to the native ones.
+    """
+    marker = id(timeline)
+    known = _SINK_PROVEN_TIMELINES.get(marker)
+    if known is not None and known() is timeline:
+        return True
+    if not _resource_ledger.can_sink_resource_columns(timeline, _sink_timeline_module._TIMELINE_MAPS):
         return False
+    _SINK_PROVEN_TIMELINES[marker] = weakref.ref(
+        timeline, lambda _dead, marker=marker: _SINK_PROVEN_TIMELINES.pop(marker, None))
+    return True
 
 
 def _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns):
@@ -1793,7 +1813,7 @@ def _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns
                 return False
             checked_configs.add(id(config))
     timeline = runtime.timeline
-    if not _resource_ledger.can_sink_resource_columns(timeline, _sink_timeline_module._TIMELINE_MAPS):
+    if not _sink_columns_proven(timeline):
         return False
     # The public reducers can read foreign busy/byte/last operands, so their
     # complete proof above stays. Core calendars read only their native owner
@@ -2020,6 +2040,8 @@ def _non_negative(value: Any, name: str) -> float:
 
 
 def _non_negative_int(value: Any, name: str) -> int:
+    if type(value) is int and value >= 0:
+        return value
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{name} must be a non-negative integer")
     return value

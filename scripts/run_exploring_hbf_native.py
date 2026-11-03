@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from enum import Enum
 import csv
 import functools
+import gc
 import io
 import json
 import math
@@ -1205,6 +1206,17 @@ def select_case(case, planned, rows, mode="detailed"):
             if mode == "fast" else "highest measured passing per-GPU throughput among the explicitly executed (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch")}
 
 
+def widen_cycle_collection():
+    """Keep a fast worker's cycle collector off its large heap.
+
+    A point builds tens of gigabytes of acyclic task records, and every full
+    pass walks them all: a quarter of the wall at a large batch, freeing
+    nothing. Young passes at wider intervals still free the short-lived cycles,
+    and a finished window copy dies by reference counting.
+    """
+    gc.set_threshold(100_000, 50, 100)
+
+
 def worker_candidate(case, layout, batch, directory, mode="detailed", wall_factor=1, window_processes=1):
     """Run or reuse exactly one candidate in this process; the manager owns the case point."""
     directory = Path(directory)
@@ -2177,6 +2189,8 @@ def main(argv=None):
         case = next((row for row in case_matrix() if row["case_id"] == args.worker_case_id), None)
         if case is None or args.batch_size is None:
             parser.error("a worker needs a known native case and --batch-size")
+        if args.mode == "fast":
+            widen_cycle_collection()
         try:
             if args.window_helper:
                 return worker_window_helper(case, layout, args.batch_size, directory, args.window_helper,

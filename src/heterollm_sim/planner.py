@@ -3802,6 +3802,8 @@ def _gddr_non_negative_int(
 ) -> int:
     """Parse one physical-memory byte fact without silently coercing it."""
 
+    if type(value) is int and value >= 0:
+        return value
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError("{} {} must be a non-negative integer".format(
             _physical_memory_label(physical_kind, component_id, physical_owner), name))
@@ -17165,7 +17167,7 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
     builder = SimpleNamespace(request=request, _attention_invocation_lanes=lanes,
                               _physical_kv_blocks=blocks)
     declarations, configs, contracts, owners, tail_slots, request_buffers = {}, {}, [], {}, [], []
-    with _compilation_scope(scenario):
+    with _compilation_scope(scenario) as scope:
         plan = _parallel_plan(scenario)
         if not 0 <= ep_group < plan.ep_degree:
             raise ValueError("native KV ingress ep_group {} is outside 0..{}".format(
@@ -17185,7 +17187,8 @@ def native_kv_ingress_inventory(scenario: ScenarioConfig, request_id: str,
                 if component_id not in owners:
                     # One service per KV component; every layer/rank reuses it.
                     _cached_physical_memory_config(component)
-                    owners[component_id] = resolve_service(component).physical_owner
+                    owners[component_id] = scope.invariant(("native_kv_ingress_owner", component_id),
+                                                           lambda: resolve_service(component).physical_owner)
                 owner = owners[component_id]
                 config = component.metadata["physical_memory_config"]
                 configs[owner] = config
@@ -29121,7 +29124,7 @@ def _ordered_residency_accesses(
                 "mtp_proposer_invocation_group_request_ids"
             )
         if isinstance(request_ids, (list, tuple)):
-            access["request_ids"] = tuple(str(item) for item in request_ids)
+            access["request_ids"] = tuple(map(str, request_ids))
         group_id = metadata.get("operator_invocation_group_id")
         if group_id is None:
             group_id = metadata.get("mtp_proposer_invocation_group_id")
@@ -29218,7 +29221,7 @@ def _ordered_residency_accesses(
         for _, member, _, logical_invocation_id in members:
             raw_request_ids = member.get("request_ids", ())
             if isinstance(raw_request_ids, (list, tuple)):
-                request_ids.extend(str(item) for item in raw_request_ids)
+                request_ids.extend(map(str, raw_request_ids))
             request_id = member.get("request_id")
             if request_id is not None:
                 request_ids.append(str(request_id))

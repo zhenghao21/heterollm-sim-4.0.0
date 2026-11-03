@@ -35,7 +35,8 @@ def test_parallel_request_matches_serial_all_live_arrays(channels, mapping, inte
     requests = [AccessRequest("read", "read", 193, size + 37),
                 AccessRequest("write", "write", 8193, size + 115, 100.),
                 AccessRequest("after-maintenance", "read", 31, size + 71, 200000.)]
-    packed = _pack_hbm_numeric(DramCore(config, capture_details=False), requests[0])
+    core = DramCore(config, capture_details=False)
+    packed = _pack_hbm_numeric(core, requests[0])
     before = tuple(array.copy() for array in packed.arrays)
     for request in requests:
         packed.arrays = tuple(array.copy() for array in before)
@@ -69,7 +70,8 @@ def test_b200_decode_sized_parallel_requests_preserve_results_and_state(size, ar
         AccessRequest("write", "write", 8192, size, arrival + 100.),
         AccessRequest("repeat", "read", 0, size, arrival + 1000.),
     )
-    packed = _pack_hbm_numeric(DramCore(b200_memory(), capture_details=False), requests[0])
+    core = DramCore(b200_memory(), capture_details=False)
+    packed = _pack_hbm_numeric(core, requests[0])
     before = tuple(array.copy() for array in packed.arrays)
     for request in requests:
         packed.arrays = tuple(array.copy() for array in before)

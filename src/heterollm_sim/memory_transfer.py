@@ -54,6 +54,28 @@ class _TimelineBefore(Mapping):
         except KeyError:
             return default
 
+    def select(self, keys):
+        """The before-values of ``keys`` as a plain dictionary, without the absent ones.
+
+        A physical task bills thousands of resources: this is ``get`` without a
+        Python frame per resource. An authored reader keeps its own protocol.
+        """
+        if type(self) is not _TimelineBefore or type(self).__getitem__ is not _NATIVE_BEFORE_GETITEM:
+            return {key: value for key in keys for value in (self.get(key, _TIMELINE_MISSING),)
+                    if value is not _TIMELINE_MISSING}
+        transaction = self.transaction
+        entries, root, objects = transaction.entries[self.name], transaction.roots[self.name], transaction.objects
+        selected = {}
+        for key in keys:
+            value = entries[key] if key in entries else root.get(key, _TIMELINE_MISSING)
+            if value is _TIMELINE_MISSING:
+                continue
+            if type(value) is list:
+                previous = objects.get(id(value))
+                value = tuple(value if previous is None else previous[1])
+            selected[key] = value
+        return selected
+
     def __iter__(self):
         return (key for key in self.transaction.roots[self.name]
                 if self.transaction.entries[self.name].get(key) is not _TIMELINE_MISSING)

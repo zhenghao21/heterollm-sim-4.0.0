@@ -14,7 +14,8 @@ from test_hbm_write_ticks import same_result
 
 def compare(config, requests, monkeypatch, workers=1):
     monkeypatch.setattr(_hbm_numeric, "_CHANNEL_WORKERS", workers)
-    packed = _pack_hbm_numeric(DramCore(config, capture_details=False), requests[0])
+    core = DramCore(config, capture_details=False)
+    packed = _pack_hbm_numeric(core, requests[0])
     assert _hbm_numeric._column_tick_profile(packed.g, packed.t, True)[0] == 1
     before = tuple(array.copy() for array in packed.arrays)
     for request in requests:

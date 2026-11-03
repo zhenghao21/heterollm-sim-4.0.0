@@ -14,11 +14,10 @@ import heapq
 import math
 from contextlib import contextmanager
 from dataclasses import dataclass
-from types import MethodType as _MethodType, SimpleNamespace
+from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from .data_motion import (AccessKind, PhysicalRuntimeContext, PhysicalService, resolve_service,
-                          _NATIVE_TIMELINE_HISTORY_SNAPSHOT)
+from .data_motion import AccessKind, PhysicalRuntimeContext, PhysicalService, resolve_service
 from .ir import ComponentSpec
 from .memory_allocator import PhysicalAddressAllocator, PhysicalAllocation
 from .memory_types import DramConfig, NandConfig, SramConfig
@@ -653,6 +652,8 @@ class PhysicalKVTransferExecutor:
         publish the imported context only after every stream's last write
         completes and commit. External Prefill production is outside this
         Decode-node runtime, never a free destination-memory initialization.
+        A failed preparation leaves its partial work: the caller holds a
+        ``snapshot()`` from before the call and restores it.
         """
         if (type(buffer_bytes) is not int or type(chunk_bytes) is not int
                 or min(buffer_bytes, chunk_bytes) <= 0 or not request_id):
@@ -678,59 +679,50 @@ class PhysicalKVTransferExecutor:
         slots = buffer_bytes // chunk_bytes
         if slots < len(streams):
             raise KvPoolError("external KV source buffer must hold one chunk slot per target stream")
-        snapshot_method = self.snapshot
-        snapshot = (snapshot_method(_immutable_timeline=True)
-            if type(snapshot_method) is _MethodType
-            and snapshot_method.__func__ is _IMMUTABLE_EXECUTOR_SNAPSHOT else snapshot_method())
         source = self._ensure_service(source_component)
         size = slots * chunk_bytes
         identity = self.namespace + ":external:" + request_id
         start = self._arrival(None, arrival_ns)
-        try:
-            allocation = self._allocator(source.physical_owner).allocate(identity, size, 0,
-                allocation_arena="workspace")
-            relays = []
-            for component in self.relay_components:
-                owner = self._ensure_service(component).physical_owner
-                allocated = self._allocator(owner).allocate(identity + ":relay:" + component,
-                    self.allocation_bytes(component, size), 0, allocation_arena="workspace")
-                relays.append((component, owner, allocated))
-            plan_id = self._next_async_plan_id
-            self._next_async_plan_id += 1
-            # A stream is [destination row indices, row cursor, byte offset,
-            # free slots]; a chunk is [stream, slot, actions, next action].
-            state = {"plan_id": plan_id, "done": False, "phase": 0,
-                "request_id": request_id, "source_component": source_component,
-                "source_owner": source.physical_owner, "source_allocation": allocation,
-                "relays": tuple(relays), "destinations": tuple(rows),
-                "streams": [[tuple(indices), 0, 0, list(range(index, slots, len(streams)))]
-                            for index, indices in enumerate(streams.values())],
-                "chunk_bytes": chunk_bytes, "slot_count": slots, "chunks": {}, "events": [],
-                "next_chunk_id": 0, "submitted_actions": 0, "submitted_write_bytes": 0,
-                "last_write": None, "logical_bytes": sum(r["size_bytes"] for r in rows),
-                # Native PD continuation submits memory phases through the
-                # executor callback rather than a KernelEvent. Retain the
-                # authoritative NAND bills so the sampling window can attach
-                # those physical pages to its storage ledger.
-                "native_nand_bills": [],
-                "start_ns": start, "completion_ns": start, "submitted_until_ns": start,
-                "rollback_snapshot": snapshot}
-            self._async_plan_states[plan_id] = state
-            # Fill every stream's slots round-robin, so all target ranks start
-            # together and share the source in arrival order.
-            changed, progressed = [], True
-            while progressed:
-                progressed = False
-                for index, stream in enumerate(state["streams"]):
-                    if stream[3] and stream[1] < len(stream[0]):
-                        changed.append(self._start_external_chunk(state, index, stream[3][0], start))
-                        stream[3].pop(0)
-                        progressed = True
-            return self._external_plan(state, state, None if None in changed
-                else tuple(dict.fromkeys(resource for value in changed for resource in value)))
-        except BaseException:
-            self.restore(snapshot)
-            raise
+        allocation = self._allocator(source.physical_owner).allocate(identity, size, 0,
+            allocation_arena="workspace")
+        relays = []
+        for component in self.relay_components:
+            owner = self._ensure_service(component).physical_owner
+            allocated = self._allocator(owner).allocate(identity + ":relay:" + component,
+                self.allocation_bytes(component, size), 0, allocation_arena="workspace")
+            relays.append((component, owner, allocated))
+        plan_id = self._next_async_plan_id
+        self._next_async_plan_id += 1
+        # A stream is [destination row indices, row cursor, byte offset,
+        # free slots]; a chunk is [stream, slot, actions, next action].
+        state = {"plan_id": plan_id, "done": False, "phase": 0,
+            "request_id": request_id, "source_component": source_component,
+            "source_owner": source.physical_owner, "source_allocation": allocation,
+            "relays": tuple(relays), "destinations": tuple(rows),
+            "streams": [[tuple(indices), 0, 0, list(range(index, slots, len(streams)))]
+                        for index, indices in enumerate(streams.values())],
+            "chunk_bytes": chunk_bytes, "slot_count": slots, "chunks": {}, "events": [],
+            "next_chunk_id": 0, "submitted_actions": 0, "submitted_write_bytes": 0,
+            "last_write": None, "logical_bytes": sum(r["size_bytes"] for r in rows),
+            # Native PD continuation submits memory phases through the
+            # executor callback rather than a KernelEvent. Retain the
+            # authoritative NAND bills so the sampling window can attach
+            # those physical pages to its storage ledger.
+            "native_nand_bills": [],
+            "start_ns": start, "completion_ns": start, "submitted_until_ns": start}
+        self._async_plan_states[plan_id] = state
+        # Fill every stream's slots round-robin, so all target ranks start
+        # together and share the source in arrival order.
+        changed, progressed = [], True
+        while progressed:
+            progressed = False
+            for index, stream in enumerate(state["streams"]):
+                if stream[3] and stream[1] < len(stream[0]):
+                    changed.append(self._start_external_chunk(state, index, stream[3][0], start))
+                    stream[3].pop(0)
+                    progressed = True
+        return self._external_plan(state, state, None if None in changed
+            else tuple(dict.fromkeys(resource for value in changed for resource in value)))
 
     def _external_chunk_actions(self, state, row, offset, amount, slot):
         base = slot * state["chunk_bytes"]
@@ -837,14 +829,12 @@ class PhysicalKVTransferExecutor:
         completion = state["submitted_until_ns"] if final else state["events"][0][0]
         token = self._new_phase_token()
         state.update(completion_ns=completion, phase_token=token, final=final)
-        phase = state["phase"]
         return KvPoolTransferPlan(duration_ns=completion-state["start_ns"], start_ns=state["start_ns"],
             completion_ns=completion,
             native_changed_resource_ids=changed_resources,
             advance=None if final else lambda: self._advance_external_phase(callback_state, token),
             commit=lambda: self._finish_external_import(callback_state, token, cancelled=False),
-            cancel=lambda: self._finish_external_import(callback_state, token, cancelled=True),
-            rollback=lambda: self._rollback_external_import(callback_state, token, phase))
+            cancel=lambda: self._finish_external_import(callback_state, token, cancelled=True))
 
     def _advance_external_phase(self, callback_state, token):
         """Handle the earliest completed action: at most one new submission.
@@ -891,7 +881,6 @@ class PhysicalKVTransferExecutor:
             del state["chunks"][chunk_id]
         state["phase"] += 1
         state["last_write"] = write
-        state.pop("rollback_snapshot", None)
         return self._external_plan(state, callback_state, changed)
 
     def _finish_external_import(self, callback_state, token, *, cancelled):
@@ -919,18 +908,8 @@ class PhysicalKVTransferExecutor:
             counter = "cancelled_transfer_count" if cancelled else "transfer_count"
             self.counters[counter] = self.counters.get(counter, 0) + 1
             state.update(cancelled=cancelled, terminal_event=billed)
-            state.pop("rollback_snapshot", None)
             self._finish_transfer(state, callback_state)
             return billed
-
-    def _rollback_external_import(self, callback_state, token, phase):
-        state = self._transfer_state(callback_state)
-        self._check_phase_token(state, token)
-        if phase != 0 or state["phase"] != 0:
-            raise KvPoolError("only a just-prepared external import can roll back")
-        snapshot = state["rollback_snapshot"]
-        self.restore(snapshot)
-        callback_state.update(done=True, terminal_epoch=self._async_restore_epoch)
 
     def _link_segment(self, source: str, target: str, size: int, *, arrival_ns: float) -> tuple[float, list[dict[str, Any]]]:
         current = arrival_ns
@@ -1319,12 +1298,8 @@ class PhysicalKVTransferExecutor:
     def __call__(self, request: KvPoolTransferRequest) -> KvPoolTransferPlan:
         return self._transfer(request)
 
-    def snapshot(self, *, _immutable_timeline: bool = False) -> dict[str, Any]:
-        runtime_method = self.runtime.snapshot
-        runtime_snapshot = (runtime_method(_immutable_timeline=True)
-            if _immutable_timeline and type(runtime_method) is _MethodType
-            and runtime_method.__func__ is _NATIVE_TIMELINE_HISTORY_SNAPSHOT else runtime_method())
-        return {"runtime": runtime_snapshot, "bindings": copy.deepcopy(self._bindings),
+    def snapshot(self) -> dict[str, Any]:
+        return {"runtime": self.runtime.snapshot(), "bindings": copy.deepcopy(self._bindings),
                 "cache_states": self._snapshot_caches(),
                 "events": copy.deepcopy(self.events), "counters": copy.deepcopy(self.counters),
                 "cost_phases": tuple(self._cost_phases),
@@ -1348,9 +1323,6 @@ class PhysicalKVTransferExecutor:
 
     def stats(self) -> Mapping[str, Any]:
         return {**self.counters, "events": len(self.events)}
-
-
-_IMMUTABLE_EXECUTOR_SNAPSHOT = PhysicalKVTransferExecutor.snapshot
 
 
 _PLAN_COPY_ATOMS = (str, int, float, bool, type(None))
@@ -1408,15 +1380,9 @@ def _copy_plan_destinations(value, memo):
 
 
 def _copy_plan_states(states):
-    """Copy in-flight plan states, sharing their rollback snapshots.
-
-    A rollback snapshot is a value that restore() only reads. Deep-copying it
-    copied the whole runtime once per just-prepared import, nested through
-    every later snapshot, so each import cost grew with the batch.
-    """
+    """Copy in-flight plan states."""
     memo = {}
-    return {plan_id: {key: value if key == "rollback_snapshot" else
-                      _copy_plan_destinations(value, memo)
+    return {plan_id: {key: _copy_plan_destinations(value, memo)
                       if type(key) is str and key == "destinations" else copy.deepcopy(value, memo)
                       for key, value in state.items()}
             for plan_id, state in states.items()}

@@ -13,7 +13,7 @@ def _executor_state(executor):
     return bits({"counters": executor.counters, "next_plan": executor._next_async_plan_id,
         "next_token": executor._next_async_phase_token,
         "states": {key: {name: value for name, value in state.items()
-                         if name not in {"rollback_snapshot", "source_allocation", "relays"}}
+                         if name not in {"source_allocation", "relays"}}
                    for key, state in executor._async_plan_states.items()}})
 
 

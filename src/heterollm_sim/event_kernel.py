@@ -779,10 +779,12 @@ def _validate_acyclic(tasks_by_id: Mapping[str, TaskSpec]) -> None:
 def _publish_physical_summary(kernel, task, physical_ids, snapshot, predecessors):
     """Publish the retained intervals through the ordered resource reducer."""
     from ._resource_ledger import publish_physical_summary
+    from .memory_transfer import _TimelineBefore
 
+    before = snapshot["timeline"]["lane_available"]
     return publish_physical_summary(
         task.task_id, physical_ids, kernel.physical_runtime.timeline.lane_available,
-        snapshot["timeline"]["lane_available"],
+        before.select(physical_ids) if type(before) is _TimelineBefore else before,
         task.metadata.get("physical_resource_last_intervals", {}),
         kernel.resource_last_interval, kernel._resource_lane_last_interval,
         kernel.resource_available, predecessors)

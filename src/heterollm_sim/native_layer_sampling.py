@@ -600,6 +600,16 @@ def _rank_timeline(kernel, owners):
                    if _owner_resources(rid, owners)} for name in _TP_TIMELINE_MAPS}
 
 
+def _copy_owner_runtime(runtime, owner):
+    """One owner's state after a task, on the same timeline; a NAND core's page buffers copy directly."""
+    from .nand_core import NandCore, _copy_nand_read_cache
+    active = runtime.runtimes[owner]
+    memo = {id(runtime.timeline): runtime.timeline}
+    if type(active.core) is NandCore:
+        _copy_nand_read_cache(active.core.__dict__["_read_cache"], memo)
+    return deepcopy(active, memo)
+
+
 class _TPRankMirror:
     """Reuse an equal native physical transition, preserving the full event DAG.
 
@@ -977,7 +987,7 @@ class _TPRankMirror:
                 'inputs':[(str(a['operation']),a['address'],a['byte_count'],
                            a.get('physical_owner',task.metadata.get('physical_owner')))
                           for a in resolved.metadata['memory_accesses']],
-                'cores_after':{o:deepcopy(runtime.runtimes[o],{id(runtime.timeline):runtime.timeline}) for o in owners},
+                'cores_after':{o:_copy_owner_runtime(runtime, o) for o in owners},
                 'recorder_after': {name: deepcopy(getattr(runtime.timeline, name)) for name in (
                     '_touched', '_interval_limit', '_interval_count', '_intervals_truncated')},
                 'timeline_after':{name:{rid:deepcopy(getattr(runtime.timeline,name)[rid]) for rid in touched
@@ -1059,7 +1069,7 @@ class _TPRankMirror:
             touched = resolved.metadata['physical_resource_last_intervals']
             record.update(task=resolved,inputs=[(str(a['operation']),a['address'],a['byte_count'],
                 a.get('physical_owner',task.metadata.get('physical_owner'))) for a in resolved.metadata['memory_accesses']],
-                cores_after={o:deepcopy(runtime.runtimes[o],{id(runtime.timeline):runtime.timeline}) for o in owners},
+                cores_after={o:_copy_owner_runtime(runtime, o) for o in owners},
                 timeline_after={name:{rid:deepcopy(getattr(runtime.timeline,name)[rid]) for rid in touched
                                       if rid in getattr(runtime.timeline,name)} for name in _TP_TIMELINE_MAPS},
                 timeline_removed={name:tuple(rid for rid in touched if rid not in getattr(runtime.timeline,name))
