@@ -532,6 +532,27 @@ def test_a_budget_change_keeps_saved_rows_and_runs_kills_under_a_smaller_budget_
     assert lookup(32)["rejection_reason"] == killed["rejection_reason"]
 
 
+def test_a_worker_reuses_exactly_the_rows_the_search_counts(tmp_path, monkeypatch):
+    case, layout = run.case_matrix()[0], run.make_layout(2, 4, 1, 1)
+    budget = run.FAST_CANDIDATE_WALL_BUDGET_SECONDS
+    killed = {"status": "forecast_rejected", "rejection_reason": "native_process_wall_budget_exhausted"}
+    ran = []
+
+    def execute(params, directory, progress, **options):
+        ran.append(params["batch_size"])
+        return {"status": "slo_rejected", "backend": run.BACKEND, "parameters": params,
+                "candidate_id": run.params_candidate_id(params)}
+
+    monkeypatch.setattr(run, "execute_candidate", execute)
+    for batch, cap, row in ((8, 3000., {"status": "slo_rejected"}), (16, 3000., killed), (32, budget, killed)):
+        run.save_candidate(tmp_path, {**row, "backend": run.BACKEND, "candidate_id": run.candidate_id(case, layout, batch),
+            "parameters": {**run.parameters(case, layout, batch, "fast"), "candidate_wall_budget_seconds_per_worker": cap}})
+        assert run.worker_candidate(case, layout, batch, tmp_path, "fast") == 0
+    # Otherwise the manager restarts a point the search still wants and the worker keeps reusing.
+    assert ran == [16]
+    assert run._search_lookup(tmp_path, case, layout)(16)["status"] == "slo_rejected"
+
+
 def test_peak_prediction_stays_within_the_measured_peaks():
     case, layout = run.case_matrix()[0], run.make_layout(1, 8, 1, 1)
     row = {**case, **layout}

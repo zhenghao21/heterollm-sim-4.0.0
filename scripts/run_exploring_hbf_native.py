@@ -1216,7 +1216,7 @@ def worker_candidate(case, layout, batch, directory, mode="detailed", wall_facto
             compatible = parameters_compatible(row.get("parameters"), params) and row.get("backend") == BACKEND
             if not compatible and row.get("status") in CANDIDATE_TERMINAL:
                 raise RuntimeError("saved terminal candidate parameters/backend differ; historical results cannot be relabeled")
-            if not compatible or row["status"] not in CANDIDATE_TERMINAL:
+            if not compatible or row["status"] not in CANDIDATE_TERMINAL or _killed_under_smaller_budget(row, params):
                 row = None
         if row is None:
             progress.begin_candidate(params)
