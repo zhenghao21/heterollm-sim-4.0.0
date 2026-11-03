@@ -112,6 +112,16 @@ def test_a_layout_beyond_native_reach_stops_at_its_largest_point_without_extrapo
     assert batch == 830 and search.search_result(plan, batch, TP8) == "native_wall_limited"
 
 
+def test_the_slo_within_a_step_blames_no_limit_that_did_not_bind():
+    # The next point would sit closer than a step to the last one, with the wall cap far away.
+    layouts = [native(lambda b: (20 + .1538 * b) * 1e6, lambda b: .1 * b)]
+    plan, _runs = drive([entry(capacity=100000)], layouts, cap=100000.)
+    outcome = plan["layouts"][0]["outcome"]
+    assert outcome["kind"] == "limited" and outcome["reason"] == "native_slo_within_step"
+    largest = outcome["batch"]
+    assert (20 + .1538 * largest) * 1.002 <= 100 < (20 + .1538 * (largest * (1 + search.MIN_STEP))) * 1.002
+
+
 def test_a_too_big_first_point_is_halved():
     wall_exhausted = ("forecast_rejected", "native_total_candidate_wall_budget_exhausted")
     layouts = [native(linear, lambda b: 4. * b, too_big=lambda b: wall_exhausted if b >= 400 else None)]

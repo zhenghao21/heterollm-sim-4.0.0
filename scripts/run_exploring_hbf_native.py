@@ -120,7 +120,7 @@ SEARCH_TOP_LAYOUTS = search_plan.TOP_LAYOUTS
 SEARCH_LABELS = {"slo_accepted": "插值到100ms并通过验收", "acceptance_failed_fallback": "验收未过，退回已测通过点",
     "native_wall_limited": "受仿真开销限制，未到100ms", "native_capacity_limited": "受原生容量限制，未到100ms",
     "native_import_limited": "受导入速度限制，未到100ms", "native_interval_limited": "受预测区间宽度限制，未到100ms",
-    "native_memory_limited": "受仿真内存限制，未到100ms",
+    "native_memory_limited": "受仿真内存限制，未到100ms", "native_slo_within_step": "距100ms已不足一个搜索步长",
     "points_exhausted": "批量点用尽，未到100ms", "best_measured_point": "已测最佳通过点"}
 
 

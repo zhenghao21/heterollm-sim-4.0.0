@@ -439,7 +439,12 @@ def _outcome(entry, runs, points, slo_ns, caps, rounded):
         return {"kind": "no_native_measurement", "reason": runs[-1]["reason"] if runs else None}
     if all(point["tpot_upper_ns"] <= slo_ns for point in points):
         largest = max(points, key=lambda point: point["batch"])
-        _limit_batch, reason = _limit(entry, runs, points, caps, rounded)
+        limit, reason = _limit(entry, runs, points, caps, rounded)
+        # A limit at least a step away did not end the search: the SLO is within
+        # one step. The smallest limit is not the cause just because it is smallest.
+        if limit - largest["batch"] >= _step(largest["batch"], _quantum(entry)) \
+                and not any(run["kind"] == "too_big" for run in runs):
+            reason = "native_slo_within_step"
         return {"kind": "limited", "reason": reason or "slo_not_reached", "batch": largest["batch"]}
     q = _quantum(entry)
     if min(point["batch"] for point in points) == q:
