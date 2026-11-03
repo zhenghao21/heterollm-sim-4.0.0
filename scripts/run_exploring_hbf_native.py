@@ -92,6 +92,11 @@ MAX_WORKERS = os.cpu_count() or 1
 # predicted at DEFAULT_CANDIDATE_PEAK_BYTES.
 WORKER_MEMORY_RESERVE_BYTES = 8*1024**3
 DEFAULT_CANDIDATE_PEAK_BYTES = 16*1024**3
+# A prediction stays within this share of the model's largest measured peak, or
+# the default if larger. No line fits peaks across layouts: one predicted 136 GiB
+# for a point that peaked at 1.9 GiB, and held 20 worker slots idle, while none
+# of 560 measured peaks passed 14.4 GiB.
+PEAK_PREDICTION_CAP = 1.5
 STATUS_LABELS = {"pending": "等待", "running": "运行中", "completed": "完成",
     "completed_with_rejections": "结束（含拒绝）", "all_candidates_rejected": "候选均被拒绝",
     "capacity_rejected": "容量拒绝", "slo_rejected": "TPOT约束拒绝", "forecast_rejected": "预测预算拒绝", "paused": "暂停", "failed": "失败"}
@@ -1403,19 +1408,22 @@ def predicted_peak_bytes(known, case, layout, batch):
     """A candidate's peak memory from measured peaks, linear in the batch.
 
     Same model, hardware, workload and layout first, then model and
-    workload, then model; DEFAULT_CANDIDATE_PEAK_BYTES without any.
+    workload, then model; DEFAULT_CANDIDATE_PEAK_BYTES without any. Bounded
+    by PEAK_PREDICTION_CAP.
     """
     params = {**case, **layout}
+    cap = max(DEFAULT_CANDIDATE_PEAK_BYTES, PEAK_PREDICTION_CAP * max(
+        (peak for row, peak in known if row.get("model") == params.get("model")), default=0.))
     for keys in (("model", "hardware", "workload", *LAYOUT_KEYS, "microbatches"), ("model", "workload"), ("model",)):
         points = [(row["batch_size"], peak) for row, peak in known
                   if all(row.get(key, 1) == params.get(key, 1) for key in keys)]
         if not points:
             continue
         if len({b for b, _ in points}) == 1:
-            return max(peak for _b, peak in points) * max(1., batch / points[0][0])
+            return min(cap, max(peak for _b, peak in points) * max(1., batch / points[0][0]))
         intercept, slope = search_plan.fit_line(points)
         floor = max((peak for b, peak in points if b <= batch), default=0.)
-        return max(intercept + max(0., slope) * batch, floor)
+        return min(cap, max(intercept + max(0., slope) * batch, floor))
     return DEFAULT_CANDIDATE_PEAK_BYTES
 
 
@@ -1471,8 +1479,9 @@ def _start(queue, active, known, ceiling, directory, mode, spawn):
                   if mode == "fast" else None)
         started = time.perf_counter()
         # The kernel's outcome does not depend on the thread count: a new worker
-        # takes its share of the logical cores among those running now.
-        threads = max(1, MAX_WORKERS // (len(active) + 1))
+        # takes its share of the logical cores among those running now, up to
+        # the kernel's limit.
+        threads = max(1, min(8, MAX_WORKERS // (len(active) + 1)))
         process = (spawn(case, layout, batch, directory) if spawn
                    else _spawn(case, layout, batch, directory, mode, factor, threads))
         active[candidate_id(case, layout, batch)] = {"process": process, "case": case, "layout": layout,

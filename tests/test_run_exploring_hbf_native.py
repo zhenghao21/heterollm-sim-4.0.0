@@ -532,6 +532,19 @@ def test_a_budget_change_keeps_saved_rows_and_runs_kills_under_a_smaller_budget_
     assert lookup(32)["rejection_reason"] == killed["rejection_reason"]
 
 
+def test_peak_prediction_stays_within_the_measured_peaks():
+    case, layout = run.case_matrix()[0], run.make_layout(1, 8, 1, 1)
+    row = {**case, **layout}
+    gib = 2**30
+    # A steep line across two batches would predict about 100 GiB at B1000.
+    known = [({**row, "batch_size": 10}, 1. * gib), ({**row, "batch_size": 20}, 2. * gib)]
+    assert run.predicted_peak_bytes(known, case, layout, 15) == pytest.approx(1.5 * gib)
+    assert run.predicted_peak_bytes(known, case, layout, 1000) == run.DEFAULT_CANDIDATE_PEAK_BYTES
+    other = {**row, "tp": 4, "dp": 2, "batch_size": 100}
+    known.append((other, 20. * gib))
+    assert run.predicted_peak_bytes(known, case, layout, 1000) == pytest.approx(30. * gib)
+
+
 def test_prefill_tp_steps_past_a_kv_block_larger_than_the_cache_the_weights_leave():
     # 405B at TP1: what the weights leave of HBM4 holds no 256-token block.
     assert run.prefill_tp("llama3_405b", "LONG", 1, 1, 1) == 4
