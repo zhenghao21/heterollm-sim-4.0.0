@@ -486,6 +486,34 @@ def mirror_batches(seed, config):
 
 
 @pytest.mark.parametrize("seed", range(3))
+def test_fr_fcfs_outcome_does_not_depend_on_the_worker_count(seed, monkeypatch):
+    from heterollm_sim import _hbm_numeric
+    from heterollm_sim._compiled_hbm import _pack_hbm_numeric
+
+    config = hbm4()
+    seen = []
+    for workers in (1, 2, 4, 8):
+        monkeypatch.setattr(_hbm_numeric, "_CHANNEL_WORKERS", workers)
+        packed = _pack_hbm_numeric(numeric_core(config), request("x", READ, 0))
+        arrays = [array.copy() for array in packed.arrays]
+        outcome = []
+        for firsts, stops, arrivals, reads in mirror_batches(seed, config):
+            try:
+                results = _hbm_numeric.run_fr_fcfs(firsts, stops, arrivals, reads, packed._fr_queue,
+                                                   packed.g, packed.t, *arrays)
+            except ValueError:
+                # Random traffic can hold a row past tRASmax.
+                outcome.append("refused")
+                break
+            outcome.append(tuple(value.tobytes() for value in results))
+        windows, counts = arrays[12], arrays[13]
+        outcome.append(tuple(array.tobytes() for index, array in enumerate(arrays) if index != 12))
+        outcome.append([row[:count].tobytes() for row, count in zip(windows, counts)])
+        seen.append(outcome)
+    assert all(outcome == seen[0] for outcome in seen)
+
+
+@pytest.mark.parametrize("seed", range(3))
 @pytest.mark.parametrize("policy", ("all_bank", "disabled"))
 def test_channel_mirror_matches_simulating_every_channel(seed, policy):
     from heterollm_sim._compiled_hbm import _pack_hbm_numeric
@@ -505,13 +533,19 @@ def test_channel_mirror_matches_simulating_every_channel(seed, policy):
         counts = np.zeros(7)
         try:
             for channel in range(channels):
-                counts += _run_fr_fcfs_channels(*common, *single, *expected, channel, channel + 1)
+                row = np.zeros((1, 7))
+                _run_fr_fcfs_channels(*common, *single, *expected, channel, channel + 1, 1, row)
+                counts += row[0]
         except ValueError as error:
             # Random traffic can hold a row past tRASmax; mirroring must refuse it too.
             with pytest.raises(ValueError, match=str(error)):
-                _run_fr_fcfs_channels(*common, *whole, *outcome, 0, channels)
+                _run_fr_fcfs_channels(*common, *whole, *outcome, 0, channels, channels, np.zeros((channels, 7)))
             return
-        mirrored = _run_fr_fcfs_channels(*common, *whole, *outcome, 0, channels)
+        rows = np.zeros((channels, 7))
+        _run_fr_fcfs_channels(*common, *whole, *outcome, 0, channels, channels, rows)
+        mirrored = np.zeros(7)
+        for row in rows:
+            mirrored += row
         assert outcome[0].tobytes() == expected[0].tobytes()
         assert outcome[1].tobytes() == expected[1].tobytes()
         assert mirrored[:5].tobytes() == counts[:5].tobytes()

@@ -1809,7 +1809,7 @@ def _fr_open_rows_safe(source, ch, g, t, rows, bf, addresses, half, source_reach
 def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc,
                           history, pc_seen, channel, channel_int, resources, moved, directions,
                           touched, windows, window_counts, stats, out_int, out_float,
-                          channel_first, channel_stop):
+                          channel_first, channel_stop, span, channel_counts):
     """Issue one batch's bursts command by command through per-PC queues.
 
     Each physical channel owns both PCs, their banks and its CA buses, so one
@@ -1822,9 +1822,8 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
     requests, lanes, banks = firsts.shape[0], g[0], g[1]
     channels = lanes // 2
     half = t[0] / 2
-    counts = np.zeros(7, dtype=np.float64)
     if requests == 0 or channel_first >= channel_stop:
-        return counts
+        return
     inverse = 1. / half
     ticks = np.empty(t.shape[0], dtype=np.int64)
     for index in range(t.shape[0]):
@@ -1857,8 +1856,8 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
     total_bursts = 0
     for request in range(requests):
         total_bursts += stops[request] - firsts[request]
-    mirror = (channel_stop - channel_first >= 2 and t[0] * 2 != math.floor(t[0] * 2)
-              and total_bursts >= FR_MIRROR_MIN_BURSTS * (channel_stop - channel_first))
+    mirror = (span >= 2 and t[0] * 2 != math.floor(t[0] * 2)
+              and total_bursts >= FR_MIRROR_MIN_BURSTS * span)
     capacity_sources = min(FR_MIRROR_SOURCES, channel_stop - channel_first) if mirror else 0
     span_banks, entries = 2 * banks, history.shape[1]
     sources = (np.empty(capacity_sources, dtype=np.int64), np.empty(capacity_sources, dtype=np.bool_),
@@ -1899,7 +1898,7 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
     first_arrival = math.inf
     for request in range(requests):
         first_arrival = min(first_arrival, arrivals[request])
-    tally = np.zeros(7, dtype=np.float64) if mirror else counts
+    tally = np.zeros(7, dtype=np.float64) if mirror else channel_counts[0]
     ch_int = np.zeros((requests, 3), dtype=np.int64) if mirror else out_int
     ch_float = np.zeros((requests, 2), dtype=np.float64) if mirror else out_float
     saved_busy = np.empty(4, dtype=np.float64)
@@ -1968,7 +1967,7 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                             and _fr_open_rows_safe(source, ch, g, t, rows, bf, addresses, half, source_reach)):
                         _fr_apply_source(source, ch, g, rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
                                          resources, moved, directions, touched, windows, window_counts, stats,
-                                         out_int, out_float, counts, sources)
+                                         out_int, out_float, channel_counts[ch - channel_first], sources)
                         mirrored = True
                         break
                 if mirrored:
@@ -2375,8 +2374,7 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                                   channel_int, resources, directions, windows, window_counts, pc_seen, touched,
                                   partial_moved, partial_stats, ch_int, ch_float, tally, sources)
             _fr_merge_tallies(ch, g, saved_busy, partial_busy, partial_moved, partial_stats, ch_int, ch_float, tally,
-                              resources, moved, stats, out_int, out_float, counts)
-    return counts
+                              resources, moved, stats, out_int, out_float, channel_counts[ch - channel_first])
 
 
 def run_fr_fcfs(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc, history, pc_seen,
@@ -2400,18 +2398,31 @@ def run_fr_fcfs(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc
               directions, touched, windows, window_counts, stats)
     requests = len(firsts)
 
+    span = channel_stop - channel_first
+
     def execute(left, right):
         out_int = np.zeros((requests, 3), dtype=np.int64)
         out_float = np.zeros((requests, 2), dtype=np.float64)
         out_float[:, 0] = arrivals
-        counts = _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, *arrays,
-                                       out_int, out_float, left, right)
-        return out_int, out_float, counts
+        channel_counts = np.zeros((max(1, right - left), 7), dtype=np.float64)
+        _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, *arrays,
+                              out_int, out_float, left, right, span, channel_counts)
+        return out_int, out_float, channel_counts
+
+    def reduced(channel_counts):
+        counts = np.zeros(7, dtype=np.float64)
+        for row in channel_counts:
+            counts += row
+        return counts
 
     physical_bytes = int((stops - firsts).sum()) * int(g[9])
-    workers = min(_CHANNEL_WORKERS, channel_stop - channel_first, physical_bytes // (32 * 1024))
-    if physical_bytes < 128 * 1024 or workers < 2:
-        return execute(channel_first, channel_stop)
+    bursts = int((stops - firsts).sum())
+    workers = min(_CHANNEL_WORKERS, span, physical_bytes // (32 * 1024))
+    clock = float(t[0])
+    if (physical_bytes < 128 * 1024 or workers < 2
+            or (clock * 2 != math.floor(clock * 2) and bursts < FR_MIRROR_MIN_BURSTS * span)):
+        out_int, out_float, channel_counts = execute(channel_first, channel_stop)
+        return out_int, out_float, reduced(channel_counts)
     # Compile or load the kernel on the calling thread before workers start.
     execute(0, 0)
     condition = Condition()
@@ -2450,7 +2461,4 @@ def run_fr_fcfs(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc
         raise
     out_int = sum(result[0] for result in results)
     out_float = np.stack([result[1] for result in results]).max(axis=0)
-    counts = np.zeros(7, dtype=np.float64)
-    for result in results:
-        counts += result[2]
-    return out_int, out_float, counts
+    return out_int, out_float, reduced(np.concatenate([result[2] for result in results]))

@@ -394,6 +394,10 @@ def _window_peaks(records):
     return peaks
 
 
+class _StagingUnderestimated(Exception):
+    """A sampled run reached a shared extent the reservation does not cover."""
+
+
 def _staging_underestimated(before, after):
     """Whether the runs reached a shared extent that stores fewer tails than they were run with."""
     return any(row["stored_fraction"] < before[rank]["stored_fraction"] and
@@ -714,9 +718,14 @@ def sample_stationary(runtime, prepared, control, layers, records, *, holdout_sh
     prefix, suffix = boundary.get("before_first_layer", []), boundary.get("after_last_layer", [])
 
     def run(role, layer_ids, groups, origin, tag, imports=None, entry=False, exit=False):
-        return run_window(prepared, control, records, role, layer_ids, groups, origin, "stationary-" + tag,
-                          imports=imports, row_terms=None if imports else window_terms(
-                              prepared, layer_ids, entry=entry, exit=exit))
+        row = run_window(prepared, control, records, role, layer_ids, groups, origin, "stationary-" + tag,
+                         imports=imports, row_terms=None if imports else window_terms(
+                             prepared, layer_ids, entry=entry, exit=exit))
+        reserved = prepared.get("page_staging_occupancy")
+        if reserved and _staging_underestimated(reserved, page_staging_occupancy(
+                runtime, prepared["cohort"], _window_peaks(records))):
+            raise _StagingUnderestimated
+        return row
 
     first, second = prepared["origin"], prepared["origin"] + holdout_shift_ns
     runs = {"calibration": run("calibration", roles["calibration"], (prefix,), first, "calibration", entry=True),
@@ -1721,21 +1730,27 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
             if admission:
                 budget = {"accepted": False, "reasons": admission}
             else:
-                samples = sample_stationary(runtime, prepared, sample_control, layers, records,
-                    pd_concurrency_envelope=options.pd_concurrency_envelope)
-                # Every layer's KV tails with the activations the windows reached.
-                occupancy = page_staging_occupancy(runtime, prepared["cohort"], _window_peaks(records))
-                if _staging_underestimated(prepared["page_staging_occupancy"], occupancy):
-                    # The runs wrote their tails before the step's activation
-                    # high-water: sample again with that extent reserved.
-                    diagnostics["page_staging_resampled_from"] = {
-                        rank: {**row, "kv_layers": len(row["kv_layers"])}
-                        for rank, row in prepared["page_staging_occupancy"].items()}
+                # A run's tails were written before the step's activation
+                # high-water: as soon as a run proves that, sample again with
+                # that extent reserved.
+                first_reservation = None
+                while True:
+                    try:
+                        samples = sample_stationary(runtime, prepared, sample_control, layers, records,
+                            pd_concurrency_envelope=options.pd_concurrency_envelope)
+                    except _StagingUnderestimated:
+                        samples = None
+                    # Every layer's KV tails with the activations the windows reached.
+                    occupancy = page_staging_occupancy(runtime, prepared["cohort"], _window_peaks(records))
+                    if samples is not None:
+                        break
+                    if first_reservation is None:
+                        first_reservation = prepared["page_staging_occupancy"]
+                        diagnostics["page_staging_resampled_from"] = {
+                            rank: {**row, "kv_layers": len(row["kv_layers"])}
+                            for rank, row in first_reservation.items()}
                     prepared["page_staging_occupancy"] = occupancy
                     records.clear()
-                    samples = sample_stationary(runtime, prepared, sample_control, layers, records,
-                        pd_concurrency_envelope=options.pd_concurrency_envelope)
-                    occupancy = page_staging_occupancy(runtime, prepared["cohort"], _window_peaks(records))
                 diagnostics["page_staging_occupancy"] = {
                     rank: {**row, "kv_layers": len(row["kv_layers"])} for rank, row in occupancy.items()}
                 budget = _checked_budget(evaluate_stationary(runtime, prepared, samples, options))
