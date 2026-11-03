@@ -241,6 +241,30 @@ def test_any_replica_stops_at_the_first_run_past_the_reservation(monkeypatch):
     _run_with_store_check(monkeypatch, pipeline)
 
 
+def test_the_exit_run_goes_first_and_the_records_keep_their_order(monkeypatch):
+    from heterollm_sim import native_stationary as stationary
+    order, records = [], []
+
+    def run_window(prepared, control, windows, role, layer_ids, groups, origin, sample_id, **options):
+        order.append(role)
+        windows.append(role)
+        return {"role": role}
+
+    monkeypatch.setattr(stationary, "run_window", run_window)
+    monkeypatch.setattr(stationary, "window_terms", lambda *args, **kwargs: None)
+    monkeypatch.setattr(stationary, "_sample_roles", lambda inventory, layers: dict.fromkeys(
+        ("calibration", "holdout", "entry", "exit", "pd_import"), ["l"]))
+    monkeypatch.setattr(stationary, "_import_sets", lambda runtime, prepared, envelope: (
+        None, {"samples": []}, [(["r"], {"request_ids": ["r"]})]))
+    prepared = {"inventory": [], "boundary": {}, "record_layers": None, "origin": 0.}
+    samples = stationary._sample_windows(None, prepared, None, (1, 1), records, holdout_shift_ns=1.,
+                                         pd_concurrency_envelope=True)
+    assert order == ["exit", "calibration", "holdout", "entry", "pd_import"]
+    assert records == ["calibration", "holdout", "entry", "exit", "pd_import"]
+    assert list(samples["runs"]) == ["calibration", "holdout", "entry_at_holdout_origin", "exit_at_calibration_origin"]
+    assert samples["runs"]["exit_at_calibration_origin"] == {"role": "exit"}
+
+
 def test_the_sample_deadline_keeps_the_shared_windows():
     from heterollm_sim import native_stationary as stationary
     shards = object()

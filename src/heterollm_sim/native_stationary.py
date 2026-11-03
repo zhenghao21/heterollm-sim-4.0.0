@@ -759,12 +759,17 @@ def _sample_windows(runtime, prepared, control, layers, records, *, holdout_shif
                               prepared, layer_ids, entry=entry, exit=exit))
 
     first, second = prepared["origin"], prepared["origin"] + holdout_shift_ns
+    # The exit reaches the shared store's highest extent of all the runs and is
+    # among the shortest, so a too-small reservation restarts the samples after
+    # it, not after the long runs. The records keep the usual order.
+    exit_run = run("exit", roles["exit"], (suffix,), first, "exit-second", exit=True)
     runs = {"calibration": run("calibration", roles["calibration"], (prefix,), first, "calibration", entry=True),
             "holdout": run("holdout", roles["holdout"], (suffix,), second, "holdout", exit=True),
             # The cold ends again at the other origin.
             "entry_at_holdout_origin": run("entry", roles["entry"], (prefix,), second, "entry-second",
                                            entry=True),
-            "exit_at_calibration_origin": run("exit", roles["exit"], (suffix,), first, "exit-second", exit=True)}
+            "exit_at_calibration_origin": exit_run}
+    records[:4] = (*records[1:4], *records[:1])
     executor, imports, sets = _import_sets(runtime, prepared, pd_concurrency_envelope)
     for identities, row in sets:
         imports["samples"].append({**row,
