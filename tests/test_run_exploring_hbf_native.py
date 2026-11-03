@@ -1180,6 +1180,22 @@ def test_admission_fills_predicted_memory_and_uses_the_run_worker_limit(tmp_path
     assert run.admit(queue, {"a": active["a"]}, known, 1, tmp_path) == ([], 1)
 
 
+def test_a_candidate_the_memory_cannot_hold_lets_smaller_ones_pass(tmp_path, monkeypatch):
+    GiB = 2**30
+    case, small = run.case_matrix()[0], run.make_layout(2, 4, 1, 1)
+    known = [(run.parameters(case, LAYOUT, 100, "fast"), 30 * GiB, 0.),
+             (run.parameters(case, small, 100, "fast"), 4 * GiB, 0.)]
+    queue = [(case, LAYOUT, 100), (case, small, 100), (case, small, 100)]
+    monkeypatch.setattr(run, "available_memory_bytes", lambda: run.WORKER_MEMORY_RESERVE_BYTES + 10 * GiB)
+    active = {"a": _job(tmp_path, "a", factor=4, peak=1)}
+    chosen, _factor = run.admit(queue, active, known, 32, tmp_path)
+    assert [item for item, _peak, _processes in chosen] == queue[1:]
+    # With memory for it, the first in the queue goes first again.
+    monkeypatch.setattr(run, "available_memory_bytes", lambda: run.WORKER_MEMORY_RESERVE_BYTES + 32 * GiB)
+    chosen, _factor = run.admit(queue, active, known, 32, tmp_path)
+    assert [item for item, _peak, _processes in chosen] == queue[:1]
+
+
 def test_peak_prediction_prefers_the_same_layout_and_is_linear_in_the_batch():
     GiB = 2**30
     case, other = run.case_matrix()[0], run.make_layout(2, 4, 1, 1)
@@ -1191,6 +1207,15 @@ def test_peak_prediction_prefers_the_same_layout_and_is_linear_in_the_batch():
     assert run.predicted_peak_bytes(known[2:], case, other, 200) == 6 * GiB
     foreign = run.case_matrix()[-1]
     assert run.predicted_peak_bytes(known, foreign, LAYOUT, 1) == run.DEFAULT_CANDIDATE_PEAK_BYTES
+    # The same layout under other hardware says more than another layout under the same.
+    twin = next(row for row in run.case_matrix() if row["model"] == case["model"]
+                and row["workload"] == case["workload"] and row["hardware"] != case["hardware"])
+    assert run.predicted_peak_bytes(known, twin, other, 100) == 3 * GiB
+    # A candidate rejected before any window says nothing.
+    row = {"parameters": known[0][0], "peak_memory_bytes": GiB, "wall_seconds": 5.}
+    assert run.known_row(row) == (known[0][0], GiB, 5.)
+    assert run.known_row({**row, "physical_layer_summary": {"completed_windows": 0}}) is None
+    assert run.known_row({**row, "physical_layer_summary": {"completed_windows": 3}}) == (known[0][0], GiB, 5.)
 
 
 def test_summary_rows_drop_the_physical_ledgers_and_follow_newer_full_rows(tmp_path):

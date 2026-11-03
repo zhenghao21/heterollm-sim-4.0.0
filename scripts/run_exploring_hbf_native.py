@@ -1481,7 +1481,14 @@ def process_memory_bytes():
 
 
 def known_row(row):
-    """(parameters, peak memory of one process, wall of its windows in one process) of a saved candidate."""
+    """(parameters, peak memory of one process, wall of its windows in one process) of a saved candidate, or None.
+
+    A candidate rejected before its first window peaks at 0.2 GiB whatever its
+    batch, so it says nothing about what a point of its layout takes.
+    """
+    summary = row.get("physical_layer_summary")
+    if not _numeric(row.get("peak_memory_bytes")) or (summary and not summary["completed_windows"]):
+        return None
     shards = row.get("window_shards")
     return row["parameters"], row["peak_memory_bytes"], (
         shards["window_seconds"] if shards
@@ -1491,20 +1498,24 @@ def known_row(row):
 def known_peaks(directory):
     """``known_row`` of every saved candidate that measured its peak."""
     rows = (read_json(path) for path in sorted((Path(directory) / "summaries").glob("*.json")))
-    return [known_row(row) for row in rows if row and _numeric(row.get("peak_memory_bytes"))]
+    return [known for known in (known_row(row) for row in rows if row) if known]
 
 
 def predicted_peak_bytes(known, case, layout, batch):
     """A candidate's peak memory from measured peaks, linear in the batch.
 
-    Same model, hardware, workload and layout first, then model and
-    workload, then model; DEFAULT_CANDIDATE_PEAK_BYTES without any. Bounded
-    by PEAK_PREDICTION_CAP. It is the peak of each of the candidate's processes.
+    The most alike candidates of the model: the layout decides the most, so
+    hardware and workload go first; DEFAULT_CANDIDATE_PEAK_BYTES without any.
+    Bounded by PEAK_PREDICTION_CAP. It is the peak of each of the candidate's
+    processes.
     """
     params = {**case, **layout}
     cap = max(DEFAULT_CANDIDATE_PEAK_BYTES, PEAK_PREDICTION_CAP * max(
         (peak for row, peak, _wall in known if row.get("model") == params.get("model")), default=0.))
-    for keys in (("model", "hardware", "workload", *LAYOUT_KEYS, "microbatches"), ("model", "workload"), ("model",)):
+    layout_keys = (*LAYOUT_KEYS, "microbatches")
+    for keys in (("model", "hardware", "workload", *layout_keys), ("model", "workload", *layout_keys),
+                 ("model", "hardware", *layout_keys), ("model", *layout_keys), ("model", "tp", "pp", "ep"),
+                 ("model", "hardware", "workload"), ("model", "workload"), ("model",)):
         points = [(row["batch_size"], peak) for row, peak, _wall in known
                   if all(row.get(key, 1) == params.get(key, 1) for key in keys)]
         if not points:
@@ -1565,11 +1576,13 @@ def _working_set(directory, identity):
 
 
 def admit(queue, active, known, ceiling, directory, mode="fast"):
-    """The queue head(s) that fit memory, using the run's fixed wall factor K.
+    """The queued candidates that fit memory, using the run's fixed wall factor K.
 
-    Candidates start in queue order while their predicted peaks fit in the
-    free memory left by the reserve and by the running candidates' predicted
-    remaining growth.  The worker limit is the only concurrency limit and
+    In queue order, each candidate starts if its predicted peak fits in the
+    free memory left by the reserve, the running candidates' predicted
+    remaining growth and those starting before it. One that does not fit lets
+    later ones pass: the order across points decides no result, and it comes
+    first again when memory frees.  The worker limit is the only concurrency limit and
     counts processes; with nothing running one candidate always starts, even
     if its prediction is larger than the available memory. Only once the whole
     queue has started do the fast candidates starting now get more processes for
@@ -1588,7 +1601,7 @@ def admit(queue, active, known, ceiling, directory, mode="fast"):
             break
         peak = predicted_peak_bytes(known, *item)
         if (active or chosen) and peak > free:
-            break
+            continue
         chosen.append((item, peak))
         free -= peak
     slots, started = ceiling - busy - len(chosen), []
@@ -1854,7 +1867,7 @@ def run_manager(directory=DEFAULT_DIRECTORY, *, layout=CONTROL_LAYOUT, batches=(
                 changed = True
                 case, batch = job["case"], job["batch"]
                 row = _settle_candidate(directory, case, layout, batch, code, mode)
-                if _numeric(row.get("peak_memory_bytes")):
+                if known_row(row):
                     known.append(known_row(row))
                 write_case_point(directory, case, layout, batches, mode)
                 if row["status"] == "failed" or (code not in (0,) and not job.get("process_watchdog")):
@@ -2076,7 +2089,7 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
                 del active[identity]
                 changed = True
                 row = _settle_candidate(directory, job["case"], job["layout"], job["batch"], code, mode)
-                if _numeric(row.get("peak_memory_bytes")):
+                if known_row(row):
                     known.append(known_row(row))
                 if row["status"] == "failed" or (code not in (0,) and not job.get("process_watchdog")):
                     error = row.get("error") or f"worker exit {code}"
