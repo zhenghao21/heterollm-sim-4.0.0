@@ -537,11 +537,11 @@ def test_peak_prediction_stays_within_the_measured_peaks():
     row = {**case, **layout}
     gib = 2**30
     # A steep line across two batches would predict about 100 GiB at B1000.
-    known = [({**row, "batch_size": 10}, 1. * gib), ({**row, "batch_size": 20}, 2. * gib)]
+    known = [({**row, "batch_size": 10}, 1. * gib, 0.), ({**row, "batch_size": 20}, 2. * gib, 0.)]
     assert run.predicted_peak_bytes(known, case, layout, 15) == pytest.approx(1.5 * gib)
     assert run.predicted_peak_bytes(known, case, layout, 1000) == run.DEFAULT_CANDIDATE_PEAK_BYTES
     other = {**row, "tp": 4, "dp": 2, "batch_size": 100}
-    known.append((other, 20. * gib))
+    known.append((other, 20. * gib, 0.))
     assert run.predicted_peak_bytes(known, case, layout, 1000) == pytest.approx(30. * gib)
 
 
@@ -913,7 +913,13 @@ def test_each_candidate_gets_its_own_worker_command_that_main_parses_back(tmp_pa
     seen = []
     monkeypatch.setattr(run, "worker_candidate", lambda *args: seen.append(args) or 0)
     assert run.main(command[2:]) == 0
-    assert seen == [(case, layout, 4, tmp_path, "fast", 3)]
+    assert seen == [(case, layout, 4, tmp_path, "fast", 3, 1)]
+    assert run.main(run.candidate_command(case, layout, 4, tmp_path, "fast", 3, 2)[2:]) == 0
+    assert seen[-1] == (case, layout, 4, tmp_path, "fast", 3, 2)
+    monkeypatch.setattr(run, "worker_window_helper", lambda *args: seen.append(args) or 0)
+    store = tmp_path / "store"
+    assert run.main([*command[2:], "--window-helper", str(store), "--import-pool", "7"]) == 0
+    assert seen[-1] == (case, layout, 4, tmp_path, store, 7)
 
 
 def test_manager_spawns_one_process_per_candidate_and_writes_the_per_gpu_selection(tmp_path, monkeypatch):
@@ -1147,7 +1153,7 @@ def _job(directory, identity, *, factor, peak, working_set=None):
     if working_set is not None:
         run.write_json(directory / "progress" / (identity + ".json"),
                        {"candidate_id": identity, "working_set_bytes": working_set})
-    return {"process": NS(pid=1), "factor": factor, "peak": peak}
+    return {"process": NS(pid=1), "factor": factor, "peak": peak, "processes": 1}
 
 
 def test_admission_fills_predicted_memory_and_uses_the_run_worker_limit(tmp_path, monkeypatch):
@@ -1157,14 +1163,14 @@ def test_admission_fills_predicted_memory_and_uses_the_run_worker_limit(tmp_path
     monkeypatch.setattr(run, "available_memory_bytes", lambda: 8 * GiB + 40 * GiB)
     # Without measured peaks each candidate counts DEFAULT_CANDIDATE_PEAK_BYTES (16 GiB).
     chosen, factor = run.admit(queue, {}, [], 32, tmp_path)
-    assert [item for item, _peak in chosen] == queue[:2] and factor == 32
+    assert [item for item, _peak, _processes in chosen] == queue[:2] and factor == 32
     # Nothing running: one candidate always starts, however large.
     monkeypatch.setattr(run, "available_memory_bytes", lambda: 0)
-    assert run.admit(queue, {}, [], 32, tmp_path) == ([(queue[0], 16 * GiB)], 32)
+    assert run.admit(queue, {}, [], 32, tmp_path) == ([(queue[0], 16 * GiB, 1)], 32)
     # A running candidate's remaining predicted growth is reserved; what it
     # already uses is already missing from the available memory.
     monkeypatch.setattr(run, "available_memory_bytes", lambda: 8 * GiB + 20 * GiB)
-    known = [(run.parameters(case, LAYOUT, 100, "fast"), 4 * GiB)]
+    known = [(run.parameters(case, LAYOUT, 100, "fast"), 4 * GiB, 0.)]
     active = {"a": _job(tmp_path, "a", factor=4, peak=10 * GiB, working_set=8 * GiB)}
     chosen, factor = run.admit(queue, active, known, 32, tmp_path)
     assert len(chosen) == 4 and factor == 32
@@ -1177,8 +1183,9 @@ def test_admission_fills_predicted_memory_and_uses_the_run_worker_limit(tmp_path
 def test_peak_prediction_prefers_the_same_layout_and_is_linear_in_the_batch():
     GiB = 2**30
     case, other = run.case_matrix()[0], run.make_layout(2, 4, 1, 1)
-    known = [(run.parameters(case, LAYOUT, 100, "fast"), 6 * GiB), (run.parameters(case, LAYOUT, 300, "fast"), 8 * GiB),
-             (run.parameters(case, other, 100, "fast"), 3 * GiB)]
+    known = [(run.parameters(case, LAYOUT, 100, "fast"), 6 * GiB, 0.),
+             (run.parameters(case, LAYOUT, 300, "fast"), 8 * GiB, 0.),
+             (run.parameters(case, other, 100, "fast"), 3 * GiB, 0.)]
     assert run.predicted_peak_bytes(known, case, LAYOUT, 500) == pytest.approx(10 * GiB)
     assert run.predicted_peak_bytes(known, case, LAYOUT, 1) == 6 * GiB - .99 * GiB
     assert run.predicted_peak_bytes(known[2:], case, other, 200) == 6 * GiB

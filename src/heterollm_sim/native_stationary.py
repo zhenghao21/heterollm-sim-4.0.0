@@ -405,6 +405,26 @@ def _staging_underestimated(before, after):
                for rank, row in after.items() if rank in before)
 
 
+def _reservation_exceeded(prepared, peaks):
+    """Whether ``peaks`` (owner -> bytes) reach an extent the store reservation does not cover."""
+    reserved = prepared.get("page_staging_occupancy")
+    return bool(reserved) and _staging_underestimated(reserved, page_staging_occupancy(
+        prepared["staging_runtime"], prepared["cohort"], peaks))
+
+
+def _window_record(prepared, control, sample_id, execute):
+    """The run of window ``sample_id``, ``execute(control)`` in one process.
+
+    With the point's windows shared over processes, its saved run, or None
+    while this process only goes through the list running windows.
+    """
+    shards = prepared.get("window_shards")
+    if shards is None:
+        return execute(control)
+    return shards.window(sample_id, control, execute, lambda record: _reservation_exceeded(
+        prepared, (record["physical_observations"] or {}).get("allocator_peak_end_bytes", {})))
+
+
 def _import_pool_occupancy(runtime, degree):
     """Prepared imports (in flight or ready) held for each ep group."""
     held = (*runtime._external_pending, *runtime._external_ready)
@@ -668,17 +688,19 @@ def run_window(prepared, control, records, role, layer_ids, groups, origin, samp
     """Run ``groups`` and the tasks of ``layer_ids`` on a copy of the source; record the sample.
 
     The finished run is appended to ``records`` at once, so a wall limit in
-    a later run keeps the physical samples already taken.
+    a later run keeps the physical samples already taken. A run past the store
+    reservation stops the samples at once.
     """
     control.raise_if_cancelled()
     by_layer, cohort = prepared["by_layer"], prepared["cohort"]
     ids = [identity for group in groups for identity in group] + [
         identity for layer in layer_ids for identity in by_layer[layer]]
-    record = _execute_staged_window(prepared, prepared["specs"], ids, origin_ns=origin,
-                                    control=control, sample_id=sample_id, concurrent_imports=imports,
-                                    row_terms=row_terms,
-                                    **({"tp_symmetry": prepared["tp_symmetry"]}
-                                       if "tp_symmetry" in prepared else {}))
+    record = _window_record(prepared, control, sample_id, lambda window_control: _execute_staged_window(
+        prepared, prepared["specs"], ids, origin_ns=origin, control=window_control, sample_id=sample_id,
+        concurrent_imports=imports, row_terms=row_terms,
+        **({"tp_symmetry": prepared["tp_symmetry"]} if "tp_symmetry" in prepared else {})))
+    if record is None:
+        return {}
     row = {"layer_ids": layer_ids, "origin_ns": origin, **{key: record[key] for key in _RUN_FIELDS}}
     records.append(NativeLayerWindowSample(window_id=row["sample_id"], role=role,
         cohort_id=cohort.cohort_id, cohort_kind=cohort.kind, decode_step=0,
@@ -691,6 +713,8 @@ def run_window(prepared, control, records, role, layer_ids, groups, origin, samp
     control.report("native_stationary_sample", len(records), unit="work_units",
         message="原生层样本已保存，不计完整批次或输出词元",
         metadata={"sample_id": row["sample_id"], "role": role, "executed_tasks": row["task_count"]})
+    if _reservation_exceeded(prepared, _window_peaks(records)):
+        raise _StagingUnderestimated
     return row
 
 
@@ -701,9 +725,21 @@ def sample_stationary(runtime, prepared, control, layers, records, *, holdout_sh
     Each finished run is appended to ``records`` at once, so a wall limit
     in a later run keeps the physical samples already taken.
     """
-    if "pipeline" in prepared:
-        return _sample_pipeline(runtime, prepared, control, records, holdout_shift_ns=holdout_shift_ns,
-                                pd_concurrency_envelope=pd_concurrency_envelope)
+    prepared["staging_runtime"] = runtime
+
+    def sample(windows):
+        if "pipeline" in prepared:
+            return _sample_pipeline(runtime, prepared, control, windows, holdout_shift_ns=holdout_shift_ns,
+                                    pd_concurrency_envelope=pd_concurrency_envelope)
+        return _sample_windows(runtime, prepared, control, layers, windows, holdout_shift_ns=holdout_shift_ns,
+                               pd_concurrency_envelope=pd_concurrency_envelope)
+
+    shards = prepared.get("window_shards")
+    return sample(records) if shards is None else shards.sample(prepared, control, sample, records)
+
+
+def _sample_windows(runtime, prepared, control, layers, records, *, holdout_shift_ns, pd_concurrency_envelope):
+    """The step samples of a replica without pipeline stages."""
     started = time.perf_counter()
     calibration, holdout = layers
     inventory, boundary = prepared["inventory"], prepared["boundary"]
@@ -718,14 +754,9 @@ def sample_stationary(runtime, prepared, control, layers, records, *, holdout_sh
     prefix, suffix = boundary.get("before_first_layer", []), boundary.get("after_last_layer", [])
 
     def run(role, layer_ids, groups, origin, tag, imports=None, entry=False, exit=False):
-        row = run_window(prepared, control, records, role, layer_ids, groups, origin, "stationary-" + tag,
-                         imports=imports, row_terms=None if imports else window_terms(
-                             prepared, layer_ids, entry=entry, exit=exit))
-        reserved = prepared.get("page_staging_occupancy")
-        if reserved and _staging_underestimated(reserved, page_staging_occupancy(
-                runtime, prepared["cohort"], _window_peaks(records))):
-            raise _StagingUnderestimated
-        return row
+        return run_window(prepared, control, records, role, layer_ids, groups, origin, "stationary-" + tag,
+                          imports=imports, row_terms=None if imports else window_terms(
+                              prepared, layer_ids, entry=entry, exit=exit))
 
     first, second = prepared["origin"], prepared["origin"] + holdout_shift_ns
     runs = {"calibration": run("calibration", roles["calibration"], (prefix,), first, "calibration", entry=True),
@@ -803,7 +834,7 @@ def _pipeline_window(prepared, control, records, role, keys, origin, sample_id, 
     (0, 0)); holdout and exit roles run its suffix, and exit roles also its
     outgoing activation transfer and, on the last stage, the microbatch's
     CPU commit. ``layers`` maps a block to the layers it runs instead of its
-    role's.
+    role's. A run past the store reservation stops the samples at once.
     """
     control.raise_if_cancelled()
     pipeline = prepared["pipeline"]
@@ -830,10 +861,13 @@ def _pipeline_window(prepared, control, records, role, keys, origin, sample_id, 
                 for identity, task in block["detached"].items()}
     wanted = frozenset(ids)
     specs = [detached.get(task.task_id, task) for task in prepared["specs"] if task.task_id in wanted]
-    record = _execute_staged_window(
-        prepared, specs, ids, origin_ns=origin, control=control, sample_id=sample_id, concurrent_imports=imports,
-        row_terms=None if imports else terms,
-        **({"tp_symmetry": prepared["tp_symmetry"]} if "tp_symmetry" in prepared else {}))
+    record = _window_record(prepared, control, sample_id, lambda window_control: _execute_staged_window(
+        prepared, specs, ids, origin_ns=origin, control=window_control, sample_id=sample_id,
+        concurrent_imports=imports, row_terms=None if imports else terms,
+        **({"tp_symmetry": prepared["tp_symmetry"]} if "tp_symmetry" in prepared else {})))
+    if record is None:
+        return {"sample_id": sample_id, "views": {}, "wall_seconds": 0., "task_count": 0,
+                "concurrent_imports": None, "start_ns": 0., "end_ns": 0.}
     cohort = prepared["cohort"]
     records.append(NativeLayerWindowSample(window_id=record["sample_id"], role=role,
         cohort_id=cohort.cohort_id, cohort_kind=cohort.kind, decode_step=0,
@@ -845,6 +879,8 @@ def _pipeline_window(prepared, control, records, role, keys, origin, sample_id, 
     control.report("native_stationary_sample", len(records), unit="work_units",
         message="原生层样本已保存，不计完整批次或输出词元",
         metadata={"sample_id": record["sample_id"], "role": role, "executed_tasks": record["task_count"]})
+    if _reservation_exceeded(prepared, _window_peaks(records)):
+        raise _StagingUnderestimated
     access, ends = record["first_access_ns"] or {}, record["stage_completion_ns"]
     views = {}
     for key, block, layer_ids, mark in members:
@@ -1654,9 +1690,7 @@ def deadline_control(control, deadline):
         # Native file/deadline checks cannot edit a physical calendar; keep
         # them native so PD phases avoid the unknown-callback rollback path.
         deadlines = [value for value in (deadline, control.deadline_monotonic) if value is not None]
-        return ExecutionControl(progress_callback=control.progress_callback,
-            progress_queue=control.progress_queue, stop_request_path=control.stop_request_path,
-            deadline_monotonic=min(deadlines, default=None))
+        return replace(control, deadline_monotonic=min(deadlines, default=None))
 
     def cancel():
         control.raise_if_cancelled()
@@ -1724,6 +1758,7 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
             else:
                 raise RuntimeError("native stationary sampling unexpectedly committed an ordinary cohort")
             prepared["tp_symmetry"] = (scenario, options.tp_rank_symmetry)
+            prepared["window_shards"] = sample_control.window_shards
             diagnostics["physical_admission_cutoff_ns"] = runtime.now
             diagnostics.update(kv_block_admission(runtime))
             admission = admission_reasons(runtime, prepared)

@@ -30,6 +30,7 @@ import math
 import os
 from pathlib import Path
 from queue import Empty, SimpleQueue
+import shutil
 import statistics
 import subprocess
 import sys
@@ -97,6 +98,11 @@ DEFAULT_CANDIDATE_PEAK_BYTES = 16*1024**3
 # for a point that peaked at 1.9 GiB, and held 20 worker slots idle, while none
 # of 560 measured peaks passed 14.4 GiB.
 PEAK_PREDICTION_CAP = 1.5
+# A candidate's windows take one more process at each of these walls in one
+# process; see window_processes.
+WINDOW_PROCESS_WALLS = (600., 1800., 3600.)
+# A helper ends as soon as its stdin closes, unless it is hung.
+WINDOW_HELPER_EXIT_SECONDS = 10.
 STATUS_LABELS = {"pending": "等待", "running": "运行中", "completed": "完成",
     "completed_with_rejections": "结束（含拒绝）", "all_candidates_rejected": "候选均被拒绝",
     "capacity_rejected": "容量拒绝", "slo_rejected": "TPOT约束拒绝", "forecast_rejected": "预测预算拒绝", "paused": "暂停", "failed": "失败"}
@@ -965,10 +971,95 @@ def with_prefill_ttft(row, params, prefill):
                        mean_complete_request_ttft_ns=value + metrics["mean_complete_request_ingress_ttft_ns"])
 
 
-def execute_candidate(params, directory, progress, *, builder=None, runner=None, prefill=None, wall_factor=1):
+def candidate_scenario(params, import_pool, max_wall_seconds, builder=None):
+    """The candidate's scenario; a fast one samples under this wall limit."""
+    from exploring_hbf_native_config import build_native_comparison_scenario, native_fast_window_options
+    scenario = (builder or build_native_comparison_scenario)(params["model"], params["hardware"],
+        params["workload"], batch_size=params["batch_size"], tp=params["tp"], pp=params["pp"],
+        ep=params["ep"],
+        **({"pipeline_microbatches": params["microbatches"]} if params.get("microbatches", 1) != 1 else {}),
+        **({} if import_pool is None else {"import_pool": import_pool}))
+    if params.get("simulation_mode") != "fast":
+        return scenario
+    from heterollm_sim.simulation_options import SimulationConfig
+    options = native_fast_window_options(params["model"], params["hardware"],
+        params["workload"], tp=params["tp"], pp=params["pp"], ep=params["ep"],
+        max_wall_seconds=max_wall_seconds)
+    return replace(scenario, simulation=SimulationConfig(mode="fast", native_window=options),
+        assumptions=native_fast_assumptions(scenario))
+
+
+@contextlib.contextmanager
+def window_helpers(params, directory, import_pool, processes, control, row):
+    """``control`` with the candidate's windows shared with ``processes`` - 1 helpers.
+
+    A helper repeats the candidate's setup and ends when its stdin closes, so it
+    cannot outlive this process, however that ends; the store holds only one
+    attempt's runs. The row keeps what the shared windows cost.
+    """
+    if processes == 1:
+        yield control
+        return
+    from heterollm_sim.native_window_shards import WindowShards
+    identity = params_candidate_id(params)
+    directory = Path(directory).resolve()
+    store = window_store(directory, identity)
+    shutil.rmtree(store, ignore_errors=True)
+    store.mkdir(parents=True)
+    shards = WindowShards(store, alive=pid_alive)
+    (directory / "logs").mkdir(parents=True, exist_ok=True)
+    command = [*candidate_command(params, params_layout(params), params["batch_size"], directory, "fast"),
+               "--window-helper", str(store),
+               *(() if import_pool is None else ("--import-pool", str(import_pool)))]
+    helpers = []
+    try:
+        for index in range(1, processes):
+            with (directory / "logs" / f"{identity}.helper{index}.log").open("a", encoding="utf-8") as log:
+                helpers.append(subprocess.Popen(command, cwd=ROOT, stdin=subprocess.PIPE, stdout=log, stderr=log,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0))
+        yield replace(control, window_shards=shards)
+    finally:
+        for helper in helpers:
+            helper.stdin.close()
+        for helper in helpers:
+            try:
+                helper.wait(timeout=WINDOW_HELPER_EXIT_SECONDS)
+            except subprocess.TimeoutExpired:
+                _kill_worker_tree(helper)
+        shutil.rmtree(store, ignore_errors=True)
+        row["window_shards"] = {"processes": processes, "lost_windows": shards.lost,
+                                "window_seconds": shards.window_seconds,
+                                "helper_exit_codes": [helper.poll() for helper in helpers]}
+
+
+def worker_window_helper(case, layout, batch, directory, store, import_pool):
+    """Run a candidate's shared windows beside its primary, until that closes our stdin."""
+    from heterollm_sim.execution_control import ExecutionCancelledError, ExecutionControl
+    from heterollm_sim.native_window_shards import WindowShards
+    from heterollm_sim.reporting import run_scenario
+
+    def exit_with_primary():
+        try:
+            os.read(sys.stdin.fileno(), 1)
+        finally:
+            os._exit(0)
+
+    threading.Thread(target=exit_with_primary, daemon=True).start()
+    params = parameters(case, layout, batch, "fast")
+    budget = params["candidate_wall_budget_seconds_per_worker"]
+    control = ExecutionControl(stop_request_path=Path(directory) / "stop.request",
+        deadline_monotonic=time.perf_counter() + budget, window_shards=WindowShards(store, helper=True))
+    try:
+        run_scenario(candidate_scenario(params, import_pool, budget), retention_policy="aggregate", control=control)
+    except ExecutionCancelledError:
+        pass
+    return 0
+
+
+def execute_candidate(params, directory, progress, *, builder=None, runner=None, prefill=None, wall_factor=1,
+                      window_processes=1):
     """Run one candidate; a fast one within its per-worker caps times K."""
     from heterollm_sim.execution_control import ExecutionControl, ExecutionCancelledError
-    from exploring_hbf_native_config import build_native_comparison_scenario, native_fast_window_options
     from heterollm_sim.reporting import run_scenario
     directory = Path(directory)
     started = time.perf_counter()
@@ -992,25 +1083,16 @@ def execute_candidate(params, directory, progress, *, builder=None, runner=None,
         control.raise_if_cancelled()
 
         def attempt(import_pool):
-            scenario = (builder or build_native_comparison_scenario)(params["model"], params["hardware"],
-                params["workload"], batch_size=params["batch_size"], tp=params["tp"], pp=params["pp"],
-                ep=params["ep"],
-                **({"pipeline_microbatches": params["microbatches"]} if params.get("microbatches", 1) != 1 else {}),
-                **({} if import_pool is None else {"import_pool": import_pool}))
+            remaining = budget - (time.perf_counter() - started) if fast else None
+            if fast and remaining <= 0:
+                raise NativeFastWallBudgetError("native candidate construction exhausted the wall budget")
+            scenario = candidate_scenario(params, import_pool, remaining, builder)
             if fast:
-                from heterollm_sim.simulation_options import SimulationConfig
-                remaining = budget - (time.perf_counter() - started)
-                if remaining <= 0:
-                    raise NativeFastWallBudgetError("native candidate construction exhausted the wall budget")
-                options = native_fast_window_options(params["model"], params["hardware"],
-                    params["workload"], tp=params["tp"], pp=params["pp"], ep=params["ep"],
-                    max_wall_seconds=remaining)
-                scenario = replace(scenario, simulation=SimulationConfig(mode="fast", native_window=options),
-                    assumptions=native_fast_assumptions(scenario))
-                row["sampling_options"] = asdict(options)
+                row["sampling_options"] = asdict(scenario.simulation.native_window)
             write_json(directory / "configurations" / (row["candidate_id"] + ".json"), scenario)
             control.raise_if_cancelled()
-            result = (runner or run_scenario)(scenario, retention_policy="aggregate", control=control)
+            with window_helpers(params, directory, import_pool, window_processes, control, row) as window_control:
+                result = (runner or run_scenario)(scenario, retention_policy="aggregate", control=window_control)
             try:
                 control.raise_if_cancelled()
             except NativeFastWallBudgetError:
@@ -1123,7 +1205,7 @@ def select_case(case, planned, rows, mode="detailed"):
             if mode == "fast" else "highest measured passing per-GPU throughput among the explicitly executed (DP, TP, PP, EP) layout and per-replica batch candidates; not a global optimum or maximum feasible batch")}
 
 
-def worker_candidate(case, layout, batch, directory, mode="detailed", wall_factor=1):
+def worker_candidate(case, layout, batch, directory, mode="detailed", wall_factor=1, window_processes=1):
     """Run or reuse exactly one candidate in this process; the manager owns the case point."""
     directory = Path(directory)
     params = parameters(case, layout, batch, mode)
@@ -1139,7 +1221,8 @@ def worker_candidate(case, layout, batch, directory, mode="detailed", wall_facto
         if row is None:
             progress.begin_candidate(params)
             progress.publish()
-            row = execute_candidate(params, directory, progress, wall_factor=wall_factor)
+            row = execute_candidate(params, directory, progress, wall_factor=wall_factor,
+                                    window_processes=window_processes)
             usage = process_memory_bytes()
             # The search predicts later candidates' memory from this peak.
             row["peak_memory_bytes"] = usage[1] if usage else None
@@ -1397,11 +1480,18 @@ def process_memory_bytes():
     return counters.working_set, counters.peak_working_set
 
 
+def known_row(row):
+    """(parameters, peak memory of one process, wall of its windows in one process) of a saved candidate."""
+    shards = row.get("window_shards")
+    return row["parameters"], row["peak_memory_bytes"], (
+        shards["window_seconds"] if shards
+        else max(0., (row.get("wall_seconds") or 0.) - (row.get("prefill_wall_seconds") or 0.)))
+
+
 def known_peaks(directory):
-    """(parameters, peak memory) of every saved candidate that measured its peak."""
+    """``known_row`` of every saved candidate that measured its peak."""
     rows = (read_json(path) for path in sorted((Path(directory) / "summaries").glob("*.json")))
-    return [(row["parameters"], row["peak_memory_bytes"]) for row in rows
-            if row and _numeric(row.get("peak_memory_bytes"))]
+    return [known_row(row) for row in rows if row and _numeric(row.get("peak_memory_bytes"))]
 
 
 def predicted_peak_bytes(known, case, layout, batch):
@@ -1409,13 +1499,13 @@ def predicted_peak_bytes(known, case, layout, batch):
 
     Same model, hardware, workload and layout first, then model and
     workload, then model; DEFAULT_CANDIDATE_PEAK_BYTES without any. Bounded
-    by PEAK_PREDICTION_CAP.
+    by PEAK_PREDICTION_CAP. It is the peak of each of the candidate's processes.
     """
     params = {**case, **layout}
     cap = max(DEFAULT_CANDIDATE_PEAK_BYTES, PEAK_PREDICTION_CAP * max(
-        (peak for row, peak in known if row.get("model") == params.get("model")), default=0.))
+        (peak for row, peak, _wall in known if row.get("model") == params.get("model")), default=0.))
     for keys in (("model", "hardware", "workload", *LAYOUT_KEYS, "microbatches"), ("model", "workload"), ("model",)):
-        points = [(row["batch_size"], peak) for row, peak in known
+        points = [(row["batch_size"], peak) for row, peak, _wall in known
                   if all(row.get(key, 1) == params.get(key, 1) for key in keys)]
         if not points:
             continue
@@ -1425,6 +1515,37 @@ def predicted_peak_bytes(known, case, layout, batch):
         floor = max((peak for b, peak in points if b <= batch), default=0.)
         return min(cap, max(intercept + max(0., slope) * batch, floor))
     return DEFAULT_CANDIDATE_PEAK_BYTES
+
+
+def predicted_wall_seconds(known, case, layout, batch):
+    """A candidate's window wall in one process, 0 without a measured point.
+
+    Linear in the batch from the largest measured point of the same model,
+    hardware and workload, of the same layout first. It only sizes the
+    candidate's processes, which decide no result.
+    """
+    params = {**case, **layout}
+    point = ("model", "hardware", "workload")
+    for keys in ((*point, *LAYOUT_KEYS, "microbatches"), point):
+        points = [(row["batch_size"], wall) for row, _peak, wall in known
+                  if wall > 0. and all(row.get(key, 1) == params.get(key, 1) for key in keys)]
+        if points:
+            largest, wall = max(points)
+            return wall * batch / largest
+    return 0.
+
+
+def window_processes(wall, slots, free, peak):
+    """Processes to run one candidate's windows, given ``wall`` seconds of them in one process.
+
+    Every process repeats the setup and holds the candidate's whole ``peak``
+    until it ends, which a short point does not earn back, and the largest window
+    bounds the gain, so WINDOW_PROCESS_WALLS sets how many are worth having (at most
+    4). The helpers take at most half of the free ``slots`` and half of the ``free``
+    memory, so that the candidates the search starts next still find both.
+    """
+    wanted = 1 + sum(wall >= limit for limit in WINDOW_PROCESS_WALLS)
+    return max(1, min(wanted, 1 + slots // 2, 1 + int(free / 2 // max(peak, 1.))))
 
 
 def worker_ceiling(workers):
@@ -1443,49 +1564,61 @@ def _working_set(directory, identity):
     return usage if _numeric(usage) else 0
 
 
-def admit(queue, active, known, ceiling, directory):
+def admit(queue, active, known, ceiling, directory, mode="fast"):
     """The queue head(s) that fit memory, using the run's fixed wall factor K.
 
     Candidates start in queue order while their predicted peaks fit in the
     free memory left by the reserve and by the running candidates' predicted
-    remaining growth.  The worker limit is the only concurrency limit; with
-    nothing running one candidate always starts, even if its prediction is
-    larger than the available memory.
+    remaining growth.  The worker limit is the only concurrency limit and
+    counts processes; with nothing running one candidate always starts, even
+    if its prediction is larger than the available memory. Only once the whole
+    queue has started do the fast candidates starting now get more processes for
+    their windows: each comes with the predicted peak of all its processes and
+    their number.
     """
-    if len(active) >= ceiling:
+    busy = sum(job["processes"] for job in active.values())
+    if busy >= ceiling:
         return [], ceiling
     free = available_memory_bytes() - WORKER_MEMORY_RESERVE_BYTES
     for identity, job in active.items():
-        free -= max(0, job["peak"] - _working_set(directory, identity))
+        free -= max(0, job["peak"] - job["processes"] * _working_set(directory, identity))
     chosen = []
     for item in queue:
-        if len(active) + len(chosen) >= ceiling:
+        if busy + len(chosen) >= ceiling:
             break
         peak = predicted_peak_bytes(known, *item)
         if (active or chosen) and peak > free:
             break
         chosen.append((item, peak))
         free -= peak
-    return chosen, ceiling
+    slots, started = ceiling - busy - len(chosen), []
+    for item, peak in chosen:
+        processes = (window_processes(predicted_wall_seconds(known, *item), slots, free, peak)
+                     if mode == "fast" and len(chosen) == len(queue) else 1)
+        slots -= processes - 1
+        free -= (processes - 1) * peak
+        started.append((item, processes * peak, processes))
+    return started, ceiling
 
 
 def _start(queue, active, known, ceiling, directory, mode, spawn):
     """Start the admitted head of ``queue`` of (case, layout, batch) items."""
-    chosen, factor = admit(queue, active, known, ceiling, directory)
-    for item, peak in chosen:
+    chosen, factor = admit(queue, active, known, ceiling, directory, mode)
+    for item, peak, processes in chosen:
         queue.remove(item)
         case, layout, batch = item
         budget = (parameters(case, layout, batch, mode)["candidate_wall_budget_seconds_per_worker"]
                   if mode == "fast" else None)
         started = time.perf_counter()
-        # The kernel's outcome does not depend on the thread count: a new worker
-        # takes its share of the logical cores among those running now, up to
-        # the kernel's limit.
-        threads = max(1, min(8, MAX_WORKERS // (len(active) + 1)))
+        # The kernel's outcome does not depend on the thread count: each process of
+        # a new worker takes its share of the logical cores among those running now,
+        # up to the kernel's limit.
+        threads = max(1, min(8, MAX_WORKERS // (sum(job["processes"] for job in active.values()) + processes)))
         process = (spawn(case, layout, batch, directory) if spawn
-                   else _spawn(case, layout, batch, directory, mode, factor, threads))
+                   else _spawn(case, layout, batch, directory, mode, factor, threads, processes))
         active[candidate_id(case, layout, batch)] = {"process": process, "case": case, "layout": layout,
                                                      "batch": batch, "factor": factor, "peak": peak,
+                                                     "processes": processes,
                                                      "hbm_channel_threads": threads,
                                                      "started_monotonic": started,
                                                      "candidate_wall_budget_seconds": budget,
@@ -1501,14 +1634,19 @@ def checked_directory(directory):
     return directory
 
 
-def candidate_command(case, layout, batch, directory, mode="detailed", wall_factor=1):
+def candidate_command(case, layout, batch, directory, mode="detailed", wall_factor=1, processes=1):
     return [sys.executable, str(Path(__file__).resolve()), "--worker-case-id", case["case_id"],
             "--layout", *(str(layout[key]) for key in LAYOUT_KEYS), "--batch-size", str(batch),
             *(["--microbatches", str(layout["microbatches"])] if layout.get("microbatches", 1) != 1 else []),
-            "--mode", mode, "--directory", str(directory), "--wall-factor", str(wall_factor)]
+            "--mode", mode, "--directory", str(directory), "--wall-factor", str(wall_factor),
+            *(["--window-processes", str(processes)] if processes != 1 else [])]
 
 
-def _spawn(case, layout, batch, directory, mode="detailed", wall_factor=1, threads=1):
+def window_store(directory, identity):
+    return Path(directory) / "window_store" / identity
+
+
+def _spawn(case, layout, batch, directory, mode="detailed", wall_factor=1, threads=1, processes=1):
     """One fresh subprocess per candidate: a candidate's heap never fragments the next one's."""
     directory = checked_directory(directory)
     log = directory / "logs" / (params_candidate_id(parameters(case, layout, batch, mode)) + ".log")
@@ -1516,8 +1654,8 @@ def _spawn(case, layout, batch, directory, mode="detailed", wall_factor=1, threa
     env = {**os.environ, "HETEROLLM_HBM_CHANNEL_THREADS": str(threads),
            "PYTHONFAULTHANDLER": "1"}
     with log.open("a", encoding="utf-8") as stdout, log.with_suffix(".err.log").open("a", encoding="utf-8") as stderr:
-        return subprocess.Popen(candidate_command(case, layout, batch, directory, mode, wall_factor), cwd=ROOT,
-            stdout=stdout, stderr=stderr, env=env,
+        return subprocess.Popen(candidate_command(case, layout, batch, directory, mode, wall_factor, processes),
+            cwd=ROOT, stdout=stdout, stderr=stderr, env=env,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
 
 
@@ -1621,6 +1759,8 @@ def _settle_candidate(directory, case, layout, batch, code, mode):
     """The saved row of an exited worker; a worker that left none has failed."""
     params = parameters(case, layout, batch, mode)
     identity = params_candidate_id(params)
+    # Only a killed worker leaves its windows behind.
+    shutil.rmtree(window_store(directory, identity), ignore_errors=True)
     row = read_candidate(directory, identity)
     if row is not None and not parameters_compatible(row.get("parameters"), params):
         raise RuntimeError("saved candidate parameters differ; historical results cannot be relabeled")
@@ -1641,7 +1781,7 @@ def _saved_terminal(directory, case, layout, batch, mode):
 def _jobs(active):
     return [{"case_id": job["case"]["case_id"], "candidate_id": key, "launcher_pid": job["process"].pid,
              "wall_factor": job["factor"], "worker_limit": job["factor"],
-             "hbm_channel_threads": job["hbm_channel_threads"],
+             "hbm_channel_threads": job["hbm_channel_threads"], "window_processes": job["processes"],
              "predicted_peak_bytes": job["peak"]} for key, job in active.items()]
 
 
@@ -1715,7 +1855,7 @@ def run_manager(directory=DEFAULT_DIRECTORY, *, layout=CONTROL_LAYOUT, batches=(
                 case, batch = job["case"], job["batch"]
                 row = _settle_candidate(directory, case, layout, batch, code, mode)
                 if _numeric(row.get("peak_memory_bytes")):
-                    known.append((row["parameters"], row["peak_memory_bytes"]))
+                    known.append(known_row(row))
                 write_case_point(directory, case, layout, batches, mode)
                 if row["status"] == "failed" or (code not in (0,) and not job.get("process_watchdog")):
                     error = row.get("error") or f"worker exit {code}"
@@ -1937,7 +2077,7 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
                 changed = True
                 row = _settle_candidate(directory, job["case"], job["layout"], job["batch"], code, mode)
                 if _numeric(row.get("peak_memory_bytes")):
-                    known.append((row["parameters"], row["peak_memory_bytes"]))
+                    known.append(known_row(row))
                 if row["status"] == "failed" or (code not in (0,) and not job.get("process_watchdog")):
                     error = row.get("error") or f"worker exit {code}"
                     if not (directory / "stop.request").exists():
@@ -1994,6 +2134,9 @@ def main(argv=None):
     parser.add_argument("--worker-case-id", help=argparse.SUPPRESS)
     parser.add_argument("--batch-size", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--wall-factor", type=int, default=1, help=argparse.SUPPRESS)
+    parser.add_argument("--window-processes", type=int, default=1, help=argparse.SUPPRESS)
+    parser.add_argument("--window-helper", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--import-pool", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--background", action="store_true")
     args = parser.parse_args(argv)
     if args.workers != "auto":
@@ -2018,7 +2161,11 @@ def main(argv=None):
         if case is None or args.batch_size is None:
             parser.error("a worker needs a known native case and --batch-size")
         try:
-            return worker_candidate(case, layout, args.batch_size, directory, args.mode, args.wall_factor)
+            if args.window_helper:
+                return worker_window_helper(case, layout, args.batch_size, directory, args.window_helper,
+                                            args.import_pool)
+            return worker_candidate(case, layout, args.batch_size, directory, args.mode, args.wall_factor,
+                                    args.window_processes)
         except Exception:
             print(traceback.format_exc(), file=sys.stderr, flush=True)
             return 1

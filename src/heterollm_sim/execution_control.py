@@ -53,6 +53,10 @@ class NativeFastWallBudgetError(RuntimeError):
     """The whole native fast candidate exhausted its allowed wall time."""
 
 
+class WindowCancelledError(ExecutionCancelledError):
+    """Another process of the point proved this sampled window needless."""
+
+
 class _NativeLayerSamplingCutoff(BaseException):
     """Intentional incomplete cohort boundary, never a committed Token.
 
@@ -93,6 +97,9 @@ class ExecutionControl:
     stop_request_path: Optional[str | Path] = None
     deadline_monotonic: Optional[float] = None
     progress_queue: Optional[SimpleQueue] = None
+    # The point's windows shared with other processes (native_window_shards).
+    window_shards: Optional[Any] = None
+    window_cancel_path: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.stop_request_path is not None:
@@ -112,6 +119,8 @@ class ExecutionControl:
         # A user's stop always wins over a simultaneous wall-time deadline.
         if self.stop_request_path is not None and os.path.exists(self.stop_request_path):
             raise ExecutionCancelledError("仿真任务已取消")
+        if self.window_cancel_path is not None and os.path.exists(self.window_cancel_path):
+            raise WindowCancelledError("采样窗口已不需要")
         if (
             self.cancellation_callback is not None
             and self.cancellation_callback()
@@ -169,6 +178,7 @@ def native_callback_free_control(control) -> bool:
         and getattr(control.raise_if_cancelled, "__func__", None) is _NATIVE_CONTROL_CANCEL
         and control.progress_callback is None and control.cancellation_callback is None
         and (control.stop_request_path is None or type(control.stop_request_path) is str)
+        and (control.window_cancel_path is None or type(control.window_cancel_path) is str)
         and (control.deadline_monotonic is None or type(control.deadline_monotonic) is float)
         and (control.progress_queue is None or type(control.progress_queue) is SimpleQueue))
 
@@ -181,6 +191,7 @@ __all__ = [
     "ExecutionProgress",
     "PROGRESS_UNIT_LABELS_ZH",
     "ProgressCallback",
+    "WindowCancelledError",
     "progress_unit_for_stage",
     "progress_unit_label_zh",
 ]
