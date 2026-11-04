@@ -74,6 +74,48 @@ def test_finished_window_copy_dies_by_reference_counting(case):
             gc.enable()
 
 
+def test_a_window_copy_is_discardable_and_its_source_is_not():
+    runtime = native_runtime(ingress_scenario("hbm_tp1", count=2))
+    source = runtime._execution_resource_kernel
+    kernel, _copied = layer._independent_kernel(source)
+    assert kernel.physical_runtime.timeline._discardable
+    assert not source.physical_runtime.timeline._discardable
+
+
+def test_a_discardable_timeline_journals_only_lanes_and_refuses_use_after_a_rollback():
+    timeline = ResourceTimeline(lane_available={"a": [5.0]}, ready_ns={"a": 5.0})
+    timeline._discardable = True
+    token = timeline._begin_owned_transaction()
+    before = token.before_lanes()
+    timeline._remember_resources(["a", "b"])
+    timeline.lane_available["a"][0] = 9.0
+    assert list(token.entries) == ["lane_available"]
+    assert list(token.entries["lane_available"]) == ["a", "b"]
+    assert before.select(["a", "b"]) == {"a": (5.0,)}
+    # Core accounting keeps its own three before-images.
+    accounting = timeline._core_metrics_snapshot()["_owned_metric_transaction"]
+    assert list(accounting.entries) == ["busy_ns", "bytes_moved", "last_intervals"]
+    accounting.finish()
+    token.rollback()
+    assert timeline._discarded and not timeline._owned_transactions
+    with pytest.raises(RuntimeError, match="discarded"):
+        timeline._begin_owned_transaction()
+
+
+def test_a_declined_transaction_that_wrote_nothing_does_not_discard_the_copy():
+    # The TP mirror prepares a task inside a transaction and restores it when
+    # the task does not match, then executes the task on the same copy.
+    timeline = ResourceTimeline(lane_available={"a": [5.0]})
+    timeline._discardable = True
+    timeline._begin_owned_transaction().rollback()
+    assert not timeline._discarded and not timeline._owned_transactions
+    token = timeline._begin_owned_transaction()
+    timeline._remember_resources(["a"])
+    assert list(token.entries["lane_available"]) == ["a"]
+    token.finish()
+    assert not timeline._discarded
+
+
 def test_numeric_state_follows_a_copied_core_and_leaves_no_cycle():
     runtime = native_runtime(ingress_scenario("hbm_tp1", count=2))
     runtime._arrive()

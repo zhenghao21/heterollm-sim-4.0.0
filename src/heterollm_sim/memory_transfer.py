@@ -94,8 +94,11 @@ class _OwnedTimelineTransaction:
         self.timeline = timeline
         # The inner Core checkpoint only supplies the three before-images
         # consumed by metrics_delta. Physical rollback belongs to the outer
-        # owner transaction, which still journals every calendar and recorder.
-        names = ("busy_ns", "bytes_moved", "last_intervals") if accounting else _TIMELINE_MAPS
+        # owner transaction, which journals every calendar and recorder; on a
+        # discardable timeline it never restores, and its callers read only
+        # the before-image of the lanes and which resources it remembered.
+        names = (("busy_ns", "bytes_moved", "last_intervals") if accounting
+                 else ("lane_available",) if timeline._discardable else _TIMELINE_MAPS)
         self.roots = {name: getattr(timeline, name) for name in names}
         self.entries = {name: {} for name in names}
         self.objects = {}
@@ -141,6 +144,12 @@ class _OwnedTimelineTransaction:
             raise ValueError("Core accounting checkpoints do not own physical rollback")
         self.finish()
         timeline = self.timeline
+        if timeline._discardable and any(self.entries.values()):
+            # Only the exception on its way up, which discards this whole copy,
+            # abandons written calendars. A transaction that remembered nothing
+            # wrote nothing, as when the TP mirror declines a task it prepared.
+            timeline._discarded = True
+            return
         for original, values in self.objects.values():
             original[:] = values
         for name, root in self.roots.items():
@@ -241,8 +250,13 @@ class ResourceTimeline:
     _metric_key_orders: dict = field(default_factory=dict, init=False, repr=False, compare=False)
     _owned_transactions: list = field(default_factory=list, init=False, repr=False, compare=False)
     _owned_metric_orders: Optional[dict] = field(default_factory=lambda: None, init=False, repr=False, compare=False)
+    # A sampling window's copy: any exception discards it, so nothing restores it.
+    _discardable: bool = field(default=False, init=False, repr=False, compare=False)
+    _discarded: bool = field(default=False, init=False, repr=False, compare=False)
 
     def _begin_owned_transaction(self, *, accounting=False):
+        if self._discarded:
+            raise RuntimeError("a discarded timeline copy was used after its rollback")
         token = _OwnedTimelineTransaction(self, accounting=accounting)
         self._owned_transactions.append(token)
         return token
