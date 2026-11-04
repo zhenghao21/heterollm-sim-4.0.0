@@ -751,7 +751,7 @@ class NandConfig:
     page_staging_burst_bytes: int = field(default=64, kw_only=True)
     wear_model: Optional[NandWearConfig | Mapping[str, Any]] = field(default=None, kw_only=True)
     detailed_observability: bool = field(default=False, kw_only=True)
-    partial_page_policy: str = "read_modify_write"
+    partial_page_policy: str = "host_merge"
     capacity_bytes: Optional[int] = None
     max_outstanding_requests: int = 32
     queue_scope: str = field(default="device", kw_only=True)
@@ -846,8 +846,8 @@ class NandConfig:
                 raise ValueError(f"{name} must be positive")
             if value > float(self.host_bandwidth_gb_s):
                 raise ValueError(f"{name} cannot exceed host_bandwidth_gb_s")
-        if self.partial_page_policy not in {"read_modify_write", "reject"}:
-            raise ValueError("partial_page_policy must be read_modify_write or reject")
+        if self.partial_page_policy not in {"host_merge", "reject"}:
+            raise ValueError("partial_page_policy must be host_merge or reject")
         if not isinstance(self.metadata, Mapping):
             raise ValueError("metadata must be a mapping")
         if "buffered_write_mode" in self.metadata:

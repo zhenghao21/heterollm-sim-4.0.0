@@ -75,7 +75,8 @@ def test_nand_builder_uses_actual_die_plane_counts_not_effective_units(name, pla
     assert config.queue_scope == "device"
     assert config.metadata["physical_config_profile_id"] == "hbf_synthetic"
     assert "local choices, not parameters sourced" in config.metadata["research_assumptions"]["basis"]
-    assert config.metadata["protocol_basis"].startswith("generic_nand")
+    assert config.protocol_mode == "generic_nand"
+    assert config.metadata["protocol_basis"].startswith("control behaviour follows OCP HBF v0.7")
     assert config.read_cache_pages_per_bank == 2
     assert "logic_die_flush_assumption" in config.metadata
     assert "本层最后一个 NAND 读完成后发起刷写" in config.metadata["logic_die_flush_assumption"]
@@ -157,7 +158,7 @@ def test_nand_core_stages_small_kv_writes_until_their_page_is_full():
     result = core.submit(AccessRequest("read-page", "read", 0, 4096, 0))
     assert result.completion_ns > config.page_read_ns
     assert result.physical_read_bytes == 4096
-    assert config.host_granularity_bytes == 4096
+    assert config.host_granularity_bytes == 64
     staged = NandCore(config, capture_details=False)
     rows = [staged.submit(AccessRequest(f"kv-{row}", "write", 4096 + row * 256, 256, row * 10.))
             for row in range(16)]

@@ -129,7 +129,7 @@ def test_a_write_with_full_pages_programs_them_directly_and_stages_its_tail():
 
 
 @pytest.mark.parametrize("numeric", [False, True])
-def test_a_tail_that_does_not_fit_spills_to_the_array_with_a_read_modify_write(numeric):
+def test_a_tail_that_does_not_fit_spills_to_the_array_with_a_host_merge(numeric):
     nand = core(numeric=numeric, capacity=2 * PAGE)
     write(nand, "a", 0 * PAGE, 3000, 0.)       # channel 0
     write(nand, "b", 4 * PAGE, 3000, 0.)       # page 4: channel 4 -> host 0
@@ -138,7 +138,7 @@ def test_a_tail_that_does_not_fit_spills_to_the_array_with_a_read_modify_write(n
     assert spilled.pages_programmed == 1 and spilled.counters["staging_write_pages"] == 0
     state = nand.page_staging_state()
     assert (state["valid_bytes"][0], state["staged_pages"], state["spilled_pages"]) == (6000, 2, 1)
-    # Its later rows stay on the array page and read-modify-write it.
+    # Its later rows stay on the array page: the host reads, merges and writes it.
     more = write(nand, "c2", 8 * PAGE + 3000, 500, 200000.)
     assert more.pages_programmed == 1 and more.physical_read_bytes == PAGE
     back = read(nand, "back", 8 * PAGE, 3500, 900000.)

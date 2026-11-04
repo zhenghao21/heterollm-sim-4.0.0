@@ -19,7 +19,7 @@ from b200_hbm_hbf_scan_config import build_scan_scenario
 from exploring_hbf_compare import _add_hbm_for_intermediates, _set_memory
 from exploring_hbf_native_models import build_native_paper_model
 from exploring_hbf_paper_config import (
-    LOGIC_DIE_SRAM_LATENCY_NS, MB, STACK_INTERFACE_GB_S,
+    LOGIC_DIE_SRAM_LATENCY_NS, MB, PAGE_BYTES, STACK_INTERFACE_GB_S,
     build_paper_hbm_config, build_paper_nand_config, default_research_assumptions,
     hardware_by_id, workload_catalog,
 )
@@ -30,6 +30,7 @@ from heterollm_sim.cost_models import HostMemoryProfile
 from heterollm_sim.ir import ComponentSpec, LinkSpec, ParallelSpec, PortSpec, RankMappingSpec, RequestSpec, model_graph_execution_layers
 from heterollm_sim.memory_types import SramConfig
 from heterollm_sim.physical_contract import require_physical_memory_config
+from heterollm_sim.planner import _physical_kv_width_for_rank
 from heterollm_sim.parallel import build_parallel_plan
 from heterollm_sim.schema_v4 import ControllerProfile, GPUControllerProfile
 from heterollm_sim.simulation_options import SimulationConfig
@@ -39,7 +40,8 @@ PD_BUFFER_BYTES = 64 * 1024**2
 # Tokens of one physical KV block. FIFO free lists mix fully over a long run, so
 # a block is about a request's contiguous extent in a settled layout. Measured at
 # HBM4 SHORT B322: 16 tokens (vLLM's default) 95.6 ms, 256 tokens 43.6 ms, for
-# about 6% more pool capacity.
+# about 6% more pool capacity. NAND-backed KV instead stripes a whole request's
+# rows over consecutive banks (see kv_stripe_layout), in the same round multiple.
 NATIVE_KV_BLOCK_TOKENS = 256
 PHYSICAL_WINDOW_ASSUMPTION = (
     "Bounded physical execution has no sampled suffix; the fast path reports its conditional sampling interval "
@@ -117,6 +119,19 @@ def native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool, tokens_p
     ring = -(-max(chunks) // tokens_per_block) if chunks else 0
     return kv_block_peak(native_seed_ages_by_group(batch_size, output, ep), prompt, output,
                          pool // ep, tokens_per_block, ring)
+
+
+def native_kv_stripe(layers, prompt, output, batch_size, tp, ep, published, blocks):
+    """The host's bank-striped KV placement for one NAND-backed deployment."""
+    from heterollm_sim.native_stationary import kv_stripe_layout
+    rows = {_physical_kv_width_for_rank(layer, tp) * _DTYPE_BYTES[layer.dtype] for layer in layers
+            if layer.sequence_mixer != "linear_attention" and layer.kv_heads}
+    if len(rows) != 1:
+        raise ValueError("a KV stripe needs one row size per deployment")
+    ages = tuple(tuple(group) for group in native_seed_ages_by_group(batch_size, output, ep))
+    chunk = min((layer.attention_chunk_size for layer in layers if layer.attention_chunk_size), default=0)
+    return kv_stripe_layout(ages, prompt, output, max(1, PAGE_BYTES // rows.pop()),
+                            published.hbf_stacks * published.dies_per_hbf_stack * published.planes_per_hbf_die, blocks, chunk)
 
 
 def native_capacity_batch(capacity, batch_size, pool, layers, prompt, output, ep, quantum,
@@ -293,8 +308,10 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
     # The old scan builder supplies only CPU/HOST wiring. Discard its model,
     # tensor targets, source identity and rank contracts below.
     template = build_scan_scenario("qwen2_5-0_5b", "HBM" if hardware_id == "HBM4" else "HBF", 2, 2)
+    tokens_per_block = (-(-(prompt + output - 1) // NATIVE_KV_BLOCK_TOKENS) * NATIVE_KV_BLOCK_TOKENS
+                        if published.hbf_stacks else NATIVE_KV_BLOCK_TOKENS)
     template = replace(template, placement=replace(template.placement, kv_policy=replace(
-        template.placement.kv_policy, tokens_per_page=NATIVE_KV_BLOCK_TOKENS)))
+        template.placement.kv_policy, tokens_per_page=tokens_per_block)))
     if hardware_id != "HBM4" and published.hbm_stacks:
         template = _add_hbm_for_intermediates(template)
     if published.hbm_stacks:
@@ -386,8 +403,12 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
     # slots), so the producer holds one per pool entry.
     pool = (native_import_pool(layers, prompt, output, batch_size, tp, pp, ep, published)
             if import_pool is None else import_pool)
-    kv_peaks = native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool,
-                                     template.placement.kv_policy.tokens_per_page)
+    kv_peaks = native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool, tokens_per_block)
+    pool_blocks = {kind: max(peaks) for kind, peaks in kv_peaks.items()}
+    stripe = (native_kv_stripe(layers, prompt, output, batch_size, tp, ep, published, max(pool_blocks.values()))
+              if published.hbf_stacks else None)
+    if stripe:
+        pool_blocks = dict.fromkeys(pool_blocks, stripe["pool_blocks"])
     pd_physical = replace(pd_source, capacity_bytes=pool * PD_BUFFER_BYTES, channels=channels,
         interface_bandwidth_gb_s=pd_bandwidth_gb_s, read_bandwidth_gb_s=pd_bandwidth_gb_s,
         write_bandwidth_gb_s=pd_bandwidth_gb_s,
@@ -454,8 +475,10 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
         placement=replace(template.placement, hardware_name=hardware.name, model_name=model.name,
             parallel=parallel, tensor_to_component={}, tensor_bytes={}, op_to_component={}, metadata=metadata,
             kv_policy=replace(template.placement.kv_policy, cache_component=weight0, allocation_policy="lazy",
-                              dtype="bf16", pool_blocks=max(kv_peaks["full"]),
-                              chunk_pool_blocks=max(kv_peaks.get("chunk", [0])))),
+                              dtype="bf16", pool_blocks=pool_blocks["full"],
+                              chunk_pool_blocks=pool_blocks.get("chunk", 0),
+                              stripe_stride_pages=stripe["stride_pages"] if stripe else 0,
+                              stripe_phase_bytes=stripe["phase_pages"] * PAGE_BYTES if stripe else 0)),
         workload=replace(template.workload, name="native-decode-node-continuous",
             requests=tuple(requests),
             request_count=batch_size * 4, scheduler=scheduler, metadata={"native_paper_comparison": True,
@@ -466,7 +489,9 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
                     "measurement_decode_cohorts": measurement, "finish_after_measurement": True}}),
         assumptions=("Native serving, planner, GPU cost profiles and physical DRAM/NAND/SRAM services; no paper_* execution.",
             "Paper Table I per-GPU capacity and interface budgets, BF16 model and KV, decimal workload K.",
-            "Native generic NAND page service; unspecified block geometry and timing are research assumptions, not OCP or vendor GC.",
+            "Native NAND page service with OCP HBF v0.7 control and Table I geometry and timing; the host owns KV placement and "
+            "block opens and there is no FTL or GC. Block size and erase time are research assumptions; every plane erasing at once "
+            "is not stated by OCP.",
             "8x40MB intermediate SRAM is modeled as a pooled 8-port array; bandwidth/latency/credits are explicit research inputs.",
             "External Prefill producer source uses native DDR5 service geometry expanded to at least world x 100 GB/s; PD links and target KV writes remain the intended bottlenecks (research assumption).",
             "PD import (user approved 2026-10-24): one stream per target rank, all streams concurrent; each import owns a %d MiB source buffer cut into 1 MiB chunk slots dealt round-robin to its streams; a chunk holds its slot from source read until its target write completes (RDMA source-buffer semantics), so a stream keeps at most its slot count in flight while adjacent chunks' reads, links and writes overlap on the native timelines." % (PD_BUFFER_BYTES // 1024**2),

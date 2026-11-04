@@ -42,11 +42,15 @@ def test_partial_write_across_page_boundary_charges_two_reads_and_programs():
     assert result.pages_read == result.pages_programmed == 2
     assert result.physical_read_bytes == result.physical_write_bytes == 2 * PAGE
     assert result.internal_transfer_bytes == result.transfer_bytes == 4 * PAGE
-    assert result.host_transfer_bytes == 128
+    assert result.host_transfer_bytes == 4 * PAGE
     assert result.counters['rmw_read_operations'] == 2
-    reads = [stage for stage in result.stages if stage.name == 'RMW_PAGE_READ']
+    reads = [stage for stage in result.stages if stage.name == 'MERGE_PAGE_READ']
     programs = [stage for stage in result.stages if stage.name == 'PAGE_PROGRAM']
     assert all(program.start_ns >= read.end_ns for read, program in zip(reads, programs))
+    # The host holds the old page before it writes the merged 4 KiB.
+    backs = [stage for stage in result.stages if stage.name == 'MERGE_HOST_TRANSFER']
+    writes = [stage for stage in result.stages if stage.name == 'HOST_TRANSFER']
+    assert all(write.start_ns >= back.end_ns and write.bytes == PAGE for back, write in zip(backs, writes))
 
 
 def test_staging_ack_and_read_report_host_path_ceiling_and_batch_uses_it():

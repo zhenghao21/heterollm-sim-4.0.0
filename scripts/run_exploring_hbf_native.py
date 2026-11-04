@@ -52,7 +52,11 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # Maverick HBM4 EP-group layouts, in addition to the 405B HBM4 exception.
 # v22 executes the NAND out-of-order read batch, KV page staging and the HBM4
 # SID-aware per-PC FR-FCFS controller; v21 results describe older physics.
-FAST_CONTRACT = "native_stationary_layout_fast_v23"
+# v24 follows OCP HBF v0.7 control on NAND (striped KV, host merge, flush over
+# the host link, block opens) and corrects the unfinished-import extra.
+FAST_CONTRACT = "native_stationary_layout_fast_v24"
+# Prefill runs on HBM4 and v24 changes neither its physics nor its forecast.
+PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v23"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # sample a whole prompt by its stage blocks and a chunked one by the
 # conditional chunk forecast; detailed passes retain the complete native
@@ -843,7 +847,8 @@ def prefill_parameters(params):
         contract = PREFILL_STAGE_CHUNK_CONTRACT
     return {"model": params["model"], "workload": params["workload"], "input_tokens": params["input_tokens"],
             "tp": tp, "pp": params["pp"], "ep": params["ep"], "prefill_hardware": "HBM4",
-            "pass": "sampled" if fast else "full", "runner_contract": params["runner_contract"],
+            "pass": "sampled" if fast else "full",
+            "runner_contract": PREFILL_FAST_RUNNER_CONTRACT if fast else params["runner_contract"],
             "prefill_contract": contract,
             **({"target_relative_error": params["target_relative_error"]} if fast else {})}
 

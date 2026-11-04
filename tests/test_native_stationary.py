@@ -135,8 +135,9 @@ def test_finished_import_scales_its_later_end_and_unfinished_import_uses_the_lay
         ("y", 100, 50, None, [30., 42.5, 55.], 60., 3)))
     assert rows[0]["mode"] == "complete_import_in_window" and rows[0]["extra_ns"] == 4.
     assert rows[1]["mode"] == "post_entry_layer_slope"
-    assert rows[1]["span_ns"] == pytest.approx(120.) and rows[1]["extra_ns"] == pytest.approx(24.)
-    assert list(terms) == [1] and terms[1]["extra_ns"] == pytest.approx((0., 44.))
+    # 5 ns measured by the last layer, then a fifth of the 65 ns left of the span.
+    assert rows[1]["span_ns"] == pytest.approx(120.) and rows[1]["extra_ns"] == pytest.approx(18.)
+    assert list(terms) == [1] and terms[1]["extra_ns"] == pytest.approx((0., 32.))
 
 
 def test_imports_run_together_give_their_joint_extra_and_span():

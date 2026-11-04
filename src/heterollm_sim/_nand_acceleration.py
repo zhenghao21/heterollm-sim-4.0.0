@@ -61,8 +61,8 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
     """Run one logic-die scope flush through the resident numeric controller.
 
     The caller has already selected full pages belonging to one layer/rank.
-    This bridge only packs the shared fabric once, reserves all channel and
-    array work in ``run_generic_flush_batch``, then publishes the touched
+    This bridge only packs the shared fabric once, reserves all host, channel
+    and array work in ``run_generic_flush_batch``, then publishes the touched
     calendars back.  It returns ``None`` before mutation when an authored or
     unusual timeline cannot be represented by the native arrays; the scalar
     flush remains the exact fallback for those cases.
@@ -96,15 +96,20 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
     units = banks if config.planes_independent else base_units
     per_channel = base_units // config.channels
     (bank_keys, prefixes, array_names, array_resources, channels, hosts, names,
-     array_ids, channel_ids, _host_ids) = _geometry_plan(
+     array_ids, channel_ids, host_write_ids) = _geometry_plan(
         core, Operation.WRITE, banks, units, per_channel)
-    # A logic-die flush touches only array and die-channel resources.  Keeping
-    # host links out of this pack lets the kernel work even when a host lane
-    # was never materialized by the preceding read wave.
-    names = tuple(dict.fromkeys((*array_resources, *channels)))
+    read_hosts = _geometry_plan(core, Operation.READ, banks, units, per_channel)[5]
+    # A flush touches every host link in both directions, its die channels
+    # and arrays.
+    links = (*read_hosts, *hosts)
+    if config.host_channels * 2 != len(set(links)):
+        return None
+    names = tuple(dict.fromkeys((*array_resources, *channels, *links)))
     lookup = {name: index for index, name in enumerate(names)}
     array_ids = np.asarray([lookup[array_resources[unit]] for unit in range(units)], dtype=np.int64)
     channel_ids = np.asarray([lookup[name] for name in channels], dtype=np.int64)
+    host_read_ids = np.asarray([lookup[name] for name in read_hosts], dtype=np.int64)
+    host_write_ids = np.asarray([lookup[name] for name in hosts], dtype=np.int64)
     direction_names = [None, "read", "write"]
     packed_timeline = pack_single_lane(timeline, names, len(pages), config.transfer_page_bytes)
     single_lane = packed_timeline is not None
@@ -140,7 +145,10 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
     try:
         ends, touched, active_units, active_banks = run_generic_flush_batch(
             pages, ready_times, start_times, geometry, config.page_program_ns,
-            internal_ns, int(config.transfer_page_bytes), array_ids, channel_ids,
+            internal_ns, int(config.transfer_page_bytes),
+            config.transfer_page_bytes / core._host_bandwidth(Operation.READ),
+            config.transfer_page_bytes / core._host_bandwidth(Operation.WRITE),
+            array_ids, channel_ids, host_read_ids, host_write_ids,
             arrays, buffers, tags, starts, lane_counts, lanes, lane_directions,
             state, moved, direction_values)
     except BaseException:
@@ -153,12 +161,13 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
     publish_timeline(
         timeline, names, state.tolist(), moved.tolist(), direction_values.tolist(),
         lanes.tolist(), lane_directions.tolist(), starts.tolist(), lane_counts.tolist(),
-        resources, (), [int(name in resources and name in channels) for name in names],
+        resources, (), [int(name in resources and (name in channels or name in links)) for name in names],
         direction_names, single_lane)
     timeline._touched.update(resources)
     timeline._intervals_truncated = bool(resources) or timeline._intervals_truncated
     core._nand_numeric_state = packed
-    return {"pages": pages, "ends": ends, "internal_transfer_bytes": int(len(pages) * config.transfer_page_bytes)}
+    return {"pages": pages, "ends": ends, "internal_transfer_bytes": int(len(pages) * config.transfer_page_bytes),
+            "host_transfer_bytes": int(2 * len(pages) * config.transfer_page_bytes)}
 
 
 def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
@@ -193,7 +202,6 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
             or 4096 % config.host_granularity_bytes
             or request.operation not in (Operation.READ, Operation.WRITE)
             or request.operation is Operation.WRITE and (request.address % 4096 or request.byte_count % 4096)
-            and config.partial_page_policy != "read_modify_write"
             or (request.address + request.byte_count - 1) // 4096 > 2**63 - 1
             or request.operation is Operation.WRITE and config.write_buffer_bytes
             or type(core._cache_use) is not int
@@ -292,9 +300,6 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
     tail_start = max(request.address, (end - 1) // 4096 * 4096)
     tail_bytes = -(-end // granularity) * granularity - tail_start // granularity * granularity
     host_bytes = head_bytes if page_count == 1 else head_bytes + tail_bytes + (page_count - 2) * 4096
-    # A partially written boundary page pays the scalar read-modify-write.
-    write = request.operation is Operation.WRITE
-    head_rmw, tail_rmw = write and head_end - request.address != 4096, write and end - tail_start != 4096
     geometry = np.array((base_units, config.planes_per_lun, config.planes_independent,
                          per_channel, config.host_channels), dtype=np.int64)
     before = packed.checkpoint() if packed is core._nand_numeric_state and packed is not None else None
@@ -305,13 +310,12 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
                        config.transfer_page_bytes / config.internal_bandwidth_gb_s,
                        4096 / host_bandwidth, config.transfer_page_bytes))
     try:
-        completion, hits, misses, rmw_reads, clock, touched, active_units, active_banks, resource_order, max_read_wait = run_generic_full_pages(
+        completion, hits, misses, clock, touched, active_units, active_banks, resource_order, max_read_wait = run_generic_full_pages(
             request.address // 4096, page_count, request.operation is Operation.READ,
             request.arrival_ns + config.front_ns, geometry, timing, array_ids, channel_ids, host_ids,
             arrays, buffers, tags, ready, readers, uses, present, core._cache_use,
             start_values, lane_counts, lanes, lane_directions, state, moved, direction_values,
-            head_bytes, head_bytes / host_bandwidth, tail_bytes, tail_bytes / host_bandwidth,
-            head_rmw, tail_rmw)
+            head_bytes, head_bytes / host_bandwidth, tail_bytes, tail_bytes / host_bandwidth)
         if not np.all(np.isfinite(state)) or not isfinite(completion):
             raise ValueError("resource reservation exceeds finite timing range")
     except BaseException:
@@ -362,7 +366,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
         _metrics.update(generic_metrics_delta(timeline, names, resource_indexes, before_busy, before_moved))
     read = request.operation is Operation.READ
     programmed = 0 if read else page_count
-    pages_read = int(misses) + int(rmw_reads)
+    pages_read = int(misses)
     internal_bytes = (pages_read + programmed) * config.transfer_page_bytes
     core._last_media_queue_wait_ns = float(max_read_wait)
     return TransactionResult(request.request_id, request.operation, request.arrival_ns, float(completion),

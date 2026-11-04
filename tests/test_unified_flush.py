@@ -188,6 +188,34 @@ def test_pp2_flush_dependency_stays_in_invocation_group():
         assert all(parent.metadata.get("operator_invocation_group_id") == group for parent in parents)
 
 
+def test_a_flush_reads_the_scratchpad_back_and_writes_a_page_over_the_host_link(monkeypatch):
+    import heterollm_sim._nand_acceleration as acceleration
+
+    batches, original = [], acceleration.execute_staged_flush_batch
+
+    def counted(*args):
+        batches.append(original(*args))
+        return batches[-1]
+
+    monkeypatch.setattr(acceleration, "execute_staged_flush_batch", counted)
+    core = NandCore(_logic_config(), capture_details=False)
+    core._nand_numeric_enabled = True
+    core.set_staging_scope("dense0:rank000")
+    for index in range(4):
+        _write(core, str(index), 10 * PAGE + index * 1024, 1024, index * 1000.0)
+    core.submit_many([
+        AccessRequest("read0", Operation.READ, 1000 * PAGE, 2 * PAGE, 0.0),
+        AccessRequest("read1", Operation.READ, 2000 * PAGE, 2 * PAGE, 0.0),
+    ])
+    account = core.flush_staged_pages("dense0:rank000", 5000.0)
+    assert batches and batches[-1] is not None
+    assert account["host_transfer_bytes"] == 2 * PAGE
+    intervals = core.timeline.last_intervals
+    back, host = intervals["nand:host:2:read"], intervals["nand:host:2:write"]
+    channel = max((value for name, value in intervals.items() if "channel" in name), key=lambda value: value[1])
+    assert 5000.0 <= back[0] < back[1] <= host[0] < host[1] <= channel[0]
+
+
 def test_logic_die_flush_scalar_and_owned_batch_are_bit_exact():
     def run(numeric):
         core = NandCore(_logic_config(), capture_details=False)

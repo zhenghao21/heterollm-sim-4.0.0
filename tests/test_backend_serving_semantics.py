@@ -320,7 +320,7 @@ def test_rejected_abort_keeps_physical_reservation_retryable(monkeypatch):
 def test_memory_phase_reports_actual_core_bytes_and_detailed_payloads():
     from test_kv_transfer_deep_semantics import component, page
     config = make_hbf_config(capacity_bytes=1048576, page_bytes=16384,
-                             partial_page_policy="read_modify_write")
+                             partial_page_policy="host_merge")
     executor = PhysicalKVTransferExecutor([component("hbf", config)])
     item = page(size=16384)
     executor.bind_page(item)

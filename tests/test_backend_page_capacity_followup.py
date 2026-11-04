@@ -15,7 +15,7 @@ def fixture(*, payload=4096, hbf_capacity=32768, active_hbf=False, ledger=None,
             attach=True, declared_config=True):
     configs = {"hbm": make_hbm_config(capacity_bytes=131072),
                "hbf": make_hbf_config(capacity_bytes=hbf_capacity, page_bytes=16384,
-                    write_buffer_bytes=min(32768, hbf_capacity), partial_page_policy="read_modify_write")}
+                    write_buffer_bytes=min(32768, hbf_capacity), partial_page_policy="host_merge")}
     hardware = [ComponentSpec(name, name, capacity_bytes=config.capacity_bytes,
         read_bandwidth_gbps=800, write_bandwidth_gbps=80,
         metadata={"physical_memory_config": config}) for name, config in configs.items()]

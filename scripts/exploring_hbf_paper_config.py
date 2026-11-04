@@ -207,8 +207,8 @@ class NandResearchAssumptions:
                 raise ValueError("write request subset cannot exceed combined requests")
         if not isinstance(self.host_full_duplex, bool):
             raise ValueError("host_full_duplex must be boolean")
-        if self.partial_page_policy not in {"reject", "read_modify_write"}:
-            raise ValueError("partial_page_policy must be reject or read_modify_write")
+        if self.partial_page_policy not in {"reject", "host_merge"}:
+            raise ValueError("partial_page_policy must be reject or host_merge")
         if not isinstance(self.basis, str) or not self.basis.strip():
             raise ValueError("research assumption basis must be a non-empty string")
 
@@ -228,13 +228,13 @@ def default_research_assumptions(configuration_id: str) -> NandResearchAssumptio
         pages_per_block=256, blocks_per_plane=(512 * GB + stripe - 1) // stripe,
         block_erase_ns=2_000_000., internal_bandwidth_gb_s=100.,
         max_outstanding_requests=4096, max_outstanding_write_requests=None,
-        host_full_duplex=True, host_granularity_bytes=PAGE_BYTES,
-        partial_page_policy="read_modify_write",
+        host_full_duplex=True, host_granularity_bytes=64,
+        partial_page_policy="host_merge",
         basis="Local mechanism control only: 256 pages/block, whole-block covering capacity, 2 ms erase, "
               "100 GB/s per die-channel, one full-duplex host channel per stack, 4096 global combined credits "
-              "with writes sharing those credits, 4 KiB host-transfer granularity and paid read-modify-write "
-              "for partial program pages. These are local choices, not parameters sourced from "
-              "this paper; OCP is not selected.")
+              "with writes sharing those credits. Control follows OCP HBF v0.7: 64-byte host reads, whole-page "
+              "writes, a partial page being the host's read and merge. Block size, erase time and credits "
+              "are local choices, not parameters sourced from this paper or OCP.")
 
 
 def build_paper_hbm_config(configuration_id: str) -> DramConfig | None:
@@ -286,8 +286,8 @@ def build_paper_nand_config(configuration_id: str, *,
     host channel; die channel c belongs to stack c mod stacks. Partial pages
     (KV tails) are staged in the intermediate store and programmed only as
     full pages: in the stack's logic-die SRAM (HBF+/CONV+, 40 MB per stack)
-    or in the HBM stack (HBF/CONV). This does not claim OCP control, a paper
-    FTL or steady-state continuous batching.
+    or in the HBM stack (HBF/CONV). Control follows OCP HBF v0.7, geometry
+    and timing the paper's Table I; there is no FTL and no garbage collection.
     """
     hardware = hardware_by_id(configuration_id)
     if not isinstance(assumptions, NandResearchAssumptions):
@@ -349,11 +349,12 @@ def build_paper_nand_config(configuration_id: str, *,
                                    "crosses the stack's host channel to be programmed"),
             "logic_die_flush_assumption": "主机在本层最后一个 NAND 读完成后发起刷写；一层没有 NAND 读时回退到本层真正的 KV 读任务。刷写任务不进入读任务或层串行链。",
             "timing_basis": "paper 1/3 us read and 100 us program; explicitly supplied local erase/front assumptions",
-            "protocol_basis": "generic_nand; the article does not specify OCP",
+            "protocol_basis": "control behaviour follows OCP HBF v0.7 (the article does not specify a protocol); "
+                              "geometry and media timing stay on the paper's Table I",
             "paper_page_basis": "4 KiB read page is explicit; same program-page unit is a local modeling assumption",
-            "host_granularity_basis": "explicit local transfer quantum, distinct from the published 4 KiB media page",
-            "partial_page_basis": "explicit local policy; read_modify_write pays NandCore's old-page read, internal transfer "
-                                  "and page program; reject disallows partial programs. Neither policy is given in the paper",
+            "host_granularity_basis": "OCP HBF v0.7 4.1: reads of 64 bytes to 4 KiB, distinct from the 4 KiB media page",
+            "partial_page_basis": "OCP HBF v0.7 4.1 and 5.4.1: writes are whole pages, so host_merge pays the host's old-page "
+                                  "read, then its 4 KiB write and the page program; reject disallows partial writes",
             "paper_read_staging_bytes": hardware.read_staging_bytes_per_hbf_stack * hardware.hbf_stacks,
             "paper_read_staging_execution": "native per-bank two-page read buffers; array, internal and host transfers "
                                             "retain independent resource calendars and live-reader overwrite dependencies; "

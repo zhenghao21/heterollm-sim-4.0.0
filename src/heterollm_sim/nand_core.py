@@ -1787,6 +1787,7 @@ class NandCore:
                 selected.discard(page)
             programs = len(active_pages)
             internal_bytes = int(batch["internal_transfer_bytes"])
+            host_bytes = int(batch["host_transfer_bytes"])
             self._tail_flush_started_pages += programs
         else:
             for page, entry, start in zip(active_pages, active_entries, start_times):
@@ -2079,10 +2080,12 @@ class NandCore:
         return result
 
     def _tail_program(self, page, mapping, ready, stages, *, start_override=None):
-        """Program one filled staged page from ``ready`` without an RMW read.
+        """Program one filled staged page from ``ready`` without reading it from the array.
 
-        Logic-die staging feeds the die channel directly; external staging
-        first moves the page over its host channel.
+        The host writes the page, 4 KiB as always. A logic-die scratchpad is
+        the host's too, with no internal path to NAND (OCP 5.4.2, 11.3), so
+        the host reads the page back first; an external store's reads are
+        billed by the memory that holds it.
         """
         config, timeline = self.config, self.timeline
         write_back = None
@@ -2096,13 +2099,19 @@ class NandCore:
             self._invalidate_cache(mapping)
             array_id = self._array_id(mapping)
             earliest, host_bytes = self._tail_program_channel_start(ready, start_override), 0
-            if config.page_staging == "external":
-                host = timeline.transfer(self._host_id(mapping, Operation.WRITE), config.page_bytes, earliest,
-                                         self._host_bandwidth(Operation.WRITE), direction="write")
+            if config.page_staging == "logic_die":
+                back = timeline.transfer(self._host_id(mapping, Operation.READ), config.page_bytes, earliest,
+                                         self._host_bandwidth(Operation.READ), direction="read")
                 if self.capture_details:
-                    stages.append(StageTiming("STAGING_FLUSH_HOST", host.start_ns, host.end_ns,
-                                              host.resource_id, host.bytes))
-                earliest, host_bytes = host.end_ns, config.page_bytes
+                    stages.append(StageTiming("STAGING_FLUSH_READ", back.start_ns, back.end_ns,
+                                              back.resource_id, back.bytes))
+                earliest, host_bytes = back.end_ns, config.page_bytes
+            host = timeline.transfer(self._host_id(mapping, Operation.WRITE), config.page_bytes, earliest,
+                                     self._host_bandwidth(Operation.WRITE), direction="write")
+            if self.capture_details:
+                stages.append(StageTiming("STAGING_FLUSH_HOST", host.start_ns, host.end_ns,
+                                          host.resource_id, host.bytes))
+            earliest, host_bytes = host.end_ns, host_bytes + config.page_bytes
             array_front = self.__dict__["_array_ready"].get(array_id, 0.0)
             buffer_front = self.__dict__["_buffer_ready"].get(array_id, 0.0)
             internal_earliest = max(earliest, buffer_front)
@@ -2143,13 +2152,12 @@ class NandCore:
 
     @staticmethod
     def _tail_program_channel_start(ready, start_override=None):
-        """Return the shared channel-transfer origin for scalar and batch flushes.
+        """Return the shared host-transfer origin for scalar and batch flushes.
 
-        Deferred flushes gate the plane PROGRAM with ``start_override``; the
-        channel copy keeps the original page-ready origin so scalar and native
-        batch paths retain the established physical timing.
+        The host releases a deferred flush at ``start_override``, once the
+        page's bytes are all in the store.
         """
-        return float(ready)
+        return float(ready) if start_override is None else max(float(ready), float(start_override))
 
     def _merge_split(self, request, results):
         """One result for a write split into direct and staged page runs."""
@@ -2571,11 +2579,14 @@ class NandCore:
                 staging_write_pages += 1
                 completion = max(completion, host.end_ns)
                 continue
-            if request.operation is Operation.WRITE and partial and self.config.partial_page_policy == "read_modify_write":
-                # Boundary pages need a simplified old-data read before the
-                # new bytes can be programmed.  This is intentionally not a
-                # persistent page cache.
-                read = self._media_stage("RMW_PAGE_READ", m, dependency, self.config.page_read_ns,
+            host_write_origin = request.arrival_ns + self.config.front_ns
+            host_write_bytes = segment.host_transfer_bytes
+            if request.operation is Operation.WRITE and partial and self.config.partial_page_policy == "host_merge":
+                # OCP writes are whole pages (4.1): the host reads the old
+                # page, merges the new bytes and writes 4 KiB out of place on
+                # the same bank. This is intentionally not a persistent page
+                # cache.
+                read = self._media_stage("MERGE_PAGE_READ", m, dependency, self.config.page_read_ns,
                                          eligible_ns=request.arrival_ns+self.config.front_ns)
                 media_queue_wait_ns = max(
                     media_queue_wait_ns,
@@ -2588,12 +2599,18 @@ class NandCore:
                     dependency, self.config.internal_bandwidth_gb_s,
                     direction="read",
                 )
-                record(StageTiming("RMW_INTERNAL_TRANSFER", read_xfer.start_ns, read_xfer.end_ns, read_xfer.resource_id, read_xfer.bytes))
+                record(StageTiming("MERGE_INTERNAL_TRANSFER", read_xfer.start_ns, read_xfer.end_ns, read_xfer.resource_id, read_xfer.bytes))
                 internal_bytes += read_xfer.bytes
-                dependency = read_xfer.end_ns
                 self._touch_frontiers(array_id)
                 self.__dict__["_buffer_ready"][array_id] = read_xfer.end_ns
                 pages_read += 1
+                merge = self.timeline.transfer(
+                    self._host_id(m, Operation.READ), self.config.page_bytes, read_xfer.end_ns,
+                    self._host_bandwidth(Operation.READ), direction="read")
+                record(StageTiming("MERGE_HOST_TRANSFER", merge.start_ns, merge.end_ns, merge.resource_id, merge.bytes))
+                dependency = host_write_origin = merge.end_ns
+                host_write_bytes = self.config.page_bytes
+                host_bytes += merge.bytes + host_write_bytes - segment.host_transfer_bytes
             if request.operation is Operation.READ:
                 staged = self._staged_pages.get(self._staged_key(m)) if self._buffered_write_mode else None
                 logical_start = max(request.address, segment.address) - segment.address
@@ -2691,8 +2708,7 @@ class NandCore:
                     self.timeline.ready_ns[array_id] = erase.end_ns
                     erases += 1
                 host = self.timeline.transfer(
-                    self._host_id(m, Operation.WRITE), segment.host_transfer_bytes,
-                    request.arrival_ns + self.config.front_ns,
+                    self._host_id(m, Operation.WRITE), host_write_bytes, host_write_origin,
                     self._host_bandwidth(Operation.WRITE),
                     direction="write",
                 )
@@ -2867,16 +2883,15 @@ def _bulk_min_pages(core, operation):
 def _generic_bulk_span(request, config):
     """A span the generic two-buffer page machine runs compiled beside a resident controller.
 
-    A READ or WRITE touching at least RESIDENT_MIN_PAGES 4 KiB pages. It may
-    start or end inside a page (its boundary pages move their
-    host-granularity span) unless it writes under the reject partial-page
-    policy, which only the scalar machine raises.
+    A READ or WRITE touching at least RESIDENT_MIN_PAGES 4 KiB pages. A READ
+    may start or end inside a page (its boundary pages move their
+    host-granularity span); a partial WRITE is the scalar machine's host
+    merge, or its reject policy's error.
     """
     if request.operation not in (Operation.READ, Operation.WRITE) or request.byte_count <= 0:
         return False
     aligned = not request.address % 4096 and not request.byte_count % 4096
-    partial = (not 4096 % config.host_granularity_bytes
-               and (request.operation is Operation.READ or config.partial_page_policy == "read_modify_write"))
+    partial = not 4096 % config.host_granularity_bytes and request.operation is Operation.READ
     return ((aligned or partial)
             and (request.address + request.byte_count - 1) // 4096 - request.address // 4096
             >= RESIDENT_MIN_PAGES - 1)

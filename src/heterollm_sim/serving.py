@@ -3418,6 +3418,14 @@ class _KVBlockTables:
                 self.free[group, kind] = array("q", settled)
                 self.head[group, kind] = 0
 
+    def order_by_admission(self, ages_by_group) -> None:
+        """Seeds (youngest first) take blocks so that older means lower, as FIFO admissions would."""
+        for (group, kind), free in self.free.items():
+            seeds = len(ages_by_group[group])
+            if seeds > len(free) or list(ages_by_group[group]) != sorted(ages_by_group[group]):
+                raise ValueError("striped KV needs its seeds, youngest first, within the pool")
+            self.free[group, kind] = array("q", (*range(seeds - 1, -1, -1), *range(seeds, len(free))))
+
     def blocks_for_pages(self, kind: str, pages: int) -> int:
         return min(pages, self.ring) if kind == "chunk" else pages
 
@@ -6368,7 +6376,9 @@ class _OnlineRuntime:
         self._external_preloaded_bytes = 0
         self._external_buffer_peak_bytes = 0
         contract = stationary_refill_contract(self)
-        if contract is not None:
+        if contract is not None and self.plan.scenario.placement.kv_policy.stripe_stride_pages:
+            self.ledger.blocks.order_by_admission(contract[0])
+        elif contract is not None:
             self.ledger.blocks.settle(*contract, self._kv_block_layout["tokens_per_block"])
         self._decode_window = {}
         if self._external_ingress is None:

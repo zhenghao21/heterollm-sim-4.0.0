@@ -16,7 +16,8 @@ def test_media_experiments_conserve_payload_and_expose_real_dual_path():
     for row in write_rows:
         assert row["base_media_write_bytes"] == row["physical_programs"] * row["page_bytes"]
         assert row["media_write_bytes"] == row["base_media_write_bytes"] * row["gc_write_amplification"]
-        assert row["link_write_bytes"] == row["logical_write_bytes"]
+        assert (row["link_write_bytes"] == row["logical_write_bytes"] if row["write_buffer_capacity_bytes"]
+                else row["link_write_bytes"] >= row["logical_write_bytes"])
         assert row["applied_physical_page_bytes"] == row["page_bytes"]
         assert row["write_buffer_remaining_bytes_after_drain"] == 0
         assert row["buffered_pages_remaining_after_drain"] == 0

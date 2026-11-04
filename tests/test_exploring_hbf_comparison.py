@@ -60,7 +60,7 @@ def test_real_mixed_memory_request_has_flash_weights_and_kv_but_hbm_workspace():
 def test_paper_page_service_executes_real_native_partial_kv_writes(case):
     row = execute_control((case, 1, "qwen2_5-0_5b", 16, 3))
     assert row["status"] == "completed"
-    assert row["physical_configs"]["hbf0"]["partial_page_policy"] == "read_modify_write"
+    assert row["physical_configs"]["hbf0"]["partial_page_policy"] == "host_merge"
     assert row["storage_traffic"]["physical_write_bytes"] > 0
     assert row["resolved_placement"]["rank_active_memory"] == ["hbm0"]
     assert row["paper_tps_reproduced"] is False

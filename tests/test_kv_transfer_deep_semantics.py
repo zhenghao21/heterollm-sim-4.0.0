@@ -31,7 +31,7 @@ def request(p, target):
 def executor(*, buffer_bytes=32768, reject=True, observe=False):
     cfg = make_hbf_config(capacity_bytes=1048576, page_bytes=16384,
         write_buffer_bytes=buffer_bytes,
-        partial_page_policy="reject" if reject else "read_modify_write",
+        partial_page_policy="reject" if reject else "host_merge",
         detailed_observability=observe)
     return PhysicalKVTransferExecutor([component("hbf", cfg)])
 
@@ -133,7 +133,7 @@ def transfer_executor(p, *, target_reject=False, topology=None):
     hbm = make_hbm_config(capacity_bytes=1048576)
     hbf = make_hbf_config(capacity_bytes=1048576, page_bytes=16384,
         write_buffer_bytes=32768,
-        partial_page_policy="reject" if target_reject else "read_modify_write")
+        partial_page_policy="reject" if target_reject else "host_merge")
     e = PhysicalKVTransferExecutor([component("hbm", hbm), component("hbf", hbf)],
                                    topology=topology)
     e.bind_page(p)

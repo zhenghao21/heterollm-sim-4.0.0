@@ -5196,8 +5196,8 @@ function validatePhysicalMemoryConfig(value, component) {
   if (nand && typeof value.planes_independent !== "boolean") {
     throw new Error("physical_memory_config.planes_independent 必须是布尔值。");
   }
-  if (nand && !["read_modify_write", "reject"].includes(String(value.partial_page_policy))) {
-    throw new Error("physical_memory_config.partial_page_policy 必须是 read_modify_write 或 reject。");
+  if (nand && !["host_merge", "reject"].includes(String(value.partial_page_policy))) {
+    throw new Error("physical_memory_config.partial_page_policy 必须是 host_merge 或 reject。");
   }
   if (nand) {
     if (!["device", "host_channel"].includes(value.queue_scope)) {

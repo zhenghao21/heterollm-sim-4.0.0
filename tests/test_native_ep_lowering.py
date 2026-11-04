@@ -118,8 +118,10 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # change updates the structural digest while leaving task cardinality
     # unchanged. The serialized HBM4 queue fields and timings changed it again,
     # and the per-layer KV block pools and their 256-token blocks once more.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "9e68c6776fb2c921")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "bd12fe4b8289d34c")
+    # OCP control changed the serialized NAND config and striped the KV blocks,
+    # with the same task names, categories and dependencies.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "a6bdd641d975fcf0")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "c5077d314c39b68e")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():

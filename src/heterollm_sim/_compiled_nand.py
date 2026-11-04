@@ -13,18 +13,16 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
                            array_ids, channel_ids, host_ids, array_ready, buffer_ready,
                            tags, cache_ready, readers, uses, present, cache_clock,
                            starts, lane_counts, lanes, lane_directions, state, moved,
-                           directions, head_bytes, head_ns, tail_bytes, tail_ns,
-                           head_rmw, tail_rmw):
+                           directions, head_bytes, head_ns, tail_bytes, tail_ns):
     """The ordinary generic page machine, with ordered IEEE additions.
 
     Admission remains one host request in NandCore.submit. Unlike the OCP
     kernel below, generic NAND has neither implicit page-0 erase nor PROGRAM
     frontier validation. No page or cache transition is skipped here. The
     first and last page move ``head_bytes``/``tail_bytes`` over the host
-    (their host-granularity span of a span that starts or ends inside a
-    page); every other page moves a full page. A partially written first or
-    last page (``head_rmw``/``tail_rmw``) first pays the read-modify-write
-    old-page read and its internal transfer, as the scalar machine does.
+    (their host-granularity span of a read that starts or ends inside a
+    page); every other page moves a full page. Writes are whole pages: the
+    host's read-merge-write of a partial page runs in the scalar machine.
     """
     base_units, planes, independent, per_channel, host_channels = geometry
     page_read, page_program, internal_ns, page_host_ns, internal_bytes = timing
@@ -49,7 +47,7 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
     resource_order = np.empty(len(state), dtype=np.int64)
     ordered = np.zeros(len(state), dtype=np.bool_)
     order_count = 0
-    hits = misses = rmw_reads = 0
+    hits = misses = 0
     max_read_wait = 0.0
     completion = base
     for offset in range(count):
@@ -61,11 +59,11 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
         unit = bank if independent else base_unit
         channel = base_unit // per_channel
         ar, ch, host = array_ids[unit], channel_ids[channel], host_ids[channel % host_channels]
-        host_ns, host_bytes, rmw = page_host_ns, 4096, False
+        host_ns, host_bytes = page_host_ns, 4096
         if offset == 0:
-            host_ns, host_bytes, rmw = head_ns, head_bytes, head_rmw
+            host_ns, host_bytes = head_ns, head_bytes
         elif offset == count - 1:
-            host_ns, host_bytes, rmw = tail_ns, tail_bytes, tail_rmw
+            host_ns, host_bytes = tail_ns, tail_bytes
         if read:
             cache_clock += 1
             slot = -1
@@ -116,19 +114,6 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
                     if tags[bank, slot] == physical_page:
                         tags[bank, slot] = -1
                         banks_touched[bank] = True
-            if rmw:
-                # The old page is read into the page buffer before the new
-                # bytes arrive; the array frontier itself is not advanced.
-                eligible = max(base, array_ready[unit], buffer_ready[unit])
-                read_end = _reserve(ar, eligible, page_read, -1, 0,
-                    starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
-                frontier_wait = initial_frontier[unit] - base
-                if frontier_wait > max_read_wait:
-                    max_read_wait = frontier_wait
-                buffer_ready[unit] = _reserve(ch, read_end, internal_ns, int(internal_bytes), 1,
-                    starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
-                arrays_touched[unit] = True
-                rmw_reads += 1
             host_end = _reserve(host, base, host_ns, host_bytes, 2,
                 starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
             internal_end = _reserve(ch, max(host_end, buffer_ready[unit]), internal_ns,
@@ -141,7 +126,7 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
         if count < 128:
             if read and hit:
                 first_rid, second_rid, third_rid = host, host, host
-            elif read or rmw:
+            elif read:
                 first_rid, second_rid, third_rid = ar, ch, host
             else:
                 first_rid, second_rid, third_rid = host, ch, ar
@@ -151,7 +136,7 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
                     resource_order[order_count] = rid
                     order_count += 1
         completion = max(completion, end)
-    return (completion, hits, misses, rmw_reads, cache_clock, touched,
+    return (completion, hits, misses, cache_clock, touched,
             arrays_touched, banks_touched, resource_order[:order_count], max_read_wait)
 
 
@@ -184,18 +169,19 @@ def _reserve(rid, earliest, duration, payload, direction, starts, lane_counts,
 
 @njit(cache=True, nogil=True, fastmath=False)
 def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_program_ns,
-                            internal_ns, internal_bytes, array_ids, channel_ids,
+                            internal_ns, internal_bytes, host_read_ns, host_write_ns,
+                            array_ids, channel_ids, host_read_ids, host_write_ids,
                             array_ready, buffer_ready, tags,
                             starts, lane_counts, lanes, lane_directions, state, moved,
                             directions):
-    """Reserve a logic-die page-program batch against resident NAND arrays.
+    """Reserve a scratchpad page-program batch against resident NAND arrays.
 
-    ``pages`` is already in the scalar flush order.  The kernel performs the
-    same channel transfer followed by array PROGRAM for every page while the
-    controller/cache arrays and fabric calendars remain resident.  No host
-    transfer or read-modify-write is involved for a full logic-die page.
+    ``pages`` is already in the scalar flush order.  The scratchpad is the
+    host's, with no internal path to NAND: for every page the host reads it
+    back and writes 4 KiB, then the channel transfer and array PROGRAM run,
+    while the controller/cache arrays and fabric calendars remain resident.
     """
-    base_units, planes, independent, per_channel, _host_channels = geometry
+    base_units, planes, independent, per_channel, host_channels = geometry
     touched = np.zeros(len(state), dtype=np.bool_)
     arrays_touched = np.zeros(len(array_ready), dtype=np.bool_)
     banks_touched = np.zeros(len(tags), dtype=np.bool_)
@@ -214,6 +200,7 @@ def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_prog
         channel = base_unit // per_channel
         ar = array_ids[unit]
         ch = channel_ids[channel]
+        link = channel % host_channels
 
         # _invalidate_cache only removes the tag; reader lifetimes and LRU
         # ages remain live until the next fill, so preserve all other fields.
@@ -222,12 +209,18 @@ def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_prog
                 tags[bank, slot] = -1
                 banks_touched[bank] = True
 
-        # Keep the same ordering as NandCore._tail_program: channel transfer
-        # first, then the plane PROGRAM after both channel and array fronts.
-        # ``start_times`` is the release frontier for the whole program
-        # transfer.  A channel transfer must not begin before that point;
-        # scalar ``_tail_program_channel_start`` uses the same rule.
-        internal_start = max(ready_times[index], buffer_ready[unit], start_times[index])
+        # Keep the same ordering as NandCore._tail_program: host read and
+        # write, channel transfer, then the plane PROGRAM after both channel
+        # and array fronts. ``start_times`` is the release frontier for the
+        # whole program transfer: nothing begins before that point.
+        release = max(ready_times[index], start_times[index])
+        host_end = _reserve(host_read_ids[link], release, host_read_ns, internal_bytes, 1,
+                            starts, lane_counts, lanes, lane_directions, state,
+                            moved, directions, touched)
+        host_end = _reserve(host_write_ids[link], host_end, host_write_ns, internal_bytes, 2,
+                            starts, lane_counts, lanes, lane_directions, state,
+                            moved, directions, touched)
+        internal_start = max(host_end, buffer_ready[unit], start_times[index])
         internal_end = _reserve(ch, internal_start, internal_ns, internal_bytes, 2,
                                 starts, lane_counts, lanes, lane_directions, state,
                                 moved, directions, touched)

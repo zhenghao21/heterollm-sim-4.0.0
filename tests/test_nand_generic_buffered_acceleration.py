@@ -68,15 +68,16 @@ def test_mixed_bulk_partial_hits_erase_and_direction_calendars(independent, full
         ("read", 240 * PAGE, 256 * PAGE, 10.),  # real cache hits in the first stripe
         ("write", 7 * PAGE, 256 * PAGE, .3),
         ("read", 0, 256 * PAGE, .4),
-        ("write", 29, 128 * PAGE + 13, 1.),  # scalar RMW boundary semantics
+        ("write", 29, 128 * PAGE + 13, 1.),  # partial: the scalar host merge
         ("read", 35, 128 * PAGE + 31, 1.),
         ("erase", 0, PAGE, 2.),
         ("read", 0, 129 * PAGE, 2.),
         ("read", 0, PAGE, 2.),
     ]
     for index, (operation, address, count, arrival) in enumerate(operations):
-        # Reads and RMW writes run compiled over any span of 128 pages.
-        native = operation != "erase" and (address + count - 1) // PAGE - address // PAGE >= 127
+        # Reads and whole-page writes run compiled over any span of 128 pages.
+        whole = operation != "write" or not (address % PAGE or count % PAGE)
+        native = operation != "erase" and whole and (address + count - 1) // PAGE - address // PAGE >= 127
         submit_pair(pair, AccessRequest(str(index), operation, address, count, arrival), native=native)
     timeline = pair[0].timeline
     if full_duplex:
@@ -238,8 +239,8 @@ def test_resident_controller_runs_short_unaligned_spans_compiled_with_scalar_res
                 ("read", 305 * PAGE + 9, 2 * PAGE, True),  # three pages, partial ends
                 ("read", 9000 * PAGE + 4095, 2, True),     # two pages, one byte each
                 ("read", 9000 * PAGE + 7, 100, False),     # one page: scalar
-                ("write", 9100 * PAGE, 3 * PAGE + 5, True),   # read-modify-write tail page
-                ("write", 9200 * PAGE + 100, 2 * PAGE, True),  # partial head and tail pages
+                ("write", 9100 * PAGE, 3 * PAGE + 5, False),   # partial tail page: scalar host merge
+                ("write", 9200 * PAGE + 100, 2 * PAGE, False),  # partial head and tail pages too
                 ("read", 9100 * PAGE, 3 * PAGE + 5, True),
                 ("read", 9200 * PAGE, 3 * PAGE, True)]
     for index, (operation, address, count, native) in enumerate(requests):

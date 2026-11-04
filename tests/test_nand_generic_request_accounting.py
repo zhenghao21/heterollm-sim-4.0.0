@@ -46,7 +46,7 @@ def compare(pair, request):
 @pytest.mark.parametrize("owned", [False, True])
 @pytest.mark.parametrize("depth", [1, 3])
 @pytest.mark.parametrize("duplex", [False, True])
-def test_request_sequence_partial_rmw_hits_and_admission_are_bit_exact(owned, depth, duplex):
+def test_request_sequence_partial_merge_hits_and_admission_are_bit_exact(owned, depth, duplex):
     pair = contexts(config(max_outstanding_requests=depth, max_outstanding_write_requests=1,
                            host_full_duplex=duplex, host_channels=2, host_granularity_bytes=256))
     compare(pair, AccessRequest("seed", "read", 0, 128 * PAGE, .125))
@@ -55,7 +55,7 @@ def test_request_sequence_partial_rmw_hits_and_admission_are_bit_exact(owned, de
     rng = Random(1097)
     waited = False
     # Same-arrival read batches include all-cache-hit requests; mixed one-page
-    # appends preserve write limits, old-page RMW and cache reader lifetimes.
+    # appends preserve write limits, the host merge and cache reader lifetimes.
     operations = [("read", 0, 128 * PAGE), ("read", 0, 128 * PAGE),
                   ("write", 17, 99), ("read", 17, 99),
                   ("write", PAGE - 7, 20), ("read", PAGE - 7, 20)]
@@ -65,7 +65,8 @@ def test_request_sequence_partial_rmw_hits_and_admission_are_bit_exact(owned, de
     for index, (op, address, size) in enumerate(operations):
         row, native = compare(pair, AccessRequest(str(index), op, address, size, .125))
         span = (address + size - 1) // PAGE - address // PAGE + 1
-        assert native == (span if span >= 2 else None)
+        whole = op == "read" or not (address % PAGE or size % PAGE)
+        assert native == (span if span >= 2 and whole else None)
         waited |= row.counters["queue_wait_ns"] > 0
     assert waited
     for context, token in zip(pair, tokens):

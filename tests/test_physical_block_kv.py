@@ -7,12 +7,56 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from hbf_hbm_experiments import scenario
-from heterollm_sim.native_stationary import kv_block_peak
+from heterollm_sim.native_stationary import kv_block_peak, kv_stripe_layout
 from heterollm_sim.memory_types import KVRuns
 from heterollm_sim.planner import (_generic_kv_accesses, _generic_kv_read_rows, _kv_block_runs, kv_block_geometry,
                                    _parallel_plan, _execution_layers, _subtract_direct_buffer_accesses)
 from heterollm_sim.reporting import run_scenario
 from heterollm_sim.serving import RequestStatus, _KVBlockTables, _settled_free_list
+
+
+class KVStripeTests(unittest.TestCase):
+    @staticmethod
+    def seed_ages(batch, output, ep):
+        return tuple(tuple((2 * index + 1) * output // (2 * batch) for index in range(group, batch, ep))
+                     for group in range(ep))
+
+    def test_a_layer_programs_each_bank_at_most_once_in_any_step(self):
+        for batch, ep, prompt, output, per_page, banks in ((3088, 8, 1660, 373, 2, 3200), (6048, 8, 1660, 373, 2, 3200),
+                                                           (1504, 8, 5900, 499, 2, 3200), (612, 2, 5900, 499, 8, 2048),
+                                                           (104, 8, 103500, 1100, 2, 3200)):
+            groups = self.seed_ages(batch, output, ep)
+            layout = kv_stripe_layout(groups, prompt, output, per_page, banks, batch // ep + 16)
+            stride, phase = layout["stride_pages"], layout["phase_pages"]
+            self.assertEqual(layout["pool_blocks"] * stride % banks, 0)
+            self.assertGreaterEqual(stride, -(-(prompt + output - 1) // per_page))
+            self.assertEqual((layout["flush_collisions"], layout["spill_collisions"]), (0, 0))
+            for ages in groups:
+                for step in range(output):
+                    used = set()
+                    for slot, age in enumerate(ages):
+                        generation, held = divmod(age + step, output)
+                        if (prompt + held) % per_page == 0:
+                            # The oldest slot took the lowest block.
+                            index = generation * len(ages) + len(ages) - 1 - slot
+                            bank = index * stride + (prompt + held - 1) // per_page
+                            pair = {bank % banks, (bank + phase) % banks}
+                            self.assertEqual(len(pair), 2)
+                            self.assertFalse(used & pair)
+                            used |= pair
+
+    def test_seeds_take_blocks_oldest_lowest_and_admissions_follow(self):
+        blocks = _KVBlockTables(1, {"full": 6})
+        blocks.order_by_admission([[0, 2, 4]])
+        for name in ("young", "middle", "old", "next"):
+            blocks.resize(0, name, 1, 0)
+        self.assertEqual([blocks.table(name)["full"] for name in ("young", "middle", "old", "next")],
+                         [(2,), (1,), (0,), (3,)])
+        blocks.resize(0, "old", 0, 1)
+        blocks.resize(0, "after", 1, 0)
+        self.assertEqual(blocks.table("after")["full"], (4,))
+        with self.assertRaises(ValueError):
+            _KVBlockTables(1, {"full": 6}).order_by_admission([[4, 2, 0]])
 
 
 class KVBlockTableTests(unittest.TestCase):

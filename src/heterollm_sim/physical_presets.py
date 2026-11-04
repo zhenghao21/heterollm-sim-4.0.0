@@ -73,7 +73,7 @@ _NAND_RESEARCH_BASE = {
     "write_buffer_bytes": 0, "page_staging": "none", "page_staging_bytes_per_host_channel": 0,
     "page_staging_latency_ns": 0.0, "page_staging_burst_bytes": 64,
     "wear_model": None, "detailed_observability": False,
-    "partial_page_policy": "read_modify_write", "capacity_bytes": 8 * 1024 ** 3,
+    "partial_page_policy": "host_merge", "capacity_bytes": 8 * 1024 ** 3,
     "max_outstanding_requests": 32, "queue_scope": "device",
     "max_outstanding_write_requests": None, "max_expanded_segments": 1000000,
     "metadata": {

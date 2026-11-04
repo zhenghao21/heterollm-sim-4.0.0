@@ -97,7 +97,7 @@ def test_migrated_kv_generation_stays_resident_with_live_workspace(asynchronous)
     hbm = make_hbm_config(capacity_bytes=32768)
     hbm = replace(hbm, metadata={**hbm.metadata, "workspace_capacity_bytes": 4096})
     hbf = make_hbf_config(capacity_bytes=65536, page_bytes=16384,
-                          partial_page_policy="read_modify_write")
+                          partial_page_policy="host_merge")
     executor = PhysicalKVTransferExecutor([component("hbm", hbm), component("hbf", hbf)])
     item = page("hbm", 8192)
     executor.bind_page(item)

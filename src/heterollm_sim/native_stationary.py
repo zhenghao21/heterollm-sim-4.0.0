@@ -52,11 +52,14 @@ from array import array
 from collections import defaultdict
 from dataclasses import asdict, replace
 from fractions import Fraction
+from functools import lru_cache
 import json
 import math
 import re
 from statistics import fmean
 import time
+
+import numpy as np
 
 from .execution_control import ExecutionControl, NativeFastWallBudgetError, _NativeLayerSamplingCutoff
 from .native_fast_window import (NativeLayerWindowSample, NativeWindowForecast, _checked_budget,
@@ -64,7 +67,8 @@ from .native_fast_window import (NativeLayerWindowSample, NativeWindowForecast, 
 from .native_layer_sampling import (NativeLayerSamplingGuardError, _execute_window, _graph_facts, _layer_counts,
                                     drop_unsampled_request_records, layer_inventory,
                                     remaining_import_bytes)
-from .planner import _compilation_scope
+from .memory_types import NandConfig
+from .planner import _compilation_scope, kv_block_pools
 from .serving import RequestStatus, _OnlineRuntime, compile_serving_plan, stationary_refill_contract
 
 HOLDOUT_SHIFT_NS = 10e6
@@ -1172,9 +1176,11 @@ def _import_extra(samples):
     Each sample continues one set of in-flight imports (k = 1: one import
     alone). A set finished inside the window gives E(k) directly as the
     later end of the same work, scaled from the bytes written in the window
-    to the set's whole imports. Otherwise the post-entry layer slope gives
-    the slowdown s and the set's observed write rate the span, with
-    E(k) = T(k)*s/(1+s). Every sampled k needs two sets; returns
+    to the set's whole imports. Otherwise E(k) is the delay the run measured
+    by its last layer, plus the post-entry layer slowdown s over what is left
+    of the span, T(k) from the set's observed write rate: the step's entry
+    absorbs its share of an import without delay, so s can't cover all of
+    T(k). Every sampled k needs two sets; returns
     {k: {"extra_ns": (lo, hi), "span_ns": (lo, hi)}} and the sample rows.
     """
     rows = []
@@ -1209,8 +1215,9 @@ def _import_extra(samples):
             if min(observed["write_phases_by_request"][identity] for identity in identities) < 2:
                 raise ValueError("native_stationary_PD_window_has_too_few_import_writes")
             slowdown = (c[-1] - c[0]) / (q[-1] - q[0]) - 1.
+            left = max(0., imported - (c[-1] - busy["start_ns"]))
             row.update(mode="post_entry_layer_slope", slowdown=slowdown,
-                       extra_ns=max(0., imported * slowdown / (1. + slowdown)))
+                       extra_ns=max(0., c[-1] - q[-1] + left * slowdown / (1. + slowdown)))
         rows.append(row)
     terms = {}
     for count in sorted({row["concurrent_imports"] for row in rows}):
@@ -1441,6 +1448,126 @@ def kv_block_peak(ages_by_group, prompt, output, group_pool, tokens_per_block, r
     return peaks
 
 
+def block_open_stall_ns(runtime, requests, output):
+    """Step time the host gives to opening NAND blocks for a group's KV; 0 without striped NAND KV.
+
+    Writing page 0 of a block erases it (OCP 5.4.1). A bank log uses pages as
+    KV programs them: one per page a tail fills, or one per row appended where
+    the scratchpad can't hold the tail, and each landing import's history. The
+    host opens one block on every bank at once, between layers, so every
+    pages_per_block programs per bank stall the device's reads for one erase.
+    Ranks stall together, so the busiest rank sets the step's loss.
+    """
+    scenario = runtime.plan.scenario
+    if not scenario.placement.kv_policy.stripe_stride_pages:
+        return 0.
+    prompt = next(state.spec.prompt_tokens for state in runtime._state_values
+                  if not state.spec.metadata.get("warmup_seed", False))
+    physical = runtime._execution_resource_kernel.physical_runtime
+    programs, configs = defaultdict(float), {}
+    for row in kv_block_pools(scenario, 0, runtime._kv_block_layout["tokens_per_block"]):
+        config = row["memory_config"]
+        if not isinstance(config, NandConfig):
+            continue
+        owner, bytes_per_row = row["physical_owner"], row["row_bytes"]
+        share = physical._staging_shares.get(owner)
+        stored = physical._tail_reserved.get(share[0], (0, 1.))[1] if share is not None else 1.
+        history = min(prompt - 1, row["attention_chunk_size"] or prompt - 1)
+        programs[owner] += requests * (stored * bytes_per_row / config.page_bytes + 1. - stored)
+        programs[owner] += requests / output * -(-history * bytes_per_row // config.page_bytes)
+        configs[owner] = config
+    return max((config.block_erase_ns * programs[owner] / (config.array_units * config.pages_per_block)
+                for owner, config in configs.items()), default=0.)
+
+
+@lru_cache(maxsize=1024)
+def kv_stripe_layout(ages_by_group, prompt, output, per_page, banks, blocks, chunk=0):
+    """Host placement of NAND-backed KV: stride, K/V phase and pool blocks.
+
+    The physical bank is the low address bits, and a bank log gives any
+    program the bank's next page number, so a whole-request block striped
+    over consecutive banks writes and reads on the banks its address names.
+    Admission n's tail at step T is on bank n * stride + position // per_page,
+    with position falling by the admission spacing as n grows. So the banks
+    of two tails differ by dn * stride - m for a small set of (dn, m), fixed
+    by the ages, and the search only has to avoid zero:
+
+    * ``flush``: tails that fill a page in one step, whose 100 us programs
+      would otherwise stack on one plane and hold up the next layer's reads;
+    * ``spill``: any two live tails, which program together when the
+      scratchpad is short;
+    * the bank spread of the stripes, since each layer reads them all.
+
+    ``blocks * stride`` wraps to a whole number of bank turns, so a FIFO
+    free list cycling through the pool never breaks the pattern. An import
+    writes K and V of each layer in turn, so each pool's phase is about the
+    pages of the smallest kind's history: the next pool starts where this one
+    ended and the import rolls round the banks, one program at a time on each,
+    instead of stacking every layer's programs on the same banks. It avoids
+    every tail difference, since V programs beside K in a flush.
+    """
+    flush, spill = set(), set()
+    readers = []
+    for ages in ages_by_group:
+        admitted = np.array([-age for age in reversed(ages)] + [output - age for age in reversed(ages)], dtype=np.int64)
+        count = len(ages)
+        for dn in range(count):
+            for dt in np.unique(admitted[dn:dn + count] - admitted[:count]):
+                dt = int(dt)
+                if dt < output and (dn or dt):
+                    spill.update({(dn, dt // per_page), (dn, -(-dt // per_page))})
+                    if dt % per_page == 0:
+                        flush.add((dn, dt // per_page))
+        readers.append(np.array([-(-(prompt + age) // per_page) for age in reversed(ages)], dtype=np.int64))
+    flush_pairs = np.array(sorted(flush), dtype=np.int64).reshape(-1, 2)
+    spill_pairs = np.array(sorted(spill), dtype=np.int64).reshape(-1, 2)
+    pages = -(-(prompt + output - 1) // per_page)
+    span = blocks + max(len(ages) for ages in ages_by_group)
+
+    def spread(stride):
+        worst = 0
+        for held in readers:
+            start = np.arange(len(held), dtype=np.int64) * stride % banks
+            whole, rest = np.divmod(held, banks)
+            end = start + rest
+            cover = (np.cumsum(np.bincount(start, minlength=banks) - np.bincount(end % banks, minlength=banks))
+                     + int(np.count_nonzero(end >= banks)) + int(whole.sum()))
+            worst = max(worst, int(cover.max()) - math.ceil(float(cover.mean())))
+        return worst
+
+    best = None
+    for stride in range(pages, pages + banks):
+        turn = banks // math.gcd(stride, banks)
+        if turn > span:
+            continue
+        flush_hits = int(np.count_nonzero((flush_pairs[:, 0] * stride - flush_pairs[:, 1]) % banks == 0))
+        spill_hits = int(np.count_nonzero((spill_pairs[:, 0] * stride - spill_pairs[:, 1]) % banks == 0))
+        pool = -(-blocks // turn) * turn
+        key = (flush_hits, spill_hits, spread(stride), pool * stride)
+        if best is None or key < best[0]:
+            best = key, stride, pool
+    if best is None:
+        raise ValueError("no KV stripe stride turns over the banks within the pool")
+    (flush_hits, spill_hits, excess, _), stride, pool = best
+
+    def forbidden(pairs):
+        values = (pairs[:, 0] * stride - pairs[:, 1]) % banks
+        mask = np.zeros(banks, dtype=np.bool_)
+        mask[values] = mask[-values % banks] = mask[0] = True
+        return mask
+
+    history = -(-min(prompt - 1, chunk or prompt - 1) // per_page) % banks
+    mask = forbidden(spill_pairs)
+    if mask.all():
+        mask = forbidden(flush_pairs)
+    phase = history
+    if not mask.all():
+        free = np.flatnonzero(~mask)
+        phase = int(free[np.searchsorted(free, history) % len(free)])
+    return {"stride_pages": stride, "phase_pages": phase, "pool_blocks": pool,
+            "flush_collisions": flush_hits, "spill_collisions": spill_hits, "read_excess_pages": excess}
+
+
 def kv_block_admission(runtime):
     """The refill cycle's KV block peak of every EP group against its pools.
 
@@ -1589,8 +1716,11 @@ def evaluate_stationary(runtime, prepared, samples, options):
     # landings, every step grows by B/output * sum_k E(k) n_k/total; with
     # single imports only that is B*e*rho/output.
     shares = {count: steps / total for count, steps in busiest.items()} if total else {1: 1.}
-    tpot_lo = step_lo + sum(batch * terms[count]["extra_ns"][0] * share / output for count, share in shares.items())
-    tpot_hi = step_hi + sum(batch * terms[count]["extra_ns"][1] * share / output for count, share in shares.items())
+    block_open = block_open_stall_ns(runtime, batch // degree, output)
+    tpot_lo = step_lo + block_open + sum(batch * terms[count]["extra_ns"][0] * share / output
+                                         for count, share in shares.items())
+    tpot_hi = step_hi + block_open + sum(batch * terms[count]["extra_ns"][1] * share / output
+                                         for count, share in shares.items())
     span_lo = min(terms[count]["span_ns"][0] for count in shares)
     span_hi = max(terms[count]["span_ns"][1] for count in shares)
     gap = schedule["fewest_landing_steps"]
@@ -1642,7 +1772,8 @@ def evaluate_stationary(runtime, prepared, samples, options):
                 "measurement_visible_output_tokens": tokens, "complete_fresh_requests": complete,
                 "forecast_only": True},
         error_budget={**result["error_budget"], "step_service_ns": {"lower": step_lo, "upper": step_hi},
-            "step": step, "pd_import_extra_ns": {"lower": terms[1]["extra_ns"][0], "upper": terms[1]["extra_ns"][1]},
+            "step": step, "block_open_stall_ns": block_open,
+            "pd_import_extra_ns": {"lower": terms[1]["extra_ns"][0], "upper": terms[1]["extra_ns"][1]},
             "pd_import_span_ns": {"lower": span_lo, "upper": span_hi}, "pd_imports": imports,
             "pd_import_terms": [{"concurrent_imports": count, "measured_steps": busiest.get(count, 0),
                                  "share_of_landings": shares.get(count, 0.),
