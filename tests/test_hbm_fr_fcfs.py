@@ -513,6 +513,42 @@ def test_fr_fcfs_outcome_does_not_depend_on_the_worker_count(seed, monkeypatch):
     assert all(outcome == seen[0] for outcome in seen)
 
 
+def test_kernel_reports_its_failures_as_python_errors():
+    """The kernel runs without the GIL; its failures must still raise, with the controller's messages."""
+    from heterollm_sim._compiled_hbm import _pack_hbm_numeric
+    from heterollm_sim._hbm_numeric import _run_fr_fcfs_channels
+
+    packed = _pack_hbm_numeric(numeric_core(), request("x", READ, 0))
+    half = float(packed.t[0]) / 2
+
+    def run(arrival=0., t=packed.t, prepare=lambda arrays: None):
+        arrays = [array.copy() for array in packed.arrays]
+        prepare(arrays)
+        _run_fr_fcfs_channels(np.array([0], dtype=np.int64), np.array([2], dtype=np.int64), np.array([arrival]),
+                              np.array([True]), packed._fr_queue, packed.g, t, *arrays,
+                              np.zeros((1, 3), dtype=np.int64), np.zeros((1, 2)), 0, 1, 1, np.zeros((1, 7)))
+
+    run()
+    with pytest.raises(OverflowError, match="clock index"):
+        run(arrival=half * 2. ** 53)
+
+    def full_calendar(arrays):
+        arrays[12][0] = 1e9 + np.arange(arrays[12].shape[1])
+        arrays[13][0] = arrays[12].shape[1]
+    with pytest.raises(OverflowError, match="ACT calendar"):
+        run(prepare=full_calendar)
+    short = packed.t.copy()
+    short[29] = 1.
+    with pytest.raises(ValueError, match="tRASmax activation window"):
+        run(t=short)
+    wrong_layout = [array.copy() for array in packed.arrays]
+    wrong_layout[1] = wrong_layout[1][:, :6].copy()
+    with pytest.raises(ValueError, match="layout"):
+        _run_fr_fcfs_channels(np.array([0], dtype=np.int64), np.array([2], dtype=np.int64), np.array([0.]),
+                              np.array([True]), packed._fr_queue, packed.g, packed.t, *wrong_layout,
+                              np.zeros((1, 3), dtype=np.int64), np.zeros((1, 2)), 0, 1, 1, np.zeros((1, 7)))
+
+
 @pytest.mark.parametrize("seed", range(3))
 @pytest.mark.parametrize("policy", ("all_bank", "disabled"))
 def test_channel_mirror_matches_simulating_every_channel(seed, policy):

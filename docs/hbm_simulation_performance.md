@@ -582,7 +582,7 @@ HBM 状态刷新另做了同源码编译辅助函数候选：保留每次读取�
 .venv/Scripts/python.exe scripts/build_resource_ledger.py --inplace
 ```
 
-扩展保留浮点运算顺序，未启用 fast-math。生成文件位于 `tmp/resource_ledger` 和源码目录，均不入库。没有扩展时同一份 Python 源码仍可执行，但不能用其速度代替启用扩展的测量。
+扩展保留浮点运算顺序，未启用 fast-math。生成文件位于 `tmp/resource_ledger` 和源码目录，均不入库。没有扩展时同一份 Python 源码仍可执行，但不能用其速度代替启用扩展的测量。例外是 FR-FCFS 命令内核 `_hbm_fr_kernel`（C 源码 `_hbm_fr_core.c`）：它没有 Python 形态，每个工作树都要先构建，修改 `.c` 后也要重建，未构建时导入 `_hbm_numeric` 直接报错。
 
 本轮优化减少仿真器自身的计算和状态处理开销。模型、硬件参数、每条内存命令的执行规则和预测精度保持原样。性能测量和等价检查见 [本轮结果](../artifacts/hbm_execution_performance_20261015/report.md)。
 
