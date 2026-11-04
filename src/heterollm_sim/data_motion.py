@@ -1347,11 +1347,11 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     staging_sessions = {}
     resolved_accesses = []
     task_resource_sink = (({}, {}, {})
-        if type(owners) is set and len(owners) > 1
+        if type(owners) is set
         and type(validated) in (list, tuple)
         and any(type(item) is tuple and len(item) == 6 and type(item[5]) is NandConfig
                 for item in validated)
-        and _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns) else None)
+        and _native_resource_sink(task, runtime, prepared, ledger, arrival_ns) else None)
     owner_resource_sinks = {}
     resource_accumulator = None
     if (len(owners) == 1 and not staging_bindings and not runtime.capture_details
@@ -1755,7 +1755,7 @@ def _sink_columns_proven(timeline):
     return True
 
 
-def _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns):
+def _native_resource_sink(task, runtime, prepared, ledger, arrival_ns):
     if (type(task) is not TaskSpec or type(runtime) is not PhysicalRuntimeContext
             or type(prepared) is not _sink_task_module.PreparedPhysicalTask
             or type(ledger) is not _sink_task_module.PhysicalTaskLedger
@@ -1894,8 +1894,7 @@ def _native_multiowner_resource_sink(task, runtime, prepared, ledger, arrival_ns
             return False
         footprint.extend(resources)
         by_owner[owner] = core
-    return (has_nand and len(by_owner) > 1
-            and _sink_nand_pack_module.can_own_timeline(timeline, tuple(dict.fromkeys(footprint))))
+    return has_nand and _sink_nand_pack_module.can_own_timeline(timeline, tuple(dict.fromkeys(footprint)))
 
 
 def _recost_physical_kernel_envelope(task: TaskSpec) -> TaskSpec:

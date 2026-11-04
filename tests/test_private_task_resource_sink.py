@@ -35,22 +35,22 @@ RESOURCE_FIELDS = ("resource_busy_ns", "resource_bytes", "resource_last_interval
 
 @contextmanager
 def sink_mode(enabled):
-    original = data_motion._native_multiowner_resource_sink
+    original = data_motion._native_resource_sink
     if not enabled:
         # This new gate is not a dispatcher/writer. Disabling it leaves the
         # same native Token scope, submission and publication paths in use.
-        data_motion._native_multiowner_resource_sink = lambda *args, **kwargs: False
+        data_motion._native_resource_sink = lambda *args, **kwargs: False
     try:
         yield
     finally:
-        data_motion._native_multiowner_resource_sink = original
+        data_motion._native_resource_sink = original
 
 
 class NativeTrace:
     """Observe Python returns without monkeypatching guarded entry points."""
 
     def __init__(self):
-        self.gate = data_motion._native_multiowner_resource_sink.__code__
+        self.gate = data_motion._native_resource_sink.__code__
         self.task = data_motion.execute_prepared_physical_task.__code__
         self.submit = NandCore.submit.__code__
         self.batch = _nand_acceleration.execute_read_batch.__code__
@@ -419,7 +419,7 @@ def test_authored_false_accounting_keeps_original_callback_sequence_and_public_s
             # The additional predicate must reject its type without another
             # bool conversion, even though it eventually selects fallback.
             assert sum("_can_own_metric_orders" in row for row in calls) == 1
-            assert not any("_native_multiowner_resource_sink" in row for row in calls)
+            assert not any("_native_resource_sink" in row for row in calls)
             if enabled:
                 assert all(scope for _, scope in trace.gates)
             runs.append((kernel, events, state, calls))
