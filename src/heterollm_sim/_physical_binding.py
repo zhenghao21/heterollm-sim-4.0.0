@@ -17,20 +17,10 @@ from .memory_types import KVRuns
 _PHYSICAL_FIELDS = frozenset({
     "physical_memory_config", "memory_accesses", "physical_memory_component_id",
     "physical_owner", "physical_address_scope", "physical_address_bindings",
-    "physical_allocations", "physical_memory_configs", "hbf_host_staging_by_owner",
-    "hbf_staging_replaced_link_ids", "hbf_preloaded_buffers",
+    "physical_allocations", "physical_memory_configs",
     "buffer_accesses", "logical_buffer_accesses", "address_precision",
     "cache_line_identity_coverage",
 })
-
-
-def _copy_staging_contracts(contracts):
-    """Match _attach_hbf_host_staging's exact copy/borrow boundary."""
-    return {owner: {**contract, "routes": {
-        direction: tuple({**hop, "resource_capacities": dict(hop["resource_capacities"])}
-                         for hop in hops)
-        for direction, hops in contract["routes"].items()}}
-        for owner, contract in contracts.items()}
 
 
 def _copy_physical_field(key, value):
@@ -39,8 +29,6 @@ def _copy_physical_field(key, value):
         return list(rows) if type(value) is list else rows
     if key == "physical_memory_configs":
         return dict(value)
-    if key == "hbf_host_staging_by_owner":
-        return _copy_staging_contracts(value)
     # Raw configurations and typed HOST configurations are borrowed from the
     # immutable scenario by ordinary lowering too. Deep-copying them would
     # strengthen ownership and repeatedly copy hundreds of fixed fields.
@@ -160,11 +148,6 @@ class StaticPhysicalBinding:
                         address_groups.setdefault(key, []).append((collection, index))
                 elif source not in {"explicit_physical_address", "explicit_buffer_tensor_address"}:
                     return None
-        if any(row[2] != 0 for row in metadata.get("hbf_preloaded_buffers", ())):
-            return None
-        if identity_is_dynamic is not None and any(
-                identity_is_dynamic(row[1]) for row in metadata.get("hbf_preloaded_buffers", ())):
-            return None
         return cls(tuple(generation_slots), tuple(
             (tuple(slots), key[-2], key[-1]) for key, slots in address_groups.items()),
             tuple((key, None if key == "logical_buffer_accesses" else _copy_physical_field(key, value))

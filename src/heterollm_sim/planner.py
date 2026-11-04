@@ -5130,156 +5130,6 @@ def _attach_gddr_physical_task(task: TaskSpec, scenario: ScenarioConfig) -> Task
     return bound_task
 
 
-def _attach_hbf_host_staging(task: TaskSpec, scenario: ScenarioConfig) -> TaskSpec:
-    """Bind the explicit host page assembler to real memory and fabric owners.
-
-    The NAND protocol remains a complete-page protocol.  This is a host-side
-    service contract consumed at physical dispatch, where actual dirty ranges
-    and page flushes are known across successive decode invocations.
-    """
-    accesses = _memory_accesses(task.metadata) or ()
-    if not accesses or task.metadata.get("physical_memory_config") is None:
-        return task
-    from .data_motion import resolve_service
-    from .memory_types import DramConfig, NandConfig
-    from .physical_contract import parse_execution_physical_config
-
-    def declared_bindings():
-        bindings = {}
-        for component in scenario.hardware.components:
-            declaration = component.metadata.get("host_write_staging")
-            if declaration is None:
-                continue
-            if not isinstance(declaration, Mapping):
-                raise ValueError("host_write_staging must be a mapping")
-            unknown = set(declaration) - {"host_component_id", "capacity_bytes", "reserve_blocks"}
-            if unknown:
-                raise ValueError("host_write_staging has unsupported fields: " + ", ".join(sorted(unknown)))
-            physical = _cached_physical_memory_config(component)
-            if not isinstance(physical, NandConfig) or physical.protocol_mode != "ocp_hbf_0_7":
-                raise ValueError("host_write_staging requires strict ocp_hbf_0_7 HBF")
-            host_id = declaration.get("host_component_id")
-            host = scenario.hardware.component_map().get(host_id)
-            if host is None or host.normalized_kind != "host_memory":
-                raise ValueError("host_write_staging requires an explicit host_memory component")
-            host_config = _cached_physical_memory_config(host)
-            if not isinstance(host_config, DramConfig):
-                raise ValueError("host_write_staging host component requires physical DRAM")
-            capacity = declaration.get("capacity_bytes")
-            if type(capacity) is not int or capacity < 2 * physical.page_bytes or capacity % physical.page_bytes:
-                raise ValueError("host_write_staging capacity_bytes requires at least two aligned HBF pages")
-            if capacity > host_config.effective_capacity_bytes:
-                raise ValueError("host_write_staging capacity_bytes exceeds HOST DRAM capacity")
-            reserve = declaration.get("reserve_blocks", 1)
-            if type(reserve) is not int or reserve != 1:
-                raise ValueError("host_write_staging reserves exactly one physical erase block")
-            owner = resolve_service(component).physical_owner
-            if owner in bindings:
-                raise ValueError("host_write_staging requires unique HBF physical owners")
-            bindings[owner] = (component, physical, host, host_config, capacity, reserve)
-        return bindings
-
-    context = _active_compilation_context(scenario)
-    bindings = (declared_bindings() if context is None else
-                context.invariant(("hbf_host_staging_bindings",), declared_bindings))
-    owners = {str(row.get("physical_owner") or task.metadata.get("physical_owner") or "")
-              for row in accesses}
-    active = owners.intersection(bindings)
-    if not active:
-        return task
-    component_map = scenario.hardware.component_map()
-    endpoint_ids = tuple(dict.fromkeys(str(task.metadata[key]) for key in
-        ("target_component", "source_component") if task.metadata.get(key)))
-    explicit_initiator = task.metadata.get("hbf_staging_initiator")
-    if explicit_initiator is not None:
-        if (explicit_initiator not in component_map
-                or component_map[explicit_initiator].normalized_kind not in {"cpu", "gpu", "host_memory"}):
-            raise ValueError("HBF staging transfer initiator must be a CPU, GPU, or HOST DRAM component")
-        initiators = [explicit_initiator]
-    else:
-        initiators = [identifier for identifier in endpoint_ids
-                      if identifier in component_map and component_map[identifier].normalized_kind in {"cpu", "gpu"}]
-    if not initiators:
-        ranks = _parallel_plan(scenario).ranks
-        rank_id = task.metadata.get("rank")
-        matching = [rank.component_id for rank in ranks
-                    if rank.rank == rank_id] if rank_id is not None else [
-                        rank.component_id for rank in ranks if rank.memory_component_id in endpoint_ids]
-        initiators = list(dict.fromkeys(matching))
-    if len(initiators) != 1:
-        raise ValueError("HBF host staging requires an unambiguous task CPU/GPU or rank")
-    initiator = initiators[0]
-    router = _topology_router(scenario)
-    configs = dict(task.metadata.get("physical_memory_configs", {}))
-    primary_owner = str(task.metadata.get("physical_owner") or "")
-    if primary_owner:
-        configs.setdefault(primary_owner, task.metadata["physical_memory_config"])
-    contracts = dict(task.metadata.get("hbf_host_staging_by_owner", {}))
-    replaced_link_ids = set(task.metadata.get("hbf_staging_replaced_link_ids", ()))
-    preloaded = set(tuple(key) for key in task.metadata.get("hbf_preloaded_buffers", ()))
-    # Runtime KV (request tail slots and the layer block pools) is written by
-    # serving, never preloaded with the weights.
-    request_buffers = {identity for identities in task.metadata.get("persistent_request_buffers", {}).values()
-                       for identity in identities} | set(task.metadata.get("kv_pool_buffer_ids", ()))
-    is_resident = _resident_physical_buffer_lookup(task.metadata)
-    if scenario.weights_resident:
-        for row in accesses:
-            owner = str(row.get("physical_owner") or primary_owner)
-            identity = row.get("buffer_id")
-            if (owner in active and identity not in request_buffers
-                    and is_resident(identity)):
-                preloaded.add((owner, identity, int(row.get("allocation_generation", 0))))
-    for owner in sorted(active):
-        component, physical, host, host_config, capacity, reserve = bindings[owner]
-        host_owner = (resolve_service(host).physical_owner if context is None else
-            context.invariant(("hbf_staging_host_owner", host.component_id),
-                              lambda: resolve_service(host).physical_owner))
-        previous = configs.get(host_owner)
-        if previous is not None and parse_execution_physical_config(previous) != host_config:
-            raise ValueError("HBF host staging HOST DRAM physical configuration conflicts with the task")
-        configs[host_owner] = host_config
-
-        def route(source, target):
-            hops = router.route(source, target, physical.page_bytes)
-            return tuple({"link_id": hop.link_id, "resource_id": hop.resource_id,
-                          "bandwidth_gb_s": hop.bandwidth_gbps / 8.0,
-                          "latency_ns": hop.latency_ns,
-                          "inflight_resource_id": hop.service.physical_owner + ".inflight",
-                          "queue_depth": hop.queue_depth,
-                          "resource_capacities": dict(hop.resource_capacities),
-                          "direction": hop.source_component + "->" + hop.target_component}
-                         for hop in hops if hop.service_ref is None)
-        def make_contract():
-            contract = {"host_component_id": host.component_id,
-                "host_owner": host_owner, "host_config": host_config,
-                "capacity_bytes": capacity, "reserve_blocks": reserve,
-                "routes": {"to_host": route(initiator, host.component_id),
-                           "from_host": route(host.component_id, initiator),
-                           "to_hbf": route(host.component_id, component.component_id),
-                           "from_hbf": route(component.component_id, host.component_id),
-                           "read_hbf": route(component.component_id, initiator),
-                           "write_hbf": route(initiator, component.component_id)}}
-            replaced = frozenset(demand.resource_id
-                for source, target in ((initiator, component.component_id),
-                                       (component.component_id, initiator))
-                for hop in router.route(source, target, physical.page_bytes)
-                for demand in hop.demands(1))
-            return contract, replaced
-        # Routes and staging capacity are scenario invariants, independent of
-        # tensor addresses, Decode position and the current dirty-page state.
-        contract, replaced = (make_contract() if context is None else
-            context.invariant(("hbf_staging_routes", owner, initiator), make_contract))
-        contracts[owner] = {**contract, "routes": {
-            direction: tuple({**hop, "resource_capacities": dict(hop["resource_capacities"])}
-                             for hop in hops)
-            for direction, hops in contract["routes"].items()}}
-        replaced_link_ids.update(replaced)
-    return replace(task, metadata={**task.metadata, "physical_memory_configs": configs,
-        "hbf_host_staging_by_owner": contracts,
-        "hbf_staging_replaced_link_ids": tuple(sorted(replaced_link_ids)),
-        "hbf_preloaded_buffers": tuple(sorted(preloaded))})
-
-
 def _assert_physical_memory_demands(task: TaskSpec, scenario: ScenarioConfig) -> None:
     """Reject a memory demand left outside the task's physical descriptors."""
     from .physical_contract import PHYSICAL_MEMORY_COMPONENT_KINDS
@@ -5551,8 +5401,6 @@ class _TaskBuilder:
         if context is not None:
             self.tasks[-1] = _attach_gddr_physical_task(self.tasks[-1], context.scenario)
         self.tasks[-1] = _attach_planned_l2(self.tasks[-1])
-        if context is not None:
-            self.tasks[-1] = _attach_hbf_host_staging(self.tasks[-1], context.scenario)
         self._record_tail_task(self.tasks[-1])
         if self._physical_segment_sources is not None:
             self._physical_segment_sources[task_id] = (physical_source, self.tasks[-1])
@@ -7485,7 +7333,6 @@ class _TaskSegmentTemplate:
                     raise RuntimeError("physical Token binding requires its compilation context")
                 builder.tasks[-1] = _attach_gddr_physical_task(builder.tasks[-1], context.scenario)
                 builder.tasks[-1] = _attach_planned_l2(builder.tasks[-1])
-                builder.tasks[-1] = _attach_hbf_host_staging(builder.tasks[-1], context.scenario)
             elif isinstance(physical_binding, _DeferredEndpointPhysicalBinding) and not use_lazy_metadata:
                 builder.tasks[-1] = _attach_planned_l2(builder.tasks[-1])
             if post_metadata:
@@ -9671,7 +9518,7 @@ def _add_transfer_tasks(
                 continue
             from .memory_types import DramConfig, SramConfig
             config = _cached_physical_memory_config(component)
-            if not isinstance(config, (DramConfig, SramConfig)) and not component.metadata.get("host_write_staging"):
+            if not isinstance(config, (DramConfig, SramConfig)):
                 continue
             # The authoring IR may omit native addresses. Use an allocator
             # binding, never one fixed address for all DMA payloads.
@@ -9681,7 +9528,7 @@ def _add_transfer_tasks(
                 transfer_metadata, "read", fallback_identity=builder.request.request_id
             )
             address = _gddr_stable_address(identity, 0, byte_count,
-                config.capacity_bytes, config.burst_bytes if isinstance(config, (DramConfig, SramConfig)) else config.page_bytes,
+                config.capacity_bytes, config.burst_bytes,
                 component_id=component_id, physical_kind=config.kind.value)
             row = {"address": address, "buffer_id": identity,
                    "byte_count": byte_count, "offset_bytes": 0,
@@ -9715,29 +9562,6 @@ def _add_transfer_tasks(
             target_page_offset_bytes=target_page_offset,
         )
     )
-    staged_endpoint = None
-    staged_initiator = None
-    if scenario is not None:
-        staged = [endpoint for endpoint in (source_component, target_component)
-                  if _component(scenario, endpoint).metadata.get("host_write_staging")]
-        if len(staged) > 1:
-            raise ValueError("HBF-to-HBF staging transfers require an explicit intermediate host transfer")
-        if staged:
-            staged_endpoint = staged[0]
-            peer = target_component if staged_endpoint == source_component else source_component
-            if _component(scenario, peer).normalized_kind == "host_memory":
-                staged_initiator = peer
-            else:
-                devices = {rank.component_id for rank in _parallel_plan(scenario).ranks
-                           if rank.memory_component_id == peer or rank.component_id == peer}
-                if len(devices) != 1:
-                    raise ValueError("HBF staging transfer peer requires one explicit rank or HOST DRAM")
-                staged_initiator = next(iter(devices))
-            # The staged endpoint decides at dispatch whether this payload
-            # comes from HOST DRAM or NAND.  Its selected route owns transport;
-            # emitting the original HBF route as separate DAG tasks duplicates
-            # the same bytes and is wrong for unflushed host-resident data.
-            phases = tuple(phase for phase in phases if not phase.metadata.get("link_id"))
     previous = tuple(dependencies)
     if pageable_spec is not None:
         split_count = pageable_spec["graph_split_count"]
@@ -9897,8 +9721,6 @@ def _add_transfer_tasks(
         phase_metadata.update(transfer_metadata)
         phase_metadata.setdefault("source_component", source_component)
         phase_metadata.setdefault("target_component", target_component)
-        if staged_endpoint is not None and phase_metadata.get("component_id") == staged_endpoint:
-            phase_metadata["hbf_staging_initiator"] = staged_initiator
         state_binding = state_bindings.get(phase_metadata.get("component_id"))
         if state_binding is not None and phase_metadata.get("memory_accesses"):
             template, = phase_metadata["memory_accesses"]
@@ -20310,8 +20132,7 @@ def _compile_parallel_embedding(
             )
         operation_metadata["weight_source_component"] = weight_source
         operation_metadata.setdefault("lookup_read_bytes", lookup_read_bytes)
-        if ((_rank_uses_hbf_host_staging(scenario, rank) or shared_storage is not None)
-                and not source_get_rows and not declared_f32_storage):
+        if shared_storage is not None and not source_get_rows and not declared_f32_storage:
             # An indexed lookup reads the resident table, then produces the
             # typed hidden edge consumed by the first layer. Keep the table's
             # capacity independent of the number of repeated row accesses.
@@ -20320,8 +20141,7 @@ def _compile_parallel_embedding(
             while remaining_lookup:
                 row_bytes = min(remaining_lookup, rank_weight_bytes)
                 table_reads.append(_rank_tensor_access(
-                    rank, shared_storage[0] if shared_storage is not None else weight_tensor_id,
-                    row_bytes, "read", extent=rank_weight_bytes))
+                    rank, shared_storage[0], row_bytes, "read", extent=rank_weight_bytes))
                 remaining_lookup -= row_bytes
             operation_metadata.update(
                 buffer_view_cache_policy="aggregate_directional_v1",
@@ -21551,8 +21371,7 @@ def _compile_parallel_attention_group(
         hidden_elements = max(
             1, token_batch * layer.hidden_size
         )
-        bind_input_norm = generic_kv is not None and (
-            _rank_uses_hbf_host_staging(scenario, rank) or plan.pp_degree > 1)
+        bind_input_norm = generic_kv is not None and plan.pp_degree > 1
         if bind_input_norm:
             hidden_input, _hidden_output = _layer_hidden_tensor_ids(scenario, layer)
             input_norm_hidden_bytes = _activation_bytes(layer, hidden_elements, scenario=scenario)
@@ -23082,7 +22901,7 @@ def _compile_parallel_attention_group(
                 **rank_meta,
                 "projection_id": "attention.output",
                 **({"output_buffer_id": generic_base + ".attention_output"}
-                   if _rank_uses_hbf_host_staging(scenario, rank) or plan.pp_degree > 1 else {}),
+                   if plan.pp_degree > 1 else {}),
                 **({"input_buffer_id": source_base + (".gated" if attention_execution is not None else ".context")}
                    if source_f32 else {"input_buffer_id": generic_base + ".context"} if generic_kv is not None else {}),
                 **({"output_tensor_id": prefix + ".rank{:03d}.attention_output_value".format(rank.rank)}
@@ -23185,7 +23004,7 @@ def _compile_parallel_attention_group(
                                 _activation_bytes(layer, tail_elements, scenario=scenario), "read"),
                             generic_access("attention_output", _activation_bytes(layer, tail_elements, scenario=scenario), "read"),
                             generic_access("attention_residual", _activation_bytes(layer, tail_elements, scenario=scenario), "write"))}
-                           if _rank_uses_hbf_host_staging(scenario, rank) or plan.pp_degree > 1 else {}),
+                           if plan.pp_degree > 1 else {}),
                     },
                 )
             output = _return_rank_value(
@@ -24270,11 +24089,6 @@ def _rank_tensor_access(rank, tensor_id, size, operation, *, offset=0, extent=No
         **({"buffer_size_bytes": extent} if extent is not None else {})}
 
 
-def _rank_uses_hbf_host_staging(scenario, rank):
-    return bool(rank.memory_component_id and _component(
-        scenario, rank.memory_component_id).metadata.get("host_write_staging"))
-
-
 def _compile_parallel_dense_mlp_uncached(
     builder: _TaskBuilder,
     scenario: ScenarioConfig,
@@ -24300,7 +24114,7 @@ def _compile_parallel_dense_mlp_uncached(
     for rank in ranks:
         activation_bits = _activation_storage_bits(layer, scenario)
         hidden_elements = max(1, token_batch * layer.hidden_size)
-        bind_hidden = _rank_uses_hbf_host_staging(scenario, rank) or plan.pp_degree > 1
+        bind_hidden = plan.pp_degree > 1
         hidden_input, hidden_output = (_layer_hidden_tensor_ids(scenario, layer)
                                        if bind_hidden else ("", ""))
         activation_base = prefix + ".rank{:03d}.activation".format(rank.rank)
@@ -30076,8 +29890,6 @@ def _private_physical_construction_context(scenario: ScenarioConfig) -> bool:
         for component in scenario.hardware.components:
             if component.metadata.get("physical_memory_config") is None:
                 continue
-            if component.metadata.get("host_write_staging"):
-                return False
             service = resolve_service(component)
             owner = service.physical_owner
             if owner in owners:
@@ -30111,11 +29923,7 @@ class TopologyAwareBatchCostProvider:
         self._template_cache_entries = template_cache_entries
         self._leaf_cache_entries = leaf_cache_entries
         self._defer_physical_execution = defer_physical_execution
-        self._defer_endpoint_construction = bool(
-            defer_physical_execution
-            and not any(component.metadata.get("host_write_staging")
-                        for component in scenario.hardware.components)
-        )
+        self._defer_endpoint_construction = bool(defer_physical_execution)
         self._scenario = scenario
         self._execution_control = execution_control or ExecutionControl()
         self._compilation_context = CompilationContext(
@@ -32285,9 +32093,7 @@ def _estimate_serving_cohort_cost(
     # controller. Replaying it here against a fresh controller duplicates the
     # expensive work and cannot provide the final persistent-state timings.
     # Standalone estimates still execute their independent physical preview.
-    staged_hbf_deferred = any(task.metadata.get("hbf_host_staging_by_owner")
-                              for task in lowering.schedule.tasks)
-    deferred_physical = staged_hbf_deferred or any(
+    deferred_physical = any(
         defer_physical_execution and str(cohort.kind) in {"prefill", "decode", "mixed", "mtp"} and (
             task.metadata.get("physical_memory_config") is not None
             or task.metadata.get("stateful_l2") is not None)
@@ -32366,7 +32172,6 @@ def _estimate_serving_cohort_cost(
                 summary.execution_records,
                 resource_owners=lowering.schedule.resource_owners,
             ),
-            "storage_gc_observations": _summarize_hbf_gc_observations(summary.execution_records),
             "dram_traffic": _summarize_dram_task_traffic(
                 summary.execution_records,
                 resource_owners=lowering.schedule.resource_owners,
@@ -32399,8 +32204,7 @@ def _estimate_serving_cohort_cost(
                 execution_stages
             ),
             "execution_stage_source": (
-                "deferred_physical_task_dag" if staged_hbf_deferred
-                else "authored_physical_task_dag" if deferred_physical and execution_stages
+                "authored_physical_task_dag" if deferred_physical and execution_stages
                 else "executed_task_dag_kernel_timeline"
                 if execution_stages
                 else "serial_fallback"
@@ -32485,50 +32289,6 @@ def _nand_queue_scope_description(scopes_by_owner):
     prefix = ("mixed admission scopes; peak is max of source samples, not a simultaneous device total: "
               if len(scopes) > 1 else "max across physical owners: ")
     return prefix + "; ".join(scopes)
-
-
-def _summarize_hbf_gc_observations(tasks: Sequence[TaskSpec]) -> Mapping[str, object]:
-    """Sum task-local staging deltas once per owner, never controller totals.
-
-    The ordinary staging ledger emits sparse counter differences. An absent
-    GC key in a recorded ledger row therefore means zero; an absent ledger
-    row on an executed HBF task is unavailable, not evidence of zero GC.
-    HOST/link records share that task's ledger and must not count it again.
-    """
-    fields = ("gc_cycles", "gc_copied_pages", "pressure_flushes", "rmw_pages")
-    totals, seen = {}, set()
-    for task in tasks:
-        metadata = task.metadata
-        staging = metadata.get("hbf_host_staging")
-        staging = staging if isinstance(staging, Mapping) else {}
-        owners = {str(owner) for owner in staging}
-        by_owner = metadata.get("physical_execution_by_owner")
-        if isinstance(by_owner, Mapping):
-            owners.update(str(owner) for owner, raw in by_owner.items()
-                          if isinstance(raw, Mapping)
-                          and str(raw.get("kind", "")).upper() in {"HBF", "MEMORYKIND.HBF"})
-        for owner in owners:
-            identity = task.task_id, owner
-            if identity in seen:
-                continue
-            seen.add(identity)
-            total = totals.setdefault(owner, {**dict.fromkeys(fields, 0),
-                "available": True, "recorded_task_count": 0, "expected_task_count": 0,
-                "semantics": "cohort_local_staging_counter_deltas"})
-            total["expected_task_count"] += 1
-            raw = staging.get(owner)
-            if (not isinstance(raw, Mapping) or any(type(raw.get(name, 0)) is not int
-                    or raw.get(name, 0) < 0 for name in fields)):
-                total["available"] = False
-                continue
-            total["recorded_task_count"] += 1
-            for name in fields:
-                total[name] += raw.get(name, 0)
-    for total in totals.values():
-        if not total["available"]:
-            for name in fields:
-                total[name] = None
-    return dict(sorted(totals.items()))
 
 
 def _summarize_nand_task_traffic(tasks: Sequence[TaskSpec], *, resource_owners=None) -> Mapping[str, object]:

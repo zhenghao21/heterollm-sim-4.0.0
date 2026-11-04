@@ -237,7 +237,6 @@ class PhysicalRuntimeContext:
     # tuples; scalar timing and traffic counters remain unchanged.
     capture_details: bool = True
     _committed_owners: set[str] = field(default_factory=set, repr=False)
-    hbf_staging: dict[str, Any] = field(default_factory=dict, repr=False)
     _owner_config_cache: dict[str, Any] = field(default_factory=dict, repr=False)
     # NAND owner -> (owner of data sharing its staging store, host channels).
     _staging_shares: dict[str, Any] = field(default_factory=dict, repr=False)
@@ -275,8 +274,6 @@ class PhysicalRuntimeContext:
     def release_staging_buffer(self, owner: str, buffer_id: str, generation: int,
                                *, arrival_ns: float = 0.0, allocation=None) -> None:
         """Discard dead logical data; request completion does not force a tail write."""
-        from .hbf_staging_runtime import release
-        release(self, owner, buffer_id, generation, arrival_ns)
         active = self.runtimes.get(owner)
         if (allocation is not None and allocation.alias_of is None and active is not None
                 and getattr(active.core.config, "page_staging", "none") != "none"):
@@ -431,7 +428,6 @@ class PhysicalRuntimeContext:
         """
         from .dram_core import DramCore, _BankState
         from .nand_core import NandCore
-        from .hbf_staging_runtime import snapshot as snapshot_staging
 
         selected_owners = None if owners is None else frozenset(owners)
         native_footprints = {}
@@ -594,7 +590,6 @@ class PhysicalRuntimeContext:
             # without adding it to the current request's touched-resource bill.
             "_owned_native_writers": bool(native_owned_hooks),
             "committed_owners": set(self._committed_owners),
-            "hbf_staging": snapshot_staging(self.hbf_staging, transactional=transactional),
         }
         if not transactional:
             # Transactions keep the high-water mark in their allocator save.
@@ -610,7 +605,7 @@ class PhysicalRuntimeContext:
         from .memory_transfer import ResourceTimeline, _TIMELINE_MAPS, _OWNED_TIMELINE_RESERVE
         from ._compiled_hbm import can_capture_resource_columns
         if (not owners or type(self.timeline) is not ResourceTimeline
-                or self.hbf_staging or self.capture_details
+                or self.capture_details
                 or any(type(getattr(self.timeline, name)) is not dict for name in _TIMELINE_MAPS)
                 or type(self.timeline.resource_aliases) is not dict
                 or type(self.timeline._touched) is not set
@@ -731,11 +726,10 @@ class PhysicalRuntimeContext:
 
     def begin_transaction(self, *, owners: Optional[Iterable[str]] = None,
                           _owned_timeline: bool = False) -> dict[str, Any]:
-        """Protect live dispatch by journaling changed HBM and staging state."""
+        """Protect live dispatch by journaling changed HBM state."""
         return self.snapshot(transactional=True, owners=owners, _owned_timeline=_owned_timeline)
 
     def commit_transaction(self, snapshot: dict[str, Any]) -> None:
-        from .hbf_staging_runtime import commit
         for state in snapshot["runtime_state"].values():
             token = state.get("hbm_transaction")
             if token is not None:
@@ -743,7 +737,6 @@ class PhysicalRuntimeContext:
             nand_token = state.get("nand_transaction")
             if nand_token is not None:
                 state["active"].core.commit_transaction(nand_token)
-        commit(snapshot["hbf_staging"])
         for owner, save in snapshot["allocator_state"].items():
             if type(save) is not dict:
                 snapshot["allocators"][owner].commit_transaction(save)
@@ -821,8 +814,6 @@ class PhysicalRuntimeContext:
             })
         self._committed_owners.clear()
         self._committed_owners.update(snapshot["committed_owners"])
-        from .hbf_staging_runtime import restore
-        self.hbf_staging = restore(snapshot["hbf_staging"])
 
 
 def _physical_runtime(
@@ -1148,10 +1139,10 @@ def resolve_physical_task(
     through construction of the final resource demands.
     """
     if _caller_managed_transaction:
-        return _resolve_physical_task(task, runtime, arrival_ns)
+        return _execute_physical_task(task, runtime, arrival_ns)
     snapshot = runtime.begin_transaction()
     try:
-        result = _resolve_physical_task(task, runtime, arrival_ns)
+        result = _execute_physical_task(task, runtime, arrival_ns)
     except Exception:
         runtime.restore(snapshot)
         raise
@@ -1165,25 +1156,6 @@ def _merge_latest_resource_intervals(target, incoming):
     _resource_ledger.merge_latest_intervals(target, incoming)
 
 
-def _resolve_physical_task(
-    task: TaskSpec,
-    runtime: PhysicalRuntimeContext,
-    arrival_ns: float,
-) -> TaskSpec:
-    if not task.metadata.get("hbf_host_staging_by_owner"):
-        return _execute_physical_task(task, runtime, arrival_ns)
-    from . import _io_execution
-
-    token = _io_execution.begin_task(runtime)
-    success = False
-    try:
-        result = _execute_physical_task(task, runtime, arrival_ns)
-        success = True
-        return result
-    finally:
-        _io_execution.end_task(runtime, token, success=success)
-
-
 def prepare_physical_task(
     task: TaskSpec,
     runtime: PhysicalRuntimeContext,
@@ -1191,8 +1163,8 @@ def prepare_physical_task(
 ):
     """Resolve and validate one task's ordered physical instructions.
 
-    Allocation registration and HBF preload are part of the caller's existing
-    task transaction. The returned instructions are valid for this dispatch,
+    Allocation registration is part of the caller's existing task
+    transaction. The returned instructions are valid for this dispatch,
     and must not be cached across allocation generations or external edits.
     """
     # Keep the authored mapping borrowed while validating the descriptor.  The
@@ -1221,16 +1193,6 @@ def prepare_physical_task(
     if metadata.get("physical_memory_configs") is None and len(owners) > 1:
         raise ValueError("multi-owner physical task requires per-owner configurations")
     register_physical_allocations(task, runtime, config=config)
-    staging_bindings = metadata.get("hbf_host_staging_by_owner", {})
-    if staging_bindings:
-        from . import hbf_staging_runtime
-        for owner, binding in staging_bindings.items():
-            hbf_staging_runtime.configure(runtime, owner,
-                _owner_physical_config(metadata, owner, config, runtime), binding)
-        for owner, buffer_id, generation in metadata.get("hbf_preloaded_buffers", ()):
-            if owner in staging_bindings:
-                hbf_staging_runtime.preload(runtime, owner, buffer_id, generation,
-                                           staging_bindings[owner])
 
     # Validate every descriptor before creating a core or reserving a resource.
     # A physical address may be omitted only when the buffer has an explicit
@@ -1291,7 +1253,7 @@ def prepare_physical_task(
             )
         validated.append((access, operation, address, byte_count, owner, access_config))
     from ._physical_task import PreparedPhysicalTask
-    return PreparedPhysicalTask(metadata, config, owners, validated, staging_bindings)
+    return PreparedPhysicalTask(metadata, config, owners, validated)
 
 
 def _execute_physical_task(
@@ -1307,14 +1269,14 @@ def _execute_physical_task(
 def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskSpec:
     """Consume validated instructions without rebuilding their descriptors.
 
-    The caller must retain the transaction and HBF task scope around both
-    preparation and execution, as ``resolve_physical_task`` does.
+    The caller must retain the transaction around both preparation and
+    execution, as ``resolve_physical_task`` does.
     """
     from .memory_types import AccessRequest, DramConfig, NandConfig, Operation
     from ._physical_task import PhysicalTaskLedger
 
     metadata, owners = prepared.metadata, prepared.owners
-    validated, staging_bindings = prepared.instructions, prepared.staging_bindings
+    validated = prepared.instructions
     # Previous accesses only constrain a new request when at least one side
     # writes.  The old implementation scanned every prior descriptor for
     # every descriptor (O(n**2)); a large line-expanded projection can contain
@@ -1339,16 +1301,15 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
         for owner, endpoints in endpoints_by_owner.items()
     }
 
-    placeholder_ids = set(metadata.get("hbf_staging_replaced_link_ids", ()))
+    placeholder_ids = set()
     for access, _op, _address, _bytes, _owner, _config in validated:
         for key in ("resource_id", "physical_owner"):
             value = access.get(key)
             if value:
                 placeholder_ids.add(str(value))
     ledger = PhysicalTaskLedger()
-    physical_results, staging_stats = ledger.records, ledger.staging_stats
+    physical_results = ledger.records
     media_wait_by_owner = {}
-    staging_sessions = {}
     resolved_accesses = []
     task_resource_sink = (({}, {}, {})
         if type(owners) is set
@@ -1358,7 +1319,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
         and _native_resource_sink(task, runtime, prepared, ledger, arrival_ns) else None)
     owner_resource_sinks = {}
     resource_accumulator = None
-    if (len(owners) == 1 and not staging_bindings and not runtime.capture_details
+    if (len(owners) == 1 and not runtime.capture_details
             and all(isinstance(item[5], DramConfig)
                     and item[5].control_mode == "jedec_hbm" for item in validated)):
         from ._hbm_pack import HBMResourceAccumulator
@@ -1416,24 +1377,6 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             resolved_accesses.append({**dict(access), "address": address})
             index += 1
             continue
-        if owner in staging_bindings:
-            from ._io_execution import PreparedStagingIO
-            session = staging_sessions.get(owner)
-            if session is None:
-                session = staging_sessions[owner] = PreparedStagingIO(
-                    runtime, owner, staging_bindings[owner], ledger)
-            access_arrival = float(arrival_ns)
-            if track_overlaps:
-                prior = all_completion[owner] if operation is Operation.WRITE else write_completion[owner]
-                access_arrival = max(access_arrival, prior.query(address, byte_count))
-            completion = session.submit(access, operation, byte_count, access_arrival)
-            if track_overlaps:
-                all_completion[owner].update(address, byte_count, completion)
-                if operation is Operation.WRITE:
-                    write_completion[owner].update(address, byte_count, completion)
-            resolved_accesses.append({**dict(access), "address": address})
-            index += 1
-            continue
         active = runtime.runtime(access_config, owner)
         if isinstance(access_config, NandConfig) and access_config.page_staging == "logic_die":
             scope = metadata.get("page_staging_scope")
@@ -1446,12 +1389,6 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             floor, fraction = runtime._tail_reserved.get(share[0], (0, 1.))
             active.core._tail_shared = max(-(-getattr(allocator, "peak_end_bytes", 0) // share[1]), floor)
             active.core._tail_fraction = fraction
-        # An authored task may mix staged HBF accesses and a direct access
-        # to the same HOST controller. Publish the preceding staged work
-        # before the direct core reads the shared resource calendars.
-        if getattr(runtime, "_hbf_host_task", None) is not None:
-            from ._io_execution import flush_task
-            flush_task(runtime)
         stop = index + 1
         scheduled_batch = (isinstance(active.core.config, DramConfig)
                            and active.core.config.scheduler != "fcfs")
@@ -1606,7 +1543,6 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
     metadata.update({
         "memory_accesses": tuple(resolved_accesses),
         "physical_execution_by_owner": execution_by_owner,
-        **({"hbf_host_staging": staging_stats} if staging_stats else {}),
         "physical_arrival_ns": float(arrival_ns),
         "physical_completion_ns": completion_ns,
         "physical_resource_intervals": tuple(
@@ -1641,7 +1577,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
 
 # The metric-order scope must not cover an authored dispatcher callback.
 _NATIVE_METRIC_DISPATCH = tuple((name, globals()[name]) for name in (
-    "resolve_physical_task", "_resolve_physical_task", "_execute_physical_task",
+    "resolve_physical_task", "_execute_physical_task",
     "prepare_physical_task", "execute_prepared_physical_task",
     "register_physical_allocations", "_register_physical_allocation"))
 
@@ -1792,8 +1728,6 @@ def _native_resource_sink(task, runtime, prepared, ledger, arrival_ns):
             or task.request_id is not None and type(task.request_id) is not str
             or type(runtime.capture_details) is not bool or runtime.capture_details
             or type(runtime.runtimes) is not dict or type(runtime._owner_config_cache) is not dict
-            or type(runtime.hbf_staging) is not dict or runtime.hbf_staging
-            or type(prepared.staging_bindings) is not dict or prepared.staging_bindings
             or type(prepared.metadata) is not dict
             or any(type(key) is not str for key in prepared.metadata)
             or type(prepared.instructions) not in (list, tuple)
@@ -1991,23 +1925,10 @@ def is_physical_task(task: TaskSpec) -> bool:
 def physical_task_transaction_owners(task: TaskSpec):
     """Owners that the task's explicit memory descriptors may mutate.
 
-    Host staging can execute additional controller work through its bindings;
-    it keeps the complete transaction. Ordinary DRAM/NAND/SRAM descriptors
-    name their entire memory footprint, including L2 backing allocations.
+    Ordinary DRAM/NAND/SRAM descriptors name their entire memory footprint,
+    including L2 backing allocations.
     """
     metadata = task.metadata
-    staging = metadata.get("hbf_host_staging_by_owner")
-    if staging:
-        # Keep host-staging tasks in the bounded owner transaction as well.
-        # The binding names the NAND controller; its host controller is part
-        # of the same rollback scope and is included when authored.
-        owners = {str(owner) for owner in staging}
-        for binding in staging.values():
-            if isinstance(binding, Mapping):
-                host_owner = binding.get("host_owner") or binding.get("host_physical_owner")
-                if host_owner:
-                    owners.add(str(host_owner))
-        return frozenset(owners)
     default = metadata.get("physical_owner")
     owners = {str(default)} if default else set()
     for rows in (_memory_accesses(metadata), _physical_allocations(metadata)):
@@ -2028,7 +1949,6 @@ def physical_task_demands(task: TaskSpec) -> Tuple[ResourceDemand, ...]:
     metadata = task.metadata
     physical_ids = set(str(item) for item in metadata.get("physical_demands_resource_ids", ()))
     physical_ids.update(str(item) for item in metadata.get("physical_placeholder_resource_ids", ()))
-    physical_ids.update(str(item) for item in metadata.get("hbf_staging_replaced_link_ids", ()))
     accesses = _memory_accesses(metadata)
     for access in accesses or ():
         if isinstance(access, Mapping):
@@ -2352,29 +2272,6 @@ class PhysicalService:
             raise ValueError(("SRAM" if isinstance(config, SramConfig) else "DRAM") + " does not support ERASE operations")
         if page_offset_bytes is None and self.component.metadata.get("memory_access_offset_bytes") is None:
             raise ValueError("physical_memory_config requires an explicit memory address")
-        if self.component.metadata.get("host_write_staging") is not None:
-            if runtime is not None and not preview:
-                raise ValueError("host-staged HBF requires logical buffer descriptors and resolved host routes; use resolve_physical_task")
-            if getattr(config, "protocol_mode", None) != "ocp_hbf_0_7":
-                raise ValueError("host_write_staging requires strict OCP HBF")
-            if kind not in {AccessKind.READ, AccessKind.WRITE}:
-                raise ValueError("host-staged HBF accepts logical reads and writes only")
-            # A planner has no live page-merge state or resolved HOST DRAM
-            # allocations. Emit a marked placeholder only; the event kernel
-            # replaces this demand with real host, link and NAND operations.
-            # Do not run a generic NAND estimate or submit an illegal small
-            # write to the strict physical core during graph construction.
-            return {
-                "logical_bytes": byte_count, "physical_bytes": byte_count,
-                "physical_read_bytes": byte_count if kind is AccessKind.READ else 0,
-                "physical_write_bytes": byte_count if kind is AccessKind.WRITE else 0,
-                "host_transfer_bytes": 0, "internal_transfer_bytes": 0,
-                "service_ns": 0.0, "actual_bandwidth_gb_s": 0.0,
-                "bandwidth_ceiling_gb_s": 0.0, "pages_touched": 0,
-                "operation": kind.value.lower(),
-                "timing_model": "host_staging_deferred_to_physical_runtime",
-                "physical_cost_deferred": True,
-            }
         if byte_count == 0:
             return {
                 "logical_bytes": 0, "physical_bytes": 0,
@@ -2457,8 +2354,6 @@ class PhysicalService:
         _non_negative(start_ns, "start_ns")
         if self.component is None:
             raise ValueError("price_batch requires a physical memory component")
-        if self.component.metadata.get("host_write_staging") is not None:
-            raise ValueError("host-staged HBF requires logical buffer descriptors and resolved host routes; use resolve_physical_task")
         from .physical_contract import require_physical_memory_config
         config = require_physical_memory_config(self.component)
         from .memory_types import AccessRequest, Operation
@@ -2946,15 +2841,14 @@ def _construction_service_bill(
     """Preserve descriptors when live dispatch owns the physical service.
 
     Direct GPU backing phases and communication endpoints use the same
-    construction contract. Ordinary pricing, explicit runtime submissions,
-    and host-staged HBF retain their existing preview frontiers.
+    construction contract. Ordinary pricing and explicit runtime submissions
+    retain their existing preview frontiers.
     """
     component = service.component
     deferred = (
         _DEFER_ENDPOINT_CONSTRUCTION.get() is not None
         and runtime is None and summary_only
         and component is not None
-        and component.metadata.get("host_write_staging") is None
     )
     if not deferred:
         return service.price(

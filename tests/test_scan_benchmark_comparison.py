@@ -255,7 +255,7 @@ def test_retired_nand_source_option_is_rejected_before_scenario(benchmark, monke
 
 def test_execution_module_preload_uses_selected_packages_available_modules(benchmark, monkeypatch):
     from types import SimpleNamespace
-    available = {"heterollm_sim._token_program", "heterollm_sim._io_execution"}
+    available = {"heterollm_sim._token_program", "heterollm_sim._nand_execution"}
     inspected, imported = [], []
     def find(name):
         inspected.append(name)
@@ -267,7 +267,7 @@ def test_execution_module_preload_uses_selected_packages_available_modules(bench
     monkeypatch.setattr(benchmark.importlib, "import_module", load)
     assert benchmark.preload_execution_modules() == {
         "_token_program": "heterollm_sim._token_program.pyd",
-        "_io_execution": "heterollm_sim._io_execution.pyd"}
+        "_nand_execution": "heterollm_sim._nand_execution.pyd"}
     assert inspected == ["heterollm_sim." + suffix for suffix in (
-        "_token_program", "_physical_task", "_io_execution", "_nand_execution")]
+        "_token_program", "_physical_task", "_nand_execution")]
     assert imported == [name for name in inspected if name in available]

@@ -1,5 +1,4 @@
-"""Qwen's separate RoPE consumes a generated table on either memory tier."""
-from dataclasses import replace
+"""Qwen's separate RoPE consumes a generated table."""
 from pathlib import Path
 import sys
 
@@ -7,16 +6,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from b200_hbm_hbf_scan_config import build_scan_scenario
-from heterollm_sim.data_motion import PhysicalRuntimeContext, resolve_physical_task
 from heterollm_sim.planner import compile_scenario
 
 
 @pytest.fixture(scope="module")
-def qwen_plans():
-    # Compile real Qwen geometry; only selected small physical tasks execute
-    # below. This is a dataflow regression, not a shortened benchmark result.
-    return {medium: compile_scenario(build_scan_scenario(
-        "qwen2_5-0_5b", medium, 2048, 3)) for medium in ("HBM", "HBF")}
+def qwen_plan():
+    # Compile real Qwen geometry. This is a dataflow regression, not a
+    # shortened benchmark result.
+    return compile_scenario(build_scan_scenario("qwen2_5-0_5b", "HBM", 2048, 3))
 
 
 def rope_pair(plan, phase):
@@ -38,9 +35,8 @@ def depends_on(plan, consumer, producer):
     return False
 
 
-@pytest.mark.parametrize("medium", ("HBM", "HBF"))
-def test_real_qwen_prefill_generates_complete_rope_table_before_consumer(qwen_plans, medium):
-    plan = qwen_plans[medium]
+def test_real_qwen_prefill_generates_complete_rope_table_before_consumer(qwen_plan):
+    plan = qwen_plan
     producer, consumer = rope_pair(plan, "prefill")
     assert consumer.metadata["fusion_decision"] == "explicit_qkv_bias_boundary"
     assert producer.metadata["target_component"] == consumer.metadata["target_component"] == "gpu0"
@@ -61,35 +57,3 @@ def test_real_qwen_prefill_generates_complete_rope_table_before_consumer(qwen_pl
                      if row["buffer_id"] == table["buffer_id"]]
     assert logical_reads[0]["size_bytes"] == expected_bytes
     assert producer.metadata["cost_model"]["special_function_operations"] == expected_bytes // 2
-    assert all(row[1] != table["buffer_id"] for row in producer.metadata.get("hbf_preloaded_buffers", ()))
-
-
-def test_two_decode_rope_tables_require_and_consume_real_hbf_writes(qwen_plans):
-    runtime = PhysicalRuntimeContext(capture_details=False)
-    now, identities = 0.0, []
-    for phase in ("decode0001", "decode0002"):
-        producer, consumer = rope_pair(qwen_plans["HBF"], phase)
-        table = producer.metadata["memory_accesses"][0]
-        identities.append(table["buffer_id"])
-        qkv = next(row for row in consumer.metadata["memory_accesses"]
-                   if ".activation.qkv:" in row["buffer_id"])
-        # Provide the actual QKV input with a physical producer write. Keep
-        # the table uninitialized until its real compiled producer runs.
-        seed = replace(consumer, metadata={**consumer.metadata, "memory_accesses": (
-            {**qkv, "operation": "write", "offset_bytes": 0,
-             "byte_count": qkv["allocation_size_bytes"]},)})
-        realized = resolve_physical_task(seed, runtime, now)
-        now = realized.metadata["physical_completion_ns"]
-        with pytest.raises(ValueError, match="uninitialized"):
-            resolve_physical_task(consumer, runtime, now)
-        generated = resolve_physical_task(producer, runtime, now)
-        now = generated.metadata["physical_completion_ns"]
-        media = generated.metadata["physical_execution_by_owner"]["hbf0.memory"]
-        assert media["pages_programmed"] == 1
-        assert media["logical_write_bytes"] == table["byte_count"] == 4096
-        consumed = resolve_physical_task(consumer, runtime, now)
-        now = consumed.metadata["physical_completion_ns"]
-        assert consumed.metadata["physical_execution_by_owner"]["hbf0.memory"]["logical_read_bytes"] == 1024
-        assert (table["buffer_id"], table["allocation_generation"]) not in runtime.hbf_staging["hbf0.memory"]["preloaded"]
-    assert len(set(identities)) == 2
-    assert now > 0

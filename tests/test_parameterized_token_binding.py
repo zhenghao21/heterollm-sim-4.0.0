@@ -72,10 +72,9 @@ def check_contexts(scenario, contexts, monkeypatch):
 
 
 @pytest.mark.parametrize("model", ["qwen2_5-0_5b", "qwen2_5-7b"])
-@pytest.mark.parametrize("medium", ["HBM", "HBF"])
 @pytest.mark.parametrize("boundary", ["power_of_two", "physical_page"])
-def test_full_dag_rebinds_context_across_attention_and_page_boundaries(model, medium, boundary, monkeypatch):
-    scenario = build_scan_scenario(model, medium, 1, 96)
+def test_full_dag_rebinds_context_across_attention_and_page_boundaries(model, boundary, monkeypatch):
+    scenario = build_scan_scenario(model, "HBM", 1, 96)
     if boundary == "power_of_two":
         contexts = (31, 32, 33)
     else:
@@ -90,10 +89,9 @@ def test_full_dag_rebinds_context_across_attention_and_page_boundaries(model, me
 
 
 @pytest.mark.parametrize("model", ["qwen2_5-0_5b", "qwen2_5-7b"])
-@pytest.mark.parametrize("medium", ["HBM", "HBF"])
-def test_request_budget_remains_capacity_not_current_context(model, medium, monkeypatch):
+def test_request_budget_remains_capacity_not_current_context(model, monkeypatch):
     for budget in (64, 96):
-        scenario = build_scan_scenario(model, medium, 1, budget)
+        scenario = build_scan_scenario(model, "HBM", 1, budget)
         check_contexts(scenario, (31, 32, 33), monkeypatch)
         compiler = planner.CompilationContext(scenario, compiled_serving_invocation_segments=True)
         actual = lower(scenario, 33, "budget", compiler)

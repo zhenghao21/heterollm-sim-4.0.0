@@ -1016,8 +1016,6 @@ def bootstrap_control_plane(
     kernel = runtime.kernel
     if kernel is None:  # pragma: no cover - run always constructs a kernel
         raise RuntimeError("control-plane runtime did not create a kernel")
-    from .hbf_resident_init import initialize_hbf_resident_weights
-    initialize_hbf_resident_weights(mapped, kernel)
     return ControlPlaneBootstrap(mapped, decision, result, kernel)
 
 

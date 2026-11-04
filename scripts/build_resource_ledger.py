@@ -14,8 +14,8 @@ import sys
 
 
 BUILD_MODULES = ("_resource_ledger", "_nand_pack", "_hbm_pack", "_cost_ledger",
-                 "_token_program", "_physical_task", "_io_execution",
-                 "_nand_execution", "_hbf_page_state", "_hbm_fr_kernel")
+                 "_token_program", "_physical_task", "_nand_execution",
+                 "_hbm_fr_kernel")
 # Modules that are not pure-Python-mode sources: their files under the package.
 MODULE_SOURCES = {"_hbm_fr_kernel": ("_hbm_fr_kernel.pyx", "_hbm_fr_core.c")}
 MODULE_HEADERS = {"_hbm_fr_kernel": ("_hbm_fr_core.h",)}

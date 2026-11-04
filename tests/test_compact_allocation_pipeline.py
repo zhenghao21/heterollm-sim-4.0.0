@@ -12,10 +12,9 @@ from heterollm_sim.serving import BatchCohort, BatchItem
 
 @pytest.mark.parametrize("medium", ["HBM", "HBF"])
 def test_deferred_metadata_matches_materialized_physical_graph(medium, monkeypatch):
-    from test_deferred_physical_preview import scenario, strict_staging_scenario
+    from test_deferred_physical_preview import scenario
 
-    configured = (scenario(prompt=4, count=1, output=3) if medium == "HBM" else
-                  strict_staging_scenario(prompt=4, output=3, all_hbf=True, capacity=65536))
+    configured = scenario(hbf=medium == "HBF", prompt=4, count=1, output=3)
     item = BatchItem("request", "decode", 1, 4, main_tokens=1, draft_tokens=0,
                      verifier_tokens=1, committed_tokens=1, logit_tokens=1)
     cohort = BatchCohort("decode", "decode", 0., (item,))

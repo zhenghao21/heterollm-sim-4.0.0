@@ -171,7 +171,7 @@ def test_physical_validation_failure_leaves_no_scope_and_rolls_back(monkeypatch)
             owned_physical_frontiers=True)
     assert kernel.physical_runtime.timeline._owned_metric_orders is None
     after = kernel.physical_runtime.snapshot()
-    for name in ("timeline", "allocator_state", "committed_owners", "hbf_staging"):
+    for name in ("timeline", "allocator_state", "committed_owners"):
         assert bits(after[name]) == bits(before[name])
 
 

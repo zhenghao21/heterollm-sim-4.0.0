@@ -133,16 +133,16 @@ def test_reference_is_frozen():
 
 def paired_runtime(monkeypatch):
     scenario, request, runners = harness(monkeypatch, growth=.156,
-        options=FastDecodeConfig(max_sample_tokens=16), erase_counts=lambda step: 0)
+        options=FastDecodeConfig(max_sample_tokens=16, target_relative_error=.07))
     scenario.model = NS(name="model")
     scenario.hardware = NS(component_map=lambda: {"hbf0": NS(normalized_kind="hbf")})
     plan = NS(requests=(request,), kv_policy=NS(cache_component="hbf0"))
     projection = NS(safe=True, safety_reasons=(),
-        hbf_devices=({"block_erase_ns": 1., "ordinary_erase_serial_time_guard_ns": 300.},),
         to_metadata=lambda: {"safe": True, "physical_state_advanced": False})
     monkeypatch.setattr(fast, "compile_serving_plan", lambda scenario: plan)
     monkeypatch.setattr(fast, "project_fast_tail", lambda *args, **kwargs: projection)
-    ref = reference(decode_estimate_ns=15600., decode_lower_ns=15000., decode_upper_ns=16200.)
+    ref = reference(target_relative_error=.07, decode_estimate_ns=15600.,
+                    decode_lower_ns=15400., decode_upper_ns=15800.)
     return scenario, request, runners, ref
 
 
@@ -156,7 +156,7 @@ def test_synthetic_runtime_pairs_exact_prefix_and_never_executes_detailed_suffix
     diagnostics = outcome.diagnostics
     decision = diagnostics["paired_budget_decision"]
     assert decision["accepted"] is True
-    assert decision["candidate_relative_error_budget"] > .10 / 2.10
+    assert decision["candidate_relative_error_budget"] > .07 / 2.07
     exact_prefix = math.fsum(sample.duration_ns for sample in outcome.forecast.samples)
     assert diagnostics["exact_sampled_decode_ns"] == exact_prefix == 1600.
     assert decision["candidate_decode_interval"]["estimate_ns"] == pytest.approx(

@@ -104,28 +104,27 @@ def test_live_metadata_keeps_every_field_order_type_and_original_summary_records
     expected = {"resource_busy_by_direction_ns": ledger._resource_busy_by_direction(tasks),
                 "dram_traffic": planner._summarize_dram_task_traffic(tasks, resource_owners=live.resource_owners),
                 "sram_traffic": live_execution_metrics.summarize_sram_task_traffic(tasks),
-                "storage_traffic": planner._summarize_nand_task_traffic(tasks, resource_owners=live.resource_owners),
-                "storage_gc_observations": planner._summarize_hbf_gc_observations(tasks)}
+                "storage_traffic": planner._summarize_nand_task_traffic(tasks, resource_owners=live.resource_owners)}
     # Observe that all reducers receive the exact record tuple, not a
     # new wrapper collection, without changing their reduction code.
     observed = []
     for module, name in ((planner, "_resource_busy_by_direction"), (planner, "_summarize_dram_task_traffic"),
                          (live_execution_metrics, "summarize_sram_task_traffic"),
-                         (planner, "_summarize_nand_task_traffic"), (planner, "_summarize_hbf_gc_observations")):
+                         (planner, "_summarize_nand_task_traffic")):
         original = getattr(module, name)
         def wrapper(rows, _original=original, **kwargs):
             observed.append(rows)
             return _original(rows, **kwargs)
         monkeypatch.setattr(module, name, wrapper)
     report = live.metadata()
-    assert observed == [summary.execution_records] * 5
+    assert observed == [summary.execution_records] * 4
     assert all(rows is summary.execution_records for rows in observed)
     assert exact({key: report[key] for key in expected}) == exact(expected)
     assert report["host_orchestration_task_count"] == 1
     assert report["host_submission_count"] == 2
     assert list(report) == ["task_count", "resource_accounted_bytes", "resource_busy_ns",
         "resource_busy_by_direction_ns", "category_time_ns", "critical_path_category_ns", "coverage",
-        "linear_state_bytes", "dram_traffic", "sram_traffic", "storage_traffic", "storage_gc_observations",
+        "linear_state_bytes", "dram_traffic", "sram_traffic", "storage_traffic",
         "execution_stage_makespan_ns", "host_orchestration_ns", "device_execution_ns", "host_task_time_ns", "host_device_overlap_ns",
         "execution_idle_ns", "execution_time_semantics", "host_orchestration_task_count",
         "host_submission_count", "physical_execution_scope", "cost_duration_semantics"]

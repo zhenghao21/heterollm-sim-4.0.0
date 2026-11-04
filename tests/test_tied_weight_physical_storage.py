@@ -54,9 +54,8 @@ def test_formal_models_keep_tied_and_untied_storage_distinct(strategy, model_id)
             assert actual == ("embedding_weights", scenario.model.embedding_weight_bytes)
 
 
-@pytest.mark.parametrize("strategy", ["HBM", "HBF"])
-def test_physical_lowering_keeps_one_complete_table_and_both_logical_tensor_ids(strategy):
-    scenario = _planned(strategy, small=True)
+def test_physical_lowering_keeps_one_complete_table_and_both_logical_tensor_ids():
+    scenario = _planned("HBM", small=True)
     tasks = compile_scenario(scenario).tasks
     expected = "tensor:embedding_weights:rank=0:tp_rank=0:pp_rank=0"
     weight_tasks = [task for task in tasks if task.metadata.get("event_kind")
@@ -77,8 +76,6 @@ def test_physical_lowering_keeps_one_complete_table_and_both_logical_tensor_ids(
                    and row["allocation_arena"] == "resident" for row in reads)
         observed.extend(row for row in metadata["physical_allocations"]
                         if row["buffer_id"] == expected)
-        if strategy == "HBF":
-            assert ("hbf0.memory", expected, 0) in metadata["hbf_preloaded_buffers"]
     assert observed and {row["size_bytes"] for row in observed} == {4096}
     assert not any("lm_head_weights" in row["buffer_id"]
                    for task in tasks for row in task.metadata.get("physical_allocations", ()))

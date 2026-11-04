@@ -57,25 +57,6 @@ def test_deferred_descriptor_still_rejects_invalid_access(operation, address, si
                          page_offset_bytes=address, compact_preview=True)
 
 
-def test_staged_hbf_retains_its_existing_construction_frontier(monkeypatch):
-    from test_hbf_host_staging_integration import strict_staging_scenario
-    scenario = strict_staging_scenario(all_hbf=True)
-    provider = TopologyAwareBatchCostProvider(scenario, defer_physical_execution=True)
-    assert provider._defer_endpoint_construction is False
-    service = data_motion.resolve_service(scenario.hardware.get_component("hbf0"))
-    original_frontier = {"service_ns": 50.25, "physical_cost_deferred": True}
-    calls = []
-    def price(*args, **kwargs):
-        calls.append((args, kwargs))
-        return original_frontier
-    monkeypatch.setattr(data_motion.PhysicalService, "price", price)
-    with deferred_endpoint_construction():
-        result = data_motion._construction_service_bill(
-            service, data_motion.AccessKind.READ, 64, page_offset_bytes=0)
-    assert result is original_frontier
-    assert len(calls) == 1
-
-
 @pytest.mark.parametrize("case,identity", [("hbm_tp2", "hbm0"), ("hbf_weights_kv_tp1", "hbf0")])
 def test_deferred_descriptor_uses_geometry_derived_capacity(case, identity):
     from heterollm_sim.physical_contract import require_physical_memory_config

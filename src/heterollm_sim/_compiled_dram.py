@@ -111,22 +111,17 @@ def _publish_numeric(core, arrays, ids, first_data, banktouched, touched):
             timeline.directions[rid] = "read" if direction == 1 else "write"
 
 
-def execute_compiled(core, request, *, _submission=None, _scope=None):
+def execute_compiled(core, request):
     """Return None without changing state when the numeric path is unsuitable."""
     from .dram_core import DramCore, MAX_ACCELERATED_BANKS
 
     if (type(core) is not DramCore or request.operation not in (Operation.READ, Operation.WRITE)
-            or request.byte_count <= 0
-            or ((_scope is None or _scope.workspace is None) and not core._can_accelerate())):
+            or request.byte_count <= 0 or not core._can_accelerate()):
         return None
     config, timeline = core.config, core.timeline
-    reused = _scope is not None and _scope.workspace is not None
-    if reused:
-        lanes, banks, total_banks, burst, ids, shared = _scope.layout
-    else:
-        lanes, banks = config.lane_count, config.bank_count
-        total_banks = config.addressable_stack_count * config.addressable_die_count * lanes * banks
-        burst = config.burst_bytes
+    lanes, banks = config.lane_count, config.bank_count
+    total_banks = config.addressable_stack_count * config.addressable_die_count * lanes * banks
+    burst = config.burst_bytes
     first = request.address // burst
     stop = (request.address + request.byte_count - 1) // burst + 1
     physical = (stop - first) * burst
@@ -134,19 +129,18 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
             or request.address < 0 or request.address + request.byte_count > config.effective_capacity_bytes
             or stop > _INT64_MAX or physical > _INT64_MAX):
         return None
-    if not reused:
-        metadata = config.metadata
-        bank_prefix = str(metadata.get("bank_resource_prefix", "dram:bank"))
-        command_prefix = str(metadata.get("command_resource_prefix", "dram:command"))
-        data_prefix = str(metadata.get("data_resource_prefix", "dram:data"))
-        shared_value = metadata.get("shared_command_resource")
-        shared = str(shared_value) if shared_value else None
-        ids = _resource_ids(config.addressable_stack_count, config.addressable_die_count, lanes, banks,
-                            config.bank_groups_per_rank, config.banks_per_group,
-                            bank_prefix, command_prefix, data_prefix, shared,
-                            config.lanes_per_stack if config.stack_interface_mode == "independent" else 0)
-        if len(set(ids)) != len(ids):
-            return None
+    metadata = config.metadata
+    bank_prefix = str(metadata.get("bank_resource_prefix", "dram:bank"))
+    command_prefix = str(metadata.get("command_resource_prefix", "dram:command"))
+    data_prefix = str(metadata.get("data_resource_prefix", "dram:data"))
+    shared_value = metadata.get("shared_command_resource")
+    shared = str(shared_value) if shared_value else None
+    ids = _resource_ids(config.addressable_stack_count, config.addressable_die_count, lanes, banks,
+                        config.bank_groups_per_rank, config.banks_per_group,
+                        bank_prefix, command_prefix, data_prefix, shared,
+                        config.lanes_per_stack if config.stack_interface_mode == "independent" else 0)
+    if len(set(ids)) != len(ids):
+        return None
     read = request.operation is Operation.READ
     geometry, durations, finite_durations = _numeric_inputs(
         (lanes, banks, (config.interleave_bytes or burst) // burst,
@@ -158,7 +152,7 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
         config.open_ns, config.close_ns, config.read_to_write_ns, config.write_to_read_ns,
     ))
     count = len(ids)
-    workspace = _scope.workspace if reused else _WORKSPACES.get(core)
+    workspace = _WORKSPACES.get(core)
     if workspace is None or workspace.shape != (total_banks, count):
         workspace = _WORKSPACES[core] = _NumericWorkspace(total_banks, count)
     (bankrows, bankready, bankactivation, banktouched, calendar, busy, moved, directions,
@@ -174,38 +168,21 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
             (config.interleave_bytes or burst) // burst, config.row_bytes // burst,
             config.rows_per_bank, total_banks, bool(shared))
     live_slots = set()
-    before_busy = {} if _submission is not None else None
-    before_bytes = {} if _submission is not None else None
-    pack_indexes = indexes
-    if reused:
-        selected = list(indexes)
-        busy_values, byte_values = busy[selected].tolist(), moved[selected].tolist()
-        if any(value > _INT64_MAX - physical for value in byte_values):
-            return None
-        selected_ids = tuple(ids[index] for index in selected)
-        before_busy, before_bytes = dict(zip(selected_ids, busy_values)), dict(zip(selected_ids, byte_values))
-        pack_indexes = [index for index in selected if not _scope.loaded[index]]
     try:
-        for index in pack_indexes:
+        for index in indexes:
             rid = ids[index]
             slots = timeline.lane_available.get(rid)
             if slots is not None:
-                if _scope is not None and type(slots) is not list:
-                    return None
                 if len(slots) != 1 or id(slots) in live_slots:
                     return None
                 live_slots.add(id(slots))
             calendar[index] = slots[0] if slots is not None else timeline.available_ns(rid)
-            previous_busy = timeline.busy_ns.get(rid, 0.0)
-            busy[index] = previous_busy
+            busy[index] = timeline.busy_ns.get(rid, 0.0)
             previous_bytes = timeline.bytes_moved.get(rid, 0)
             if (isinstance(previous_bytes, bool) or not isinstance(previous_bytes, (int, np.integer))
                     or previous_bytes < 0 or previous_bytes > _INT64_MAX - physical):
                 return None
             moved[index] = previous_bytes
-            if before_busy is not None:
-                before_busy[rid] = previous_busy
-                before_bytes[rid] = previous_bytes
             previous_direction = timeline.directions.get(rid)
             directions[index] = 1 if previous_direction == "read" else 2 if previous_direction == "write" else 3 if previous_direction else 0
             last_start[index], last_end[index] = timeline.last_intervals.get(rid, (0.0, 0.0))
@@ -225,7 +202,7 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
         workspace.floats.fill(0.0)
         return None
     if (not math.isfinite(request.arrival_ns) or not finite_durations
-            or ((not reused or pack_indexes) and not np.isfinite(workspace.floats).all())):
+            or not np.isfinite(workspace.floats).all()):
         workspace.floats.fill(0.0)
         return None
     try:
@@ -237,7 +214,7 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
     execute = run_numeric if stop - first >= 64 else run_numeric_short
     try:
         completion, hits, misses, conflicts, skipped = execute(
-            first, stop, float(request.arrival_ns if _submission is None else _submission), read, geometry, durations, bool(shared),
+            first, stop, float(request.arrival_ns), read, geometry, durations, bool(shared),
             bankrows, bankready, bankactivation, banktouched, calendar, busy, moved, directions, last_start, last_end, touched)
     except BaseException:
         # Scratch is not live state, but a failed kernel must not leave
@@ -247,64 +224,10 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
     if not math.isfinite(completion) or not np.isfinite(workspace.floats).all():
         workspace.floats.fill(0.0)
         return None
-    if _submission is not None:
-        # There is no callback inside the numeric execution. Begin accounting
-        # only after it succeeds, so a declined pack never changes the live
-        # timeline. The recorded old values came from that same live pack.
-        timeline._intervals = {}
-        timeline._interval_payloads = {}
-        timeline._interval_limit = 0
-        timeline._interval_count = 0
-        timeline._touched = set()
     first_data = total_banks + (1 if shared else lanes)
     resource_indexes = np.flatnonzero(touched)
-    if _scope is None:
-        _publish_numeric(core, workspace.arrays, ids, first_data, banktouched, touched)
-        timeline._touched.update(ids[index] for index in resource_indexes.tolist())
-    else:
-        if not reused:
-            _scope.workspace, _scope.ids, _scope.first_data = workspace, ids, first_data
-            _scope.layout = lanes, banks, total_banks, burst, ids, shared
-            _scope.resource_ids = frozenset(ids)
-            _scope.calendar_slot_ids = set()
-            _scope.dirty_banks = banktouched.copy()
-            _scope.dirty_resources = touched.copy()
-            _scope.loaded = np.zeros(count, dtype=np.bool_)
-        else:
-            _scope.dirty_banks |= banktouched
-            _scope.dirty_resources |= touched
-        _scope.loaded[list(indexes)] = True
-        current_busy = dict(zip((ids[index] for index in resource_indexes.tolist()),
-                               busy[resource_indexes].tolist()))
-        current_bytes = dict(zip((ids[index] for index in resource_indexes.tolist()),
-                                moved[resource_indexes].tolist()))
-        current_last = dict(zip(current_busy, zip(last_start[resource_indexes].tolist(),
-                                                  last_end[resource_indexes].tolist())))
-        # Insert new accounting keys at their ordinary submission position;
-        # unrelated link reservations may insert keys before the next HOST
-        # call. Values stay numeric until the scope publishes. This preserves
-        # the original reduction order without rescanning every resource.
-        for index in resource_indexes.tolist():
-            rid = ids[index]
-            timeline.busy_ns.setdefault(rid, before_busy[rid])
-            if rid not in timeline.ready_ns:
-                timeline.ready_ns[rid] = float(calendar[index])
-            if rid not in timeline.lane_available:
-                timeline.lane_available[rid] = [float(calendar[index])]
-            _scope.calendar_slot_ids.add(id(timeline.lane_available[rid]))
-            timeline.last_intervals.setdefault(rid, current_last[rid])
-            if index >= first_data:
-                timeline.bytes_moved.setdefault(rid, before_bytes[rid])
-                timeline.directions.setdefault(rid, request.operation.value)
-            timeline._touched.add(rid)
-        # Preserve insertion order even when a task first visits high banks
-        # and then low banks. Their values remain in the numeric workspace.
-        from .dram_core import _BankState
-        for index in np.flatnonzero(banktouched).tolist():
-            rid = ids[index]
-            if rid not in core.__dict__["_banks"]:
-                core._hbm_remember_bank(rid)
-                core.__dict__["_banks"][rid] = _BankState()
+    _publish_numeric(core, workspace.arrays, ids, first_data, banktouched, touched)
+    timeline._touched.update(ids[index] for index in resource_indexes.tolist())
     timeline._intervals_truncated = True
     counters = {
             "row_hits": int(hits), "row_misses": int(misses), "row_conflicts": int(conflicts),
@@ -315,25 +238,6 @@ def execute_compiled(core, request, *, _submission=None, _scope=None):
             "host_transfer_bytes": 0, "internal_transfer_bytes": 0,
             "pages_read": 0, "pages_programmed": 0, "erase_operations": 0,
     }
-    if _submission is not None:
-        touched_ids = timeline._touched
-        # Match the public reducer's insertion order: its consumers sum
-        # floating-point costs in that order, including shared resources.
-        busy_ids = timeline._ordered_metric_touches("busy_ns", timeline.busy_ns, touched_ids)
-        byte_ids = timeline._ordered_metric_touches("bytes_moved", timeline.bytes_moved, touched_ids)
-        counters.update({
-            "queue_wait_ns": _submission - request.arrival_ns,
-            "scheduler_reordered_requests": 0, "scheduler_batches": 0,
-            "controller_direction_switches": int(core._scheduler_direction is not None
-                and core._scheduler_direction != request.operation.value),
-            "resource_busy_ns": {rid: value - before_busy[rid] for rid in busy_ids
-                if (value := current_busy[rid]) != before_busy[rid]},
-            "resource_bytes": {rid: value - before_bytes[rid] for rid in byte_ids
-                if (value := current_bytes[rid]) != before_bytes[rid]},
-            "resource_last_intervals": {rid: current_last[rid] for rid in touched_ids},
-            "resource_intervals": {}, "resource_interval_payloads": {},
-            "intervals_truncated": True,
-        })
     return TransactionResult(
         request_id=request.request_id, operation=request.operation,
         arrival_ns=request.arrival_ns, completion_ns=float(completion),

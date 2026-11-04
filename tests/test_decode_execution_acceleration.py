@@ -58,9 +58,9 @@ def test_small_host_accesses_match_every_interpreted_transition(bursts):
 
 def test_lowering_reuses_only_its_bound_immutable_component_config(monkeypatch):
     from heterollm_sim import physical_contract, planner
-    from test_hbf_host_staging_integration import strict_staging_scenario
+    from hbf_hbm_experiments import scenario as study_scenario
 
-    scenario = strict_staging_scenario(prompt=4, output=2, all_hbf=True, capacity=65536)
+    scenario = study_scenario(hbf=True, count=1, prompt=4, output=2)
     component = next(item for item in scenario.hardware.components if item.normalized_kind == "hbf")
     calls = []
     validate = physical_contract.require_physical_memory_config
@@ -81,12 +81,11 @@ def test_lowering_reuses_only_its_bound_immutable_component_config(monkeypatch):
     assert len(calls) == 3
 
 
-@pytest.mark.parametrize("medium", ["HBM", "HBF"])
-def test_physical_dense_segment_rebinds_every_request_generation(medium, monkeypatch):
+def test_physical_dense_segment_rebinds_every_request_generation(monkeypatch):
     from heterollm_sim import planner
     from test_hbf_rope_dataflow import build_scan_scenario
 
-    scenario = build_scan_scenario("qwen2_5-0_5b", medium, 32, 3)
+    scenario = build_scan_scenario("qwen2_5-0_5b", "HBM", 32, 3)
     context = planner.CompilationContext(scenario)
     with planner._compilation_scope(scenario, context):
         plan, router = context.parallel_plan(), context.router()
@@ -122,23 +121,10 @@ def test_physical_dense_segment_rebinds_every_request_generation(medium, monkeyp
                 assert new.metadata["physical_memory_config"] is old.metadata["physical_memory_config"]
             for owner, configured in new.metadata.get("physical_memory_configs", {}).items():
                 assert configured is old.metadata["physical_memory_configs"][owner]
-            for owner, contract in new.metadata.get("hbf_host_staging_by_owner", {}).items():
-                old_contract = old.metadata["hbf_host_staging_by_owner"][owner]
-                assert contract["host_config"] is old_contract["host_config"]
-                assert contract is not old_contract
-                assert contract["routes"] is not old_contract["routes"]
-                for direction, hops in contract["routes"].items():
-                    for hop, old_hop in zip(hops, old_contract["routes"][direction], strict=True):
-                        assert hop is not old_hop
-                        assert hop["resource_capacities"] is not old_hop["resource_capacities"]
         physical = next(task for task in actual if task.metadata.get("memory_accesses"))
         physical.metadata["memory_accesses"][0]["byte_count"] = 1
-        if medium == "HBF":
-            contract = next(iter(physical.metadata["hbf_host_staging_by_owner"].values()))
-            hops = next(hops for hops in contract["routes"].values() if hops)
-            hops[0]["latency_ns"] = 999999.0
         # Published task metadata cannot mutate the resident template or the
-        # independently bound routes/descriptors of the following request.
+        # independently bound descriptors of the following request.
         assert emit("request-third", True) == emit("request-third", False)
 
 

@@ -62,7 +62,7 @@ def test_overwrite_pruning_keeps_descriptor_aliases_routes_and_key_order():
     descriptor = {"buffer_id": "source.decode.value", "byte_count": 16}
     source = {"cost_model": {"cache": {"old_bytes": 16}},
         "memory_accesses": [descriptor], "physical_address_bindings": (descriptor,),
-        "hbf_host_staging_by_owner": {"memory:hbf0": {"routes": {
+        "routes_by_owner": {"memory:hbf0": {"routes": {
             "read": ({"resource_capacities": {"host0.link": 2}},)}}}}
     template, plan = _task_segment_capture_metadata(
         source, source_request_id="source", source_prefix="decode")
@@ -76,9 +76,9 @@ def test_overwrite_pruning_keeps_descriptor_aliases_routes_and_key_order():
     assert first["memory_accesses"][0] is first["physical_address_bindings"][0]
     assert first["memory_accesses"][0] is not second["memory_accesses"][0]
     assert first["memory_accesses"][0] is not template["memory_accesses"][0]
-    capacities = first["hbf_host_staging_by_owner"]["memory:hbf0"]["routes"]["read"][0]["resource_capacities"]
+    capacities = first["routes_by_owner"]["memory:hbf0"]["routes"]["read"][0]["resource_capacities"]
     capacities["host0.link"] = 9
-    assert second["hbf_host_staging_by_owner"]["memory:hbf0"]["routes"]["read"][0]["resource_capacities"] == {"host0.link": 2}
+    assert second["routes_by_owner"]["memory:hbf0"]["routes"]["read"][0]["resource_capacities"] == {"host0.link": 2}
     assert template["cost_model"] == {"cache": {"old_bytes": 16}}
 
 

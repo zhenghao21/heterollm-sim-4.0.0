@@ -1,21 +1,24 @@
 """Exact-prefix stops preserve the original request and resume semantics."""
 from copy import deepcopy
 from dataclasses import fields, is_dataclass, replace
+from pathlib import Path
+import sys
 
 import pytest
 
 from heterollm_sim.execution_control import ExecutionCancelledError, ExecutionControl
 from heterollm_sim.serving import BatchCost, RequestStatus, _OnlineRuntime, compile_serving_plan
-from test_hbf_host_staging_integration import strict_staging_scenario
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from hbf_hbm_experiments import scenario
 
 
 def runtime(output=9, *, control=None, lowerer=None):
-    scenario = strict_staging_scenario(prompt=7, output=max(1, output), all_hbf=True, capacity=65536)
-    scenario = replace(scenario, placement=replace(scenario.placement,
-        kv_policy=replace(scenario.placement.kv_policy, offload_ratio=0., prefetch_distance=0)),
-        workload=replace(scenario.workload, requests=tuple(
-            replace(request, output_tokens=output) for request in scenario.workload.requests)))
-    return _OnlineRuntime(compile_serving_plan(scenario),
+    configured = scenario(hbf=True, count=1, prompt=7, output=max(1, output))
+    configured = replace(configured, placement=replace(configured.placement,
+        kv_policy=replace(configured.placement.kv_policy, offload_ratio=0., prefetch_distance=0)),
+        workload=replace(configured.workload, requests=tuple(
+            replace(request, output_tokens=output) for request in configured.workload.requests)))
+    return _OnlineRuntime(compile_serving_plan(configured),
         lowerer or (lambda _scenario, cohort: BatchCost(31.7 + cohort.token_count * .3)),
         execution_control=control)
 
@@ -144,8 +147,6 @@ def test_physical_hbf_prefix_resume_keeps_transactions_and_controller_endpoint()
                 assert runner.run_until_decode_steps(target) is False
             result = runner.run()
             physical = runner._execution_resource_kernel.physical_runtime
-            controllers = {owner: value["controller"].snapshot()
-                           for owner, value in physical.hbf_staging.items()}
             cores = {}
             for owner, device in physical.runtimes.items():
                 core = device.core
@@ -153,10 +154,9 @@ def test_physical_hbf_prefix_resume_keeps_transactions_and_controller_endpoint()
                     "_banks", "_inflight", "_acceptance_ns", "_host_inflight",
                     "_host_acceptance_ns", "_next_program_page", "_read_cache",
                 ) if hasattr(core, name)}
-            return result, controllers, cores
+            return result, cores
 
-    expected, expected_controllers, expected_cores = execute(())
-    actual, controllers, cores = execute((0, 1, 3))
+    expected, expected_cores = execute(())
+    actual, cores = execute((0, 1, 3))
     exact(actual, expected)
-    assert controllers == expected_controllers
     exact(cores, expected_cores)

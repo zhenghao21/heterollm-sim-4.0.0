@@ -166,7 +166,6 @@ def compact_execution_metadata(metadata: Mapping[str, Any]) -> Mapping[str, Any]
         key: metadata[key]
         for key in (
             "persistent_request_buffers", "persistent_buffer_ids", "kv_pool_buffer_ids",
-            "hbf_host_staging",
             "native_kv_work", "source_f32_kv", "native_rope_source_contract",
             "mmvf_source_work", "mmq_source_work", "native_get_rows_storage",
             "kernel_prediction", "qwen35_attention_work", "qwen35_tensor_geometry",

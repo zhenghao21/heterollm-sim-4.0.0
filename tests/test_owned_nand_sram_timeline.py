@@ -33,7 +33,7 @@ def pair(kind):
 
 def assert_same(contexts):
     saved = [context.snapshot() for context in contexts]
-    for field in ("timeline", "allocator_state", "committed_owners", "hbf_staging"):
+    for field in ("timeline", "allocator_state", "committed_owners"):
         assert bits(saved[0][field]) == bits(saved[1][field]), field
     for owner, actual in saved[0]["runtime_state"].items():
         expected = saved[1]["runtime_state"][owner]

@@ -122,7 +122,7 @@ def test_ep_groups_really_reuse_native_moe_and_keep_events_state(
                       "completed_end_ns", "completion_leases"):
             assert exact(getattr(candidate, field)) == exact(getattr(reference, field)), field
         left, right = (kernel.physical_runtime.snapshot() for kernel in (candidate, reference))
-        for field in ("timeline", "allocator_state", "committed_owners", "hbf_staging"):
+        for field in ("timeline", "allocator_state", "committed_owners"):
             values = [snapshot[field] for snapshot in (left, right)]
             if field == "timeline":
                 values = [{key: value for key, value in rows.items() if key != "_touched"} for rows in values]

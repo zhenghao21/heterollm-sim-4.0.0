@@ -26,21 +26,15 @@ def assert_interval(actual, lower, upper, estimate):
 
 
 def test_budget_records_each_interval_and_combines_bounds_instead_of_percentages():
-    result = fast.conditional_error_budget(100., 140., 120., .1,
-        {"prefix_erase_bias_guard_ns": 10., "future_erase_serial_guard_ns": 30.})
+    result = fast.conditional_error_budget(100., 140., 120., .1)
     parts = result["error_budget_breakdown"]
     assert parts["semantics"] == "conditional_interval_bounds_not_additive_percentages"
     assert parts["forecast_tail_ns"] == 120.
     assert parts["local_relative_error"] == .1
-    assert parts["prefix_erase_bias_guard_ns"] == 10.
-    assert parts["future_erase_serial_guard_ns"] == 30.
     expected = {
         "model_only": (100., 140.),
         "model_with_local_error": (100. / 1.1, 140. / .9),
-        "model_with_prefix_erase_bias": (90., 140.),
-        "model_with_future_erase": (100., 170.),
-        "model_with_maintenance": (90., 170.),
-        "combined": (90. / 1.1, 170. / .9),
+        "combined": (100. / 1.1, 140. / .9),
     }
     for name, (lower, upper) in expected.items():
         assert_interval(parts[name], lower, upper, 120.)
@@ -48,28 +42,19 @@ def test_budget_records_each_interval_and_combines_bounds_instead_of_percentages
     assert result["conditional_tail_lower_ns"] == combined["lower_ns"]
     assert result["conditional_tail_upper_ns"] == combined["upper_ns"]
     assert result["conditional_relative_error_budget"] == combined["relative_error_budget"]
-    additive = sum(parts[name]["relative_error_budget"] for name in (
-        "model_only", "model_with_local_error", "model_with_prefix_erase_bias",
-        "model_with_future_erase"))
+    additive = sum(parts[name]["relative_error_budget"] for name in ("model_only", "model_with_local_error"))
     assert combined["relative_error_budget"] != pytest.approx(additive)
     assert result["budget_unavailable_reason"] is None
     json.dumps(result, allow_nan=False)
 
 
-@pytest.mark.parametrize("local,prefix,reason", [
-    (.01, 100., "prefix_erase_budget_exhausts_lower_timing_bound"),
-    (.01, 101., "prefix_erase_budget_exhausts_lower_timing_bound"),
-    (1., 0., "local_calibration_error_not_bounded_below_one"),
-    (math.nan, 0., "local_calibration_error_not_bounded_below_one"),
-    (math.inf, 0., "local_calibration_error_not_bounded_below_one"),
-])
-def test_unavailable_budget_remains_strict_json_without_infinite_error(local, prefix, reason):
-    result = fast.conditional_error_budget(100., 140., 120., local,
-        {"prefix_erase_bias_guard_ns": prefix, "future_erase_serial_guard_ns": 30.})
+@pytest.mark.parametrize("local", [1., math.nan, math.inf])
+def test_unavailable_budget_remains_strict_json_without_infinite_error(local):
+    result = fast.conditional_error_budget(100., 140., 120., local)
     assert result["conditional_relative_error_budget"] is None
     assert result["conditional_tail_lower_ns"] is None
     assert result["conditional_tail_upper_ns"] is None
-    assert result["budget_unavailable_reason"] == reason
+    assert result["budget_unavailable_reason"] == "local_calibration_error_not_bounded_below_one"
     json.dumps(result, allow_nan=False)
 
 
@@ -154,9 +139,6 @@ def test_success_retains_raw_samples_and_separate_training_holdout_observations(
     attempt = diagnostics["sampling_attempts"][-1]
     assert attempt["forecast_accepted"] is True
     assert attempt["holdout_observed_ns"] == 404.
-    assert len(diagnostics["calibration_cycles"]) == 16
-    assert math.fsum(row["duration_ns"] for row in diagnostics["calibration_cycles"]) == \
-        math.fsum(sample.duration_ns for sample in result.forecast.samples)
     assert runners[0].run_calls == 0
     json.dumps(diagnostics, allow_nan=False)
 

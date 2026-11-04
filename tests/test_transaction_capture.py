@@ -106,26 +106,3 @@ def test_captured_execution_can_never_establish_speedup(capture):
     assert result["exactly_equal"]
     assert all(item is None for item in result["speedup"].values())
     assert any("Transaction capture" in item for item in result["notes"])
-
-
-@pytest.mark.parametrize("accepted", [False, True])
-def test_task_local_host_controller_keeps_same_transaction_observation(capture, tmp_path, monkeypatch, accepted):
-    import gzip
-    from types import SimpleNamespace
-    from heterollm_sim import _io_execution
-    from heterollm_sim.memory_types import AccessRequest, Operation, TransactionResult
-    Capture, compare, _ = capture
-    request = AccessRequest("host", Operation.READ, 0, 256, 1.)
-    result = TransactionResult("host", Operation.READ, 1., 2., 256, 256)
-    core = SimpleNamespace(config=SimpleNamespace(metadata={}))
-    scope = SimpleNamespace(core=core)
-    monkeypatch.setattr(_io_execution, "execute_compiled", lambda *args, **kwargs: result if accepted else None)
-    path = tmp_path / "host.jsonl.gz"
-    with Capture(path):
-        assert _io_execution.execute_compiled(core, request, _scope=scope) is (result if accepted else None)
-    with gzip.open(path, "rt", encoding="utf-8") as source:
-        rows = [json.loads(line) for line in source]
-    assert len(rows) == int(accepted)
-    if accepted:
-        assert rows[0]["kind"] == "dram_request"
-    assert compare(path, path)["exactly_equal"]

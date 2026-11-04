@@ -12,8 +12,6 @@ from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import wraps
 import gzip
-import importlib
-import importlib.util
 from itertools import zip_longest
 import json
 from pathlib import Path
@@ -81,7 +79,6 @@ class PhysicalTransactionCapture:
 
     def __enter__(self):
         from heterollm_sim import data_motion
-        from heterollm_sim import _compiled_dram
         from heterollm_sim.dram_core import DramCore
         from heterollm_sim.nand_core import NandCore
 
@@ -124,34 +121,12 @@ class PhysicalTransactionCapture:
                 return result
             return observed
 
-        def host_scope_execute(original):
-            @wraps(original)
-            def observed(core, request, *args, **kwargs):
-                result = original(core, request, *args, **kwargs)
-                if result is not None and kwargs.get("_scope") is not None and self._dram_depth == 0:
-                    self.write("dram_request", (self.owner(core), request, result))
-                return result
-            return observed
-
         self._stack.enter_context(patch.object(data_motion, "resolve_physical_task",
                                                physical(data_motion.resolve_physical_task)))
         for name, many in (("submit", False), ("submit_many", True)):
             self._stack.enter_context(patch.object(DramCore, name, dram(getattr(DramCore, name), many)))
         for name in ("submit", "submit_read_pages", "submit_write_pages"):
             self._stack.enter_context(patch.object(NandCore, name, nand(getattr(NandCore, name), name)))
-        # New implementations can execute HOST requests through a task-local
-        # resident controller. Observe the same returned request, without
-        # forcing publication or routing back through the public submitter.
-        io_name = "heterollm_sim._io_execution"
-        if importlib.util.find_spec(io_name) is not None:
-            scope_module = importlib.import_module(io_name)
-        elif getattr(_compiled_dram, "HostTaskScope", None) is not None:
-            scope_module = _compiled_dram
-        else:
-            scope_module = None
-        if scope_module is not None:
-            self._stack.enter_context(patch.object(scope_module, "execute_compiled",
-                                                  host_scope_execute(scope_module.execute_compiled)))
         return self
 
     def __exit__(self, *args):

@@ -38,7 +38,7 @@ def compare_physical_state(left, right):
     # reduction observes its dictionary insertion order.
     assert left._dependents == right._dependents
     saved = [kernel.physical_runtime.snapshot() for kernel in (left, right)]
-    for field in ("timeline", "allocator_state", "committed_owners", "hbf_staging"):
+    for field in ("timeline", "allocator_state", "committed_owners"):
         assert bits(saved[0][field]) == bits(saved[1][field]), field
     assert saved[0]["runtime_state"].keys() == saved[1]["runtime_state"].keys()
     for owner, actual in saved[0]["runtime_state"].items():

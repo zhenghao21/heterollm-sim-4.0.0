@@ -32,8 +32,6 @@ from heterollm_sim.simulation_options import SimulationConfig
 
 CASES = {
     "scan_hbm": "现有 HBM3E 基线",
-    "scan_hbf": "现有全 HBF 部署",
-    "scan_hbf_hbm_intermediates": "现有 HBF 介质，激活与临时区放 HBM",
     "paper_hbm4": "论文 HBM4 容量与带宽，B200/Qwen 控制",
     "paper_hbf": "论文 HBF 混合存储参数，B200/Qwen 控制",
     "paper_conv": "论文 CONV 混合存储参数，B200/Qwen 控制",
@@ -74,7 +72,7 @@ def _set_memory(scenario, component_id, physical):
         metadata.update(queue_scope=physical.queue_scope, access_mode="memory", writable=True,
                         write_buffer_bytes=physical.write_buffer_bytes)
         if physical.protocol_mode != "ocp_hbf_0_7":
-            for key in ("host_write_staging", "max_outstanding_requests_per_host_channel",
+            for key in ("max_outstanding_requests_per_host_channel",
                         "max_outstanding_write_requests_per_host_channel"):
                 metadata.pop(key, None)
     version = "4.0" if is_hbm and physical.generation == "HBM4" else None
@@ -130,7 +128,7 @@ def build_control_scenario(case, *, model_id="qwen2_5-0_5b", prompt_tokens=1660,
         raise ValueError("batch_size must be a positive integer")
     architecture = "HBM" if case in {"scan_hbm", "paper_hbm4"} else "HBF"
     scenario = build_scan_scenario(model_id, architecture, prompt_tokens, output_tokens)
-    if case in {"scan_hbf_hbm_intermediates", "paper_hbf", "paper_conv"}:
+    if case in {"paper_hbf", "paper_conv"}:
         scenario = _add_hbm_for_intermediates(scenario)
     if case.startswith("paper_"):
         from exploring_hbf_paper_config import (build_paper_hbm_config, build_paper_nand_config,

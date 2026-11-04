@@ -26,8 +26,6 @@ sys.path[:0] = [str(IMPLEMENTATION_ROOT), str(ROOT / "scripts")]
 # replace lazily imported source halfway through a baseline measurement.
 import heterollm_sim.dram_core
 import heterollm_sim.nand_core
-import heterollm_sim.hbf_staging
-import heterollm_sim.hbf_staging_runtime
 import heterollm_sim.data_motion
 import heterollm_sim.event_kernel
 import heterollm_sim.serving
@@ -50,7 +48,7 @@ def preload_execution_modules():
     package's actual import path rather than borrowing current implementations.
     """
     loaded = {}
-    for suffix in ("_token_program", "_physical_task", "_io_execution", "_nand_execution"):
+    for suffix in ("_token_program", "_physical_task", "_nand_execution"):
         name = "heterollm_sim." + suffix
         if importlib.util.find_spec(name) is not None:
             loaded[suffix] = importlib.import_module(name).__file__

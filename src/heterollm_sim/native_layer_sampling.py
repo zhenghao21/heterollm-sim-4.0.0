@@ -636,8 +636,7 @@ class _TPRankMirror:
         self.stats = {'candidate_tasks': 0, 'mirrored_tasks': 0, 'fallback_tasks': 0,
                       'mode': self.stats_mode}
         parallel = scenario.placement.parallel
-        if (kernel.physical_runtime.capture_details or kernel.physical_runtime.timeline._interval_limit
-                or kernel.physical_runtime.hbf_staging):
+        if kernel.physical_runtime.capture_details or kernel.physical_runtime.timeline._interval_limit:
             return
         if parallel.tp_degree <= 1:
             return
@@ -784,9 +783,6 @@ class _TPRankMirror:
                 # The native dispatcher tests L2 key presence, including an
                 # empty/invalid contract; replay must never bypass that path.
                 if any(k in a.metadata or k in b.metadata for k in ('stateful_l2','l2_execution')):
-                    continue
-                if any(a.metadata.get(k) or b.metadata.get(k) for k in
-                       ('hbf_host_staging_by_owner','hbf_preloaded_buffers')):
                     continue
                 def envelope(task):
                     return task.metadata.get('phase_metadata', {}).get('kernel_model', {}).get('physical_memory_envelope')

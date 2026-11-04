@@ -220,11 +220,10 @@ const bindRuntimeTrackResizeObserver = () => {}, scheduleRuntimeSharedTracks = (
     ("fast_mode_requires_resident_weights", "权重预先驻留", "resident weights"),
     ("fast_mode_requires_flash_attention", "启用 Flash Attention", "requires Flash Attention"),
     ("fast_mode_requires_one_gpu_for_model_operators", "同一张 GPU", "one GPU"),
-    ("fast_mode_requires_physical_hbm_or_hbf", "HBM 或 HBF 物理配置", "physical HBM or HBF"),
+    ("fast_mode_requires_physical_hbm", "HBM 物理配置", "physical HBM"),
     ("fast_mode_requires_bf16_kv", "BF16 KV 缓存", "BF16 KV cache"),
-    ("fast_mode_requires_ocp_hbf_protocol", "OCP HBF 0.7 协议", "OCP HBF 0.7 protocol"),
     ("stateful_gpu_cache_requires_detailed_mode", "有状态 GPU 缓存", "stateful GPU cache"),
-    ("calibration_does_not_cover_hbf_kv_page_period", "完整 HBF KV 页写入周期", "complete HBF KV page-write period"),
+    ("calibration_exceeds_sample_budget", "超出采样预算", "exceeds the sampling budget"),
     ("detailed_decode_step_count_does_not_match_runtime", "当前运行状态不一致", "does not match runtime state"),
 ])
 def test_fast_accuracy_scope_fallback_reasons_are_readable_in_both_languages(reason, zh, en):

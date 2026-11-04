@@ -1,8 +1,8 @@
 """Task-local physical instructions and ordered execution output.
 
 Preparation resolves allocations before any access is submitted. The ledger
-keeps the original transaction order, without inventing logical transactions
-for HOST-staged HBF acceptance. Public metadata is materialized once per task.
+keeps the original transaction order. Public metadata is materialized once per
+task.
 Neither object owns a rollback boundary; the event kernel or standalone
 physical resolver continues to own that boundary.
 """
@@ -33,26 +33,22 @@ class PreparedPhysicalTask:
     config = cython.declare(object, visibility="public")
     owners = cython.declare(object, visibility="public")
     instructions = cython.declare(object, visibility="public")
-    staging_bindings = cython.declare(object, visibility="public")
 
-    def __init__(self, metadata, config, owners, instructions, staging_bindings):
+    def __init__(self, metadata, config, owners, instructions):
         self.metadata = metadata
         self.config = config
         self.owners = owners
         self.instructions = instructions
-        self.staging_bindings = staging_bindings
 
 
 @cython.cclass
 class PhysicalTaskLedger:
     records = cython.declare(list, visibility="public")
-    staging_stats = cython.declare(dict, visibility="public")
     completion_ns = cython.declare(object, visibility="public")
     all_erases = cython.declare(cython.bint, visibility="public")
 
     def __init__(self):
         self.records = []
-        self.staging_stats = {}
         self.completion_ns = None
         self.all_erases = True
 

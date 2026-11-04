@@ -26,7 +26,6 @@ MODEL_BILLIONS = dict(zip(MODELS, (0.5, 1.5, 3.0, 7.0)))
 STRATEGIES = ("HBM", "HBF")
 PREFILL_TOKENS = (64 * 1024, 256 * 1024, 512 * 1024)
 DECODE_TOKENS = (1 * 1024, 5 * 1024, 10 * 1024)
-HOST_STAGING_BYTES = 64 * 1024**2
 PREFILL_CHUNK_TOKENS = 2048
 HBM_CAPACITY_BYTES = 180_000_000_000
 HBM_BANDWIDTH_GB_S = 8000.0
@@ -74,9 +73,7 @@ def _hardware_and_profiles(strategy):
         metadata.update(access_mode="memory", writable=True, write_buffer_bytes=0,
             queue_scope=physical.queue_scope,
             max_outstanding_requests_per_host_channel=physical.max_outstanding_requests,
-            max_outstanding_write_requests_per_host_channel=physical.max_outstanding_write_requests,
-            host_write_staging={"host_component_id": "hostmem0",
-                                "capacity_bytes": HOST_STAGING_BYTES, "reserve_blocks": 1})
+            max_outstanding_write_requests_per_host_channel=physical.max_outstanding_write_requests)
     memory = replace(memory, capacity_bytes=physical.capacity_bytes,
         bandwidth_gbps=shared_gb_s * 8, read_bandwidth_gbps=read_gb_s * 8,
         write_bandwidth_gbps=write_gb_s * 8,
@@ -227,7 +224,6 @@ def describe_scan_parameters():
             "dram_capacity_bytes": 32_000_000_000, "dram_bandwidth_gb_s": 44.8,
             "dram_latency_ns": 100.0, "pcie_generation": "5.0", "pcie_lanes": 16,
             "pcie_bandwidth_gb_s": 63.01538461538462, "pcie_link_latency_ns": 800.0},
-        "host_staging_capacity_bytes": HOST_STAGING_BYTES,
         "host_hardware_source": ARCHITECTURE_PRESET,
         "ttft_definition": "arrival to first committed output token",
         "tpot_definition": "(last output token time - first output token time) / (output_tokens - 1)"}

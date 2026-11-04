@@ -18957,8 +18957,7 @@ function runManifestMarkup(report) {
       fast_mode_requires_resident_weights: ["快速模式需要权重预先驻留", "Fast mode requires resident weights"],
       fast_mode_requires_flash_attention: ["快速模式需要启用 Flash Attention", "Fast mode requires Flash Attention"],
       fast_mode_requires_one_gpu_for_model_operators: ["快速模式需要全部模型算子在同一张 GPU 上执行", "Fast mode requires all model operators to execute on one GPU"],
-      fast_mode_requires_physical_hbm_or_hbf: ["快速模式需要完整的 HBM 或 HBF 物理配置", "Fast mode requires a physical HBM or HBF configuration"],
-      fast_mode_requires_ocp_hbf_protocol: ["快速模式目前只支持 OCP HBF 0.7 协议", "Fast mode currently requires the OCP HBF 0.7 protocol"],
+      fast_mode_requires_physical_hbm: ["快速模式需要完整的 HBM 物理配置", "Fast mode requires a physical HBM configuration"],
       stateful_gpu_cache_requires_detailed_mode: ["有状态 GPU 缓存需要详细执行", "A stateful GPU cache requires detailed execution"],
       llama_runtime_requires_detailed_mode: ["llama.cpp 运行时需要详细执行", "The llama.cpp runtime requires detailed execution"],
       shared_residency_requires_detailed_mode: ["共享驻留状态需要详细执行", "Shared residency requires detailed execution"],
@@ -18971,30 +18970,18 @@ function runManifestMarkup(report) {
       request_completed_during_calibration: ["采样期间已完成整个请求", "The complete request finished during sampling"],
       no_remaining_decode_steps: ["没有剩余 Decode 需要预测", "No remaining Decode steps require prediction"],
       prefix_calibration_exceeds_error_budget: ["样本波动超出误差预算", "Sample variation exceeds the error budget"],
-      hbf_erase_observations_unavailable: ["缺少 HBF 擦除观测，无法估计尾段", "HBF erase observations are unavailable for forecasting"],
-      maintenance_recalibration_exceeds_sample_budget: ["擦除后的校准窗口超出采样预算", "Calibration after an erase exceeds the sampling budget"],
-      calibration_does_not_cover_hbf_kv_page_period: ["采样窗口尚未覆盖完整 HBF KV 页写入周期", "The sampling window does not cover a complete HBF KV page-write period"],
+      calibration_exceeds_sample_budget: ["采样窗口超出采样预算", "The sampling window exceeds the sampling budget"],
       detailed_decode_step_count_does_not_match_runtime: ["详细 Decode 步数与当前运行状态不一致", "The detailed Decode step count does not match runtime state"],
       exact_prefill_and_first_token_required: ["需要完整的详细 Prefill 与首 Token", "Detailed Prefill and the first Token are required"],
       request_not_running_or_finished: ["当前请求状态不适合预测", "The current request state is unsuitable for prediction"],
       final_kv_exceeds_logical_capacity: ["预计 KV 容量超限，需要详细执行", "Projected KV capacity exceeds the limit"],
       unsupported_kv_owner_or_offload: ["当前 KV 存储方案需要详细执行", "The current KV storage requires detailed execution"],
-      hbf_kv_rows_require_aligned_page_period: ["HBF KV 写入周期未满足页对齐条件", "The HBF KV write period does not meet page-alignment requirements"],
-      hbf_full_kv_extent_not_reserved: ["HBF 尚未预留完整 KV 地址空间", "The complete HBF KV extent is not reserved"],
-      hbf_staging_state_unavailable: ["HBF 暂存状态不足以支持预测", "HBF staging state is unavailable for prediction"],
-      hbf_logical_page_headroom_exhausted: ["HBF 剩余逻辑页不足", "HBF logical page headroom is insufficient"],
-      hbf_decode_media_budget_uncalibrated: ["HBF 媒体写入量尚未校准", "The HBF media write budget is not calibrated"],
-      hbf_program_headroom_may_require_gc: ["HBF 后续写入可能触发垃圾回收", "Later HBF writes may trigger garbage collection"],
-      hbf_nand_program_frontier_unavailable: ["HBF 页写入状态不足以支持预测", "HBF page-program state is unavailable for prediction"],
-      hbf_free_block_reuse_may_require_erase: ["HBF 后续可能需要擦除存储块", "Later HBF execution may require block erasure"],
-      hbf_host_tail_slots_may_require_pressure_flush: ["HOST 尾页暂存可能触发压力刷写", "HOST tail-page staging may require a pressure flush"],
+      fast_tail_requires_hbm_kv: ["快速模式只预测 HBM 上的 KV", "Fast mode only forecasts KV on HBM"],
     };
     const reasons = asArray(approximation.fallback_reasons).map((reason) => {
       const code = String(reason).split(":", 1)[0];
       const pair = reasonLabels[code];
-      const label = pair ? localText(...pair) : code.startsWith("hbf_observed_")
-        ? localText("HBF 已观察到需要详细执行的存储维护事件", "HBF observed storage maintenance that requires detailed execution")
-        : String(reason);
+      const label = pair ? localText(...pair) : String(reason);
       return `<li>${escapeHtml(label)}</li>`;
     }).join("");
     simulationNotice = `<section class="run-simulation-notice is-detailed" role="note" data-simulation-mode="detailed" data-i18n-skip>

@@ -1340,34 +1340,6 @@ class _ExecutionStageMetadataCache:
         self, metadata: Mapping[str, Any]
     ) -> Tuple[Tuple[_ExecutionStage, ...], Optional[str]]:
         raw_stages = metadata.get("execution_stages")
-        if metadata.get("execution_stage_source") == "deferred_physical_task_dag":
-            prepared_stages = _trusted_execution_stages(raw_stages)
-            if prepared_stages is not None:
-                # This changes only the typed planner handoff.  The source's
-                # existing host/fence/duration interpretation remains intact.
-                # Its historical JSON parser also normalizes demand scalar
-                # types. Preserve that conversion even for integer-valued
-                # services/work, without rebuilding already-normalized rows.
-                normalized = []
-                for stage in prepared_stages:
-                    tasks = []
-                    stage_changed = False
-                    for task in stage.execution_tasks:
-                        demands = tuple(
-                            demand if (type(demand.service_ns) is float
-                                       and type(demand.work_units) is float
-                                       and type(demand.bytes_moved) is int)
-                            else replace(demand, service_ns=float(demand.service_ns),
-                                work_units=float(demand.work_units),
-                                bytes_moved=int(demand.bytes_moved))
-                            for demand in task.demands)
-                        if any(left is not right for left, right in zip(task.demands, demands)):
-                            task = replace(task, demands=demands)
-                            stage_changed = True
-                        tasks.append(task)
-                    normalized.append(replace(stage, execution_tasks=tuple(tasks))
-                        if stage_changed else stage)
-                return tuple(normalized), None
         if (
             not _declares_explicit_task_dag(metadata)
             or not isinstance(raw_stages, tuple)

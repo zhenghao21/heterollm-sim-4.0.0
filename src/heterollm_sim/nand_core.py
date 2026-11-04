@@ -2247,8 +2247,6 @@ class NandCore:
     def _submit_ocp_single_page_summary(self, request: AccessRequest) -> Optional[TransactionResult]:
         """Execute the same strict page transitions without trace allocations.
 
-        Host staging interleaves each page with its external link reservation,
-        so these requests cannot be replaced by a single bulk NAND transfer.
         Only the three touched resources need accounting baselines; scanning
         all resources in the shared machine timeline for every page is wasteful.
         Multi-lane/custom timelines retain the detailed reservation executor.

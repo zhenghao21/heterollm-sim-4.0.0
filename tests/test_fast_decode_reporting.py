@@ -1,5 +1,7 @@
 """Public fast-mode results keep forecasts distinct from physical traces."""
 from dataclasses import replace
+from pathlib import Path
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -13,7 +15,8 @@ from heterollm_sim.reporting import (
 )
 from heterollm_sim.run_jobs import RunJobManager, RunJobTraceError
 from heterollm_sim.simulation_options import SimulationConfig
-from test_hbf_host_staging_integration import strict_staging_scenario
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from hbf_hbm_experiments import scenario
 
 
 def forecast_result():
@@ -45,12 +48,12 @@ def test_forecast_report_does_not_invent_complete_physical_metrics():
 
 
 def test_explicit_detailed_mode_and_fast_fallback_preserve_real_request_results():
-    scenario = strict_staging_scenario(prompt=4, output=2, all_hbf=True, capacity=65536)
-    implicit = run_scenario(scenario)
-    explicit = run_scenario(replace(scenario, simulation=SimulationConfig(mode="detailed")))
+    configured = scenario(hbf=True, count=1, prompt=4, output=2)
+    implicit = run_scenario(configured)
+    explicit = run_scenario(replace(configured, simulation=SimulationConfig(mode="detailed")))
     assert isinstance(implicit, OnlineScenarioResult)
     assert implicit == explicit
-    fallback = run_scenario(replace(scenario, simulation=SimulationConfig(mode="fast")))
+    fallback = run_scenario(replace(configured, simulation=SimulationConfig(mode="fast")))
     assert isinstance(fallback, FastScenarioResult) and fallback.forecast is None
     assert fallback.detailed.serving.request_metrics == implicit.serving.request_metrics
     assert fallback.detailed.serving.batches == implicit.serving.batches

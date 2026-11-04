@@ -174,8 +174,8 @@ def install_boundaries(collector):
     modules = {name: importlib.import_module("heterollm_sim." + name) for name in (
         "serving", "planner", "scalable_serving", "data_motion", "event_kernel",
         "_compiled_hbm", "_hbm_numeric", "_compiled_dram", "_compiled_nand",
-        "_nand_execution", "_io_execution", "_token_binding", "_physical_binding",
-        "hbf_staging", "hbf_staging_runtime", "live_execution_metrics", "nand_core")}
+        "_nand_execution", "_token_binding", "_physical_binding",
+        "live_execution_metrics", "nand_core")}
 
     def module(name, attribute, category, *, label=None):
         collector.patch(modules[name], attribute, category, label=label)
@@ -209,17 +209,8 @@ def install_boundaries(collector):
         module("data_motion", attribute, "physical_validation_lowering")
     for attribute in ("resolve_physical_task", "_execute_physical_task", "execute_prepared_physical_task"):
         module("data_motion", attribute, "physical_execution_accounting")
-    methods("hbf_staging", "HbfStagingController", ("read", "write", "flush", "release"), "hbf_staging")
-    methods("hbf_staging", "HbfStagingController", ("_read_full_pages", "_write_full_pages"), "hbf_page_mapping_and_state")
-    methods("hbf_staging", "HbfStagingController", ("_transfer",), "hbf_link_accounting")
-    methods("_io_execution", "_PhysicalIO", ("transfer", "_route"), "hbf_link_accounting")
-    methods("_io_execution", "_PhysicalIO", ("_memory", "_flash_pages"), "hbf_io_adapter")
-    for attribute in ("snapshot", "commit", "restore"):
-        module("hbf_staging_runtime", attribute, "physical_transaction_snapshot")
     for attribute in ("execute_compiled", "execute_compiled_many"):
         module("_compiled_dram", attribute, "host_dram_adapter_and_numeric", label="_compiled_dram." + attribute)
-    # Cython imported this function directly, so patch its stored alias as well.
-    module("_io_execution", "execute_compiled", "host_dram_adapter_and_numeric", label="_compiled_dram.execute_compiled")
     for attribute in ("execute_fr_fcfs_numeric", "_pack_hbm_numeric"):
         module("_compiled_hbm", attribute, "hbm_adapter")
     methods("_compiled_hbm", "_HBMNumericState", ("execute_fr_fcfs", "refresh_resources", "commit_timeline", "commit_controller", "checkpoint"), "hbm_adapter")

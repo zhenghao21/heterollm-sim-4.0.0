@@ -113,45 +113,6 @@ def test_plain_custom_stage_metadata_does_not_enter_trusted_program_path():
         {"execution_stages": tuple(rows)}, rows, _OnlineRuntime._stage_task_specs) is None
 
 
-def test_deferred_typed_handoff_does_not_change_source_timing_semantics(monkeypatch):
-    from heterollm_sim import serving
-    rows = stages()
-    rows = (replace(rows[0], execution_tasks=(replace(rows[0].execution_tasks[0],
-        demands=(ResourceDemand("cpu", 1, work_units=2),)),)), *rows[1:])
-    public_rows = tuple({
-        "stage_id": stage.stage_id, "stage_index": stage.stage_index,
-        "dependencies": stage.dependencies, "request_ids": stage.request_ids,
-        "component_id": stage.component_id, "service_ns": stage.service_ns,
-        "execution_tasks": tuple({
-            "task_id": task.task_id, "dependencies": task.dependencies,
-            "request_ids": task.request_ids, "opaque_device_fence": task.opaque_device_fence,
-            "category": task.category.value, "metadata": task.metadata,
-            "resource_demands": tuple({"resource_id": demand.resource_id,
-                "service_ns": demand.service_ns, "bytes_moved": demand.bytes_moved,
-                "work_units": demand.work_units} for demand in task.demands),
-        } for task in stage.execution_tasks),
-    } for stage in rows)
-    raw = _PreparedExecutionStageRows(public_rows, rows,
-        _token=_PREPARED_EXECUTION_STAGE_TOKEN)
-    source = {"execution_stage_source": "deferred_physical_task_dag", "execution_stages": raw}
-    expected, reason = _execution_stages_from_metadata(source)
-    assert reason is None and expected == rows
-    assert not _declares_explicit_task_dag(source)
-    monkeypatch.setattr(serving, "_execution_stages_from_metadata",
-        lambda _metadata: pytest.fail("typed stage payload must not be reparsed"))
-    actual, reason = _ExecutionStageMetadataCache().resolve(source)
-    assert (actual, reason) == (expected, None)
-    for old_stage, new_stage in zip(expected, actual, strict=True):
-        for old_task, new_task in zip(old_stage.execution_tasks, new_stage.execution_tasks, strict=True):
-            for old_demand, new_demand in zip(old_task.demands, new_task.demands, strict=True):
-                assert type(new_demand.service_ns) is type(old_demand.service_ns) is float
-                assert type(new_demand.work_units) is type(old_demand.work_units) is float
-                assert type(new_demand.bytes_moved) is type(old_demand.bytes_moved) is int
-                assert new_demand.service_ns.hex() == old_demand.service_ns.hex()
-                assert new_demand.work_units.hex() == old_demand.work_units.hex()
-    assert not _declares_explicit_task_dag(source)
-
-
 @pytest.mark.parametrize("ready", [True, -1.0, float("inf"), float("nan")])
 def test_invalid_live_release_times_fail_before_binding(ready):
     rows = stages()
