@@ -1663,17 +1663,18 @@ def admit(queue, active, known, ceiling, directory, mode="fast"):
 def channel_threads(case, active, processes):
     """HBM kernel threads for each process of a new worker; the outcome does not depend on them.
 
-    An HBM4 point spends most of its wall in the kernel and scales with threads,
-    while another process holds about one core, so an HBM4 point takes the logical
-    cores those and earlier HBM4 points leave. Other points take their share of
-    the logical cores among the processes running now. Both stop at the kernel's limit.
+    An HBM4 point spends much of its wall in the kernel and scales with threads,
+    while every process holds about one core outside it, so the HBM4 processes
+    share the logical cores that leaves. They count as processes, not as the
+    threads they were given, since those run only inside the kernel and a small
+    point cannot use them. Other points take their share of the logical cores
+    among the processes running now. Both stop at the kernel's limit.
     """
     busy = sum(job["processes"] for job in active.values())
     if case["hardware"] != "HBM4":
         return max(1, min(8, MAX_WORKERS // (busy + processes)))
-    used = sum(job["processes"] * (job["hbm_channel_threads"] if job["case"]["hardware"] == "HBM4" else 1)
-               for job in active.values())
-    return max(1, min(8, (MAX_WORKERS - used) // processes))
+    sharing = processes + sum(job["processes"] for job in active.values() if job["case"]["hardware"] == "HBM4")
+    return max(1, min(8, 1 + (MAX_WORKERS - busy - processes) // sharing))
 
 
 def _start(queue, active, known, ceiling, directory, mode, spawn):

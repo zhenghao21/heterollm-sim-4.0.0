@@ -363,17 +363,19 @@ def test_a_candidate_starts_with_its_processes_and_shares_the_cores_over_them(tm
     assert command[command.index("--window-processes") + 1] == "4"
 
 
-def test_an_hbm4_point_takes_the_cores_others_leave_and_other_points_their_share(monkeypatch):
+def test_hbm4_points_share_the_cores_others_leave_and_other_points_take_their_share(monkeypatch):
     import run_exploring_hbf_native as run
     monkeypatch.setattr(run, "MAX_WORKERS", 32)
     hbm4, hbf = {"hardware": "HBM4"}, {"hardware": "HBF"}
-    others = {str(index): {"processes": 1, "case": hbf, "hbm_channel_threads": 1} for index in range(9)}
+    others = {str(index): {"processes": 1, "case": hbf} for index in range(9)}
     assert run.channel_threads(hbm4, others, 1) == 8
     assert run.channel_threads(hbf, others, 1) == 3
-    earlier = {**others, "x": {"processes": 1, "case": hbm4, "hbm_channel_threads": 8},
-               "y": {"processes": 1, "case": hbm4, "hbm_channel_threads": 8}}
+    earlier = {**others, "x": {"processes": 1, "case": hbm4}, "y": {"processes": 1, "case": hbm4}}
     assert run.channel_threads(hbm4, earlier, 1) == 7
-    assert run.channel_threads(hbm4, {**earlier, "z": {"processes": 1, "case": hbm4, "hbm_channel_threads": 8}}, 1) == 1
+    # Small HBM4 points given many threads do not leave a large one with a single thread.
+    small = {str(index): {"processes": 1, "case": hbm4, "hbm_channel_threads": 8} for index in range(12)}
+    assert run.channel_threads(hbm4, small, 1) == 2
+    assert run.channel_threads(hbm4, {str(index): {"processes": 1, "case": hbm4} for index in range(24)}, 1) == 1
     assert run.channel_threads(hbm4, {}, 4) == 8
 
 
