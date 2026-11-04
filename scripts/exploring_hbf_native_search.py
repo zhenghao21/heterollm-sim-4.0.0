@@ -607,8 +607,10 @@ def _max_batch(entries, plan, firsts, lookup, replica_gpus, slo_ns, measured):
               "incumbent_batch_per_gpu": incumbent, "acceptance": None, "selected": None}
     if result["next"] or any(plan_["outcome"]["kind"] == "failed" for plan_ in layouts):
         return result
+    # A passing point on a layout the bound pruned can exceed every remaining outcome.
     options = [(plan_["outcome"]["batch"] / replica_gpus[index], index) for index, plan_ in enumerate(layouts)
-               if plan_["outcome"]["kind"] in ("interpolated", "limited")]
+               if plan_["outcome"]["kind"] in ("interpolated", "limited")
+               and plan_["outcome"]["batch"] / replica_gpus[index] >= incumbent]
     if options:
         per_gpu, index = max(options)
         chosen, outcome = layouts[index], layouts[index]["outcome"]
@@ -628,7 +630,7 @@ def _max_batch(entries, plan, firsts, lookup, replica_gpus, slo_ns, measured):
             result["selected"] = {"layout": chosen["layout"], "batch": outcome["batch"],
                                   "batch_per_gpu": per_gpu, "result": label}
             return result
-    # A failed acceptance falls back to the largest measured passing point.
+    # No such outcome, or a failed acceptance: the largest measured passing point.
     best = max(((point["batch"] / replica_gpus[index], index, point["batch"])
                 for plans in (measured, layouts) for index, plan_ in enumerate(plans)
                 for point in plan_.get("points") or () if point["tpot_upper_ns"] <= slo_ns), default=None)

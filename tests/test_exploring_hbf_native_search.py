@@ -458,6 +458,24 @@ def test_the_largest_batch_is_searched_after_the_throughput_search():
     assert (index, selected_batch) == (0, capacity)
 
 
+def test_the_largest_batch_is_not_below_a_passing_point_on_a_pruned_layout():
+    # Maverick HBM4 SHORT: TP8 settles at its passing end, B=512 (64/GPU). TP4_EP2 passed
+    # at B=3810 (476.25/GPU) and the bound pruned it, so it has no outcome to select.
+    tp4_ep2 = {"dp": 1, "tp": 4, "pp": 1, "ep": 2}
+    point = lambda batch, tpot: {"batch": batch, "tpot_ns": tpot, "tpot_upper_ns": tpot}
+    entries = [entry(tp4_ep2), entry(TP8)]
+    plans = [{"layout": tp4_ep2, "bypass": entries[0]["bypass"], "runs": [], "points": [point(3810, 77.4e6)],
+              "outcome": {"kind": "pruned", "reason": "bypass_batch_bound_not_above_incumbent"}},
+             {"layout": TP8, "bypass": entries[1]["bypass"], "runs": [], "points": [point(512, 23.4e6), point(3147, 100.6e6)],
+              "outcome": {"kind": "interpolated", "batch": 512, "settled": "bracket_passing_end"}}]
+    largest = search._max_batch(entries, lambda index, **_: plans[index], [None, None],
+                                lambda index: lambda batch: {"status": "completed"}, [8, 8], SLO, plans)
+    assert largest["incumbent_batch_per_gpu"] == 3810 / 8
+    assert largest["acceptance"] is None
+    assert largest["selected"] == {"layout": tp4_ep2, "batch": 3810, "batch_per_gpu": 3810 / 8,
+                                   "result": "best_measured_point"}
+
+
 def test_branch_and_bound_prunes_layouts_that_cannot_beat_the_incumbent():
     slow = {"dp": 4, "tp": 2, "pp": 1, "ep": 1}
     weak = {"dp": 2, "tp": 2, "pp": 2, "ep": 1}
