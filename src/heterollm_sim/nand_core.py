@@ -2460,17 +2460,13 @@ class NandCore:
         media_queue_wait_ns = 0.0
         # Read-wait is an observation of work inherited by this request.  The
         # scalar page loop mutates the same array/buffer/lane calendars as it
-        # goes, so snapshot the lane frontiers once and retain each logical
-        # array's initial front before the first page can change it.  This
-        # keeps same-request page serialization out of the metric while
+        # goes, so retain each execution slot's front at its first visit, which
+        # precedes this request's first reservation of that slot, and each
+        # logical array's initial front before the first page can change it.
+        # This keeps same-request page serialization out of the metric while
         # preserving a real frontier left by an earlier request.
         inherited_array_frontiers = {}
-        inherited_lane_frontiers = {
-            resource: min(lanes)
-            for resource, lanes in self.timeline.lane_available.items()
-            if lanes
-        }
-        inherited_ready_frontiers = dict(self.timeline.ready_ns)
+        inherited_slot_frontiers = {}
         merge_bytes = 0
         merged_pages = 0
         staging_write_pages = 0
@@ -2490,14 +2486,12 @@ class NandCore:
             array_ready = self.__dict__["_array_ready"].get(array_id, 0.0)
             buffer_ready = self.__dict__["_buffer_ready"].get(array_id, 0.0)
             if array_id not in inherited_array_frontiers:
-                inherited_array_frontiers[array_id] = max(
-                    array_ready,
-                    buffer_ready,
-                    inherited_lane_frontiers.get(
-                        array_resource,
-                        inherited_ready_frontiers.get(array_resource, 0.0),
-                    ),
-                )
+                slot_frontier = inherited_slot_frontiers.get(array_resource)
+                if slot_frontier is None:
+                    lanes = self.timeline.lane_available.get(array_resource)
+                    slot_frontier = min(lanes) if lanes else self.timeline.ready_ns.get(array_resource, 0.0)
+                    inherited_slot_frontiers[array_resource] = slot_frontier
+                inherited_array_frontiers[array_id] = max(array_ready, buffer_ready, slot_frontier)
             inherited_frontier = inherited_array_frontiers[array_id]
             dependency = max(request.arrival_ns + self.config.front_ns, array_ready, buffer_ready)
             if request.operation is Operation.ERASE:

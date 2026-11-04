@@ -1647,6 +1647,22 @@ def admit(queue, active, known, ceiling, directory, mode="fast"):
     return started, ceiling
 
 
+def channel_threads(case, active, processes):
+    """HBM kernel threads for each process of a new worker; the outcome does not depend on them.
+
+    An HBM4 point spends most of its wall in the kernel and scales with threads,
+    while another process holds about one core, so an HBM4 point takes the logical
+    cores those and earlier HBM4 points leave. Other points take their share of
+    the logical cores among the processes running now. Both stop at the kernel's limit.
+    """
+    busy = sum(job["processes"] for job in active.values())
+    if case["hardware"] != "HBM4":
+        return max(1, min(8, MAX_WORKERS // (busy + processes)))
+    used = sum(job["processes"] * (job["hbm_channel_threads"] if job["case"]["hardware"] == "HBM4" else 1)
+               for job in active.values())
+    return max(1, min(8, (MAX_WORKERS - used) // processes))
+
+
 def _start(queue, active, known, ceiling, directory, mode, spawn):
     """Start the admitted head of ``queue`` of (case, layout, batch) items."""
     chosen, factor = admit(queue, active, known, ceiling, directory, mode)
@@ -1656,10 +1672,7 @@ def _start(queue, active, known, ceiling, directory, mode, spawn):
         budget = (parameters(case, layout, batch, mode)["candidate_wall_budget_seconds_per_worker"]
                   if mode == "fast" else None)
         started = time.perf_counter()
-        # The kernel's outcome does not depend on the thread count: each process of
-        # a new worker takes its share of the logical cores among those running now,
-        # up to the kernel's limit.
-        threads = max(1, min(8, MAX_WORKERS // (sum(job["processes"] for job in active.values()) + processes)))
+        threads = channel_threads(case, active, processes)
         process = (spawn(case, layout, batch, directory) if spawn
                    else _spawn(case, layout, batch, directory, mode, factor, threads, processes))
         active[candidate_id(case, layout, batch)] = {"process": process, "case": case, "layout": layout,

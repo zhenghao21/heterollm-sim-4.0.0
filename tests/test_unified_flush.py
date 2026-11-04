@@ -127,6 +127,20 @@ def test_logic_die_read_batch_excludes_same_batch_array_queue_from_media_wait():
     assert core._last_media_queue_wait_ns == pytest.approx(0.0)
 
 
+def test_scalar_read_wait_ignores_this_requests_own_use_of_a_shared_slot():
+    # Two arrays share one execution slot, so the second page sees the slot
+    # after the first page reserved it. Only the earlier work is inherited.
+    from dataclasses import replace
+
+    timeline = ResourceTimeline(lane_available={"nand:parallel:0": [50000.0]})
+    core = NandCore(replace(_logic_config(), page_staging="none", parallel_units=1),
+                    timeline=timeline, capture_details=False)
+    arrival = 0.0
+    result = core._execute_detailed_accepted(AccessRequest("two-arrays", Operation.READ, 0, 2 * PAGE, arrival))
+    assert result.pages_read == 2
+    assert result.counters["media_queue_wait_ns"] == pytest.approx(50000.0 - core.config.front_ns)
+
+
 def test_logic_die_flush_task_is_background_after_last_nand_read():
     from exploring_hbf_native_config import build_native_comparison_scenario
     from exploring_hbf_native_pilot import build_pilot_scenario

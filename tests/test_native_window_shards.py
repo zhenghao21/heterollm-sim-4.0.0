@@ -329,13 +329,28 @@ def test_a_candidate_starts_with_its_processes_and_shares_the_cores_over_them(tm
     monkeypatch.setattr(run, "_spawn", lambda *args: spawned.append(args) or NS(pid=1))
     monkeypatch.setattr(run, "MAX_WORKERS", 16)
     monkeypatch.setattr(run, "available_memory_bytes", lambda: run.WORKER_MEMORY_RESERVE_BYTES + 100 * GiB)
-    queue, active = [(case, layout, 100)], {"a": {"process": NS(pid=2), "peak": 0, "processes": 4}}
+    queue, active = [(case, layout, 100)], {"a": {"process": NS(pid=2), "peak": 0, "processes": 4,
+                                                  "case": {"hardware": "HBF"}, "hbm_channel_threads": 1}}
     run._start(queue, active, known, 32, tmp_path, "fast", None)
     job = active[run.candidate_id(case, layout, 100)]
     assert not queue and job["processes"] == 4 and job["peak"] == 4 * GiB
-    assert job["hbm_channel_threads"] == 2 and spawned[0][-2:] == (2, 4)
+    assert job["hbm_channel_threads"] == 3 and spawned[0][-2:] == (3, 4)
     command = run.candidate_command(case, layout, 100, tmp_path, "fast", 1, 4)
     assert command[command.index("--window-processes") + 1] == "4"
+
+
+def test_an_hbm4_point_takes_the_cores_others_leave_and_other_points_their_share(monkeypatch):
+    import run_exploring_hbf_native as run
+    monkeypatch.setattr(run, "MAX_WORKERS", 32)
+    hbm4, hbf = {"hardware": "HBM4"}, {"hardware": "HBF"}
+    others = {str(index): {"processes": 1, "case": hbf, "hbm_channel_threads": 1} for index in range(9)}
+    assert run.channel_threads(hbm4, others, 1) == 8
+    assert run.channel_threads(hbf, others, 1) == 3
+    earlier = {**others, "x": {"processes": 1, "case": hbm4, "hbm_channel_threads": 8},
+               "y": {"processes": 1, "case": hbm4, "hbm_channel_threads": 8}}
+    assert run.channel_threads(hbm4, earlier, 1) == 7
+    assert run.channel_threads(hbm4, {**earlier, "z": {"processes": 1, "case": hbm4, "hbm_channel_threads": 8}}, 1) == 1
+    assert run.channel_threads(hbm4, {}, 4) == 8
 
 
 def test_a_saved_row_gives_the_wall_of_its_windows_in_one_process():
