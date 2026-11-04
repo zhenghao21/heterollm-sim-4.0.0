@@ -1486,6 +1486,79 @@ def _fr_column_start(lane, group, sid, bank_ready, earliest, read, t, ticks, hal
 
 
 @njit(cache=True, nogil=True, fastmath=False)
+def _fr_faw_ready(lane, earliest, frontier, width, width_tick, half, inverse, windows, window_counts):
+    """_faw_ready on a precomputed window tick."""
+    if width <= 0:
+        return earliest
+    count = window_counts[lane]
+    expired = 0
+    while expired < count and _fr_after(windows[lane, expired], width, width_tick, half, inverse) <= frontier:
+        expired += 1
+    if expired:
+        for index in range(count - expired):
+            windows[lane, index] = windows[lane, index + expired]
+        count -= expired
+        window_counts[lane] = count
+    while True:
+        position = 0
+        while position < count and windows[lane, position] <= earliest:
+            position += 1
+        next_start = earliest
+        for offset in range(max(0, position - 4), min(position, count - 4) + 1):
+            first = earliest if offset == position else windows[lane, offset]
+            last_index = offset + 4
+            last = earliest if last_index == position else windows[lane, last_index - 1]
+            if last < _fr_after(first, width, width_tick, half, inverse):
+                next_start = max(next_start, _fr_after(windows[lane, offset], width, width_tick, half, inverse))
+        if next_start == earliest:
+            return earliest
+        earliest = next_start
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_activate_start(lane, bank, group, earliest, groups, grouped, t, ticks, clock_back, half, inverse, grid_limit,
+                       bf, pc, history, resources, windows, window_counts):
+    """_activate_start for an entry already on the queue, on precomputed ticks."""
+    ready = max(earliest, bf[bank, 1], pc[lane, 1], resources[lane // 2, 0])
+    if bf[bank, 0] >= 0:
+        ready = max(ready, _fr_after(_fr_after(bf[bank, 0], t[8], ticks[8], half, inverse),
+                                     -t[0], clock_back, half, inverse))
+    anchor = _fr_after(_align(ready, t[0]), t[0], ticks[0], half, inverse)
+    other = -1.
+    for previous_group in range(groups):
+        stamp = history[lane, previous_group, 0]
+        same_group = previous_group == group
+        gap = t[14] if same_group else t[15]
+        if stamp >= 0 and gap > 0:
+            if grouped and stamp < grid_limit and not same_group:
+                other = max(other, stamp)
+            else:
+                anchor = max(anchor, _fr_after(stamp, gap, ticks[14 if same_group else 15], half, inverse))
+    if other >= 0:
+        anchor = max(anchor, _fr_after(other, t[15], ticks[15], half, inverse))
+    frontier = max(0., resources[lane // 2, 0])
+    while True:
+        anchor = _fr_faw_ready(lane, anchor, frontier, t[30], ticks[30], half, inverse, windows, window_counts)
+        start = _align(_fr_after(anchor, -t[0], clock_back, half, inverse), t[0])
+        aligned = _fr_after(start, t[0], ticks[0], half, inverse)
+        if t[30] <= 0 or aligned == anchor:
+            return start
+        anchor = aligned
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _fr_precharge_start(lane, bank, earliest, step, t, ticks, follow_tick, half, inverse, bf, pc, channel, channel_int,
+                        resources):
+    """_precharge_start on precomputed ticks."""
+    ready = max(earliest, bf[bank, 2], pc[lane, 1])
+    if pc[lane, 0] >= 0:
+        ready = max(ready, _fr_after(pc[lane, 0], t[19], ticks[19], half, inverse))
+    if channel_int[lane // 2, 0] == bank:
+        ready = max(ready, _fr_after(channel[lane // 2, 0], 2 * t[0], follow_tick, half, inverse))
+    return _align(max(ready, resources[lane // 2, 0]), step)
+
+
+@njit(cache=True, nogil=True, fastmath=False)
 def _fr_lane_cursor(first, stop, lane, lanes):
     """First burst of [first, stop) on a lane; the stripe is two bursts wide."""
     block = first >> 1
@@ -1846,6 +1919,9 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
         group_sid_group[group] = group // g[15]
     grouped = g[12] != 0
     grid_limit = t[0] * 2. ** 48
+    clock_back = -ticks[0] if ticks[0] != _NO_TICK else _NO_TICK
+    follow_tick = _fr_tick(2 * t[0], half)
+    precharge_step = t[0] if g[7] else half
     lane_shift, column_shift, bank_shift, sid_shift = (_binary_shift(g[0]), _binary_shift(g[3]),
                                                         _binary_shift(g[4]), _binary_shift(g[14]))
     binary = min(lane_shift, column_shift, bank_shift, sid_shift, _binary_shift(g[15])) >= 0
@@ -2151,13 +2227,15 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                     bank = q_bank[pseudo, direction, slot]
                     entry = q_entry[pseudo, direction, slot]
                     if rows[bank] >= 0:
-                        row_start = _precharge_start(lane, bank, entry, g, t, bf, pc, channel, channel_int, resources)
+                        row_start = _fr_precharge_start(lane, bank, entry, precharge_step, t, ticks, follow_tick, half,
+                                                        inverse, bf, pc, channel, channel_int, resources)
                         row_kind = 1
                     else:
                         # The row bus alone bounds later ACTs, so it alone may prune tFAW history.
-                        row_start = _activate_start(lane, bank, bank_group[bank - lane * banks],
-                                                    max(entry, act_floor[pseudo]), 0., g, t, bf, pc,
-                                                    history, resources, windows, window_counts)
+                        row_start = _fr_activate_start(lane, bank, bank_group[bank - lane * banks],
+                                                       max(entry, act_floor[pseudo]), g[5], grouped, t, ticks,
+                                                       clock_back, half, inverse, grid_limit, bf, pc, history,
+                                                       resources, windows, window_counts)
                         row_kind = 2
                     if row_start < start:
                         start, kind, chosen = row_start, row_kind, row_offset
@@ -2206,8 +2284,9 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
                     _close_expiring(ch, horizon, g, t, rows, bf, addresses, pc, channel,
                                     channel_int, resources, touched, tally)
                 maintained = True
-            elif _refresh_until(lane, start, entry, g, t, rows, bf, addresses, pc, pc_seen,
-                                channel, channel_int, resources, touched, tally):
+            elif (g[8] and channel[ch, 1] <= start
+                    and _refresh_until(lane, start, entry, g, t, rows, bf, addresses, pc, pc_seen,
+                                       channel, channel_int, resources, touched, tally)):
                 maintained = True
             if maintained:
                 if not refreshed:
