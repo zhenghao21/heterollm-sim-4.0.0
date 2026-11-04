@@ -319,6 +319,30 @@ def test_admission_counts_all_the_processes_of_a_candidate(tmp_path, monkeypatch
     assert [processes for _item, _peak, processes in chosen] == [4, 2]
 
 
+def test_a_worker_in_its_windows_reserves_only_what_the_windows_move(tmp_path):
+    import run_exploring_hbf_native as run
+    GiB = 2**30
+    job = {"peak": 17 * GiB, "processes": 1}
+    path = tmp_path / "progress" / "a.json"
+
+    def growth(job=job, **progress):
+        run.write_json(path, {"candidate_id": "a", **progress})
+        return run._remaining_growth(tmp_path, "a", job)
+
+    assert run._remaining_growth(tmp_path, "a", job) == 17 * GiB
+    assert growth(stage="cohort_lowering", working_set_bytes=6 * GiB) == 11 * GiB
+    assert growth(stage="native_layer_tasks", working_set_bytes=6 * GiB) == 2 * GiB
+    assert growth(stage="native_stationary_sample", working_set_bytes=16 * GiB) == 1 * GiB
+    assert growth(stage="native_layer_tasks", working_set_bytes=18 * GiB) == 0
+    # A re-sampled candidate prepares again and takes its whole reservation back.
+    assert growth(stage="cohort_tasks", working_set_bytes=6 * GiB) == 11 * GiB
+    # A report of the previous candidate of this path says nothing about this one.
+    run.write_json(path, {"candidate_id": "old", "stage": "native_layer_tasks", "working_set_bytes": 6 * GiB})
+    assert run._remaining_growth(tmp_path, "a", job) == 17 * GiB
+    helpers = {"peak": 30 * GiB, "processes": 3}
+    assert growth(helpers, stage="native_layer_tasks", working_set_bytes=5 * GiB) == 6 * GiB
+
+
 def test_a_candidate_starts_with_its_processes_and_shares_the_cores_over_them(tmp_path, monkeypatch):
     import run_exploring_hbf_native as run
     GiB = 2**30

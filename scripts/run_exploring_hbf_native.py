@@ -106,6 +106,10 @@ PEAK_PREDICTION_CAP = 1.5
 # A candidate's windows take one more process at each of these walls in one
 # process; see window_processes.
 WINDOW_PROCESS_WALLS = (600., 1800., 3600.)
+# A process in its windows, past the peak of preparation, may move by about this
+# much; WORKER_MEMORY_RESERVE_BYTES covers a re-sampled candidate's new preparation.
+WINDOW_STAGES = ("native_layer_tasks", "native_stationary_sample")
+WINDOW_GROWTH_BYTES = 2*1024**3
 # A helper ends as soon as its stdin closes, unless it is hung.
 WINDOW_HELPER_EXIT_SECONDS = 10.
 STATUS_LABELS = {"pending": "等待", "running": "运行中", "completed": "完成",
@@ -1601,11 +1605,20 @@ def worker_ceiling(workers):
     return workers
 
 
-def _working_set(directory, identity):
-    """A running worker's last reported working set in bytes, 0 before its first report."""
+def _remaining_growth(directory, identity, job):
+    """Bytes a running worker may still take beyond its last reported working set.
+
+    Before its first report that is its whole predicted peak. The peak comes in
+    preparation, so a worker in its windows reserves only what the windows move;
+    a re-sampled candidate reports a preparation stage again.
+    """
     progress = read_json(Path(directory) / "progress" / (identity + ".json")) or {}
-    usage = progress.get("working_set_bytes") if progress.get("candidate_id") == identity else None
-    return usage if _numeric(usage) else 0
+    reported = progress.get("candidate_id") == identity
+    usage = progress.get("working_set_bytes") if reported else None
+    growth = max(0, job["peak"] - job["processes"] * (usage if _numeric(usage) else 0))
+    if reported and progress.get("stage") in WINDOW_STAGES:
+        return min(growth, job["processes"] * WINDOW_GROWTH_BYTES)
+    return growth
 
 
 def admit(queue, active, known, ceiling, directory, mode="fast"):
@@ -1627,7 +1640,7 @@ def admit(queue, active, known, ceiling, directory, mode="fast"):
         return [], ceiling
     free = available_memory_bytes() - WORKER_MEMORY_RESERVE_BYTES
     for identity, job in active.items():
-        free -= max(0, job["peak"] - job["processes"] * _working_set(directory, identity))
+        free -= _remaining_growth(directory, identity, job)
     chosen = []
     for item in queue:
         if busy + len(chosen) >= ceiling:
