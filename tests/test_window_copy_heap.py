@@ -116,6 +116,27 @@ def test_a_declined_transaction_that_wrote_nothing_does_not_discard_the_copy():
     assert not timeline._discarded
 
 
+def test_a_window_copy_proves_a_nand_footprint_once_and_others_before_every_task(monkeypatch):
+    from heterollm_sim import _nand_pack
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+    from test_owned_nand_sram_timeline import settings
+    context = PhysicalRuntimeContext(settings("nand"), "flash", capture_details=False)
+    original, calls = _nand_pack.can_own_timeline, []
+    monkeypatch.setattr(_nand_pack, "can_own_timeline", lambda *args: calls.append(args[1]) or original(*args))
+    owners = ("flash",)
+    assert context._owners_have_native_hooks(owners) and context._owners_have_native_hooks(owners)
+    assert len(calls) == 2
+    rid = calls[0][0]
+    context.timeline.ready_ns[rid] = object()
+    context.timeline._discardable = True
+    # A rejected footprint is not remembered.
+    assert not context._owners_have_native_hooks(owners)
+    context.timeline.ready_ns.pop(rid)
+    del calls[:]
+    assert context._owners_have_native_hooks(owners) and context._owners_have_native_hooks(owners)
+    assert len(calls) == 1
+
+
 def test_numeric_state_follows_a_copied_core_and_leaves_no_cycle():
     runtime = native_runtime(ingress_scenario("hbm_tp1", count=2))
     runtime._arrive()

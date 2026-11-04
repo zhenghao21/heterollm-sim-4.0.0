@@ -719,7 +719,11 @@ class PhysicalRuntimeContext:
                                                         for name in names))
                 except (TypeError, ValueError, RecursionError):
                     return False
-                if resources is None or not can_own_timeline(self.timeline, resources):
+                if resources is None:
+                    return False
+                # A cached NAND footprint keeps its identity; SRAM rebuilds its names.
+                if not (_footprint_owned(self.timeline, resources) if core_type is NandCore
+                        else can_own_timeline(self.timeline, resources)):
                     return False
                 if _footprints is not None:
                     _footprints[owner] = resources
@@ -1755,6 +1759,25 @@ def _sink_columns_proven(timeline):
     return True
 
 
+def _footprint_proven(timeline, resources):
+    return timeline._discardable and id(resources) in timeline._proven_footprints
+
+
+def _footprint_owned(timeline, resources):
+    """Prove a footprint's live values once on a window copy, before every task elsewhere.
+
+    The walk visits thousands of NAND banks. A window copy is private to its
+    sampling, and the owners' checks hold each of its writers to the native ones.
+    """
+    if _footprint_proven(timeline, resources):
+        return True
+    if not _sink_nand_pack_module.can_own_timeline(timeline, resources):
+        return False
+    if timeline._discardable:
+        timeline._proven_footprints[id(resources)] = resources
+    return True
+
+
 def _native_resource_sink(task, runtime, prepared, ledger, arrival_ns):
     if (type(task) is not TaskSpec or type(runtime) is not PhysicalRuntimeContext
             or type(prepared) is not _sink_task_module.PreparedPhysicalTask
@@ -1820,7 +1843,6 @@ def _native_resource_sink(task, runtime, prepared, ledger, arrival_ns):
     # footprints. Revalidate those live values here, after preparation, rather
     # than trusting the outer transaction's earlier ownership verdict.
     by_owner = {}
-    footprint = []
     has_nand = False
     for instruction in prepared.instructions:
         access, operation, address, count, owner, config = instruction
@@ -1878,23 +1900,26 @@ def _native_resource_sink(task, runtime, prepared, ledger, arrival_ns):
             # A changed configuration rebuilds the resident pack; a relevant
             # alias makes HBM use its scalar controller on canonical targets.
             # Neither path is covered by this resident ids-only footprint.
-            if (type(resources) is not tuple or any(type(resource) is not str for resource in resources)
-                    or not _sink_plain_config(core._hbm_numeric_state._config)
-                    or core._hbm_numeric_state._config != core.config
-                    or not _sink_nand_pack_module.can_own_resource_aliases(timeline.resource_aliases)):
+            if (not _sink_plain_config(core._hbm_numeric_state._config)
+                    or core._hbm_numeric_state._config != core.config):
                 return False
-            try:
-                if any(timeline.canonical_resource_id(resource) != resource for resource in resources):
+            if not _footprint_proven(timeline, resources):
+                if (type(resources) is not tuple or any(type(resource) is not str for resource in resources)
+                        or not _sink_nand_pack_module.can_own_resource_aliases(timeline.resource_aliases)):
                     return False
-            except ValueError:
-                return False
+                try:
+                    if any(timeline.canonical_resource_id(resource) != resource for resource in resources):
+                        return False
+                except ValueError:
+                    return False
         else:
             return False
-        if type(resources) is not tuple or any(type(resource) is not str for resource in resources):
-            return False
-        footprint.extend(resources)
+        if not _footprint_proven(timeline, resources):
+            if (type(resources) is not tuple or any(type(resource) is not str for resource in resources)
+                    or not _footprint_owned(timeline, resources)):
+                return False
         by_owner[owner] = core
-    return has_nand and _sink_nand_pack_module.can_own_timeline(timeline, tuple(dict.fromkeys(footprint)))
+    return has_nand
 
 
 def _recost_physical_kernel_envelope(task: TaskSpec) -> TaskSpec:

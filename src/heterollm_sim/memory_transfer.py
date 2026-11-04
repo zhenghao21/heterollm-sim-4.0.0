@@ -253,6 +253,7 @@ class ResourceTimeline:
     # A sampling window's copy: any exception discards it, so nothing restores it.
     _discardable: bool = field(default=False, init=False, repr=False, compare=False)
     _discarded: bool = field(default=False, init=False, repr=False, compare=False)
+    _proven_footprints: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     def _begin_owned_transaction(self, *, accounting=False):
         if self._discarded:

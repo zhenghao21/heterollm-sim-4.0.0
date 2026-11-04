@@ -265,7 +265,9 @@ def _independent_kernel(source, executor=None, request_ids=None):
             memo[id(holders)] = {key: count for key, count in holders.items()
                                  if key in kept_keys or key not in request_keys}
     kernel = deepcopy(source, memo)
-    kernel.physical_runtime.timeline._discardable = True
+    timeline = kernel.physical_runtime.timeline
+    timeline._discardable = True
+    timeline._proven_footprints = {}
     if executor is None:
         return kernel, None
     # The native PD executor reserves this kernel's own physical runtime and
