@@ -52,16 +52,16 @@ def test_failed_or_declined_request_does_not_make_undo_rows_live(failure, monkey
     transaction_start = image(core)
     touches_at_start = set(runtime.timeline._touched)
     token = runtime.begin_transaction(owners=("hbm",), _owned_timeline=True)
-    original = _compiled_hbm._HBMNumericState.execute
-    def reject(packed, request):
-        result = original(packed, request)
-        if request.request_id == "rejected":
+    original = _compiled_hbm._HBMNumericState.execute_fr_fcfs
+    def reject(packed, requests):
+        result = original(packed, requests)
+        if requests[0].request_id == "rejected":
             if failure == "decline":
                 return None
             raise RuntimeError("injected dense request failure")
         return result
     with monkeypatch.context() as patch:
-        patch.setattr(_compiled_hbm._HBMNumericState, "execute", reject)
+        patch.setattr(_compiled_hbm._HBMNumericState, "execute_fr_fcfs", reject)
         request = AccessRequest("rejected", "write", 65536, 4096, 1000.)
         if failure == "exception":
             with pytest.raises(RuntimeError, match="dense request failure"):
@@ -133,16 +133,16 @@ def test_sparse_borrowed_failure_retry_and_nested_rollback_are_independent(monke
     middle = image(core)
     middle_touched = set(runtime.timeline._touched)
     inner = runtime.begin_transaction(owners=("hbm",), _owned_timeline=True)
-    original = _compiled_hbm._HBMNumericState.execute
-    def execute(packed, request):
-        result = original(packed, request)
-        if request.request_id == "bad":
+    original = _compiled_hbm._HBMNumericState.execute_fr_fcfs
+    def execute(packed, requests):
+        result = original(packed, requests)
+        if requests[0].request_id == "bad":
             if failure == "exception":
                 raise RuntimeError("sparse checkpoint failure")
             return None
         return result
     with monkeypatch.context() as patch:
-        patch.setattr(_compiled_hbm._HBMNumericState, "execute", execute)
+        patch.setattr(_compiled_hbm._HBMNumericState, "execute_fr_fcfs", execute)
         request = AccessRequest("bad", "write", 32, 32, 2000.)
         if failure == "exception":
             with pytest.raises(RuntimeError, match="sparse checkpoint failure"):

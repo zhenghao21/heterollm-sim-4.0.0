@@ -53,17 +53,17 @@ def test_serving_uses_hbm3e_reference_geometry_and_explicit_timing_assumptions()
 
 
 def test_three_timing_profiles_keep_non_group_physical_variables_identical():
-    ids = ("hbm3e_reference_flat", "hbm3e_reference", "hbm3e_reference_synthetic_timing")
+    ids = ("hbm3e_reference", "hbm3e_reference_synthetic_timing")
     configs = [physical(study.build_study_scenario("A_hbm_only", prompt=4, output=2,
                        hbm_timing_profile=profile, hbm_parameter_profile="none")) for profile in ids]
-    assert [(c.bank_groups_per_rank, c.banks_per_group) for c in configs] == [(1, 64), (16, 4), (16, 4)]
+    assert [(c.bank_groups_per_rank, c.banks_per_group) for c in configs] == [(16, 4), (16, 4)]
     assert all(c.bank_group_timing_enabled for c in configs)
     assert [getattr(configs[-1], key) for key in DRAM_BANK_GROUP_TIMING_FIELDS] == [
-        max(getattr(configs[1], key), sensitivity) for key, sensitivity in
+        max(getattr(configs[0], key), sensitivity) for key, sensitivity in
         zip(DRAM_BANK_GROUP_TIMING_FIELDS, (4, 1, 8, 2, 16, 4, 2))]
     excluded = {"metadata", "bank_groups_per_rank", "banks_per_group", *DRAM_BANK_GROUP_TIMING_FIELDS}
     signatures = [{k: v for k, v in asdict(c).items() if k not in excluded} for c in configs]
-    assert signatures[0] == signatures[1] == signatures[2]
+    assert signatures[0] == signatures[1]
 
 
 def test_micro_and_full_service_use_catalog_for_the_same_hbf_inputs():

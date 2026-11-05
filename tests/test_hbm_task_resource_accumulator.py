@@ -54,10 +54,8 @@ def assert_state_equal(left, right):
         key: value for key, value in vars(right.timeline).items() if key != "_metric_key_orders"}
 
 
-@pytest.mark.parametrize("mapping", ("bank_interleaved", "row_local"))
-def test_singletons_and_mixed_batches_preserve_exact_bills_and_results(helpers, mapping):
-    config = configuration(channels=8, address_mapping=mapping,
-        interleave_bytes=128 if mapping == "bank_interleaved" else None,
+def test_singletons_and_mixed_batches_preserve_exact_bills_and_results(helpers):
+    config = configuration(channels=8,
         max_outstanding_requests=1, refresh_policy="all_bank",
         refresh_interval_ns=400.0, refresh_cycle_ns=40.0)
     reference, actual = (DramCore(config, capture_details=False) for _ in range(2))
@@ -67,7 +65,7 @@ def test_singletons_and_mixed_batches_preserve_exact_bills_and_results(helpers, 
     # marker and resource insertion order are not this reducer's contract.
     reference._hbm_numeric_enabled = actual._hbm_numeric_enabled = True
     expected, accumulated = helpers.HBMResourceAccumulator(), helpers.HBMResourceAccumulator()
-    span = config.row_bytes * config.bank_count if mapping == "row_local" else 128
+    span = config.bank_groups_per_sid * config.burst_bytes
     next_id = 0
     for size in (1, 2, 4, 1, 8):
         requests = []
@@ -94,49 +92,42 @@ def test_singletons_and_mixed_batches_preserve_exact_bills_and_results(helpers, 
 
 def test_numeric_consumption_uses_checkpoint_without_public_metrics_snapshot(helpers, monkeypatch):
     core = DramCore(configuration(channels=8), capture_details=False)
+    core._hbm_numeric_enabled = True
     accumulator = helpers.HBMResourceAccumulator()
     def unexpected(**kwargs):
         raise AssertionError("numeric task accounting copied the public resource dictionaries")
     monkeypatch.setattr(core.timeline, "metrics_snapshot", unexpected)
-    core.submit(AccessRequest("single", "read", 3, 65), _resource_accumulator=accumulator)
+    core.submit(AccessRequest("single", "read", 3, 4096), _resource_accumulator=accumulator)
     core.submit_many((AccessRequest("a", "read", 128, 65), AccessRequest("b", "write", 512, 2048)),
                      _resource_accumulator=accumulator)
     assert accumulator.resource_busy_ns
 
 
 @pytest.mark.parametrize("failure", ("decline", "exception"))
-def test_native_failure_preserves_successful_prefix_and_consumes_fallback_once(helpers, monkeypatch, failure):
+def test_native_failure_leaves_the_batch_to_the_fallback_or_unbilled(helpers, monkeypatch, failure):
     config = configuration(channels=8)
     reference, actual = (DramCore(config, capture_details=False) for _ in range(2))
     reference._hbm_numeric_enabled = actual._hbm_numeric_enabled = True
-    requests = (AccessRequest("prefix", "read", 3, 65),
+    requests = (AccessRequest("first", "read", 3, 65),
                 AccessRequest("stop", "write", 128, 2048),
                 AccessRequest("last", "read", 4096, 4096))
     expected, accumulated = helpers.HBMResourceAccumulator(), helpers.HBMResourceAccumulator()
-    normal = reference.submit_many(requests) if failure == "decline" else (reference.submit(requests[0]),)
-    for result in normal:
-        expected.consume_metrics(result.counters)
-    original = _compiled_hbm._HBMNumericState.execute
-    stopped = False
-    def execute(state, request):
-        nonlocal stopped
-        result = original(state, request)
-        if request.request_id == "stop" and not stopped:
-            stopped = True
-            if failure == "decline":
-                return None
-            raise RuntimeError("injected numeric failure")
-        return result
-    monkeypatch.setattr(_compiled_hbm._HBMNumericState, "execute", execute)
+    original = _compiled_hbm._HBMNumericState.execute_fr_fcfs
+    def execute(state, batch):
+        original(state, batch)
+        if failure == "decline":
+            return None
+        raise RuntimeError("injected numeric failure")
+    monkeypatch.setattr(_compiled_hbm._HBMNumericState, "execute_fr_fcfs", execute)
     if failure == "decline":
+        normal = reference.submit_many(requests)
+        for result in normal:
+            expected.consume_metrics(result.counters)
         assert actual.submit_many(requests, _resource_accumulator=accumulated) == tuple(
             without_resources(result) for result in normal)
     else:
         with pytest.raises(RuntimeError, match="injected numeric failure"):
             actual.submit_many(requests, _resource_accumulator=accumulated)
-        stopped = False
-        with pytest.raises(RuntimeError, match="injected numeric failure"):
-            reference.submit(requests[1])
     assert_bill_equal(accumulated, expected)
     assert_state_equal(actual, reference)
 

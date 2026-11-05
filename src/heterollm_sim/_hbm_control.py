@@ -1,15 +1,10 @@
-"""Ordered HBM normal-operation commands with explicit JEDEC timing inputs.
+"""HBM normal-operation commands with explicit JEDEC timing inputs.
 
 The supported subset is ACT/PREpb/PREab/RD/WR/REFab in pseudo-channel mode.
 Command occupancy, array eligibility and DQ transfer are separate quantities.
-Every command bus keeps one FIFO order fixed by the request's burst order.
-Within one request the controller looks ``row_lookahead_depth`` bursts of a
-channel ahead and precharges their conflicting rows in channel order, so a
-later bank's PRE/tRP overlaps the tRP of the burst being served while the
-row bus still issues commands in a timing-independent order.
+Bursts queue per pseudo channel and issue FR-FCFS across the requests of one
+batch; see _FrFcfsController.
 Configured maximum row-active deadlines also apply with refresh disabled.
-The HBM4 SID-aware configuration instead queues bursts per pseudo channel and
-issues them FR-FCFS across requests; see _FrFcfsController.
 Training, auto-precharge and refresh postponement are not
 implemented. Timing values are supplied by DramConfig, with their provenance
 owned by the configuration builder rather than inferred here.
@@ -22,18 +17,6 @@ from bisect import insort
 from .memory_mapping import split_dram_request
 from .memory_types import Operation, StageTiming, TransactionResult
 from ._hbm_clock import align_clock, clock_after
-
-
-def row_lookahead_depth(c):
-    """Later channel bursts whose conflicting rows are precharged early.
-
-    While PRE+ACT pairs fill the row bus, this many PREs cover one bank's
-    tRP. A depth below two bank sweeps of the channel never asks one bank
-    to serve two pending bursts of a contiguous request.
-    """
-    pair = (c.activate_command_cycles + c.precharge_command_cycles) * c.command_clock_ns
-    depth = math.ceil(max(c.precharge_to_activate_ns, c.precharge_command_cycles * c.command_clock_ns) / pair) + 1
-    return min(depth, 2 * c.bank_count - 1)
 
 
 class _Controller:
@@ -243,22 +226,8 @@ class _Controller:
             start = self.after(start, self.clock)
         return start
 
-    def estimate_access(self, mapping, old, bank, row, activate_not_before):
-        earliest = self.request.arrival_ns
-        if old.open_row != row:
-            if old.open_row is not None:
-                pre = self.precharge_start(mapping, bank, earliest)
-                earliest = self.after(pre, max(self.config.precharge_to_activate_ns,
-                                     self.config.precharge_command_cycles * self.clock))
-            anchor = self.after(self.activate_start(mapping, bank, max(earliest, activate_not_before)), self.clock)
-            bank_ready = self.after(anchor, self.config.activate_to_read_ns if self.request.operation is Operation.READ
-                                   else self.config.activate_to_write_ns)
-        else:
-            anchor = bank["last_activate"]
-            bank_ready = bank["read_ready" if self.request.operation is Operation.READ else "write_ready"]
-        return self.column_start(mapping, bank_ready, earliest), anchor
-
     def maximum_active_pending(self, mapping, horizon):
+        """Open rows that must close first: a PRE on the first row grid point after the horizon misses them."""
         maximum = self.config.maximum_active_ns
         if maximum <= 0:
             return []
@@ -268,13 +237,14 @@ class _Controller:
                 for rid, bank in self.banks.items()
                 if self.core._banks[rid].open_row is not None
                 and self._pc_key(bank["mapping"])[:2] == channel), default=math.inf)
-        if self._active_deadlines[channel] > horizon:
+        before = self.align(horizon, self.row_step)
+        if self._active_deadlines[channel] >= before:
             return []
         pending = [(self.after(bank["last_activate"], maximum), rid, bank)
                    for rid, bank in self.banks.items()
                    if self.core._banks[rid].open_row is not None
                    and self._pc_key(bank["mapping"])[:2] == channel
-                   and self.after(bank["last_activate"], maximum) <= horizon]
+                   and self.after(bank["last_activate"], maximum) < before]
         return sorted(pending, key=lambda item: item[0])
 
     def close_expiring_rows(self, pending):
@@ -457,168 +427,9 @@ class _Controller:
             return True
         return False
 
-    def precharge_ahead(self, segments, order, position, target):
-        """Close a later burst's conflicting row before the served burst's ACT.
-
-        A bank that an earlier pending burst still needs keeps its PRE for
-        its own turn. Maintenance due before the PRE is issued first, just as
-        for an ordinary burst command.
-        """
-        mapping = segments[order[target]].mapping
-        rid = self.core._bank_id(mapping)
-        row = self.active_row(mapping)
-        old = self.core._banks.get(rid)
-        if old is None or old.open_row is None or old.open_row == row:
-            return False
-        if any(self.core._bank_id(segments[order[index]].mapping) == rid for index in range(position, target)):
-            return False
-        old, bank = self.bank(mapping)
-        for _ in range(2 * self.config.bank_count + 16):
-            start = self.precharge_start(mapping, bank, self.request.arrival_ns)
-            if self.maintain_before(mapping, start) or self.refresh_until(mapping, start):
-                if old.open_row is None or old.open_row == row:
-                    return False
-                continue
-            break
-        else:
-            raise ValueError("HBM timing inputs leave no row-command window between maintenance commands")
-        self.precharge(mapping, old, bank, self.request.arrival_ns)
-        return True
-
     def active_row(self, mapping):
         msb = self.config.activated_row_msb
         return mapping.row if msb is None else mapping.row & ~(1 << msb)
-
-    def execute(self):
-        config, request = self.config, self.request
-        completion = request.arrival_ns
-        logical = physical = hits = misses = conflicts = count = 0
-        segments = list(split_dram_request(request, config))
-        orders, positions = {}, []
-        for index, segment in enumerate(segments):
-            order = orders.setdefault(self._pc_key(segment.mapping)[:2], [])
-            positions.append(len(order))
-            order.append(index)
-        decided, early = dict.fromkeys(orders, 0), set()
-        depth = row_lookahead_depth(config)
-        for index, segment in enumerate(segments):
-            count += 1
-            if count > config.max_expanded_segments and not self.truncated:
-                self.stages.clear(); self.mappings.clear(); self.truncated = True
-            mapping = segment.mapping
-            channel_key = self._pc_key(mapping)[:2]
-            order, position = orders[channel_key], positions[index]
-            while decided[channel_key] < len(order) and decided[channel_key] <= position + depth:
-                target = decided[channel_key]
-                if self.precharge_ahead(segments, order, position, target):
-                    early.add(self.core._bank_id(segments[order[target]].mapping))
-                decided[channel_key] += 1
-            if self.core.capture_details and not self.truncated:
-                self.mappings.append(mapping)
-            old, bank = self.bank(mapping)
-            row = self.active_row(mapping)
-            activate_not_before = request.arrival_ns
-            # Check the command's recovery horizon before issue, including
-            # every open bank sharing this physical channel's row CA bus.
-            for _ in range(2 * config.bank_count + 16):
-                command_start, anchor = self.estimate_access(mapping, old, bank, row, activate_not_before)
-                recovery = (config.read_to_precharge_ns if request.operation is Operation.READ else
-                            self.after(self.after(config.write_latency_ns,
-                                segment.transfer_bytes / config.effective_lane_bandwidth_gb_s),
-                                config.write_to_precharge_ns))
-                horizon = self.after(command_start, recovery)
-                if self.maintain_before(mapping, horizon):
-                    continue
-                if self.refresh_until(mapping, command_start):
-                    continue
-                if (config.maximum_active_ns > 0 and old.open_row != row
-                        and horizon > self.after(anchor, config.maximum_active_ns)):
-                    rcd = config.activate_to_read_ns if request.operation is Operation.READ else config.activate_to_write_ns
-                    if self.after(rcd, recovery) > config.maximum_active_ns:
-                        raise ValueError("HBM access recovery exceeds the tRASmax activation window")
-                    # A fixed DQ reservation or direction cap can postpone
-                    # the column command. Keep the row closed during that
-                    # wait instead of opening it for longer than tRASmax.
-                    activate_not_before = self.align(max(self.after(activate_not_before, self.clock),
-                        self.after(self.after(horizon, -config.maximum_active_ns), -self.clock)), self.clock)
-                    continue
-                break
-            else:
-                raise ValueError("HBM timing inputs leave no column-command window between maintenance commands")
-            rid = self.core._bank_id(mapping)
-            if old.open_row == row:
-                hits += 1
-            else:
-                if old.open_row is None:
-                    # A row precharged ahead for this burst was a conflict.
-                    if rid in early:
-                        conflicts += 1
-                    else:
-                        misses += 1
-                else:
-                    conflicts += 1
-                    self.precharge(mapping, old, bank, request.arrival_ns)
-                self.activate(mapping, old, bank, row, activate_not_before)
-            early.discard(rid)
-            read = request.operation is Operation.READ
-            command_start = self.column_start(mapping, bank["read_ready" if read else "write_ready"], request.arrival_ns)
-            key = self._pc_key(mapping)
-            command = self.command(key, "column", command_start, config.column_command_cycles,
-                                   "READ_COMMAND" if read else "WRITE_COMMAND", rising=True)
-            self.counts["read_commands" if read else "write_commands"] += 1
-            sid = (mapping.bank_group * config.banks_per_group + mapping.bank) // 16
-            self.pc(key)["column"][request.operation.value][(sid, mapping.bank_group)] = command.start_ns
-            latency = config.read_latency_ns if read else config.write_latency_ns
-            data_ready = self.after(command.start_ns, latency)
-            self.record("READ_PIPELINE" if read else "WRITE_PIPELINE", command.start_ns, data_ready)
-            data = self.reserve_clock(self.core._data_id(mapping), data_ready,
-                segment.transfer_bytes / config.effective_lane_bandwidth_gb_s,
-                direction=request.operation.value, byte_count=segment.transfer_bytes)
-            self.pc(key)["next_data_start"][request.operation.value] = (
-                self.after(data.start_ns, segment.transfer_bytes / config.directional_lane_bandwidth_gb_s(request.operation)))
-            self.record("BURST_TRANSFER", data.start_ns, data.end_ns, data.resource_id, segment.transfer_bytes)
-            if read:
-                bank["precharge_ready"] = max(bank["precharge_ready"], self.after(command.start_ns, config.read_to_precharge_ns))
-            else:
-                bank["precharge_ready"] = max(bank["precharge_ready"], self.after(data.end_ns, config.write_to_precharge_ns))
-                self.pc(key)["write_end"][(sid, mapping.bank_group)] = data.end_ns
-            old.ready_ns = bank["precharge_ready"]
-            completion = max(completion, data.end_ns)
-            logical += segment.logical_bytes
-            physical += segment.transfer_bytes
-        return TransactionResult(request.request_id, request.operation, request.arrival_ns, completion,
-            logical, physical, tuple(self.mappings), tuple(self.stages), {
-                **self.counts, "control_mode": "jedec_hbm", "row_hits": hits, "row_misses": misses,
-                "row_conflicts": conflicts, "burst_count": count, "details_truncated": self.truncated,
-                "physical_read_bytes": physical if request.operation is Operation.READ else 0,
-                "physical_write_bytes": physical if request.operation is Operation.WRITE else 0,
-                "queue_wait_ns": 0.0, "bandwidth_ceiling_gb_s": config.directional_bandwidth_gb_s(request.operation),
-                "host_transfer_bytes": 0, "internal_transfer_bytes": 0,
-                "pages_read": 0, "pages_programmed": 0, "erase_operations": 0,
-            })
-
-
-def execute_hbm(core, request):
-    c = core.config
-    count = (request.address + request.byte_count - 1) // c.burst_bytes - request.address // c.burst_bytes + 1
-    # Single-request numeric packing scans every physical bank. For a few
-    # bursts on a large device, the same reference controller costs less.
-    # At 32K banks the cold packing cost exceeds a 4-KiB/128-burst reference
-    # request, while 8 KiB is already near the crossover. Bound reference
-    # work to 128 bursts and require 128 packed banks per burst. Transactions,
-    # resident arrays and batches keep the numeric path that amortizes packing.
-    tiny_request = (not core._hbm_transactions and not core._hbm_numeric_enabled
-                    and count <= min(128, c.lane_count * c.bank_count // 128))
-    if not core.capture_details and not tiny_request:
-        try:
-            from ._compiled_hbm import execute_hbm_numeric
-        except (ImportError, OSError):
-            pass
-        else:
-            result = execute_hbm_numeric(core, request)
-            if result is not None:
-                return result
-    return _Controller(core, request).execute()
 
 
 def fr_queue_parameters(c):
@@ -655,8 +466,7 @@ class _FrFcfsController(_Controller):
         self.physical = [0] * len(requests)
         self.counted = 0
         self.q = fr_queue_parameters(self.config)
-        self.groups_per_sid = self.config.bank_groups_per_rank // int(
-            self.config.metadata.get("sid_count", self.config.bank_groups_per_rank // 2))
+        self.groups_per_sid = self.config.bank_groups_per_sid
 
     def pc(self, key):
         state = super().pc(key)
@@ -895,7 +705,11 @@ class _FrFcfsController(_Controller):
         recovery = (c.read_to_precharge_ns if read else self.after(self.after(
             c.write_latency_ns, entry["segment"].transfer_bytes / c.effective_lane_bandwidth_gb_s),
             c.write_to_precharge_ns))
-        horizon = self.after(start, recovery) if kind == 0 else start
+        # A row command holds the row bus, and a PRE also blocks the PC's next
+        # PRE: a deadline inside that span could no longer get its own PRE.
+        horizon = self.after(start, recovery if kind == 0 else
+            max(c.precharge_command_cycles * self.clock, c.precharge_to_precharge_ns) if kind == 1
+            else c.activate_command_cycles * self.clock)
         if self.maintain_before(mapping, horizon) or self.refresh_until(mapping, start):
             self.recount(lanes)
             lanes[0]["stale"] = lanes[1]["stale"] = True
@@ -917,7 +731,7 @@ class _FrFcfsController(_Controller):
             if c.maximum_active_ns > 0:
                 rcd = c.activate_to_read_ns if read else c.activate_to_write_ns
                 column = self.column_start(mapping, self.after(anchor, rcd), arrival)
-                latest = self.after(column, recovery)
+                latest = self.align(self.after(column, recovery), self.row_step)
                 if latest > self.after(anchor, c.maximum_active_ns):
                     if self.after(rcd, recovery) > c.maximum_active_ns:
                         raise ValueError("HBM access recovery exceeds the tRASmax activation window")

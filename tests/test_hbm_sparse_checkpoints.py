@@ -8,13 +8,12 @@ from heterollm_sim.memory_types import AccessRequest
 from test_hbm_compiled_control import configuration, assert_core_state_equal
 
 
-def pair(mapping):
-    config = configuration(channels=8, address_mapping=mapping,
-        interleave_bytes=128 if mapping == "bank_interleaved" else None,
+def pair():
+    config = configuration(channels=8,
         refresh_policy="all_bank", refresh_interval_ns=400.0, refresh_cycle_ns=40.0)
     contexts = [PhysicalRuntimeContext(config, "hbm", capture_details=False) for _ in range(2)]
     cores = [context.runtimes["hbm"].core for context in contexts]
-    lane_span = config.row_bytes * config.bank_count if mapping == "row_local" else config.interleave_bytes
+    lane_span = config.bank_groups_per_sid * config.burst_bytes
     warm = AccessRequest("warm", "read", 0, lane_span * config.lane_count)
     assert cores[0].submit(warm) == cores[1].submit(warm)
     cores[1]._hbm_numeric_state.request_selection = lambda request: None
@@ -34,9 +33,8 @@ def assert_published_equal(cores):
     assert_core_state_equal(*cores)
 
 
-@pytest.mark.parametrize("mapping", ("bank_interleaved", "row_local"))
-def test_sparse_checkpoints_match_full_arrays_and_public_metrics(mapping):
-    config, span, contexts, cores = pair(mapping)
+def test_sparse_checkpoints_match_full_arrays_and_public_metrics():
+    config, span, contexts, cores = pair()
     requests = (
         AccessRequest("one", "write", span + 3, 65, 1500.),
         AccessRequest("wrap", "read", span * config.lane_count - 31, 65, 2000.),
@@ -49,22 +47,19 @@ def test_sparse_checkpoints_match_full_arrays_and_public_metrics(mapping):
     assert_published_equal(cores)
 
 
-@pytest.mark.parametrize("mapping", ("bank_interleaved", "row_local"))
 @pytest.mark.parametrize("decline", (False, True))
-def test_sparse_failure_keeps_prefix_and_restores_global_touched(mapping, decline, monkeypatch):
-    config, span, contexts, cores = pair(mapping)
-    requests = (AccessRequest("prefix", "read", span + 3, 65, 1500.),
+def test_sparse_failure_restores_global_touched(decline, monkeypatch):
+    config, span, contexts, cores = pair()
+    requests = (AccessRequest("first", "read", span + 3, 65, 1500.),
                 AccessRequest("stop", "write", span * config.lane_count - 31, 65, 3000.))
-    original = _compiled_hbm._HBMNumericState.execute
-    def stop_after_mutation(state, request):
-        result = original(state, request)
-        if request.request_id == "stop":
-            if decline:
-                return None
-            raise RuntimeError("sparse request stopped")
-        return result
+    original = _compiled_hbm._HBMNumericState.execute_fr_fcfs
+    def stop_after_mutation(state, batch):
+        original(state, batch)
+        if decline:
+            return None
+        raise RuntimeError("sparse request stopped")
     with monkeypatch.context() as patch:
-        patch.setattr(_compiled_hbm._HBMNumericState, "execute", stop_after_mutation)
+        patch.setattr(_compiled_hbm._HBMNumericState, "execute_fr_fcfs", stop_after_mutation)
         if decline:
             assert cores[0].submit_many(requests) == cores[1].submit_many(requests)
         else:
@@ -76,7 +71,7 @@ def test_sparse_failure_keeps_prefix_and_restores_global_touched(mapping, declin
 
 
 def test_sparse_checkpoint_copies_fewer_bank_rows_and_is_independent():
-    config, span, contexts, cores = pair("bank_interleaved")
+    config, span, contexts, cores = pair()
     packed = cores[0]._hbm_numeric_state
     request = AccessRequest("one", "write", span + 3, 65)
     before = tuple(array.copy() for array in packed.arrays)
@@ -92,16 +87,16 @@ def test_sparse_checkpoint_copies_fewer_bank_rows_and_is_independent():
 
 
 def test_sparse_nonfinite_result_declines_and_restores_every_touched_array(monkeypatch):
-    config, span, contexts, cores = pair("bank_interleaved")
+    config, span, contexts, cores = pair()
     packed = cores[0]._hbm_numeric_state
     request = AccessRequest("overflow", "write", span + 3, 65, 5000.)
     before = tuple(array.copy() for array in packed.arrays)
-    original = packed.run_numeric
+    original = packed.run_fr_fcfs
     def nonfinite(*args):
         result = original(*args)
         packed.arrays[1][0, 0] = np.inf
         return result
-    monkeypatch.setattr(packed, "run_numeric", nonfinite)
-    assert _compiled_hbm.execute_hbm_numeric(cores[0], request) is None
+    monkeypatch.setattr(packed, "run_fr_fcfs", nonfinite)
+    assert _compiled_hbm.execute_fr_fcfs_numeric(cores[0], (request,)) is None
     for actual, expected in zip(packed.arrays, before):
         assert actual.tobytes() == expected.tobytes()

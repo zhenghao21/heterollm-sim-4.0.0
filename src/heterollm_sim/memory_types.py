@@ -393,11 +393,16 @@ class DramConfig:
                                or self.control_mode != "jedec_hbm"):
             raise ValueError("sid_aware address_mapping, fr_fcfs scheduler and queue_scope=pc "
                              "go together and require the jedec_hbm controller")
-        if self.address_mapping == "sid_aware" and (
-                self.interleave_bytes is not None or self.banks_per_group > 16
-                or self.pseudo_channels_per_channel != 2):
-            raise ValueError("sid_aware address_mapping requires interleave_bytes=None, "
-                             "at most 16 banks per group and two pseudo channels per channel")
+        if self.control_mode == "jedec_hbm" and not all(fr_fields):
+            raise ValueError("the jedec_hbm controller requires sid_aware address_mapping, "
+                             "fr_fcfs scheduler and queue_scope=pc")
+        if self.address_mapping == "sid_aware":
+            per_sid = self.bank_groups_per_sid
+            if (self.interleave_bytes is not None or self.banks_per_group > 16
+                    or per_sid < 2 or per_sid & (per_sid - 1)):
+                raise ValueError("sid_aware address_mapping requires interleave_bytes=None, "
+                                 "at most 16 banks per group "
+                                 "and a power of two, at least two, bank groups per SID")
         _positive_int("read_queue_depth_per_pc", self.read_queue_depth_per_pc)
         _positive_int("write_queue_depth_per_pc", self.write_queue_depth_per_pc)
         _positive_int("min_reads_per_switch", self.min_reads_per_switch)
@@ -612,6 +617,15 @@ class DramConfig:
     def bank_group_timing_enabled(self) -> bool:
         """Whether any explicitly authored group/rank timing gate is enabled."""
         return any(getattr(self, name) > 0 for name in DRAM_BANK_GROUP_TIMING_FIELDS)
+
+    @property
+    def sid_count(self) -> int:
+        """SIDs of a pseudo channel: each one has 16 bank addresses in every JEDEC organization."""
+        return max(1, self.bank_groups_per_rank * self.banks_per_group // 16)
+
+    @property
+    def bank_groups_per_sid(self) -> int:
+        return self.bank_groups_per_rank // self.sid_count
 
     @property
     def bank_count(self) -> int:

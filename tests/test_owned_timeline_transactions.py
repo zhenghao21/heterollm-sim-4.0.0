@@ -15,7 +15,7 @@ from test_token_owned_history import bits
 
 
 def runtimes():
-    config = configuration(channels=8, interleave_bytes=128)
+    config = configuration(channels=8)
     contexts = [PhysicalRuntimeContext(config, "hbm", capture_details=False) for _ in range(2)]
     cores = [context.runtimes["hbm"].core for context in contexts]
     for context, core in zip(contexts, cores):
@@ -164,7 +164,7 @@ def test_nested_resource_alias_lists_restore_first_object_image_once():
 
 @pytest.mark.parametrize("hook", (
     "class_execute", "instance_execute", "run_numeric", "numeric_dispatch",
-    "pack", "entry", "control_entry", "publish", "consume", "capture"))
+    "pack", "entry", "publish", "consume", "capture"))
 def test_replaced_numeric_callbacks_get_full_snapshot_and_restore_unrelated_resources(hook, monkeypatch):
     contexts, cores = runtimes()
     before = [context.timeline.ready_ns["unrelated:0"] for context in contexts]
@@ -179,27 +179,24 @@ def test_replaced_numeric_callbacks_get_full_snapshot_and_restore_unrelated_reso
 
     with monkeypatch.context() as patch:
         if hook == "class_execute":
-            patch.setattr(_compiled_hbm._HBMNumericState, "execute",
-                          injected(_compiled_hbm._HBMNumericState.execute))
+            patch.setattr(_compiled_hbm._HBMNumericState, "execute_fr_fcfs",
+                          injected(_compiled_hbm._HBMNumericState.execute_fr_fcfs))
         elif hook == "instance_execute":
             for core in cores:
                 packed = core._hbm_numeric_state
-                patch.setattr(packed, "execute", injected(packed.execute))
+                patch.setattr(packed, "execute_fr_fcfs", injected(packed.execute_fr_fcfs))
         elif hook == "run_numeric":
             for core in cores:
                 packed = core._hbm_numeric_state
-                patch.setattr(packed, "run_numeric", injected(packed.run_numeric))
+                patch.setattr(packed, "run_fr_fcfs", injected(packed.run_fr_fcfs))
         elif hook == "numeric_dispatch":
             numeric = _compiled_hbm._owned_numeric_module
-            patch.setattr(numeric, "_run_hbm_numeric", injected(numeric._run_hbm_numeric))
+            patch.setattr(numeric, "_run_fr_fcfs_channels", injected(numeric._run_fr_fcfs_channels))
         elif hook == "capture":
             patch.setattr(_compiled_hbm._NumericResourceCapture, "finish",
                           injected(_compiled_hbm._NumericResourceCapture.finish))
-        elif hook == "control_entry":
-            control = _compiled_hbm._owned_control_module
-            patch.setattr(control, "execute_hbm", injected(control.execute_hbm))
         else:
-            name = {"pack": "_pack_hbm_numeric", "entry": "execute_hbm_numeric",
+            name = {"pack": "_pack_hbm_numeric", "entry": "execute_fr_fcfs_numeric",
                     "publish": "publish_resource_columns", "consume": "consume_resource_columns"}[hook]
             patch.setattr(_compiled_hbm, name, injected(getattr(_compiled_hbm, name)))
         tokens = [context.begin_transaction(owners=("hbm",), _owned_timeline=index == 0)

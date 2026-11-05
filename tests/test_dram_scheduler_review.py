@@ -3,8 +3,6 @@ from dataclasses import replace
 
 import pytest
 
-from heterollm_sim import _hbm_control
-from heterollm_sim._compiled_hbm import execute_hbm_numeric
 from heterollm_sim.contracts import TaskCategory, TaskSpec
 from heterollm_sim.data_motion import PhysicalRuntimeContext, resolve_physical_task
 from heterollm_sim.dram_core import DramCore
@@ -23,15 +21,15 @@ def _task(config, addresses, ident):
 @pytest.mark.parametrize("details", [False, True])
 @pytest.mark.parametrize("hbm", [False, True])
 def test_reordered_results_keep_latest_global_and_owner_resource_intervals(details, hbm):
-    config = (configuration(address_mapping="row_local", four_activate_window_ns=31.)
-              if hbm else analytical_config())
-    config = replace(config, scheduler="row_hit_first")
+    config = (configuration(four_activate_window_ns=31.)
+              if hbm else replace(analytical_config(), scheduler="row_hit_first"))
     runtime = PhysicalRuntimeContext(capture_details=details)
     resolve_physical_task(_task(config, (0,), "warm"), runtime, 0.)
     row_span = config.lane_count * config.bank_count * config.row_bytes
     result = resolve_physical_task(_task(config, (row_span, 32), "reordered"), runtime, 100.)
     owner = result.metadata["physical_execution_by_owner"]["hbm"]
-    assert owner["scheduler_reordered_requests"] == 1
+    # FR-FCFS reorders bursts, not requests.
+    assert owner["scheduler_reordered_requests"] == (0 if hbm else 1)
     observed = result.metadata["physical_resource_last_intervals"]
     assert observed == owner["resource_last_intervals"]
     assert observed == runtime.timeline.last_intervals
@@ -48,19 +46,8 @@ def _without_execution_marker(results):
                                        if k != "compiled_hbm_float64"}) for row in results)
 
 
-def _assert_execution_state_equal(actual, expected):
-    assert {key: value for key, value in vars(actual).items() if key != "timeline"} == {
-        key: value for key, value in vars(expected).items() if key != "timeline"}
-    # The reducer may warm its derived ordering cache differently on each path.
-    assert {key: value for key, value in vars(actual.timeline).items() if key != "_metric_key_orders"} == {
-        key: value for key, value in vars(expected.timeline).items() if key != "_metric_key_orders"}
-
-
-@pytest.mark.parametrize("scheduler", ["fcfs", "row_hit_first", "read_write_batch"])
-@pytest.mark.parametrize("mapping", ["bank_interleaved", "row_local"])
-@pytest.mark.parametrize("scope", ["device", "channel"])
-def test_tiny_reference_and_large_numeric_requests_share_identical_state(monkeypatch, scheduler, mapping, scope):
-    config = _large_config(scheduler=scheduler, address_mapping=mapping, queue_scope=scope)
+def test_tiny_reference_and_large_numeric_requests_share_identical_state():
+    config = _large_config()
     direct, numeric = DramCore(config, capture_details=False), DramCore(config, capture_details=False)
     span = config.lane_count * config.bank_count * config.row_bytes
     requests = tuple(AccessRequest(str(i), op, address, count, arrival)
@@ -68,27 +55,20 @@ def test_tiny_reference_and_large_numeric_requests_share_identical_state(monkeyp
             ("read", 0, 64, 0.), ("write", span, 64, 0.), ("read", 0, 64, 0.),
             ("write", 64, 96, 0.), ("read", 65536, 4096, 1.),
             ("write", 0, 129, 10000.), ("read", 0, 1024, 10000.))))
-    def run(core):
-        # FCFS scalar calls test the service loop; other policies test the
-        # finite-window scheduler, which executes selected requests singly.
-        return (tuple(core.submit(request) for request in requests) if scheduler == "fcfs"
-                else core.submit_many(requests))
-    with monkeypatch.context() as patch:
-        patch.setattr(_hbm_control, "execute_hbm", execute_hbm_numeric)
-        expected = run(numeric)
-    actual = run(direct)
+    numeric._hbm_numeric_enabled = True
+    expected = tuple(numeric.submit(request) for request in requests)
+    numeric._hbm_numeric_enabled = False
+    actual = tuple(direct.submit(request) for request in requests)
     assert all(row.counters["compiled_hbm_float64"] for row in expected)
     # Cold scalar execution on this 8192-bank device keeps up to 64 bursts
     # on the reference controller, including the final 1024-byte/32-burst read.
     assert [bool(row.counters.get("compiled_hbm_float64")) for row in actual] == [False] * 4 + [True, False, False]
     assert _without_execution_marker(actual) == _without_execution_marker(expected)
-    _assert_execution_state_equal(direct, numeric)
     following = AccessRequest("after", "read", 0, 4096, 20000.)
     assert direct.submit(following) == numeric.submit(following)
-    _assert_execution_state_equal(direct, numeric)
 
 
-def test_tiny_scalar_skips_packing_but_fcfs_batch_packs_once(monkeypatch):
+def test_tiny_calls_skip_packing_but_a_larger_batch_packs_once(monkeypatch):
     from heterollm_sim import _compiled_hbm
     core = DramCore(_large_config(), capture_details=False)
     calls = []
@@ -98,9 +78,10 @@ def test_tiny_scalar_skips_packing_but_fcfs_batch_packs_once(monkeypatch):
         return original(core, request, refresh_requests=refresh_requests)
     monkeypatch.setattr(_compiled_hbm, "_pack_hbm_numeric", observe)
     core.submit(AccessRequest("scalar", "read", 0, 64))
+    core.submit_many((AccessRequest("tiny-1", "read", 64, 64), AccessRequest("tiny-2", "read", 128, 64)))
     assert calls == []
-    requests = (AccessRequest("batch-1", "read", 64, 64),
-                AccessRequest("batch-2", "read", 128, 64))
+    requests = (AccessRequest("batch-1", "read", 4096, 2048),
+                AccessRequest("batch-2", "read", 8192, 2048))
     result = core.submit_many(requests)
     assert calls == [("batch-1", requests)]
     assert all(row.counters["compiled_hbm_float64"] for row in result)

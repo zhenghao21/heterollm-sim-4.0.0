@@ -145,11 +145,12 @@ def test_native_owner_prefixed_resources_and_one_shared_host_remain_eligible():
 @pytest.mark.parametrize("case", ["hbm_tp2", "hbf_kv_tp1", "hbf_weights_kv_tp1"])
 def test_live_timing_and_physical_ledger_equal_priced_preview(case, monkeypatch):
     # The pilot's tiny KV pools would share DRAM rows across ranks; the two
-    # execution orders differ in which rank opens such a row first.
+    # execution orders differ in which rank opens such a row first. One row
+    # across every lane and bank spans 16 MiB.
     from heterollm_sim.memory_allocator import PhysicalAddressAllocator
     original = PhysicalAddressAllocator.__init__
     monkeypatch.setattr(PhysicalAddressAllocator, "__init__", lambda self, capacity, alignment=64, **kwargs:
-                        original(self, capacity, max(alignment, 1 << 20), **kwargs))
+                        original(self, capacity, max(alignment, 1 << 24), **kwargs))
     scenario = build_pilot_scenario(case)
     scenario = replace(scenario, workload=replace(scenario.workload,
         requests=scenario.workload.requests[:1], request_count=1))

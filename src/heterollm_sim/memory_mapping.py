@@ -58,20 +58,16 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
     die, local = divmod(stack_local, per_die)
     bursts_per_row = config.row_bytes // config.burst_bytes
     if config.address_mapping == "sid_aware":
-        # HBM4 SID-aware mapping (JESD270-4A Table 5, printed p.7):
-        # burst | SID-internal BG bit | lane | column | bank-in-group |
-        # SID | row.  The low BG bit alternates the two bank groups inside
-        # one SID, so two consecutive bursts remain in the same PC and do
-        # not pay tCCDR.  Keep the mixed-radix form instead of masking bits;
-        # the HBM4 reference geometry is power-of-two, while this decoder is
-        # also used by small non-standard test geometries.
-        sid_count = int(config.metadata.get("sid_count", config.bank_groups_per_rank // 2))
-        groups_per_sid = config.bank_groups_per_rank // sid_count
-        if sid_count <= 0 or groups_per_sid < 2:
-            raise ValueError("sid_aware mapping requires at least two bank groups per SID")
+        # SID-aware mapping over the JEDEC Table 5 organizations: burst |
+        # SID-internal BG | lane | column | bank-in-group | SID | row.  The low
+        # digit cycles the bank groups of one SID (two in HBM4, four in HBM2/3),
+        # so consecutive bursts stay in one PC, do not pay tCCDR, and meet tCCDL
+        # only once per stripe.  Keep the mixed-radix form instead of masking
+        # bits; rows and SIDs need not be powers of two.
+        sid_count, groups_per_sid = config.sid_count, config.bank_groups_per_sid
         cursor = local // config.burst_bytes
-        sid_bg, lane = divmod(cursor // 2, config.lane_count)
-        bg_in_sid = cursor & 1
+        sid_bg, lane = divmod(cursor // groups_per_sid, config.lane_count)
+        bg_in_sid = cursor % groups_per_sid
         column = sid_bg % bursts_per_row
         sid_bg //= bursts_per_row
         bank = sid_bg % config.banks_per_group
@@ -80,7 +76,7 @@ def map_dram_address(config: DramConfig, address: int) -> AddressMapping:
         row = sid_bg // sid_count
         if sid >= sid_count or row >= config.rows_per_bank:
             raise ValueError("sid_aware address exceeds the selected HBM SID geometry")
-        bank_group = sid * groups_per_sid + (bg_in_sid % groups_per_sid)
+        bank_group = sid * groups_per_sid + bg_in_sid
         # ``bank`` is already the bank-in-group coordinate.  The rest of the
         # function decodes the flat lane into stack/channel/pseudo-channel.
     elif config.address_mapping == "row_local":
@@ -139,8 +135,8 @@ def dram_request_channels(config: DramConfig, request: AccessRequest) -> tuple[t
         block_bytes = config.row_bytes * config.bank_count
     elif config.address_mapping == "sid_aware":
         # The low BG digit is the only radix below lane, hence each lane's
-        # address stripe is exactly two bursts.
-        block_bytes = config.burst_bytes * 2
+        # address stripe holds one burst of each bank group of a SID.
+        block_bytes = config.burst_bytes * config.bank_groups_per_sid
     else:
         block_bytes = config.interleave_bytes or config.burst_bytes
     start = request.address // block_bytes

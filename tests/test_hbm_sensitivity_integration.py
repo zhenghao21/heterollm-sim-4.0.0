@@ -35,23 +35,22 @@ def test_main_factory_executes_complete_assumed_reference(capacity):
 
 def test_serving_inventory_preserves_parameter_and_controller_choices():
     scenario = build_study_scenario("A_hbm_only", prompt=4, output=2,
-        hbm_parameter_profile="slow", hbm_controller={"address_mapping": "row_local",
-            "interleave_bytes": None, "scheduler": "read_write_batch", "queue_scope": "channel",
-            "max_outstanding_requests": 1})
+        hbm_parameter_profile="slow", hbm_controller={"read_queue_depth_per_pc": 16,
+            "write_high_watermark": .5, "min_reads_per_switch": 4})
     config = parse_execution_physical_config(scenario.hardware.get_component("hbm0").metadata["physical_memory_config"])
     assert config.metadata["hbm_parameter_profile"]["name"] == "slow"
     assert config.refresh_cycle_ns == 650.
-    assert (config.address_mapping, config.scheduler, config.queue_scope) == ("row_local", "read_write_batch", "channel")
+    assert (config.read_queue_depth_per_pc, config.write_high_watermark, config.min_reads_per_switch) == (16, .5, 4)
 
 
 @pytest.mark.parametrize("details", [False, True])
 def test_mixed_small_live_task_reaches_scheduler_and_reports_observations(monkeypatch, details):
-    config = configuration(scheduler="read_write_batch", scheduler_window=8)
+    config = configuration()
     calls, executed = [], []
     original = DramCore.submit_many
-    def observe(core, requests):
+    def observe(core, requests, **kwargs):
         calls.append(tuple(r.operation.value for r in requests))
-        results = original(core, requests)
+        results = original(core, requests, **kwargs)
         executed.extend(results)
         return results
     monkeypatch.setattr(DramCore, "submit_many", observe)
@@ -64,30 +63,11 @@ def test_mixed_small_live_task_reaches_scheduler_and_reports_observations(monkey
     assert calls == [("read", "write", "read", "write")]
     assert executed[3].completion_ns >= executed[2].completion_ns
     row = resolved.metadata["physical_execution_by_owner"]["hbm"]
-    assert row["scheduler_batches"] == 1
-    assert row["scheduler_reordered_requests"] > 0
-    assert row["controller_direction_switches"] == 1
+    assert row["controller_direction_switches"] == 3
     assert row["logical_read_bytes"] == row["logical_write_bytes"] == 64
 
 
-def test_channel_credit_state_is_restorable_without_mutating_saved_point():
-    config = configuration(queue_scope="channel", max_outstanding_requests=1)
-    runtime = PhysicalRuntimeContext(config, "hbm", capture_details=False)
-    core = runtime.runtimes["hbm"].core
-    core.submit(AccessRequest("seed", "read", 0, 32))
-    saved = runtime.snapshot()
-    saved_channels = deepcopy(saved["runtime_state"]["hbm"]["core"]["_channel_inflight"])
-    request = AccessRequest("next", "write", 0, 64)
-    first = core.submit(request)
-    assert saved["runtime_state"]["hbm"]["core"]["_channel_inflight"] == saved_channels
-    for _ in range(2):
-        runtime.restore(saved)
-        result = runtime.runtimes["hbm"].core.submit(request)
-        assert result.completion_ns == first.completion_ns
-        assert result.queue_wait_ns == first.queue_wait_ns
-
-
-@pytest.mark.parametrize("field", ["address_mapping", "scheduler", "scheduler_window", "queue_scope"])
+@pytest.mark.parametrize("field", ["address_mapping", "scheduler", "read_queue_depth_per_pc", "queue_scope"])
 def test_serialized_controller_contract_rejects_omitted_fields(field):
     payload = asdict(configuration())
     del payload[field]

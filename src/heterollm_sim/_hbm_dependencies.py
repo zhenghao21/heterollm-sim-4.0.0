@@ -501,15 +501,6 @@ def normalize_hbm_dependencies(payload: Mapping, *, previous: Mapping | None = N
         standard = standard and result.get("data_lanes") in (None, expected["channels"] * 2)
     else:
         standard = False
-    # The SID-aware controller follows the organization unless it was authored.
-    if prior and not explicit & {"address_mapping", "scheduler", "queue_scope", "interleave_bytes"}:
-        before = (old_gen == "HBM4" and prior.get("bank_groups_per_rank") == 8 and prior.get("banks_per_group") == 8)
-        after = gen == "HBM4" and result.get("bank_groups_per_rank") == 8 and result.get("banks_per_group") == 8
-        if before != after and result.get("address_mapping") == ("sid_aware" if before else "bank_interleaved"):
-            result.update(address_mapping="sid_aware" if after else "bank_interleaved",
-                          scheduler="fr_fcfs" if after else "fcfs", queue_scope="pc" if after else "device",
-                          interleave_bytes=None if after else result["burst_bytes"])
-            meta["sid_aware_mapping"] = after
     if standard:
         standard_name, source_file, organization_basis, control_basis = DOCUMENTS[gen]
         limitations = ["linear mixed-radix simulation mapping is not a vendor address mapping",

@@ -79,7 +79,7 @@ def load_sources(*, hbm_source=None):
 
     A complete NAND implementation must be selected with implementation-root;
     its page wrapper, packing and numeric state machine live in distinct modules.
-    HBM packed states retain run_hbm_numeric after their first construction, so
+    HBM packed states retain run_fr_fcfs after their first construction, so
     this replacement occurs before execution, never between measured cohorts.
 
     A dedicated Numba cache namespace prevents source-local environments from

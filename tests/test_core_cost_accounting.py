@@ -191,9 +191,9 @@ def test_nand_cache_restore_preserves_slot_list_aliases_and_extensions():
 
 def test_small_physical_batches_preserve_overlap_dependencies(monkeypatch):
     import heterollm_sim.data_motion as module
-    from test_hbm_column_pack_equivalence import b200_memory
+    from test_dram_controller_policies import config as analytical_config
 
-    config = b200_memory()
+    config = analytical_config(rows_per_bank=65536, capacity_bytes=1 << 20)
     accesses = [
         {"operation": op, "address": addr, "byte_count": count}
         for op, addr, count in (

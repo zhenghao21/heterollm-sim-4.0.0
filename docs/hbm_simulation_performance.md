@@ -616,7 +616,6 @@ HBM 状态刷新另做了同源码编译辅助函数候选：保留每次读取�
 ## 复现入口
 
 ```powershell
-.venv/Scripts/python.exe scripts/benchmark_hbm_numeric.py --mib 128 --repetitions 6
 .venv/Scripts/python.exe scripts/benchmark_hbm_serving.py --output artifacts/hbm_execution_performance_20261015/serving-after.json
 ```
 

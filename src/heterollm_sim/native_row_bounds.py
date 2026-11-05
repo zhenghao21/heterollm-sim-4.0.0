@@ -83,17 +83,16 @@ class _Device:
             stripes = np.arange(first, last + 1, dtype=np.int64)
             return (stripes // self.banks) % self.lanes, stripes % self.banks
         if config.address_mapping == "sid_aware":
-            sid_count = int(config.metadata.get("sid_count", config.bank_groups_per_rank // 2))
-            per_sid = config.bank_groups_per_rank // sid_count
+            sid_count, per_sid = config.sid_count, config.bank_groups_per_sid
             bursts_per_row = config.row_bytes // config.burst_bytes
             first, last = local // config.burst_bytes, (local + count - 1) // config.burst_bytes
-            if last - first + 1 >= 2 * self.lanes * bursts_per_row * config.banks_per_group * sid_count:
+            if last - first + 1 >= per_sid * self.lanes * bursts_per_row * config.banks_per_group * sid_count:
                 return None
             cursors = np.arange(first, last + 1, dtype=np.int64)
-            blocks = cursors >> 1
+            blocks = cursors // per_sid
             stripes = (blocks // self.lanes) // bursts_per_row
             sids = (stripes // config.banks_per_group) % sid_count
-            return blocks % self.lanes, ((sids * per_sid + (cursors & 1) % per_sid) * config.banks_per_group
+            return blocks % self.lanes, ((sids * per_sid + cursors % per_sid) * config.banks_per_group
                                          + stripes % config.banks_per_group)
         interleave = config.interleave_bytes or config.burst_bytes
         first, last = local // interleave, (local + count - 1) // interleave

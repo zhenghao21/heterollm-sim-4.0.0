@@ -141,8 +141,7 @@ class HBMTransaction:
             shadow.__dict__["_banks"], shadow.__dict__["_hbm_control_state"] = copy.deepcopy((
                 core.__dict__["_banks"], core.__dict__["_hbm_control_state"]))
             restored = _HBMNumericState(shadow, packed.bank_ids, packed.pc_keys,
-                packed.channel_keys, packed.ids, packed.g, packed.t, packed.run_numeric,
-                arrays)
+                packed.channel_keys, packed.ids, packed.g, packed.t, arrays)
             restored._controller_before = packed._controller_before
             restored._config = packed._config
             if commits:

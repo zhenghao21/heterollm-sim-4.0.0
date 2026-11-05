@@ -134,8 +134,8 @@ agent-session API or a static hot-hit probability.
                 if hbm_timing_overrides:
                     physical = reconfigure_physical_config(physical, overrides=hbm_timing_overrides)
                 if hbm_controller:
-                    allowed = {"address_mapping", "scheduler", "scheduler_window", "queue_scope",
-                               "max_outstanding_requests", "interleave_bytes"}
+                    allowed = {"read_queue_depth_per_pc", "write_queue_depth_per_pc", "write_high_watermark",
+                               "write_low_watermark", "min_reads_per_switch"}
                     unknown = set(hbm_controller) - allowed
                     if unknown:
                         raise ValueError("unknown HBM controller fields: " + ", ".join(sorted(unknown)))

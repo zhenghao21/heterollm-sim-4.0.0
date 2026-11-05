@@ -117,16 +117,9 @@ class NativePrefillPassConfig:
     holdout_layers: int = 2
     full_pass: bool = False
     chunked_sampling: bool = False
-    numeric_transition_cache: bool = False
-    numeric_memo_max_bytes: int = 2 * 1024**3
     tp_rank_symmetry: str = "off"
 
     def __post_init__(self) -> None:
-        if type(self.numeric_transition_cache) is not bool:
-            raise ValueError("simulation.native_prefill.numeric_transition_cache must be a boolean")
-        if (type(self.numeric_memo_max_bytes) is not int
-                or not 0 < self.numeric_memo_max_bytes <= 2 * 1024**3):
-            raise ValueError("simulation.native_prefill.numeric_memo_max_bytes must be positive and at most 2 GiB")
         if self.tp_rank_symmetry not in {"off", "quiet"}:
             raise ValueError("simulation.native_prefill.tp_rank_symmetry must be off or quiet")
         if type(self.chunked_sampling) is not bool:

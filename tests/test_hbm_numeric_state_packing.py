@@ -5,7 +5,8 @@ from dataclasses import replace
 import pytest
 
 from heterollm_sim import _compiled_hbm
-from heterollm_sim._compiled_hbm import _pack_hbm_numeric, execute_hbm_numeric
+from heterollm_sim._compiled_hbm import _pack_hbm_numeric
+from hbm_numeric_call import execute_hbm_numeric
 from heterollm_sim.data_motion import PhysicalRuntimeContext
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.memory_types import AccessRequest
@@ -147,7 +148,7 @@ def test_seen_flag_materializes_default_pc_even_without_changed_timing_values():
     pc = core._hbm_control_state["pcs"][(0, 0, 0)]
     assert pc == {"activate_window": [], "activate": {}, "column": {"read": {}, "write": {}},
                   "write_end": {}, "last_precharge": None, "blocked_until": 0.,
-                  "next_data_start": {"read": 0., "write": 0.}}
+                  "next_data_start": {"read": 0., "write": 0.}, "scheduler_stats": [0.] * 10}
 
 
 def test_commit_preserves_materialization_of_control_only_bank():
@@ -180,34 +181,32 @@ def test_repeated_runtime_restore_does_not_reuse_numeric_state():
 
 
 @pytest.mark.parametrize("raises", [False, True])
-def test_sparse_batch_rollback_keeps_prefix_and_unrequested_refresh_state(monkeypatch, raises):
+def test_sparse_batch_rollback_restores_every_request_and_unrequested_refresh_state(monkeypatch, raises):
     config = configuration(refresh_policy="all_bank", refresh_interval_ns=400., refresh_cycle_ns=40.)
-    scalar, batched = DramCore(config, capture_details=False), DramCore(config, capture_details=False)
-    for core in (scalar, batched):
+    control, batched = DramCore(config, capture_details=False), DramCore(config, capture_details=False)
+    for core in (control, batched):
         core.submit(AccessRequest("warm", "read", 0, 4096))
-    requests = (AccessRequest("prefix", "read", 0, 1024, 1000.),
+    requests = (AccessRequest("first", "read", 0, 1024, 1000.),
                 AccessRequest("stop", "write", 8192, 512, 1000.))
-    original = _compiled_hbm._HBMNumericState.execute
+    original = _compiled_hbm._HBMNumericState.execute_fr_fcfs
 
-    def fail_after_mutation(packed, request):
-        result = original(packed, request)
-        if request.request_id == "stop":
-            if raises:
-                raise ValueError("injected stop")
-            return None
-        return result
+    def fail_after_mutation(packed, batch):
+        original(packed, batch)
+        if raises:
+            raise ValueError("injected stop")
+        return None
 
     with monkeypatch.context() as patch:
-        patch.setattr(_compiled_hbm._HBMNumericState, "execute", fail_after_mutation)
+        patch.setattr(_compiled_hbm._HBMNumericState, "execute_fr_fcfs", fail_after_mutation)
         if raises:
-            with pytest.raises(ValueError, match="injected stop"):
-                tuple(scalar.submit(request) for request in requests)
-            with pytest.raises(ValueError, match="injected stop"):
-                batched.submit_many(requests)
+            # A smaller failed batch resets the same derived metric recorder.
+            for core, submitted in ((control, requests[:1]), (batched, requests)):
+                with pytest.raises(ValueError, match="injected stop"):
+                    core.submit_many(submitted)
         else:
-            tuple(scalar.submit(request) for request in requests)
+            control.submit_many(requests)
             batched.submit_many(requests)
-    assert_core_state_equal(scalar, batched)
+    assert_core_state_equal(control, batched)
 
 
 def test_writeback_tracks_signed_zero_changes_exactly():

@@ -13,7 +13,7 @@ from .memory_types import Operation, TransactionResult
 from .memory_mapping import map_dram_address
 from ._hbm_pack import (refresh_resource_columns, publish_resource_columns,
                        can_capture_resource_columns, consume_resource_columns,
-                       HBMResourceBatch, HBMAdmission, HBMResourceAccumulator)
+                       HBMResourceAccumulator)
 from ._hbm_control import fr_queue_parameters
 
 
@@ -122,10 +122,7 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     # The parallel traversal strides one complete address stripe. Validate in
     # Python integers before constructing the int64 geometry vector; a tiny
     # valid request may still have an authored stripe wider than int64.
-    mapping_bursts = (2 if c.address_mapping == "sid_aware"
-                      else (c.interleave_bytes or c.burst_bytes) // c.burst_bytes)
-    if (c.address_mapping != "row_local"
-            and lanes * mapping_bursts > (1 << 63) - 1):
+    if lanes * c.bank_groups_per_sid > (1 << 63) - 1:
         return None
     cached = core._hbm_numeric_state
     if cached is not None:
@@ -141,7 +138,7 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
             return cached
         return None
     try:
-        from ._hbm_numeric import FR_STAT_FIELDS, TIMING_FIELDS, run_hbm_numeric
+        from ._hbm_numeric import FR_STAT_FIELDS, TIMING_FIELDS
     except (ImportError, OSError):
         return None
     metadata = c.metadata
@@ -250,13 +247,11 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
                 channel_int[ch, 1] = pc_lookup[last_pc]
     except (KeyError, IndexError, TypeError, ValueError, OverflowError):
         return None
-    sid_aware = c.address_mapping == "sid_aware"
-    sid_count = int(c.metadata.get("sid_count", c.bank_groups_per_rank // 2)) if sid_aware else 0
-    g = np.array([lanes, banks, 2 if sid_aware else (c.interleave_bytes or c.burst_bytes) // c.burst_bytes,
+    g = np.array([lanes, banks, c.bank_groups_per_sid,
                   c.row_bytes // c.burst_bytes, c.banks_per_group, groups,
                   -1 if c.activated_row_msb is None else c.activated_row_msb,
                   c.generation in {"HBM2", "HBM2E"}, c.refresh_policy == "all_bank", c.burst_bytes,
-                  history_stride, c.address_mapping == "row_local"], dtype=np.int64)
+                  history_stride, 0], dtype=np.int64)
     t = np.array([getattr(c, field) for field in TIMING_FIELDS] + [
         c.burst_bytes / c.effective_lane_bandwidth_gb_s,
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.READ),
@@ -271,16 +266,14 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     ticks = np.rint(stamps / half_clock)
     grid_history = bool(np.all((stamps < 0) | ((np.abs(ticks) < 2. ** 49)
                                              & (stamps == ticks * half_clock))))
-    g = np.append(g, np.array([np.int64(grid_history), np.int64(sid_aware),
-                               np.int64(sid_count), np.int64(
-                                   c.bank_groups_per_rank // sid_count if sid_aware and sid_count else 0)],
+    g = np.append(g, np.array([np.int64(grid_history), 1, np.int64(c.sid_count), np.int64(c.bank_groups_per_sid)],
                               dtype=np.int64))
     if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t, windows)):
         return None
     arrays = (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
               resources, moved, directions, touched, windows, window_counts)
-    packed = _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t, run_hbm_numeric,
-                              (*arrays, stats) if sid_aware else arrays)
+    packed = _HBMNumericState(core, bank_ids, pc_keys, channel_keys, ids, g, t,
+                              (*arrays, stats))
     if core._hbm_numeric_enabled:
         core._hbm_numeric_state = packed
         for token in core._hbm_transactions:
@@ -306,23 +299,21 @@ class _CoreLink:
 
 
 class _HBMNumericState:
-    """One packed controller, its FCFS and FR-FCFS numeric executors."""
+    """One packed controller and its FR-FCFS numeric executor."""
 
-    def __init__(self, core, bank_ids, pc_keys, channel_keys, ids, g, t, run_numeric, arrays):
+    def __init__(self, core, bank_ids, pc_keys, channel_keys, ids, g, t, arrays):
         self._core_link = _CoreLink(core)
         self.bank_ids, self.pc_keys, self.channel_keys, self.ids = bank_ids, pc_keys, channel_keys, ids
         # Selecting touched resource names by index array avoids a Python
         # generator frame per name on every request publication.
         self._id_objects = np.array(ids, dtype=object)
-        self.g, self.t, self.run_numeric, self.arrays = g, t, run_numeric, arrays
+        self.g, self.t, self.arrays = g, t, arrays
         self.run_fr_fcfs = _owned_numeric_module.run_fr_fcfs
         self._controller_before = self._copy_controller_arrays()
         self._controller_commits = 0
         self._config = copy.deepcopy(core.config)
         c = self._config
-        self._request_lane_span = (c.row_bytes * c.bank_count if c.address_mapping == "row_local"
-                                   else 2 * c.burst_bytes if c.address_mapping == "sid_aware"
-                                   else c.interleave_bytes or c.burst_bytes)
+        self._request_lane_span = c.bank_groups_per_sid * c.burst_bytes
         self._dense_request_bytes = max(1, c.lane_count // 4) * self._request_lane_span
         aliases = core.timeline.resource_aliases
         self._alias_state = (dict(aliases) if type(aliases) is dict
@@ -385,9 +376,7 @@ class _HBMNumericState:
         # Refresh those channels from the public timeline every time; this
         # does not rely on hidden mutation versions or trusted caller state.
         c = self.core.config
-        lane_span = (c.row_bytes * c.bank_count if c.address_mapping == "row_local"
-                     else 2 * c.burst_bytes if c.address_mapping == "sid_aware"
-                     else c.interleave_bytes or c.burst_bytes)
+        lane_span = c.bank_groups_per_sid * c.burst_bytes
         channels = len(self.channel_keys)
         selected = set()
         for request in requests:
@@ -482,61 +471,6 @@ class _HBMNumericState:
         else:
             for array, index, values in zip(self.arrays, selection, saved):
                 array[index] = values
-
-    def execute(self, request):
-        c = self.core.config
-        first = request.address // c.burst_bytes
-        stop = (request.address + request.byte_count - 1) // c.burst_bytes + 1
-        physical = (stop - first) * c.burst_bytes
-        (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
-         resources, moved, directions, touched, windows, window_counts) = self.arrays
-        if (request.operation not in (Operation.READ, Operation.WRITE)
-                or request.address < 0 or request.address + request.byte_count > c.effective_capacity_bytes
-                or physical > (1 << 63) - 1 or stop - first > 2 ** 53
-                or not math.isfinite(request.arrival_ns)
-                or int(moved.max()) > (1 << 63) - 1 - physical):
-            return None
-        if self.core._hbm_numeric_state is self:
-            for token in self.core._hbm_transactions:
-                token.capture_numeric_request(self, request)
-        touched.fill(False)
-        g, t, run_hbm_numeric = self.g, self.t, self.run_numeric
-        read = request.operation is Operation.READ
-        try:
-            completion, hits, misses, conflicts, counts = run_hbm_numeric(
-                first, stop, float(request.arrival_ns), read, g, t, rows, bf, addresses,
-                pc, history, pc_seen, channel, channel_int, resources, moved, directions, touched,
-                windows, window_counts)
-        except OverflowError:
-            # Integer clock indices exceeded the compiled safe range. These
-            # private arrays are discarded (or rolled back by the batch
-            # caller); the Python controller uses unbounded integer indices.
-            return None
-        selection = self.request_selection(request)
-        finite_indices = (1, 3, 4, 6, 8, 12)
-        # Packing validates the complete state once.  An accepted numeric
-        # execution only writes the selected channels, so every untouched
-        # floating-point value retains that finite invariant.
-        if not math.isfinite(completion) or not all(
-                np.isfinite(self.arrays[index] if selection is None
-                            else self.arrays[index][selection[index]]).all()
-                for index in finite_indices):
-            return None
-        counters = dict(activate_commands=int(counts[0]), precharge_commands=int(counts[1]),
-                        read_commands=int(counts[2]), write_commands=int(counts[3]),
-                        row_command_bus_busy_ns=float(counts[5]), column_command_bus_busy_ns=float(counts[6]),
-                        control_mode="jedec_hbm", row_hits=int(hits), row_misses=int(misses),
-                        row_conflicts=int(conflicts), burst_count=stop - first,
-                        details_truncated=stop - first > c.max_expanded_segments,
-                        compiled_hbm_float64=True,
-                        physical_read_bytes=physical if read else 0, physical_write_bytes=0 if read else physical,
-                        queue_wait_ns=0., bandwidth_ceiling_gb_s=c.directional_bandwidth_gb_s(request.operation),
-                        host_transfer_bytes=0, internal_transfer_bytes=0,
-                        pages_read=0, pages_programmed=0, erase_operations=0)
-        if c.refresh_policy == "all_bank":
-            counters["refresh_commands"] = int(counts[4])
-        return TransactionResult(request.request_id, request.operation, request.arrival_ns,
-                                 float(completion), request.byte_count, physical, counters=counters)
 
     def execute_fr_fcfs(self, requests):
         """Run one batch through the per-PC queues, or decline with None."""
@@ -689,34 +623,10 @@ class _HBMNumericState:
             timeline.lane_available, timeline.ready_ns, timeline.busy_ns,
             timeline.last_intervals, timeline.bytes_moved, timeline.directions,
             timeline.lane_directions, timeline._touched, channels, request.operation.value)
-        if self._config.scheduler == "fr_fcfs":
-            # One batch can mix directions on different lanes.
-            for index in indices[indices >= 2 * channels].tolist():
-                timeline.directions[ids[index]] = "read" if directions[index] == 1 else "write"
+        # One batch can mix directions on different lanes.
+        for index in indices[indices >= 2 * channels].tolist():
+            timeline.directions[ids[index]] = "read" if directions[index] == 1 else "write"
         timeline._intervals_truncated = True
-
-
-def execute_hbm_numeric(core, request):
-    """Execute one accepted request, or decline without changing live state."""
-    packed = _pack_hbm_numeric(core, request)
-    if packed is None:
-        return None
-    resident = core._hbm_numeric_state is packed
-    before = packed.checkpoint(request) if resident else None
-    try:
-        result = packed.execute(request)
-    except BaseException:
-        if resident:
-            packed.restore_checkpoint(before)
-        raise
-    if result is not None:
-        packed._controller_commits += 1
-        if not resident:
-            packed.commit_controller()
-        packed.commit_timeline(request)
-    elif resident:
-        packed.restore_checkpoint(before)
-    return result
 
 
 class _RequestSpan:
@@ -762,10 +672,6 @@ def execute_fr_fcfs_numeric(core, requests, *, resource_accumulator=None):
     return results, core.timeline._core_metrics_delta(before_metrics)
 
 
-class _NumericDeclined(Exception):
-    pass
-
-
 class _NumericResourceCapture:
     """Consume each successful request's checkpoint directly into a task bill."""
 
@@ -773,7 +679,6 @@ class _NumericResourceCapture:
         self.packed = packed
         self.accumulator = accumulator
         self.before = None
-        self.deferred = None
 
     def begin(self):
         timeline = self.packed.core.timeline
@@ -799,154 +704,33 @@ class _NumericResourceCapture:
             else:
                 positions = cached[1]
         timeline = packed.core.timeline
-        if self.deferred is None:
-            consume_resource_columns(self.accumulator, packed._resource_lookup,
-                packed.arrays[8], packed.arrays[9], saved[8], saved[9], positions, timeline)
-        else:
-            self.deferred.consume(saved[8], saved[9], positions)
+        consume_resource_columns(self.accumulator, packed._resource_lookup,
+            packed.arrays[8], packed.arrays[9], saved[8], saved[9], positions, timeline)
         return {"resource_intervals": {}, "resource_interval_payloads": {},
                 "intervals_truncated": timeline._intervals_truncated}
 
 
-def _can_batch_resources(core, packed, accumulator):
-    """Defer public writes only across the complete callback-free owner path."""
-    from .dram_core import DramCore, _OWNED_TIMELINE_DRAM_METHODS
-    from .memory_transfer import (ResourceTimeline, _OWNED_TIMELINE_METHODS,
-                                  _OWNED_TIMELINE_TOKEN_TYPE, _OWNED_TIMELINE_REMEMBER)
-    if (type(core) is not DramCore or type(core.timeline) is not ResourceTimeline
-            or not _has_native_timeline_hooks(packed)
-            or type(accumulator) is not HBMResourceAccumulator
-            or any(type(getattr(accumulator, name)) is not dict for name in (
-                "resource_busy_ns", "resource_bytes", "resource_last_intervals"))):
-        return False
-    # Authored arithmetic and aliases may raise or observe each publication.
-    # Keep those operands on the ordinary per-request accounting path.
-    if (len({id(accumulator.resource_busy_ns), id(accumulator.resource_bytes),
-             id(accumulator.resource_last_intervals)}) != 3
-            or any(type(value) is not float for value in accumulator.resource_busy_ns.values())
-            or any(type(value) is not int for value in accumulator.resource_bytes.values())
-            or any(type(value) is not tuple or len(value) != 2
-                   or any(type(item) is not float or not math.isfinite(item) for item in value)
-                   for value in accumulator.resource_last_intervals.values())):
-        return False
-    for token in core.timeline._owned_transactions:
-        method = token.remember
-        if (type(token) is not _OWNED_TIMELINE_TOKEN_TYPE
-                or getattr(method, "__func__", method) is not _OWNED_TIMELINE_REMEMBER):
-            return False
-    for owner, methods in ((core, _OWNED_TIMELINE_DRAM_METHODS),
-                           (core.timeline, _OWNED_TIMELINE_METHODS)):
-        for name, original in methods:
-            method = getattr(owner, name)
-            if getattr(method, "__func__", method) is not original:
-                return False
-    return True
-
-
-def execute_hbm_numeric_many(core, requests, *, resource_accumulator=None):
-    """Amortize packing while retaining each request's admission and metrics."""
-    if not requests:
-        return ()
-    packed = _pack_hbm_numeric(core, requests[0], refresh_requests=requests)
-    if packed is None:
-        return None
-    capture = (_NumericResourceCapture(packed, resource_accumulator)
-               if resource_accumulator is not None
-               and can_capture_resource_columns(core.timeline, packed._refreshed_resource_ids) else None)
-    deferred = admission = None
-    if (len(requests) > 1 and capture is not None
-            and _can_batch_resources(core, packed, resource_accumulator)):
-        deferred = capture.deferred = HBMResourceBatch(packed, resource_accumulator)
-        if (core.config.queue_scope == "device" and type(core._inflight) is list
-                and all(type(end) is float and math.isfinite(end) for end in core._inflight)):
-            admission = HBMAdmission(core)
-    def execute(request):
-        result = packed.execute(request)
-        if result is None:
-            raise _NumericDeclined
-        if deferred is None:
-            packed.commit_timeline(request)
-        packed._controller_commits += 1
-        return result
-
-    results = []
-    try:
-        for index, request in enumerate(requests):
-            # Preserve the successful prefix even if the next checkpoint
-            # allocation fails before entering that request's executor.
-            before = packed.checkpoint(request)
-            before_commits = packed._controller_commits
-            if capture is not None:
-                capture.before = before
-            try:
-                result = core._submit_validated(request, execute=execute,
-                    _resource_accumulator=resource_accumulator, _metrics_capture=capture,
-                    _admission=admission)
-            except _NumericDeclined:
-                packed.restore_checkpoint(before)
-                packed._controller_commits = before_commits
-                if deferred is not None:
-                    deferred.publish()
-                if admission is not None:
-                    admission.publish()
-                if results and core._hbm_numeric_state is not packed:
-                    packed.commit_controller()
-                remaining = (tuple(core.submit(item) for item in requests[index:])
-                             if resource_accumulator is None else tuple(
-                                 core._submit_validated(item, _resource_accumulator=resource_accumulator)
-                                 for item in requests[index:]))
-                return tuple(results) + remaining
-            except BaseException:
-                packed.restore_checkpoint(before)
-                packed._controller_commits = before_commits
-                if results and core._hbm_numeric_state is not packed:
-                    packed.commit_controller()
-                raise
-            results.append(result)
-    finally:
-        if deferred is not None:
-            deferred.publish()
-        if admission is not None:
-            admission.publish()
-    if core._hbm_numeric_state is not packed:
-        packed.commit_controller()
-    return tuple(results)
-
-
-# Sparse timeline undo is valid only for this complete owned executor path.
 # A wrapper around any of these hooks can write a different resource before
 # raising, so checking DramCore.submit alone does not establish ownership.
 _OWNED_TIMELINE_HBM_FUNCTIONS = tuple((name, globals()[name]) for name in (
-    "_pack_hbm_numeric", "execute_hbm_numeric", "execute_hbm_numeric_many", "execute_fr_fcfs_numeric",
+    "_pack_hbm_numeric", "execute_fr_fcfs_numeric",
     "_request_array_selection", "can_capture_resource_columns",
-    "refresh_resource_columns", "publish_resource_columns", "consume_resource_columns",
-    "_can_batch_resources"))
+    "refresh_resource_columns", "publish_resource_columns", "consume_resource_columns"))
 _OWNED_TIMELINE_HBM_METHODS = tuple((name, getattr(_HBMNumericState, name)) for name in (
     "validate_aliases", "refresh_resources", "request_selection", "checkpoint",
-    "restore_checkpoint", "execute", "execute_fr_fcfs", "commit_controller", "commit_timeline"))
+    "restore_checkpoint", "execute_fr_fcfs", "commit_controller", "commit_timeline"))
 _OWNED_TIMELINE_HBM_CLASS = _HBMNumericState
 _OWNED_TIMELINE_CAPTURE_METHODS = tuple((name, getattr(_NumericResourceCapture, name))
     for name in ("__init__", "begin", "finish"))
 _OWNED_TIMELINE_CAPTURE_CLASS = _NumericResourceCapture
-_OWNED_TIMELINE_BATCH_CLASSES = (HBMResourceBatch, HBMAdmission, HBMResourceAccumulator)
-_OWNED_TIMELINE_BATCH_METHODS = tuple((cls, name, getattr(cls, name))
-    for cls in _OWNED_TIMELINE_BATCH_CLASSES
-    for name, value in vars(cls).items() if callable(value))
+_OWNED_TIMELINE_ACCUMULATOR_METHODS = tuple((name, value) for name, value in vars(HBMResourceAccumulator).items()
+                                            if callable(value))
 
 from . import _hbm_numeric as _owned_numeric_module
 from . import _hbm_control as _owned_control_module
-from . import native_hbm_memo_experiment as _owned_memo_module
 
 _OWNED_TIMELINE_NUMERIC_FUNCTIONS = tuple((name, getattr(_owned_numeric_module, name))
-    for name in ("run_hbm_numeric", "_run_hbm_numeric", "_run_hbm_channel_range", "_new_channel_scratch",
-                 "run_fr_fcfs", "_run_fr_fcfs_channels"))
-_OWNED_TIMELINE_CONTROL_ENTRY = _owned_control_module.execute_hbm
-_OWNED_NUMERIC_MEMO_CONTEXT = _owned_memo_module._ACTIVE
-_OWNED_NUMERIC_MEMO_VALIDATOR = _owned_memo_module.native_memo_hooks
-_OWNED_NUMERIC_EXECUTOR = _owned_numeric_module._CHANNEL_EXECUTOR
-_OWNED_NUMERIC_EXECUTOR_TYPE = type(_OWNED_NUMERIC_EXECUTOR)
-_OWNED_NUMERIC_EXECUTOR_SUBMIT = _OWNED_NUMERIC_EXECUTOR_TYPE.submit
-_OWNED_NUMERIC_EXECUTOR_NAMESPACE = tuple(vars(_OWNED_NUMERIC_EXECUTOR_TYPE).items())
+    for name in ("run_fr_fcfs", "_run_fr_fcfs_channels"))
 _OWNED_TIMELINE_CONTROL_CLASS = _owned_control_module._Controller
 _OWNED_TIMELINE_CONTROL_METHODS = tuple((name, getattr(_OWNED_TIMELINE_CONTROL_CLASS, name))
     for name, value in vars(_OWNED_TIMELINE_CONTROL_CLASS).items() if callable(value))
@@ -957,35 +741,10 @@ def _has_native_timeline_hooks(packed=None):
     if (_HBMNumericState is not _OWNED_TIMELINE_HBM_CLASS
             or (packed is not None and type(packed) is not _HBMNumericState)
             or _NumericResourceCapture is not _OWNED_TIMELINE_CAPTURE_CLASS
-            or (HBMResourceBatch, HBMAdmission, HBMResourceAccumulator) != _OWNED_TIMELINE_BATCH_CLASSES
-            or _owned_control_module.execute_hbm is not _OWNED_TIMELINE_CONTROL_ENTRY
             or _owned_control_module._Controller is not _OWNED_TIMELINE_CONTROL_CLASS):
         return False
-    if (_owned_numeric_module._NUMERIC_MEMO_CONTEXT is not _OWNED_NUMERIC_MEMO_CONTEXT
-            or _owned_memo_module._ACTIVE is not _OWNED_NUMERIC_MEMO_CONTEXT
-            or _owned_memo_module.native_memo_hooks is not _OWNED_NUMERIC_MEMO_VALIDATOR
-            or _numeric_memo_execution_policy is not _OWNED_NUMERIC_MEMO_POLICY):
-        return False
-    memo = _OWNED_NUMERIC_MEMO_CONTEXT.get()
-    if memo is not None:
-        if not _OWNED_NUMERIC_MEMO_VALIDATOR(memo):
-            return False
-        executor = _owned_numeric_module._CHANNEL_EXECUTOR
-        executor_class = vars(_OWNED_NUMERIC_EXECUTOR_TYPE)
-        if (executor is not _OWNED_NUMERIC_EXECUTOR or type(executor) is not _OWNED_NUMERIC_EXECUTOR_TYPE
-                or len(executor_class) != len(_OWNED_NUMERIC_EXECUTOR_NAMESPACE)
-                or any(executor_class.get(name) is not original
-                       for name, original in _OWNED_NUMERIC_EXECUTOR_NAMESPACE)):
-            return False
-        executor_fields = vars(executor)
-        if (type(_owned_numeric_module._CHANNEL_WORKERS) is not int or _owned_numeric_module._CHANNEL_WORKERS < 1
-                or type(executor_fields.get("_shutdown")) is not bool or executor_fields["_shutdown"]
-                or type(executor_fields.get("_broken")) is not bool or executor_fields["_broken"]
-                or type(executor_fields.get("_max_workers")) is not int
-                or getattr(executor.submit, "__func__", None) is not _OWNED_NUMERIC_EXECUTOR_SUBMIT):
-            return False
-    for cls, name, original in _OWNED_TIMELINE_BATCH_METHODS:
-        if getattr(cls, name) is not original:
+    for name, original in _OWNED_TIMELINE_ACCUMULATOR_METHODS:
+        if getattr(HBMResourceAccumulator, name) is not original:
             return False
     for name, original in _OWNED_TIMELINE_HBM_FUNCTIONS:
         if globals()[name] is not original:
@@ -1003,31 +762,4 @@ def _has_native_timeline_hooks(packed=None):
     for name, original in _OWNED_TIMELINE_CONTROL_METHODS:
         if getattr(_owned_control_module._Controller, name) is not original:
             return False
-    return packed is None or packed.run_numeric is _OWNED_TIMELINE_NUMERIC_FUNCTIONS[0][1]
-
-
-_OWNED_NATIVE_TIMELINE_GUARD = _has_native_timeline_hooks
-
-
-def _numeric_memo_execution_policy():
-    """A cache key policy only for the unchanged native numeric execution.
-
-    Channel grouping depends on _CHANNEL_WORKERS and changes floating count
-    reduction order. Include it rather than normalizing arrivals or state.
-    Replaced kernels/executors/guards must execute normally, never reuse a
-    result retained under a different implementation.
-    """
-    if (_has_native_timeline_hooks is not _OWNED_NATIVE_TIMELINE_GUARD
-            or not _OWNED_NATIVE_TIMELINE_GUARD()):
-        return None
-    workers = _owned_numeric_module._CHANNEL_WORKERS
-    executor = _owned_numeric_module._CHANNEL_EXECUTOR
-    if (type(workers) is not int or workers < 1
-            or executor is not _OWNED_NUMERIC_EXECUTOR or type(executor) is not _OWNED_NUMERIC_EXECUTOR_TYPE
-            or getattr(executor.submit, "__func__", None) is not _OWNED_NUMERIC_EXECUTOR_SUBMIT
-            or executor._shutdown or executor._broken or type(executor._max_workers) is not int):
-        return None
-    return ("native_channel_partitions_and_ordered_counts_v1", workers, executor._max_workers)
-
-
-_OWNED_NUMERIC_MEMO_POLICY = _numeric_memo_execution_policy
+    return packed is None or packed.run_fr_fcfs is _OWNED_TIMELINE_NUMERIC_FUNCTIONS[0][1]

@@ -52,6 +52,7 @@ cdef extern from "_hbm_fr_core.h" nogil:
         int64_t channel_first
         int64_t channel_stop
         int64_t span
+        int64_t stripe_shift
 
     int fr_run_channels(const fr_args *args)
 
@@ -109,6 +110,8 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
             or view_channel_int.shape[1] != 2 or view_resources.shape[1] != 4 or view_stats.shape[1] < 10
             or view_out_int.shape[1] != 3 or view_out_float.shape[1] != 2 or view_counts.shape[1] != 7):
         raise ValueError("HBM kernel arrays do not have the packed controller's layout")
+    if view_g[15] < 2 or view_g[15] & (view_g[15] - 1):
+        raise ValueError("HBM kernel needs a power-of-two stripe of bank groups")
     args.firsts = &view_firsts[0]
     args.stops = &view_stops[0]
     args.arrivals = &view_arrivals[0]
@@ -141,6 +144,9 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
     args.channel_first = channel_first
     args.channel_stop = channel_stop
     args.span = span
+    args.stripe_shift = 0
+    while (view_g[15] >> args.stripe_shift) > 1:
+        args.stripe_shift += 1
     with nogil:
         code = fr_run_channels(&args)
     if code != FR_OK:

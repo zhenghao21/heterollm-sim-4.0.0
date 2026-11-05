@@ -49,15 +49,15 @@ def test_non_power_of_two_mapping_is_bijective_and_channel_coverage_matches(layo
         assert set(dram_request_channels(c, request)) == expected
 
 
-def test_row_local_24_gbit_12_high_standard_geometry_keeps_last_address():
+def test_24_gbit_12_high_standard_geometry_keeps_last_address():
     c = resolve_physical_config("hbm3e_reference", overrides={
         "capacity_bytes": 36 * 1024**3, "stacks": 1,
-        "dies_per_stack": 12, "die_density_gbits": 24,
-        "address_mapping": "row_local", "interleave_bytes": None})
+        "dies_per_stack": 12, "die_density_gbits": 24})
     last = map_dram_address(c, c.capacity_bytes - 1)
     assert (last.lane, last.bank_group, last.bank, last.row, last.column) == (31, 11, 3, 24575, 31)
     assert map_dram_address(c, 32).lane == 0
-    assert map_dram_address(c, c.row_bytes).bank == 1
+    assert map_dram_address(c, 32).bank_group == 1
+    assert map_dram_address(c, 32 * c.bank_groups_per_sid).lane == 1
 
 
 def test_row_hit_first_reorders_inside_window_and_returns_input_order():

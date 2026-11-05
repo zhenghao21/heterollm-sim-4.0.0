@@ -256,14 +256,14 @@ def test_failed_hbm_execution_restores_control_state_before_retry(details, monke
     resolve_physical_task(seed, runtime, 0.)
     saved = runtime.snapshot()
     task = physical_task(config, [{"operation": "read", "address": 8192, "byte_count": 4096}])
-    original = DramCore.submit
+    original = DramCore.submit_many
 
-    def fail_after_execution(core, request, **kwargs):
-        original(core, request, **kwargs)
+    def fail_after_execution(core, requests, **kwargs):
+        original(core, requests, **kwargs)
         raise ValueError("injected after HBM controller mutation")
 
     with monkeypatch.context() as patch:
-        patch.setattr(DramCore, "submit", fail_after_execution)
+        patch.setattr(DramCore, "submit_many", fail_after_execution)
         with pytest.raises(ValueError, match="after HBM controller mutation"):
             resolve_physical_task(task, runtime, 0.)
     assert runtime.snapshot() == saved

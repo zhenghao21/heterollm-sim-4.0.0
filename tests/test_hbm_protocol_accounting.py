@@ -190,7 +190,8 @@ def test_jedec_runtime_replay_restores_real_pc_and_command_bus_state():
     saved = runtime.snapshot()
     core = runtime.runtime(config, "memory").core
     control = deepcopy(core._hbm_control_state)
-    follow = physical_task(config, [{"operation":"read", "address":32, "byte_count":1},
+    stripe = config.bank_groups_per_sid * config.burst_bytes
+    follow = physical_task(config, [{"operation":"read", "address":stripe, "byte_count":1},
                                     {"operation":"read", "address":0, "byte_count":1}])
     first = resolve_physical_task(follow, runtime, 0.)
     runtime.restore(saved)
@@ -198,7 +199,7 @@ def test_jedec_runtime_replay_restores_real_pc_and_command_bus_state():
     second = resolve_physical_task(follow, runtime, 0.)
     assert next(iter(first.metadata["physical_execution_by_owner"].values())) == next(iter(second.metadata["physical_execution_by_owner"].values()))
     billed = next(iter(second.metadata["physical_execution_by_owner"].values()))
-    # Adjacent 32-byte bursts select the two PCs of the same physical channel.
+    # Adjacent lane stripes select the two PCs of the same physical channel.
     assert set(k for k in billed["resource_busy_ns"] if "column_command:" in k) == {
         "memory:dram:column_command:0:0"}
     assert set(k for k in billed["resource_busy_ns"] if ":data:" in k) == {

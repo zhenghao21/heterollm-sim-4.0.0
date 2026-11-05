@@ -88,8 +88,7 @@ def test_program_scan_changes_executed_nand_time_after_catalog_resolution():
     assert outcomes[1] - outcomes[0] == 75000.
 
 
-@pytest.mark.parametrize("profile_id", ["research_hbm_package", "hbm3e_reference_flat",
-                                        "hbm3e_reference_synthetic_timing"])
+@pytest.mark.parametrize("profile_id", ["research_hbm_package", "hbm3e_reference_synthetic_timing"])
 @pytest.mark.parametrize("field,invalid_value", [
     ("column_same_group_ns", 3.0),
     ("column_different_group_ns", 1.0),

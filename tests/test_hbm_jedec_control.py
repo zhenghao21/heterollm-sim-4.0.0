@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 
 from heterollm_sim.dram_core import DramCore
-from heterollm_sim.memory_mapping import rotated_bank_step
 from heterollm_sim.memory_transfer import ResourceTimeline
 from heterollm_sim.memory_types import AccessRequest, DramConfig
 
@@ -16,7 +15,8 @@ def config(**overrides):
         bank_groups_per_rank=4, banks_per_group=4, rows_per_bank=8,
         row_bytes=1024, burst_bytes=32, data_width_bits=32, data_rate_mt_s=4000.,
         bank_geometry_scope="per_stack", stack_interface_mode="independent",
-        control_mode="jedec_hbm", command_clock_ns=1., activate_command_cycles=1.5,
+        control_mode="jedec_hbm", address_mapping="sid_aware", scheduler="fr_fcfs", queue_scope="pc",
+        command_clock_ns=1., activate_command_cycles=1.5,
         precharge_command_cycles=.5, column_command_cycles=1., activated_row_msb=2,
         activate_to_read_ns=4., activate_to_write_ns=3., precharge_to_activate_ns=3.,
         minimum_active_ns=7., maximum_active_ns=35100., activate_cycle_ns=10., read_to_precharge_ns=3.,
@@ -32,10 +32,13 @@ def config(**overrides):
 
 
 def address(c, *, stack=0, channel=0, pc=0, bank=0, row=0, column=0):
+    """Byte address of a burst, through burst | BG in SID | lane | column | bank in group | SID | row."""
     lane = (stack * c.channels + channel) * 2 + pc
-    step = rotated_bank_step(bank, c.bank_count, c.banks_per_group)
-    return (((row * (c.row_bytes // c.burst_bytes) + column) * c.bank_count + step)
-            * c.lane_count + lane) * c.burst_bytes
+    group, within = divmod(bank, c.banks_per_group)
+    sid, group = divmod(group, c.bank_groups_per_sid)
+    block = (row * c.sid_count + sid) * c.banks_per_group + within
+    return (((block * (c.row_bytes // c.burst_bytes) + column) * c.lane_count + lane)
+            * c.bank_groups_per_sid + group) * c.burst_bytes
 
 
 def request(c, op="read", *, time=0., **coordinates):

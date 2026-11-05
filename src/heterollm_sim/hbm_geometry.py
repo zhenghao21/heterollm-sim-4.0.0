@@ -263,11 +263,6 @@ def make_hbm_geometry_config(
             "leaves base-organization physical stack height vendor-specific"
         )
 
-    # HBM4's 16H address organization exposes four SIDs and two bank groups
-    # per SID.  The controller uses the SID-aware low-BG mapping only for
-    # this organization; HBM2/3 retain their imported generic mixed-radix
-    # mapping until a corresponding SID table is available.
-    sid_mapping = hbm4 and groups_per_pc == 8 and banks_per_group == 8
     hbm4_rtw = None
     hbm4_wtr_s = hbm4_wtr_l = hbm4_rtp = None
     if hbm4:
@@ -289,9 +284,8 @@ def make_hbm_geometry_config(
         bandwidth_input_mode="bandwidth", interface_bandwidth_gb_s=interface_gb_s,
         read_bandwidth_gb_s=read_bandwidth_gbps / 8.0,
         write_bandwidth_gb_s=write_bandwidth_gbps / 8.0,
-        interleave_bytes=None if sid_mapping else 32, open_ns=14.0, close_ns=reference_rp,
-        address_mapping="sid_aware" if sid_mapping else "bank_interleaved",
-        scheduler="fr_fcfs" if sid_mapping else "fcfs", queue_scope="pc" if sid_mapping else "device",
+        interleave_bytes=None, open_ns=14.0, close_ns=reference_rp,
+        address_mapping="sid_aware", scheduler="fr_fcfs", queue_scope="pc",
         read_queue_depth_per_pc=32, write_queue_depth_per_pc=64,
         write_high_watermark=0.85, write_low_watermark=0.50, min_reads_per_switch=16,
         read_latency_ns=read_latency_ns, write_latency_ns=write_latency_ns,
@@ -321,10 +315,8 @@ def make_hbm_geometry_config(
     )
     config.metadata.update({
         "address_mapping_basis": (
-            "JESD270-4A Table 5 (printed p.7): burst | SID-internal BG | lane | column | bank-in-group | SID | row"
-            if sid_mapping else "legacy mixed-radix research mapping"),
-        "sid_aware_mapping": bool(sid_mapping),
-        "controller_policy": "per-PC/bank FR-FCFS with cross-request PRE/ACT lookahead" if sid_mapping else "FCFS",
+            f"{standard} Table 5: burst | SID-internal BG | lane | column | bank-in-group | SID | row"),
+        "controller_policy": "per-PC/bank FR-FCFS with cross-request PRE/ACT lookahead",
         "queue_policy": {"read_depth_per_pc": 32, "write_depth_per_pc": 64,
                           "write_high_watermark": 0.85, "write_low_watermark": 0.50,
                           "min_reads_per_switch": 16,
@@ -332,7 +324,7 @@ def make_hbm_geometry_config(
                                    "write_buffer_size 64, write_high_thresh_perc 85, write_low_thresh_perc 50, "
                                    "min_reads_per_switch 16); gem5's HBM classes set read_buffer_size 64"},
     })
-    if sid_mapping:
+    if hbm4:
         config.metadata["timing_assumptions"] = {
             "tRTW": {"value_ns": hbm4_rtw, "formula": "ceil((RL-WL+2.5*tCK+tDQSS+tWDQS2DQ_O+tDQSQtra+margin)/tCK)*tCK",
                      "source": "JESD270-4A Table 108 note 18, printed pp.194-199; PHY terms are simulator assumptions"},

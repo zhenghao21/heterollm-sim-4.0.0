@@ -168,36 +168,6 @@ def evaluate_prefill(prepared, samples, options):
 def simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=None,
                                  residency_manager=None, execution_kernel=None, runtime_origin_ns=0.,
                                  custom_lowerer=False):
-    """Run Prefill with an optional exact numeric cache; approximation stays explicit."""
-    options = scenario.simulation.native_prefill
-    arguments = dict(batch_lowerer=batch_lowerer, execution_control=execution_control,
-        residency_manager=residency_manager, execution_kernel=execution_kernel,
-        runtime_origin_ns=runtime_origin_ns, custom_lowerer=custom_lowerer)
-    if not options.numeric_transition_cache:
-        return _simulate_native_prefill_pass(scenario, **arguments)
-    from .execution_control import native_callback_free_control
-    from .native_hbm_memo_experiment import hbm_numeric_memo_experiment
-    control = execution_control or ExecutionControl()
-    if options.max_wall_seconds is not None:
-        control = deadline_control(control, time.perf_counter() + options.max_wall_seconds)
-    arguments["execution_control"] = control
-    if not native_callback_free_control(control):
-        outcome = _simulate_native_prefill_pass(scenario, **arguments)
-        outcome.diagnostics["numeric_transition_cache"] = {
-            "enabled": False, "reason": "native_callback_free_control_required"}
-        return outcome
-    with hbm_numeric_memo_experiment(max_bytes=options.numeric_memo_max_bytes,
-            check=control.raise_if_cancelled) as memo:
-        outcome = _simulate_native_prefill_pass(scenario, **arguments)
-    outcome.diagnostics["numeric_transition_cache"] = {
-        "enabled": True, "exact_complete_input_bits": True, "max_bytes": options.numeric_memo_max_bytes,
-        **memo.stats}
-    return outcome
-
-
-def _simulate_native_prefill_pass(scenario, *, batch_lowerer, execution_control=None,
-                                 residency_manager=None, execution_kernel=None, runtime_origin_ns=0.,
-                                 custom_lowerer=False):
     """Sample the request's Prefill cohort boundary natively and bound the pass."""
     from .fast_simulation import FastSimulationOutcome
 

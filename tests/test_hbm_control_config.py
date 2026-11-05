@@ -72,7 +72,7 @@ def test_missing_control_contract_does_not_silently_use_legacy_or_default_fields
         parse_execution_physical_config(payload)
     payload = asdict(config)
     payload.update(control_mode="analytical", refresh_policy="disabled")
-    with pytest.raises(ValueError, match="JEDEC control status"):
+    with pytest.raises(ValueError, match="require the jedec_hbm controller"):
         parse_execution_physical_config(payload)
 
 

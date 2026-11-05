@@ -410,14 +410,6 @@ class DramCore:
                 raise ValueError("DRAM request exceeds finite timing range")
         if self.config.scheduler == "fr_fcfs":
             return self._submit_fr_fcfs((request,), _resource_accumulator=_resource_accumulator)[0]
-        if (_resource_accumulator is not None and not self.capture_details
-                and self.config.control_mode == "jedec_hbm"
-                and not self._finite_guard_required(request)):
-            from ._compiled_hbm import execute_hbm_numeric_many
-            results = execute_hbm_numeric_many(self, (request,),
-                resource_accumulator=_resource_accumulator)
-            if results is not None:
-                return results[0]
         return self._submit_validated(request, _resource_accumulator=_resource_accumulator)
 
     def _finite_guard_required(self, request: AccessRequest) -> bool:
@@ -617,8 +609,11 @@ class DramCore:
         burst = c.burst_bytes
         bursts = sum((request.address + request.byte_count - 1) // burst - request.address // burst + 1
                      for request in requests)
-        # A few bursts on a large idle device cost less through the reference
-        # controller than through a cold numeric pack; see execute_hbm.
+        # Numeric packing scans every physical bank, so a few bursts on a large
+        # idle device cost less through the reference controller. At 32K banks
+        # the cold pack exceeds a 4-KiB/128-burst reference request; bound the
+        # reference to 128 bursts and 128 packed banks per burst. Transactions
+        # and resident arrays keep the numeric path that amortizes packing.
         tiny = (not self._hbm_transactions and not self._hbm_numeric_enabled
                 and bursts <= min(128, c.lane_count * c.bank_count // 128))
         outcome = None
@@ -635,12 +630,13 @@ class DramCore:
                 max_intervals=c.max_expanded_segments if self.capture_details else 0)
             results = execute_fr_fcfs_reference(self, requests)
             metrics = self.timeline._core_metrics_delta(before)
-            if accumulator is not None:
-                accumulator.consume_metrics(metrics)
-                for field in ("resource_busy_ns", "resource_bytes", "resource_last_intervals"):
-                    metrics.pop(field, None)
         else:
             results, metrics = outcome
+        # Column capture has already billed its resources; a public delta has not.
+        if accumulator is not None and "resource_busy_ns" in metrics:
+            accumulator.consume_metrics(metrics)
+            for field in ("resource_busy_ns", "resource_bytes", "resource_last_intervals"):
+                metrics.pop(field, None)
         extra = {}
         if c.bank_group_timing_enabled:
             extra = {"bank_group_timing_enabled": True, "bank_group_timing_fallback": False}
@@ -676,17 +672,6 @@ class DramCore:
 
     def _submit_many_ordered(self, items, *, _resource_accumulator=None):
         """FCFS execution, amortizing numeric state packing when possible."""
-        if (len(items) > 1 and self.config.control_mode == "jedec_hbm" and not self.capture_details
-                and not any(self._finite_guard_required(request) for request in items)):
-            try:
-                from ._compiled_hbm import execute_hbm_numeric_many
-            except (ImportError, OSError):
-                pass
-            else:
-                results = execute_hbm_numeric_many(self, items,
-                    resource_accumulator=_resource_accumulator)
-                if results is not None:
-                    return results
         if (_resource_accumulator is None and len(items) > 1
                 and self.config.queue_scope == "device" and self._can_accelerate()
                 and not any(self._finite_guard_required(request) for request in items)):
@@ -699,9 +684,6 @@ class DramCore:
         return tuple(self.submit(request, _resource_accumulator=_resource_accumulator) for request in items)
 
     def _execute_accepted(self, request: AccessRequest) -> TransactionResult:
-        if self.config.control_mode == "jedec_hbm":
-            from ._hbm_control import execute_hbm
-            return execute_hbm(self, request)
         # Summary execution can compress repeated row-hit cycles, but must
         # retain the same bank and command/data state as the burst loop below.
         start = request.address

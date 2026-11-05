@@ -7,14 +7,12 @@ from heterollm_sim.memory_types import AccessRequest
 from test_hbm_compiled_control import configuration
 
 
-def prepared(mapping="bank_interleaved"):
-    config = configuration(channels=16, address_mapping=mapping,
-        interleave_bytes=128 if mapping == "bank_interleaved" else None,
+def prepared():
+    config = configuration(channels=16,
         refresh_policy="all_bank", refresh_interval_ns=400., refresh_cycle_ns=40.)
     runtime = PhysicalRuntimeContext(config, "hbm", capture_details=False)
     core = runtime.runtimes["hbm"].core
-    span = (config.interleave_bytes if mapping == "bank_interleaved"
-            else config.row_bytes * config.bank_count)
+    span = config.bank_groups_per_sid * config.burst_bytes
     core.submit(AccessRequest("warm", "read", 0, span * config.lane_count))
     return core, span
 
@@ -23,9 +21,8 @@ def image(core):
     return tuple(array.tobytes() for array in core._hbm_numeric_state.arrays)
 
 
-@pytest.mark.parametrize("mapping", ("bank_interleaved", "row_local"))
-def test_begin_is_lazy_and_repeated_sparse_channel_is_saved_once(mapping):
-    core, span = prepared(mapping)
+def test_begin_is_lazy_and_repeated_sparse_channel_is_saved_once():
+    core, span = prepared()
     before = image(core)
     token = core.begin_transaction()
     undo = token.numeric
@@ -44,10 +41,9 @@ def test_begin_is_lazy_and_repeated_sparse_channel_is_saved_once(mapping):
     assert image(core) == before
 
 
-@pytest.mark.parametrize("mapping", ("bank_interleaved", "row_local"))
 @pytest.mark.parametrize("dense", (False, True))
-def test_nested_disjoint_wrapped_and_dense_requests_restore_original_arrays(mapping, dense):
-    core, span = prepared(mapping)
+def test_nested_disjoint_wrapped_and_dense_requests_restore_original_arrays(dense):
+    core, span = prepared()
     before = image(core)
     outer = core.begin_transaction()
     core.submit(AccessRequest("outer", "write", 2 * span + 3, 65, 1500.))
@@ -90,9 +86,8 @@ def test_no_request_rollback_keeps_arrays_and_numeric_identity():
     assert image(core) == before
 
 
-@pytest.mark.parametrize("mapping", ("bank_interleaved", "row_local"))
-def test_nested_same_channel_undo_keeps_outer_original(mapping):
-    core, span = prepared(mapping)
+def test_nested_same_channel_undo_keeps_outer_original():
+    core, span = prepared()
     before = image(core)
     outer = core.begin_transaction()
     core.submit(AccessRequest("outer", "read", span + 3, 65, 1500.))

@@ -397,7 +397,7 @@ static void fr_argsort(const double *keys, int64_t size, int64_t *order)
 #undef FR_SWAP
 }
 
-FR_NOINLINE void fr_close_expiring(const fr_state *s, int64_t ch, double horizon, double *counts)
+FR_NOINLINE void fr_close_expiring(const fr_state *s, int64_t ch, double before, double *counts)
 {
     const double *t = s->t;
     int64_t *rows = s->rows;
@@ -411,7 +411,7 @@ FR_NOINLINE void fr_close_expiring(const fr_state *s, int64_t ch, double horizon
     double next_start = HUGE_VAL, next_pc[2] = {HUGE_VAL, HUGE_VAL};
     double duration, step;
     for (bank = ch * 2 * s->banks; bank < (ch + 1) * 2 * s->banks; ++bank) {
-        if (addresses[bank] >= 0 && rows[bank] >= 0 && fr_after(bf[bank * 7], t[29], half) <= horizon) {
+        if (addresses[bank] >= 0 && rows[bank] >= 0 && fr_after(bf[bank * 7], t[29], half) < before) {
             pending_banks[count] = bank;
             deadlines[count] = fr_after(bf[bank * 7], t[29], half);
             count += 1;
@@ -707,42 +707,19 @@ FR_NOINLINE int fr_refresh_until(const fr_state *s, int64_t lane, double horizon
 }
 
 /* memory_mapping.rotated_bank: alternate groups inside a 16-bank SID. */
-static int64_t fr_rotated_bank(int64_t step, int64_t banks, int64_t per_group)
-{
-    int64_t unit = fr_mod(banks, 16) == 0 && per_group < 16 && fr_mod(16, per_group) == 0 ? 16 : banks;
-    int64_t groups = fr_mod(unit, per_group) == 0 ? fr_floordiv(unit, per_group) : 1;
-    int64_t offset;
-    if (groups <= 1)
-        return step;
-    offset = fr_mod(step, unit);
-    return step - offset + fr_mod(offset, groups) * per_group + fr_floordiv(offset, groups);
-}
-
-/* Bank within the lane and activated row of a cursor, for any mapping. */
+/* Bank within the lane and activated row of a cursor: burst | BG-in-SID | lane |
+ * column | bank-in-group | SID | row. */
 FR_NOINLINE void fr_burst_location(const int64_t *g, int64_t cursor, int64_t *bank_within, int64_t *row)
 {
-    if (g[13]) {
-        /* HBM4 SID-aware mixed radix: burst | BG-in-SID | lane | column |
-         * bank-in-group | SID | row. */
-        int64_t bg_in_sid = fr_mod(cursor, 2), bank_in_group, sid;
-        cursor = fr_floordiv(cursor, 2);
-        cursor = fr_floordiv(cursor, g[0]);
-        cursor = fr_floordiv(cursor, g[3]);
-        bank_in_group = fr_mod(cursor, g[4]);
-        cursor = fr_floordiv(cursor, g[4]);
-        sid = fr_mod(cursor, g[14]);
-        *row = fr_floordiv(cursor, g[14]);
-        *bank_within = sid * g[15] * g[4] + fr_mod(bg_in_sid, g[15]) * g[4] + bank_in_group;
-    } else if (g[11]) { /* row_local: complete rows, then banks, then lanes. */
-        int64_t stripe = fr_floordiv(cursor, g[3]);
-        *bank_within = fr_mod(stripe, g[1]);
-        *row = fr_floordiv(stripe, g[1] * g[0]);
-    } else {
-        int64_t block = fr_floordiv(cursor, g[2]), inner = fr_mod(cursor, g[2]);
-        int64_t bank_linear = fr_floordiv(block, g[0]);
-        *bank_within = fr_rotated_bank(fr_mod(bank_linear, g[1]), g[1], g[4]);
-        *row = fr_floordiv(fr_floordiv(bank_linear, g[1]) * g[2] + inner, g[3]);
-    }
+    int64_t bg_in_sid = fr_mod(cursor, g[15]), bank_in_group, sid;
+    cursor = fr_floordiv(cursor, g[15]);
+    cursor = fr_floordiv(cursor, g[0]);
+    cursor = fr_floordiv(cursor, g[3]);
+    bank_in_group = fr_mod(cursor, g[4]);
+    cursor = fr_floordiv(cursor, g[4]);
+    sid = fr_mod(cursor, g[14]);
+    *row = fr_floordiv(cursor, g[14]);
+    *bank_within = sid * g[15] * g[4] + bg_in_sid * g[4] + bank_in_group;
     if (g[6] >= 0)
         *row &= ~(INT64_C(1) << g[6]);
 }
@@ -1001,12 +978,12 @@ FR_INLINE double fr_activate_start(const fr_state *s, int64_t lane, int64_t bank
     }
 }
 
-/* First burst of [first, stop) on a lane; the stripe is two bursts wide. */
-FR_INLINE int64_t fr_lane_cursor(int64_t first, int64_t stop, int64_t lane, int64_t lanes)
+/* First burst of [first, stop) on a lane; a stripe holds one burst of each bank group of a SID. */
+FR_INLINE int64_t fr_lane_cursor(int64_t first, int64_t stop, int64_t lane, int64_t lanes, int64_t stripe_shift)
 {
-    int64_t block = first >> 1;
+    int64_t block = first >> stripe_shift;
     int64_t offset = fr_mod(lane - block, lanes);
-    int64_t cursor = offset == 0 ? first : (block + offset) << 1;
+    int64_t cursor = offset == 0 ? first : (block + offset) << stripe_shift;
     return cursor < stop ? cursor : -1;
 }
 
@@ -1017,7 +994,7 @@ static void fr_next_request(const fr_args *a, int64_t start, int64_t direction, 
     int64_t request;
     for (request = start; request < a->requests; ++request) {
         if ((a->reads[request] != 0) == (direction == 0)) {
-            int64_t cursor = fr_lane_cursor(a->firsts[request], a->stops[request], lane, lanes);
+            int64_t cursor = fr_lane_cursor(a->firsts[request], a->stops[request], lane, lanes, a->stripe_shift);
             if (cursor >= 0) {
                 *request_out = request;
                 *cursor_out = cursor;
@@ -1110,19 +1087,19 @@ FR_NOINLINE void fr_recount(const fr_state *s, int64_t ch, fr_queue queues[2][2]
  * equal signatures are equal command streams. */
 static void fr_signature(const fr_args *a, int64_t ch, int64_t lanes, int64_t *signature)
 {
-    int64_t position = 0, pseudo, request;
+    int64_t position = 0, pseudo, request, stripe = a->g[15];
     for (pseudo = 0; pseudo < 2; ++pseudo) {
         int64_t lane = 2 * ch + pseudo;
         for (request = 0; request < a->requests; ++request) {
-            int64_t cursor = fr_lane_cursor(a->firsts[request], a->stops[request], lane, lanes);
+            int64_t cursor = fr_lane_cursor(a->firsts[request], a->stops[request], lane, lanes, a->stripe_shift);
             if (cursor < 0) {
                 signature[position] = -1;
                 signature[position + 1] = 0;
             } else {
                 int64_t span = a->stops[request] - cursor;
-                signature[position] = cursor - 2 * lane;
-                signature[position + 1] = 2 * fr_floordiv(span, 2 * lanes)
-                    + fr_imin(fr_mod(span, 2 * lanes), 2 - (cursor & 1));
+                signature[position] = cursor - stripe * lane;
+                signature[position + 1] = stripe * fr_floordiv(span, stripe * lanes)
+                    + fr_imin(fr_mod(span, stripe * lanes), stripe - (cursor & (stripe - 1)));
             }
             position += 2;
         }
@@ -1589,6 +1566,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
     int64_t ticks[FR_FIELDS];
     int64_t index, request, ch, pseudo, direction, depth, hit_words, total_bursts, capacity_sources, source_count;
     int64_t lane_shift, column_shift, bank_shift, sid_shift, row_mask, follow_tick, clock_back;
+    int64_t stripe_shift = a->stripe_shift, stripe_mask = g[15] - 1, stripe_step;
     int64_t column_duration_tick, recovery_ticks[2], groups;
     double grid_limit, plain_limit, column_duration, recovery[2], first_arrival;
     int binary, mirror, grouped;
@@ -1607,12 +1585,12 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
     for (index = 0; index < FR_FIELDS; ++index)
         ticks[index] = fr_tick(t[index], half);
     groups = g[5];
+    stripe_step = g[15] * lanes - stripe_mask;
     lane_shift = fr_binary_shift(g[0]);
     column_shift = fr_binary_shift(g[3]);
     bank_shift = fr_binary_shift(g[4]);
     sid_shift = fr_binary_shift(g[14]);
-    binary = fr_imin(fr_imin(fr_imin(fr_imin(lane_shift, column_shift), bank_shift), sid_shift),
-                     fr_binary_shift(g[15])) >= 0;
+    binary = fr_imin(fr_imin(fr_imin(lane_shift, column_shift), bank_shift), sid_shift) >= 0;
     row_mask = g[6] >= 0 ? ~(INT64_C(1) << g[6]) : -1;
     grouped = g[12] != 0;
     grid_limit = t[0] * FR_TWO48;
@@ -1770,7 +1748,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
         int64_t row_bus = ch, column_bus = channels + ch, capture = -1, stale_deadline = 0;
         int64_t last_pseudo = 1;
         int reached = 0, refreshed = 0, deadline_reached = 0;
-        double reach = -HUGE_VAL, reach_open = -HUGE_VAL, active_deadline;
+        double reach = -HUGE_VAL, reach_open = -HUGE_VAL, active_deadline, close_before;
         double traffic_floor[2], last_column[2], act_floor[2], plan_start[2], faw_expiry[2], end_top[2];
         int64_t reads_since[2], last_group[2], lane_request[2], plan_kind[2], plan_direction[2], plan_offset[2];
         int draining[2], stale[2];
@@ -1899,10 +1877,10 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                         int64_t cursor = queue->iter_cursor;
                         request = queue->iter_request;
                         if (binary) {
-                            /* The g[13] arm of the burst location for non-negative cursors. */
-                            int64_t block = cursor >> (1 + lane_shift + column_shift);
+                            /* The burst location for non-negative cursors. */
+                            int64_t block = cursor >> (stripe_shift + lane_shift + column_shift);
                             bank_within = ((block >> bank_shift) & (g[14] - 1)) * g[15] * g[4];
-                            bank_within += ((cursor & 1) & (g[15] - 1)) * g[4] + (block & (g[4] - 1));
+                            bank_within += (cursor & stripe_mask) * g[4] + (block & (g[4] - 1));
                             row = (block >> (bank_shift + sid_shift)) & row_mask;
                         } else {
                             fr_burst_location(g, cursor, &bank_within, &row);
@@ -1928,7 +1906,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                             queue->dirty = 1;
                         }
                         queue->count += 1;
-                        cursor = !(cursor & 1) ? cursor + 1 : cursor - 1 + 2 * lanes;
+                        cursor = (cursor & stripe_mask) != stripe_mask ? cursor + 1 : cursor + stripe_step;
                         if (cursor < stops[request])
                             queue->iter_cursor = cursor;
                         else
@@ -2129,22 +2107,28 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
             entry = item->entry;
             group = bank_group[bank_within];
             history_entry = bank_entry[bank_within];
+            /* A row command holds the row bus, and a PRE also blocks the PC's next
+             * PRE: a deadline inside that span could no longer get its own PRE. */
             horizon = kind == 0 ? fr_after_tick(start, recovery[direction], recovery_ticks[direction], half, inverse)
-                                : start;
+                                : fr_after(start, kind == 1 ? fr_max(t[2] * t[0], t[19]) : t[1] * t[0], half);
             if (stale_deadline) {
                 active_deadline = fr_next_active_deadline(s, ch);
                 stale_deadline = 0;
             }
             maintained = 0;
-            reach = fr_max(reach, horizon);
-            if (active_deadline <= horizon) {
+            reach = fr_max(reach, horizon + s->precharge_step);
+            /* A PRE on the first row grid point after the horizon still meets a
+             * deadline at that point, so only earlier deadlines close first. */
+            close_before = active_deadline < horizon + s->precharge_step ? fr_align(horizon, s->precharge_step)
+                                                                         : -HUGE_VAL;
+            if (active_deadline < close_before) {
                 deadline_reached = 1;
                 if (g[8] && channel[ch * 2 + 1] < 0)
                     channel[ch * 2 + 1] = fr_max(t[20], (double)fr_ifloor(fr_divide(entry, t[20])) * t[20]);
                 if (g[8] && channel[ch * 2 + 1] <= active_deadline)
                     fr_refresh_until(s, lane, channel[ch * 2 + 1], entry, tally);
                 else
-                    fr_close_expiring(s, ch, horizon, tally);
+                    fr_close_expiring(s, ch, close_before, tally);
                 maintained = 1;
             } else if (g[8] && channel[ch * 2 + 1] <= start && fr_refresh_until(s, lane, start, entry, tally)) {
                 maintained = 1;
@@ -2210,7 +2194,8 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                     double column = fr_column_start(s, lane, bank_within, group, bank_sid[bank_within],
                                                     fr_after_tick(anchor, rcd, ticks[rcd_index], half, inverse),
                                                     entry, read, column_bus, 2 * channels + lane, end_top[pseudo]);
-                    double latest = fr_after_tick(column, recovery[direction], recovery_ticks[direction], half, inverse);
+                    double latest = fr_align(fr_after_tick(column, recovery[direction], recovery_ticks[direction],
+                                                           half, inverse), s->precharge_step);
                     if (latest > fr_after_tick(anchor, t[29], ticks[29], half, inverse)) {
                         if (fr_after(rcd, recovery[direction], half) > t[29])
                             fr_fail(FR_ERR_RECOVERY_WINDOW);

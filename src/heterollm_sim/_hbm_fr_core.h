@@ -43,7 +43,7 @@ typedef struct fr_args {
     int64_t *out_int;
     double *out_float, *channel_counts;
     int64_t requests, entries, window_capacity, stat_fields;
-    int64_t channel_first, channel_stop, span;
+    int64_t channel_first, channel_stop, span, stripe_shift;
 } fr_args;
 
 /* Runs without the GIL; returns FR_OK or the error for the caller to raise. */

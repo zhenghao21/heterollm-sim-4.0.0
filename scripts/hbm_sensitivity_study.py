@@ -40,18 +40,11 @@ VARIANTS = {
     "no_rw_recovery": {"parameter_profile": "reference", "overrides": {
         "read_to_precharge_ns": 0., "write_to_read_same_group_ns": 0.,
         "write_to_read_different_group_ns": 0., "read_to_write_command_ns": 0.}},
-    "row_local": {"parameter_profile": "reference", "controller": {
-        "address_mapping": "row_local", "interleave_bytes": None}},
-    "row_hit_first": {"parameter_profile": "reference", "controller": {
-        "scheduler": "row_hit_first", "scheduler_window": 16}},
-    "read_write_batch": {"parameter_profile": "reference", "controller": {
-        "scheduler": "read_write_batch", "scheduler_window": 16}},
-    "device_depth8": {"parameter_profile": "reference", "controller": {"max_outstanding_requests": 8}},
-    "device_depth128": {"parameter_profile": "reference", "controller": {"max_outstanding_requests": 128}},
-    "channel_depth1": {"parameter_profile": "reference", "controller": {
-        "queue_scope": "channel", "max_outstanding_requests": 1}},
-    "channel_depth8": {"parameter_profile": "reference", "controller": {
-        "queue_scope": "channel", "max_outstanding_requests": 8}},
+    "read_queue8": {"parameter_profile": "reference", "controller": {"read_queue_depth_per_pc": 8}},
+    "read_queue128": {"parameter_profile": "reference", "controller": {"read_queue_depth_per_pc": 128}},
+    "write_drain_early": {"parameter_profile": "reference", "controller": {
+        "write_high_watermark": .25, "write_low_watermark": 0.}},
+    "reads_per_switch1": {"parameter_profile": "reference", "controller": {"min_reads_per_switch": 1}},
 }
 
 
@@ -106,7 +99,7 @@ def micro(variant, name, requests):
     duration = max(r.completion_ns for r in results) - min(r.arrival_ns for r in results)
     counters = {key: sum(r.counters.get(key, 0) for r in results) for key in (
         "activate_commands", "precharge_commands", "read_commands", "write_commands", "refresh_commands",
-        "row_hits", "row_misses", "row_conflicts", "queue_wait_ns", "scheduler_reordered_requests", "scheduler_batches")}
+        "row_hits", "row_misses", "row_conflicts", "queue_wait_ns")}
     latencies = [r.completion_ns-r.arrival_ns for r in results]
     return {"variant": variant, "workload": name, "requests": len(requests),
         "logical_bytes": sum(r.logical_bytes for r in results), "duration_ns": duration,
@@ -187,8 +180,8 @@ def aggregate(output_dir, named_model="qwen2_5-0_5b"):
     findings = {"no_refresh_sequential_read_percent_vs_reference": change("no_refresh", "sequential_read"),
         "no_activation_gates_pressure_percent_vs_reference": change("no_activation_gates", "activation_pressure"),
         "no_rw_recovery_mixed_same_pc_percent_vs_reference": change("no_rw_recovery", "mixed_same_pc"),
-        "row_hit_first_conflicts_percent_vs_reference": change("row_hit_first", "hot_row_conflicts"),
-        "read_write_batch_mixed_same_pc_percent_vs_reference": change("read_write_batch", "mixed_same_pc")}
+        "read_queue8_conflicts_percent_vs_reference": change("read_queue8", "hot_row_conflicts"),
+        "write_drain_early_mixed_same_pc_percent_vs_reference": change("write_drain_early", "mixed_same_pc")}
     configurations = {k: asdict(configuration(k)) for k in VARIANTS}
     result = {"point_result_version": POINT_RESULT_VERSION, "memory_execution_contract": EXECUTION_CONTRACT,
         "status": "passed" if all(checks.values()) else "incomplete", "checks": checks,
@@ -211,8 +204,8 @@ def aggregate(output_dir, named_model="qwen2_5-0_5b"):
             ("no_refresh_sequential_read_percent_vs_reference", "关闭刷新，顺序读"),
             ("no_activation_gates_pressure_percent_vs_reference", "关闭激活频率约束，密集开行"),
             ("no_rw_recovery_mixed_same_pc_percent_vs_reference", "关闭读写恢复门，同PC混合读写"),
-            ("row_hit_first_conflicts_percent_vs_reference", "优先已开行，热点行冲突"),
-            ("read_write_batch_mixed_same_pc_percent_vs_reference", "读写分组，同PC混合读写")) if findings[key] is not None],
+            ("read_queue8_conflicts_percent_vs_reference", "读队列缩到8，热点行冲突"),
+            ("write_drain_early_mixed_same_pc_percent_vs_reference", "写队列提前排空，同PC混合读写")) if findings[key] is not None],
         "这些探针用于分离机制影响，不能直接当作LLM加速百分比；完整服务结果单独列出。",
         "", "## 参数与来源", "",
         "以下为配置中的时间下限，单位ns；发令仍按CK/半CK边界对齐。nCK输入随实际时钟转换，不把周期数当作ns。完整输入单位、公式、依据、人工覆盖和来源均保存在results.json的configurations元数据中。",
@@ -236,13 +229,12 @@ def aggregate(output_dir, named_model="qwen2_5-0_5b"):
     for r in comparisons:
         lines.append(f"| {r['model']}/{r['prompt']}/{r['batch']}/{r['capacity_bytes']//GIB} GiB | {r['variant']} | {r['a_tpot_ns']/1000:.4f} | {r['b_tpot_ns']/1000:.4f} | {r['b_over_a']:.4f} | {r['faster']} |")
     lines.extend(["", "## 独立访存", "", "延迟为各请求从到达到完成的时间，包含排队；GB/s 为全部逻辑字节除以整个完成窗口。", "",
-        "| 负载 | 参数或策略 | GB/s | P99 ns | ACT | REF | 重排请求 |", "| --- | --- | ---: | ---: | ---: | ---: | ---: |"])
+        "| 负载 | 参数或策略 | GB/s | P99 ns | ACT | REF |", "| --- | --- | ---: | ---: | ---: | ---: |"])
     for r in micros:
         c = r["counters"]
-        lines.append(f"| {r['workload']} | {r['variant']} | {r['effective_gb_s']:.3f} | {r['request_latency_ns']['p99']:.3f} | {c['activate_commands']} | {c['refresh_commands']} | {c['scheduler_reordered_requests']} |")
+        lines.append(f"| {r['workload']} | {r['variant']} | {r['effective_gb_s']:.3f} | {r['request_latency_ns']['p99']:.3f} | {c['activate_commands']} | {c['refresh_commands']} |")
     lines.extend(["", "## 解释边界", "",
-        "- 不同队列范围的预算不同：device 是全设备请求数；channel 是每物理通道请求数。512 GiB配置有128个物理通道，因此 channel_depth1 的总名额上限为128，须与 device_depth128 一起比较。跨通道请求同时占用所有涉及通道的名额。",
-        "- 调度作用于已有的聚合请求和有限窗口，不是完整逐命令 FR-FCFS 控制器；不跨尚未生成的算子请求重排。",
+        "- FR-FCFS 只在一次提交的请求内重排命令；不跨尚未生成的算子请求重排。",
         "- 快/慢档同时改变多个未知时序；单项消融用于分离刷新、激活和恢复约束的作用。",
         "- HBF仍为既有逻辑页服务模型；本次未增加REFpb、RFM、低功耗、初始化或错误注入。",
         "- 方案排序仅适用于实际列出的模型、上下文、批量和参数范围；不替代完整20组研究矩阵。", ""])

@@ -3,8 +3,8 @@ import copy
 
 import pytest
 
-from heterollm_sim._compiled_hbm import execute_hbm_numeric
-from heterollm_sim._hbm_control import _Controller
+from hbm_numeric_call import execute_hbm_numeric
+from heterollm_sim._hbm_control import execute_fr_fcfs_reference
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.memory_types import AccessRequest
 from test_hbm_compiled_control import configuration
@@ -48,7 +48,7 @@ def test_reference_fallback_after_numeric_prefix_restores_transaction_start(deta
     if not details:
         execute_hbm_numeric(core, AccessRequest("numeric-prefix", "write", 131072, 512))
         assert token.full is None
-    _Controller(core, AccessRequest("reference", "write", 0, 512, 50000.)).execute()
+    execute_fr_fcfs_reference(core, (AccessRequest("reference", "write", 0, 512, 50000.),))
     assert token.full is not None
     core.rollback_transaction(token)
     assert state(core) == before
@@ -65,7 +65,7 @@ def test_nested_transactions_keep_outer_rollback_after_inner_rollback(fallback):
     middle = state(core)
     inner = core.begin_transaction()
     if fallback:
-        _Controller(core, AccessRequest("inner", "read", 131072, 512)).execute()
+        execute_fr_fcfs_reference(core, (AccessRequest("inner", "read", 131072, 512),))
     else:
         execute_hbm_numeric(core, AccessRequest("inner", "read", 131072, 512))
     core.rollback_transaction(inner)

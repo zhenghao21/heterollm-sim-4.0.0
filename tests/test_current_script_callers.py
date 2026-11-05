@@ -56,7 +56,7 @@ def _bank_point(monkeypatch):
     monkeypatch.setattr(bank_study, "run_case", run_case)
     monkeypatch.setattr(bank_study, "decode_measurement", lambda serving: {"decode_tokens": 2})
     monkeypatch.setattr(bank_study, "core_checks", lambda row: {"fixture": True})
-    return bank_study.run_point((bank_study.PROFILES[1], 16, bank_study.ARCHITECTURES[0], 3))
+    return bank_study.run_point((bank_study.PROFILES[0], 16, bank_study.ARCHITECTURES[0], 3))
 
 
 def test_current_bank_group_producer_supplies_report_parameters(monkeypatch):

@@ -5181,9 +5181,11 @@ function validatePhysicalMemoryConfig(value, component) {
     }
   });
   if (!nand) {
-    if (!["bank_interleaved", "row_local"].includes(value.address_mapping)
-        || !["fcfs", "row_hit_first", "read_write_batch"].includes(value.scheduler)
-        || !["device", "channel"].includes(value.queue_scope)) {
+    if (value.control_mode === "jedec_hbm"
+        ? value.address_mapping !== "sid_aware" || value.scheduler !== "fr_fcfs" || value.queue_scope !== "pc"
+        : !["bank_interleaved", "row_local"].includes(value.address_mapping)
+          || !["fcfs", "row_hit_first", "read_write_batch"].includes(value.scheduler)
+          || !["device", "channel"].includes(value.queue_scope)) {
       throw new Error("请选择有效的地址映射、请求调度和队列范围。");
     }
     if (!Number.isSafeInteger(value.scheduler_window) || value.scheduler_window < 1) {

@@ -220,11 +220,11 @@ def install_boundaries(collector):
         module("_compiled_dram", attribute, "host_dram_adapter_and_numeric", label="_compiled_dram." + attribute)
     # Cython imported this function directly, so patch its stored alias as well.
     module("_io_execution", "execute_compiled", "host_dram_adapter_and_numeric", label="_compiled_dram.execute_compiled")
-    for attribute in ("execute_hbm_numeric", "execute_hbm_numeric_many", "_pack_hbm_numeric"):
+    for attribute in ("execute_fr_fcfs_numeric", "_pack_hbm_numeric"):
         module("_compiled_hbm", attribute, "hbm_adapter")
-    methods("_compiled_hbm", "_HBMNumericState", ("execute", "refresh_resources", "commit_timeline", "commit_controller", "checkpoint"), "hbm_adapter")
-    # Installed before any controller captures its run_numeric instance field.
-    module("_hbm_numeric", "run_hbm_numeric", "hbm_numeric_and_thread_wait")
+    methods("_compiled_hbm", "_HBMNumericState", ("execute_fr_fcfs", "refresh_resources", "commit_timeline", "commit_controller", "checkpoint"), "hbm_adapter")
+    # Installed before any controller captures its run_fr_fcfs instance field.
+    module("_hbm_numeric", "run_fr_fcfs", "hbm_numeric_and_thread_wait")
     module("_nand_execution", "execute_pages", "nand_adapter")
     methods("nand_core", "NandCore", ("submit", "submit_read_pages", "submit_write_pages", "_submit_ocp_single_page_summary"), "nand_adapter")
     methods("nand_core", "NandCore", ("_nand_publish_numeric",), "nand_state_publication")

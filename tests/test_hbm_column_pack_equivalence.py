@@ -2,7 +2,7 @@
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.memory_types import AccessRequest
 from heterollm_sim.physical_presets import resolve_physical_config
-from test_hbm_compiled_control import assert_same, assert_batch_matches_scalar, assert_core_state_equal
+from test_hbm_compiled_control import assert_same
 
 
 def b200_memory():
@@ -31,19 +31,3 @@ def test_b200_column_pack_matches_burst_controller_after_full_bank_materializati
     )
     for request in requests:
         assert_same(reference, numeric, request)
-
-
-def test_b200_large_request_batch_preserves_each_result_and_following_access():
-    config = b200_memory()
-    sequential = DramCore(config, capture_details=False)
-    batched = DramCore(config, capture_details=False)
-    requests = tuple(AccessRequest(str(index), "write" if index % 3 == 1 else "read",
-                                   index * 65536 + index, 65536, float(index % 4))
-                     for index in range(18))
-    expected = tuple(sequential.submit(request) for request in requests)
-    actual = batched.submit_many(requests)
-    assert_batch_matches_scalar(actual, expected)
-    assert_core_state_equal(batched, sequential)
-    following = AccessRequest("following", "write", 17, 65536, 50000.)
-    assert batched.submit(following) == sequential.submit(following)
-    assert_core_state_equal(batched, sequential)

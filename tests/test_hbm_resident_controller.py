@@ -145,53 +145,48 @@ def test_resident_numeric_exception_restores_uncommitted_arrays(monkeypatch):
     core, oracle = (runtime.runtimes["hbm"].core for runtime in (fast, reference))
     warm = AccessRequest("warm", "read", 0, 4096)
     assert core.submit(warm) == oracle.submit(warm)
-    original = _HBMNumericState.execute
+    original = _HBMNumericState.execute_fr_fcfs
 
-    def fail_after_execute(packed, request):
-        original(packed, request)
+    def fail_after_execute(packed, requests):
+        original(packed, requests)
         raise RuntimeError("injected numeric executor failure")
 
     with monkeypatch.context() as patch:
-        patch.setattr(_HBMNumericState, "execute", fail_after_execute)
+        patch.setattr(_HBMNumericState, "execute_fr_fcfs", fail_after_execute)
         with pytest.raises(RuntimeError, match="injected"):
             core.submit(AccessRequest("failed", "write", 65536, 8192))
     assert core.submit(warm) == oracle.submit(warm)
     assert visible(fast.snapshot()) == visible(reference.snapshot())
 
 
-def test_resident_batch_failure_keeps_earlier_accepted_requests(monkeypatch):
+def test_resident_batch_failure_leaves_no_request_accepted(monkeypatch):
     from heterollm_sim._compiled_hbm import _HBMNumericState
 
     fast, reference = runtime_pair()
     core, oracle = (runtime.runtimes["hbm"].core for runtime in (fast, reference))
     warm = AccessRequest("warm", "read", 0, 4096)
     assert core.submit(warm) == oracle.submit(warm)
-    original = _HBMNumericState.execute
-    first = AccessRequest("accepted", "write", 65536, 4096)
+    original = _HBMNumericState.execute_fr_fcfs
+    first = AccessRequest("first", "write", 65536, 4096)
     second = AccessRequest("failed", "write", 131072, 8192)
 
-    def fail_second(packed, request):
-        result = original(packed, request)
-        if request.request_id == "failed":
-            raise RuntimeError("injected batch failure")
-        return result
+    def fail_batch(packed, requests):
+        original(packed, requests)
+        raise RuntimeError("injected batch failure")
 
     with monkeypatch.context() as patch:
-        patch.setattr(_HBMNumericState, "execute", fail_second)
+        patch.setattr(_HBMNumericState, "execute_fr_fcfs", fail_batch)
         with pytest.raises(RuntimeError, match="injected"):
             core.submit_many((first, second))
-    oracle.submit(first)
     assert core.submit(warm) == oracle.submit(warm)
     assert visible(fast.snapshot()) == visible(reference.snapshot())
 
 
-@pytest.mark.parametrize("mapping", ["bank_interleaved", "row_local"])
-def test_channel_refresh_reads_external_changes_for_wrapped_and_scattered_batches(mapping):
+def test_channel_refresh_reads_external_changes_for_wrapped_and_scattered_batches():
     from dataclasses import replace
     from test_hbm_column_pack_equivalence import b200_memory
 
-    config = replace(b200_memory(), address_mapping=mapping,
-                     interleave_bytes=128 if mapping == "bank_interleaved" else None)
+    config = b200_memory()
     fast = PhysicalRuntimeContext(config, "hbm", capture_details=False)
     reference = PhysicalRuntimeContext(config, "hbm", capture_details=False)
     core, oracle = (runtime.runtimes["hbm"].core for runtime in (fast, reference))
@@ -211,7 +206,7 @@ def test_channel_refresh_reads_external_changes_for_wrapped_and_scattered_batche
             if index >= 2 * channels:
                 runtime.timeline.bytes_moved[rid] += 32
                 runtime.timeline.directions[rid] = "write"
-    span = config.interleave_bytes or config.row_bytes * config.bank_count
+    span = config.bank_groups_per_sid * config.burst_bytes
     unrelated = AccessRequest("middle-channel", "read", 20 * span, 32)
     def physical(result):
         return replace(result, counters={key: value for key, value in result.counters.items()

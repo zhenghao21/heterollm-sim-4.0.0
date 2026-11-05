@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from heterollm_sim._hbm_control import _FrFcfsController, fr_queue_parameters
-from heterollm_sim._hbm_numeric import FR_STAT_FIELDS, _burst_location
+from heterollm_sim._hbm_numeric import FR_STAT_FIELDS
 from heterollm_sim.dram_core import DramCore, _intervals_add, _intervals_overlap
 from heterollm_sim.memory_mapping import dram_request_channels, map_dram_address
 from heterollm_sim.memory_transfer import ResourceTimeline
@@ -59,13 +59,13 @@ def reference_core(config=CONFIG):
 
 def address(lane, *, group=0, bank=0, column=0, sid=0, row=0, config=CONFIG):
     """Invert the SID-aware mapping for one burst."""
-    groups_per_sid = config.bank_groups_per_rank // int(config.metadata["sid_count"])
+    groups_per_sid = config.bank_groups_per_sid
     bursts_per_row = config.row_bytes // config.burst_bytes
-    cursor = row * int(config.metadata["sid_count"]) + sid
+    cursor = row * config.sid_count + sid
     cursor = cursor * config.banks_per_group + bank
     cursor = cursor * bursts_per_row + column
     cursor = cursor * config.lane_count + lane
-    return (cursor * 2 + group % groups_per_sid) * config.burst_bytes
+    return (cursor * groups_per_sid + group % groups_per_sid) * config.burst_bytes
 
 
 def request(name, operation, addr, size=32, arrival=0.):
@@ -83,6 +83,14 @@ class Recorder(_FrFcfsController):
     def issue(self, lane, lanes, kind, start):
         self.entry = lane["queues"][lane["direction"]][lane["offset"]]
         return super().issue(lane, lanes, kind, start)
+
+    def precharge(self, mapping, old, bank, earliest):
+        # A row closing on its deadline need not be the served entry's bank.
+        served, self.entry = self.entry, dict(mapping=mapping, row=None)
+        try:
+            return super().precharge(mapping, old, bank, earliest)
+        finally:
+            self.entry = served
 
     def command(self, key, kind, earliest, cycles, name, *, rising=False):
         transfer = super().command(key, kind, earliest, cycles, name, rising=rising)
@@ -166,6 +174,9 @@ def check_legal(log, config=CONFIG):
                 assert state.get("open") is not None
                 assert start >= state["anchor"] + config.minimum_active_ns - slack
                 checked["tRAS"] += 1
+                if config.maximum_active_ns > 0:
+                    assert start <= state["anchor"] + config.maximum_active_ns + slack
+                    checked["tRASmax"] += 1
                 if "pre_ready" in state:
                     assert start >= state["pre_ready"] - slack
                     checked["tRTP/tWR"] += 1
@@ -251,21 +262,6 @@ def test_mapping_keeps_one_lane_row_stream_with_alternating_groups():
     other = map_dram_address(CONFIG, 32)
     assert (other.lane, other.bank_group, other.column) == (0, 1, 0)
     assert map_dram_address(CONFIG, 64).lane == 1
-
-
-def test_scalar_and_numeric_mapping_agree():
-    from heterollm_sim._compiled_hbm import _pack_hbm_numeric
-    core = numeric_core()
-    packed = _pack_hbm_numeric(core, request("x", READ, 0))
-    rng = random.Random(3)
-    for _ in range(2000):
-        cursor = rng.randrange(CONFIG.effective_capacity_bytes // 32)
-        mapped = map_dram_address(CONFIG, cursor * 32)
-        lane, within, row, _inner = _burst_location(cursor, packed.g, False, 0, 0, 0, 0)
-        assert lane == mapped.lane
-        assert within == mapped.bank_group * CONFIG.banks_per_group + mapped.bank
-        assert row == (mapped.row & ~(1 << CONFIG.activated_row_msb))
-        assert core._bank_id(mapped) == packed.bank_ids[lane * CONFIG.bank_count + within]
 
 
 def test_request_channels_follow_the_two_burst_stripe():
@@ -439,12 +435,6 @@ def test_mapping_scheduler_and_queue_scope_travel_together():
         DramConfig(**{**payload, "queue_scope": "device"})
 
 
-def test_flat_reference_keeps_the_generic_mapping():
-    flat = resolve_physical_config("hbm4_reference_flat", overrides={
-        "stacks": 1, "dies_per_stack": 16, "die_density_gbits": 32, "capacity_bytes": 36 * GB})
-    assert (flat.address_mapping, flat.scheduler, flat.queue_scope) == ("bank_interleaved", "fcfs", "device")
-
-
 def test_batch_resource_bill_equals_the_sum_of_its_public_resources():
     from heterollm_sim._hbm_pack import HBMResourceAccumulator
     accumulated, public = numeric_core(), numeric_core()
@@ -600,3 +590,79 @@ def test_channel_mirror_matches_simulating_every_channel(seed, policy):
                 assert left == right, name
                 continue
             assert left.tobytes() == right.tobytes(), name
+
+
+ORGANIZATIONS = (("hbm4_reference", "HBM4", 32, 12, 1600.), ("hbm4_reference", "HBM4", 32, 8, 1600.),
+                 ("hbm4_reference", "HBM4", 32, 4, 1600.), ("hbm4_reference", "HBM4", 24, 12, 1600.),
+                 ("hbm3e_reference", "HBM3E", 32, 16, 1228.8), ("hbm3e_reference", "HBM3E", 24, 12, 1228.8),
+                 ("hbm3e_reference", "HBM3E", 16, 16, 1228.8), ("hbm3e_reference", "HBM3E", 16, 4, 1228.8),
+                 ("hbm3e_reference", "HBM3", 16, 8, 819.2), ("hbm3e_reference", "HBM2E", 16, 8, 460.8),
+                 ("hbm3e_reference", "HBM2", 16, 4, 307.2))
+
+
+def organization(profile, generation, density, height, per_stack):
+    """Eight stacks of one JEDEC organization at its own interface bandwidth."""
+    return resolve_physical_config(profile, overrides={
+        "generation": generation, "stacks": 8, "dies_per_stack": height, "die_density_gbits": density,
+        "capacity_bytes": density * height * (1 << 30), "interface_bandwidth_gb_s": per_stack * 8,
+        "read_bandwidth_gb_s": per_stack * 8, "write_bandwidth_gb_s": per_stack * 8,
+        "activate_different_group_ns": 4., "activate_same_group_ns": 6., "four_activate_window_ns": 20.})
+
+
+@pytest.mark.parametrize("row", ORGANIZATIONS, ids=lambda row: f"{row[1]}-{row[3]}H-{row[2]}Gb")
+def test_every_organization_reaches_its_banks_stays_legal_and_keeps_path_parity(row):
+    config = organization(*row)
+    rng = random.Random(1)
+    locations = [map_dram_address(config, rng.randrange(config.effective_capacity_bytes // 32) * 32)
+                 for _ in range(5000)]
+    assert len({(item.bank_group, item.bank) for item in locations}) == config.bank_count
+    assert map_dram_address(config, config.effective_capacity_bytes - 1).row == config.rows_per_bank - 1
+
+    numeric, scalar = numeric_core(config), reference_core(config)
+    fast, slow, now = [], [], 0.
+    for index in range(6):
+        items = [request(f"{index}:{position}", rng.choice((READ, WRITE)),
+                         rng.randrange(config.effective_capacity_bytes - (1 << 20)),
+                         rng.choice((32, 64, 96, 4096, 40000)), now) for position in range(rng.randint(1, 4))]
+        fast += numeric.submit_many(items)
+        slow += scalar.submit_many(items)
+        now += rng.choice((0., 50., 400., 5000.))
+    assert fingerprint(numeric, fast) == fingerprint(scalar, slow)
+
+    def burst(index, operation):
+        return request(index, operation, address(
+            rng.randrange(4), group=rng.randrange(config.bank_groups_per_sid), bank=rng.randrange(config.banks_per_group),
+            column=rng.randrange(32), sid=rng.randrange(config.sid_count), row=rng.randrange(4), config=config))
+    _, log = run_recorded([burst(index, rng.choice((READ, WRITE))) for index in range(200)],
+                          [burst(index, WRITE) for index in range(60)], [burst(index, READ) for index in range(60)],
+                          config=config)
+    check_legal(log, config)
+
+    size = 16 << 20
+    stream = numeric_core(config).submit(request("stream", READ, 0, size))
+    assert .75 * config.interface_bandwidth_gb_s < size / stream.completion_ns <= config.interface_bandwidth_gb_s
+
+
+def test_refresh_free_organization_meets_row_deadlines_on_both_paths():
+    config = organization("hbm3e_reference", "HBM3E", 24, 12, 1228.8)
+    assert config.refresh_policy == "disabled" and config.maximum_active_ns > 0
+    rng = random.Random(3)
+
+    def burst(name, arrival):
+        return request(name, READ, address(
+            rng.randrange(2), group=rng.randrange(config.bank_groups_per_sid), bank=rng.randrange(config.banks_per_group),
+            column=rng.randrange(32), sid=rng.randrange(config.sid_count), row=rng.randrange(2), config=config),
+            arrival=arrival)
+    # Open rows first, then land new commands on their deadlines.
+    batches = [[burst(f"open:{index}", 0.) for index in range(48)]]
+    batches += [[burst(f"{step}:{index}", config.maximum_active_ns + 5. * step) for index in range(12)]
+                for step in range(-4, 40)]
+    numeric, scalar = numeric_core(config), reference_core(config)
+    fast, slow = [], []
+    for items in batches:
+        fast += numeric.submit_many(items)
+        slow += scalar.submit_many(items)
+    assert fingerprint(numeric, fast) == fingerprint(scalar, slow)
+    results, log = run_recorded(*batches, config=config)
+    assert check_legal(log, config)["tRASmax"] > 0
+    assert sum(result.counters["precharge_commands"] for result in results) > 0

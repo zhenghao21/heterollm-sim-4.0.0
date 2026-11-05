@@ -43,6 +43,7 @@ class PhysicalConfigCatalogTests(unittest.TestCase):
     def test_obsolete_profile_names_are_not_resolved(self):
         for profile_id in ("hbm_legacy_zero", "hbm_group_geometry_zero",
                            "hbm3e_reference_flat_zero", "hbm4_reference_flat_zero",
+                           "hbm3e_reference_flat", "hbm4_reference_flat",
                            "published_hbm", "published_hbm_serving"):
             with self.subTest(profile_id=profile_id), self.assertRaisesRegex(ValueError, "unknown physical config profile"):
                 resolve_physical_config(profile_id)

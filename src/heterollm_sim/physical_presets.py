@@ -265,10 +265,8 @@ _HBM_TIMING_PROFILES = {
 }
 _HBM_REFERENCE_PROFILES = {
     "hbm3e_reference": "standard",
-    "hbm3e_reference_flat": "flat",
     "hbm3e_reference_synthetic_timing": "timed",
     "hbm4_reference": "standard",
-    "hbm4_reference_flat": "flat",
     "hbm4_reference_synthetic_timing": "timed",
     **{profile_id: "standard" for profile_id in _HBM_TIMING_PROFILES},
     **{profile_id: "standard" for profile_id in _HBM_MICRO_REFERENCE_DEFAULTS},
@@ -328,12 +326,6 @@ def _hbm_reference(profile_id, updates, expand_geometry=False):
     changes = {name: updates[name] for name in (
         "interface_bandwidth_gb_s", "read_bandwidth_gb_s", "write_bandwidth_gb_s")
         if name in updates}
-    if mode == "flat":
-        # One flat bank group has no SID structure for the SID-aware mapping.
-        changes.update(bank_groups_per_rank=1,
-                       banks_per_group=payload["bank_groups_per_rank"] * payload["banks_per_group"],
-                       address_mapping="bank_interleaved", scheduler="fcfs", queue_scope="device",
-                       interleave_bytes=payload["burst_bytes"])
     changes.update(values)
     changes["metadata"] = {
         **metadata,

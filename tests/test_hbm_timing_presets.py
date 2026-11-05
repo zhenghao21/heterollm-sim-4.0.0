@@ -51,8 +51,8 @@ def test_capacity_uses_existing_covering_stack_rule_without_changing_clock(capac
 def test_explicit_clock_array_timing_capacity_and_controller_inputs_take_precedence():
     overrides = dict(capacity_bytes=64 * 2**30, stacks=1, command_clock_ns=1.25,
         activate_to_read_ns=21., activate_different_group_ns=0.,
-        scheduler="row_hit_first", scheduler_window=32, queue_scope="channel",
-        max_outstanding_requests=128, read_bandwidth_gb_s=200., write_bandwidth_gb_s=100.)
+        read_queue_depth_per_pc=32, write_queue_depth_per_pc=128,
+        read_bandwidth_gb_s=200., write_bandwidth_gb_s=100.)
     config = resolve_physical_config("hbm3e_timing_reference", overrides=overrides)
     for field, expected in overrides.items():
         assert getattr(config, field) == expected
@@ -112,7 +112,7 @@ def test_packs_do_not_silently_apply_to_unsupported_organizations(overrides):
 
 
 @pytest.mark.parametrize("profile_id,control", [
-    ("hbm3e_reference", "standard"), ("hbm3e_reference_flat", "flat"),
+    ("hbm3e_reference", "standard"),
     ("hbm3e_reference_synthetic_timing", "timed"), ("hbm4_reference", "standard"),
 ])
 def test_existing_geometry_control_presets_do_not_acquire_timing_packs(profile_id, control):

@@ -25,7 +25,6 @@ from hbm_sensitivity_study import workloads as sensitivity_workloads, quantile, 
 from hbf_hbm_serving_study import POINT_RESULT_VERSION, run_case
 from hbf_hbm_decode_study import decode_measurement, core_checks, EXECUTION_CONTRACT
 from heterollm_sim.dram_core import DramCore
-from heterollm_sim.memory_mapping import rotated_bank_step
 from heterollm_sim.memory_types import AccessRequest
 from heterollm_sim.physical_contract import reconfigure_physical_config
 
@@ -108,10 +107,12 @@ def configuration(variant):
 
 
 def address(config, bank=0, row=0, column=0):
-    """Lane zero, the fixed bank-interleaved mapping used by this experiment."""
-    step = rotated_bank_step(bank, config.bank_count, config.banks_per_group)
-    return (((row * (config.row_bytes // config.burst_bytes) + column) * config.bank_count + step)
-            * config.lane_count * config.burst_bytes)
+    """Invert burst | BG in SID | lane | column | bank in group | SID | row for lane 0."""
+    group, within = divmod(bank, config.banks_per_group)
+    sid, group = divmod(group, config.bank_groups_per_sid)
+    block = (row * config.sid_count + sid) * config.banks_per_group + within
+    bursts = block * (config.row_bytes // config.burst_bytes) + column
+    return (bursts * config.lane_count * config.bank_groups_per_sid + group) * config.burst_bytes
 
 
 def workloads():
