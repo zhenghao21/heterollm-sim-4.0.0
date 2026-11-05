@@ -10,42 +10,20 @@ from heterollm_sim.nand_core import NandCore
 from heterollm_sim.physical_presets import resolve_physical_config
 
 
-@pytest.mark.parametrize("executor", ["summary", "detailed", "compiled"])
-def test_frontier_journal_covers_all_write_executors(executor):
-    config = resolve_physical_config("hbf_ocp_0_7")
-    core = NandCore(config, capture_details=executor == "detailed")
-    core.submit(AccessRequest("seed", "write", 0, 4096))
-    initial = dict(core._next_program_page)
-    token = core.begin_transaction()
-    assert not token.program_frontiers
-    addresses = [config.array_units * 4096, 4096]
-    if executor == "compiled":
-        assert core.submit_write_pages(addresses, 0.) is not None
-    else:
-        for address in addresses:
-            core.submit(AccessRequest("write", "write", address, 4096))
-    assert len(token.program_frontiers) == 2
-    assert core._next_program_page != initial
-    core.rollback_transaction(token)
-    assert core._next_program_page == initial
-    assert not core._nand_transactions
-
-
 @pytest.mark.parametrize("finish_inner", ["commit", "rollback"])
 def test_nested_frontier_journals_keep_outer_original_values(finish_inner):
     core = NandCore(resolve_physical_config("hbf_ocp_0_7"))
-    old, added = (0, 0, 0, 0, 0, 0), (0, 0, 0, 0, 0, 1)
-    core._set_program_frontier(old, 1)
+    core._log_programs((0,))
     outer = core.begin_transaction()
-    core._set_program_frontier(old, 2)
+    core._log_programs((0,))
     inner = core.begin_transaction()
-    core._update_program_frontiers({old: 3, added: 1})
+    core._log_programs((0, 1))
     with pytest.raises(ValueError, match="reverse begin order"):
         core.commit_transaction(outer)
     getattr(core, finish_inner + "_transaction")(inner)
-    assert core._next_program_page[old] == (3 if finish_inner == "commit" else 2)
+    assert core._bank_log[:2] == ([3, 1] if finish_inner == "commit" else [2, 0])
     core.rollback_transaction(outer)
-    assert core._next_program_page == {old: 1}
+    assert core._bank_log[:2] == [1, 0]
     with pytest.raises(ValueError, match="reverse begin order"):
         core.rollback_transaction(outer)
 
@@ -72,21 +50,22 @@ def test_public_snapshot_restores_active_nand_token_identity(finish):
     runtime = PhysicalRuntimeContext(config=config, physical_owner="hbf", capture_details=False)
     core = runtime.runtimes["hbf"].core
     core.submit(AccessRequest("seed", "write", 0, 4096))
-    initial = dict(core._next_program_page)
+    initial = list(core._bank_log)
     token = core.begin_transaction()
     core.submit(AccessRequest("page-1", "write", config.array_units * 4096, 4096))
     saved = runtime.snapshot()
-    middle = dict(core._next_program_page)
+    middle = list(core._bank_log)
+    assert middle[0] == initial[0] + 1
     core.submit(AccessRequest("page-2", "write", config.array_units * 8192, 4096))
     getattr(core, finish + "_transaction")(token)
     runtime.restore(saved)
     assert core._nand_transactions[-1] is token
-    assert core._next_program_page == middle
+    assert core._bank_log == middle
     core.rollback_transaction(token)
-    assert core._next_program_page == initial
+    assert core._bank_log == initial
 
 
-@pytest.mark.parametrize("executor", ["summary", "detailed", "compiled"])
+@pytest.mark.parametrize("executor", ["summary", "detailed"])
 def test_cache_journal_restores_hits_fills_invalidation_and_new_banks(executor):
     config = resolve_physical_config("hbf_ocp_0_7")
     runtime = PhysicalRuntimeContext(config=config, physical_owner="hbf",
@@ -98,16 +77,11 @@ def test_cache_journal_restores_hits_fills_invalidation_and_new_banks(executor):
     saved = runtime.begin_transaction()
     token = core._nand_transactions[-1]
     assert not token.cache_banks and "_read_cache" not in saved["runtime_state"]["hbf"]["core"]
-    if executor == "compiled":
-        assert core.submit_read_pages([0, 12288], 0.) is not None
-        assert core.submit_write_pages([0, 12288], 0.) is not None
-    else:
-        for operation in ("read", "write"):
-            for address in (0, 12288):
-                core.submit(AccessRequest("access", operation, address, 4096))
-    # Resident execution leaves Python slots untouched; scalar execution
-    # journals only the two banks it actually changes.
-    assert len(token.cache_banks) == (0 if executor == "compiled" else 2)
+    for operation in ("read", "write"):
+        for address in (0, 12288):
+            core.submit(AccessRequest("access", operation, address, 4096))
+    # Scalar execution journals only the two banks it actually changes.
+    assert len(token.cache_banks) == 2
     assert token.cache_snapshot is None
     runtime.restore(saved)
     assert runtime.snapshot() == before
@@ -124,8 +98,8 @@ def test_nested_cache_journals_preserve_original_slots_and_scalar_lifetimes(fini
     core.submit(AccessRequest("hit", "read", 0, 4096))
     middle = deepcopy(core.__dict__["_read_cache"])
     inner = core.begin_transaction()
-    core.submit_write_pages([0, 4096], 0.)
-    core.submit_read_pages([0, 4096], 0.)
+    core.submit(AccessRequest("write", "write", 0, 2 * 4096))
+    core.submit(AccessRequest("read", "read", 0, 2 * 4096))
     getattr(core, finish_inner + "_transaction")(inner)
     if finish_inner == "rollback":
         assert core.__dict__["_read_cache"] == middle

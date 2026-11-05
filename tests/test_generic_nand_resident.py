@@ -21,7 +21,7 @@ def logical(core):
     copy = deepcopy(core)
     copy._nand_publish_numeric()
     return {name: copy.__dict__[name] for name in (
-        "_array_ready", "_buffer_ready", "_read_cache", "_cache_use", "_next_program_page",
+        "_array_ready", "_buffer_ready", "_read_cache", "_cache_use", "_bank_log",
         "_block_wear_state", "_inflight", "_inflight_operations", "_acceptance_ns",
         "_host_inflight", "_host_acceptance_ns", "_write_buffer_pending",
         "_write_buffer_occupancy", "_staged_pages", "_buffer_merge_bytes",

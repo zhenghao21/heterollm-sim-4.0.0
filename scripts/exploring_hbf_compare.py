@@ -71,7 +71,7 @@ def _set_memory(scenario, component_id, physical):
     if not is_hbm:
         metadata.update(queue_scope=physical.queue_scope, access_mode="memory", writable=True,
                         write_buffer_bytes=physical.write_buffer_bytes)
-        if physical.protocol_mode != "ocp_hbf_0_7":
+        if physical.queue_scope != "host_channel":
             for key in ("max_outstanding_requests_per_host_channel",
                         "max_outstanding_write_requests_per_host_channel"):
                 metadata.pop(key, None)

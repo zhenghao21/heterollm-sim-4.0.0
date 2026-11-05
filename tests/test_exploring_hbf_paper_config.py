@@ -53,7 +53,7 @@ def test_nand_builder_uses_actual_die_plane_counts_not_effective_units(name, pla
     hardware = paper.hardware_by_id(name)
     assumptions = paper.default_research_assumptions(name)
     config = paper.build_paper_nand_config(name, assumptions=assumptions)
-    assert config.protocol_mode == "generic_nand"
+    assert config.protocol_mode == "ocp_hbf_0_7"
     assert config.parallel_units is None
     assert (config.channels, config.targets_per_channel, config.dies_per_target,
             config.luns_per_die, config.planes_per_lun) == (hardware.hbf_stacks * 16, 1, 1, 1, planes)
@@ -75,7 +75,7 @@ def test_nand_builder_uses_actual_die_plane_counts_not_effective_units(name, pla
     assert config.queue_scope == "device"
     assert config.metadata["physical_config_profile_id"] == "hbf_synthetic"
     assert "local choices, not parameters sourced" in config.metadata["research_assumptions"]["basis"]
-    assert config.protocol_mode == "generic_nand"
+    assert config.protocol_mode == "ocp_hbf_0_7"
     assert config.metadata["protocol_basis"].startswith("control behaviour follows OCP HBF v0.7")
     assert config.read_cache_pages_per_bank == 2
     assert "logic_die_flush_assumption" in config.metadata
@@ -195,7 +195,8 @@ def test_native_paper_two_slot_overwrite_waits_for_the_live_reader(name):
 @pytest.mark.parametrize("name", ["HBF", "HBF+", "CONV", "CONV+"])
 def test_native_read_buffers_do_not_retime_the_directional_interface(name):
     config = paper.build_paper_nand_config(name, assumptions=paper.default_research_assumptions(name))
-    without_cache = replace(config, read_cache_pages_per_bank=0)
+    # OCP requires the two read pages per bank; the control steps outside it.
+    without_cache = replace(config, protocol_mode="generic_nand", read_cache_pages_per_bank=0)
     # Separate cores avoid changing media state between read/write controls.
     for operation, expected in (("read", config.host_read_bandwidth_gb_s),
                                 ("write", config.host_write_bandwidth_gb_s)):

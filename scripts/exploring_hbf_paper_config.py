@@ -4,10 +4,9 @@ The catalog is separate from the existing calibrated-profile list and formal
 scan. Builders expose controlled memory mechanisms, not a reproduction of the
 paper's throughput. GB/MB are decimal; a NAND page is explicitly 4 KiB.
 
-The NAND builder deliberately selects ``generic_nand`` page service. The paper
-does not specify OCP, an FTL, or physical write-order/GC semantics. Applying the
-simulator's OCP subset would add unreported assumptions. Actual die/plane
-counts supply parallelism; no effective lane count is fitted to bandwidth.
+The NAND builder selects ``ocp_hbf_0_7``: the paper specifies no protocol, so
+control follows OCP HBF v0.7 while geometry and timing follow its Table I. Actual
+die/plane counts supply parallelism; no effective lane count is fitted to bandwidth.
 """
 from __future__ import annotations
 
@@ -310,7 +309,7 @@ def build_paper_nand_config(configuration_id: str, *,
         "No extra staging arena or intermediate SRAM is created."
     )
     overrides = {
-        "generation": "paper_HBF_projection", "protocol_mode": "generic_nand",
+        "generation": "paper_HBF_projection", "protocol_mode": "ocp_hbf_0_7",
         "channels": hardware.hbf_stacks * hardware.dies_per_hbf_stack,
         "targets_per_channel": 1, "dies_per_target": 1, "luns_per_die": 1,
         "planes_per_lun": hardware.planes_per_hbf_die, "planes_independent": True,

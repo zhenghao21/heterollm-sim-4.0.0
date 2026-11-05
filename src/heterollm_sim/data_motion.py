@@ -362,8 +362,7 @@ class PhysicalRuntimeContext:
             core._hbm_numeric_enabled = (not self.capture_details
                                          and config.control_mode == "jedec_hbm")
         elif isinstance(core, NandCore):
-            core._nand_numeric_enabled = (not self.capture_details
-                                          and config.protocol_mode in ("ocp_hbf_0_7", "generic_nand"))
+            core._nand_numeric_enabled = not self.capture_details
             shared = metadata.get("page_staging_shared_owner")
             if config.page_staging != "none" and shared:
                 # Data interleaved over the same staging store (logic-die
@@ -469,7 +468,7 @@ class PhysicalRuntimeContext:
                 }:
                     continue
                 if nand_transaction is not None and key in {
-                    "_next_program_page", "_block_wear_state", "_nand_transactions", "_read_cache",
+                    "_bank_log", "_block_wear_state", "_nand_transactions", "_read_cache",
                     "_array_ready", "_buffer_ready", "_nand_numeric_state", "_tail_pages",
                     "_tail_full_scopes", "_tail_spilled"
                 }:
@@ -487,7 +486,7 @@ class PhysicalRuntimeContext:
                                if type(bank) is _BankState else copy.copy(bank))
                         for name, bank in value.items()
                     }
-                elif key in {"_array_ready", "_buffer_ready", "_next_program_page", "_host_acceptance_ns"} and isinstance(value, dict):
+                elif key in {"_array_ready", "_buffer_ready", "_host_acceptance_ns"} and isinstance(value, dict):
                     # NAND readiness values are scalars, so a shallow dict
                     # copy is sufficient and avoids copying timeline history.
                     core_state[key] = dict(value)
@@ -502,7 +501,7 @@ class PhysicalRuntimeContext:
                     # saved retry point through a nested alias.
                     core_state[key] = copy.deepcopy(value)
                 elif key in {"_inflight", "_inflight_operations", "_write_buffer_pending", "_hbm_transactions",
-                             "_nand_transactions", "_tail_flushing"} and isinstance(value, list):
+                             "_nand_transactions", "_tail_flushing", "_bank_log"} and isinstance(value, list):
                     core_state[key] = list(value)
                 elif key == "_tail_pages":
                     # Staged pages map to immutable tuples.
@@ -633,7 +632,7 @@ class PhysicalRuntimeContext:
                     if packed is None or not can_capture_resource_columns(self.timeline, packed.ids):
                         return False
             elif type(core) is NandCore:
-                if core.config.protocol_mode != "generic_nand" or core._observe_media:
+                if core._observe_media:
                     return False
             elif type(core) is SramCore:
                 pass
@@ -762,7 +761,7 @@ class PhysicalRuntimeContext:
             if nand_token is not None:
                 active.core.rollback_transaction(nand_token)
                 journal_state.update({key: active.core.__dict__[key] for key in (
-                    "_next_program_page", "_block_wear_state", "_nand_transactions", "_read_cache",
+                    "_bank_log", "_block_wear_state", "_nand_transactions", "_read_cache",
                     "_array_ready", "_buffer_ready", "_nand_numeric_state", "_tail_pages",
                     "_tail_full_scopes", "_tail_spilled")})
             active.core.__dict__.clear()

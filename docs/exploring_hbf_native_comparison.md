@@ -33,11 +33,12 @@ Table I的每GPU容量和接口预算保留原文，计算峰值使用公开Rubi
 
 节点内采用每GPU两条相邻ring边、每方向每边900GB/s和500ns启动；不把全连接每条边都赋完整1800GB/s。超过2个GPU的ring集合通信（AllReduce/AllGather/ReduceScatter）把每块分成两半，沿顺、逆两个方向同时发送（2026-11-02起；此前只用一个方向，TP8 AllReduce只用到一半链路带宽）；all_to_all不变，TP2的两个邻居是同一GPU，也不变。正式固定8 GPU、TP8/PP1/EP1/DP1；后续部署优化另行实验。PP配置入口按真实stage选择代表GPU，不能全指向GPU0。
 
-论文的HBF模型采用原生 `generic_nand`：HBF每堆16die×25plane，CONV每堆16die×16plane，4KiB页，HBF读取1us、CONV读取3us、program100us。块几何、erase和内部带宽为显式研究输入。
+论文的HBF模型采用原生 `ocp_hbf_0_7`（2026-11-05起四种配置都用这个模式，切换后14个代表点逐位不变）：HBF每堆16die×25plane，CONV每堆16die×16plane，4KiB页，HBF读取1us、CONV读取3us、program100us。块几何、erase和内部带宽为显式研究输入。
 
 **控制行为按OCP HBF v0.7（2026-11-03起，用户决定），几何和时序仍按论文Table I。**论文没有规定协议。OCP没有FTL和GC：写只有整4KiB，一个NAND块内按页号连续写，写第0页时自动擦除该块，放置和数据迁移都归主机。本基线不引入FTL、GC或旧FlashLabAE维护机制。逐项如下：
 - 写：整页。部分页写等于主机读旧页（tR、die通道、主机链路），合并后再写4KiB（主机链路、die通道、tPROG），`partial_page_policy`为`host_merge`，不再有设备内读改写。
 - 读：64B到4KiB，不跨页；每bank两个缓存页，同bank内感知严格先进先出。
+- 页号：主机为每个bank记一本日志（`_bank_log`），写一次取下一个页号，同一块内天然连续，所以运行中没有可拒绝的顺序错误。日志目前不影响时序。
 - 暂存区：SRAM归主机管理，没有到NAND的内部通路。刷写是主机读回4KiB再写4KiB，两段都占主机链路。
 - 擦除：见下面的“块打开”。块大小1MiB和擦除时间2ms是OCP留给产品的研究假设。
 - 未建模（报告中列为限制）：刷新和读干扰（主机责任，OCP 11.5）、磨损均衡的zone重映射、出错重试、热节流。

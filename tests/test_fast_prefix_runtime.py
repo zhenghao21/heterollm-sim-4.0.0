@@ -152,7 +152,7 @@ def test_physical_hbf_prefix_resume_keeps_transactions_and_controller_endpoint()
                 core = device.core
                 cores[owner] = {name: deepcopy(getattr(core, name)) for name in (
                     "_banks", "_inflight", "_acceptance_ns", "_host_inflight",
-                    "_host_acceptance_ns", "_next_program_page", "_read_cache",
+                    "_host_acceptance_ns", "_bank_log", "_read_cache",
                 ) if hasattr(core, name)}
             return result, cores
 

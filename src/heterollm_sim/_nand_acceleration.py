@@ -24,7 +24,7 @@ def _generic_resident_writers(core):
     from ._nand_pack import can_own_resource_aliases
     timeline = core.timeline
     return (not core.capture_details and not core._observe_media and not core._nand_state_exposed
-            and core.config.protocol_mode == "generic_nand" and core.config.queue_scope == "device"
+            and core.config.queue_scope == "device"
             and core.config.read_cache_pages_per_bank == 2 and core.config.page_bytes == 4096
             and not core.config.write_buffer_bytes and not core._staged_pages
             and type(timeline) is ResourceTimeline
@@ -197,7 +197,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
     config, timeline = core.config, core.timeline
     if (type(core) is not NandCore or type(timeline) is not ResourceTimeline
             or core.capture_details or core._observe_media or core._staged_pages
-            or config.protocol_mode != "generic_nand" or config.queue_scope != "device"
+            or config.queue_scope != "device"
             or config.page_bytes != 4096 or config.read_cache_pages_per_bank != 2
             or 4096 % config.host_granularity_bytes
             or request.operation not in (Operation.READ, Operation.WRITE)
@@ -366,6 +366,9 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
         _metrics.update(generic_metrics_delta(timeline, names, resource_indexes, before_busy, before_moved))
     read = request.operation is Operation.READ
     programmed = 0 if read else page_count
+    if programmed:
+        first = request.address // 4096
+        core._log_programs(range(first, first + page_count))
     pages_read = int(misses)
     internal_bytes = (pages_read + programmed) * config.transfer_page_bytes
     core._last_media_queue_wait_ns = float(max_read_wait)
@@ -856,7 +859,7 @@ def execute_full_pages(core, request, first_page, page_count):
     # This affine program has no page-tag, cache-reader, or OCP page-order
     # state. Those configurations execute the same detailed NAND state
     # machine; never skip their protocol/cache transitions.
-    if (config.protocol_mode != "generic_nand" or config.host_channels != 1
+    if (config.host_channels != 1
             or config.host_full_duplex or config.read_cache_pages_per_bank
             or config.page_staging != "none"):
         return None

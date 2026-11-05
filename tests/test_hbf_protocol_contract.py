@@ -119,7 +119,7 @@ for (const field of ['protocol_mode', 'host_channels', 'host_full_duplex', 'read
 for (const patch of [
   {protocol_mode: 'legacy'}, {page_bytes: 16384}, {host_granularity_bytes: 4096},
   {host_full_duplex: false}, {host_channels: 17}, {read_cache_pages_per_bank: 1},
-  {write_buffer_bytes: 4096}, {queue_scope: 'device'}, {parallel_units: 1},
+  {write_buffer_bytes: 4096}, {parallel_units: 1},
   {planes_independent: false}, {max_outstanding_write_requests: 257},
 ]) {
   assert.throws(() => validatePhysicalMemoryConfig({...raw, ...patch}, component));
@@ -133,7 +133,7 @@ console.log(JSON.stringify(validatePhysicalMemoryConfig({...raw, host_channels: 
     assert actual.host_channels == 1
 
 
-def test_rollback_restores_ocp_page_order_and_cache_on_repeated_retry():
+def test_rollback_restores_the_read_cache_on_repeated_retry():
     config = resolve_physical_config("hbf_ocp_0_7", overrides={
         "channels": 1, "host_channels": 1, "parallel_units": None,
         "planes_per_lun": 1, "planes_independent": True,
@@ -150,8 +150,6 @@ def test_rollback_restores_ocp_page_order_and_cache_on_repeated_retry():
         core.submit(AccessRequest(f"read2-{attempt}", "read", 8192, 64))
         core.submit(AccessRequest(f"read3-{attempt}", "read", 12288, 64))
         runtime.restore(saved)
-        with pytest.raises(ValueError, match="write order"):
-            core.submit(AccessRequest("skip-page1", "write", 8192, 4096))
         reread = core.submit(AccessRequest(f"reread-{attempt}", "read", 0, 64))
         assert reread.counters["read_cache_hits"] == 1
         assert reread.counters["pages_read"] == 0

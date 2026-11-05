@@ -255,13 +255,12 @@ class _NandTransaction:
         # dynamic native-owner/timeline qualification. It dies with the undo
         # token; direct/public Core submissions never infer this permission.
         self.native_timeline_qualified = False
-        self.program_frontiers = {}
+        self.bank_log = None
         self.block_wear = {}
         self.cache_banks = {}
         self.cache_slots = {}
         self.cache_snapshot = None
-        lazy_frontiers = (core.config.protocol_mode == "generic_nand"
-                          and not core._nand_state_exposed
+        lazy_frontiers = (not core._nand_state_exposed
                           and type(core.__dict__["_array_ready"]) is dict
                           and type(core.__dict__["_buffer_ready"]) is dict
                           and _native_frontier_writers(core))
@@ -354,13 +353,14 @@ class _NandTransaction:
         self.cache_snapshot = saved
 
     def rollback(self, core):
-        for target, saved in ((core._next_program_page, self.program_frontiers),
-                              (core._block_wear_state, self.block_wear)):
-            for key, previous in saved.items():
-                if previous is None:
-                    target.pop(key, None)
-                else:
-                    target[key] = previous
+        if self.bank_log is not None:
+            # Tokens can be restored by a public snapshot and used again.
+            core._bank_log = list(self.bank_log)
+        for key, previous in self.block_wear.items():
+            if previous is None:
+                core._block_wear_state.pop(key, None)
+            else:
+                core._block_wear_state[key] = previous
         if self.cache_snapshot is not None:
             # Tokens can be restored by a public snapshot and used again.
             core.__dict__["_read_cache"] = _copy_nand_read_cache(self.cache_snapshot)
@@ -412,9 +412,10 @@ class NandCore:
     """Page read/program/erase with optional explicit erase wear.
 
     There is no FTL, garbage collector or cell-content validity model.
-    ``ocp_hbf_0_7`` models complete 4 KiB write units, page order and page-0
-    automatic erase. It does not expose AXI fragments/pending responses,
-    IDs/error packets, ECC, retention, scratchpad or wear-level remapping.
+    ``ocp_hbf_0_7`` models complete 4 KiB write units and the host's per-bank
+    log of page numbers; opening a block is the host's rate term in
+    native_stationary. It does not expose AXI fragments/pending responses,
+    IDs/error packets, ECC, retention or wear-level remapping.
     Read-cache banks are the mapped channel/target/die/LUN/plane coordinates;
     replacement is deterministic LRU, an explicit controller policy choice.
     """
@@ -458,7 +459,11 @@ class NandCore:
         self._block_wear_state: Dict[str, dict] = {}
         self.__dict__["_read_cache"]: Dict[tuple[int, ...], list[_ReadCacheSlot]] = {}
         self._cache_use = 0
-        self._next_program_page: Dict[tuple[int, ...], int] = {}
+        # Programs so far on each bank, which is the bank's next page number.
+        self._bank_log: Optional[list[int]] = (
+            [0] * (config.channels * config.targets_per_channel * config.dies_per_target
+                   * config.luns_per_die * config.planes_per_lun)
+            if config.protocol_mode == "ocp_hbf_0_7" else None)
         self._nand_transactions: list[_NandTransaction] = []
         self._nand_numeric_state = None
         self._nand_numeric_enabled = False
@@ -576,22 +581,28 @@ class NandCore:
         for token in self._nand_transactions:
             token.remember_frontiers(key)
 
-    def _set_program_frontier(self, key, value):
-        if self._nand_transactions:
-            previous = self._next_program_page.get(key)
-            for token in self._nand_transactions:
-                token.program_frontiers.setdefault(key, previous)
-        self._next_program_page[key] = value
+    def _log_programs(self, pages):
+        """Give each program its bank's next page number, in program order.
 
-    def _update_program_frontiers(self, frontiers):
-        if self._nand_transactions:
-            for key in frontiers:
-                previous = self._next_program_page.get(key)
-                for token in self._nand_transactions:
-                    token.program_frontiers.setdefault(key, previous)
-        self._next_program_page.update(frontiers)
+        OCP 5.4.1 wants consecutive pages within a NAND block and 13.3.2 leaves
+        placement to the host, so the host keeps this log: the bank comes from
+        the page index's low bits, as in map_nand_address, and its count of
+        programs is the next page number. Each program takes the next page by
+        construction, so there is nothing for a run to reject. Without an OCP
+        protocol there is no log.
+        """
+        log = self._bank_log
+        if log is None:
+            return
+        for token in self._nand_transactions:
+            if token.bank_log is None:
+                token.bank_log = list(log)
+        banks = len(log)
+        for page in pages:
+            log[page % banks] += 1
 
-    @property
+
+
     def buffered_write_mode(self) -> bool:
         """Return whether this core exposes host-ack/media-drain semantics."""
 
@@ -760,19 +771,6 @@ class NandCore:
                     self._touch_cache_bank(bank)
                 slot.page_key = None
 
-    def _validate_program_order(self, request, expected=None) -> None:
-        if self.config.protocol_mode != "ocp_hbf_0_7" or request.operation is not Operation.WRITE:
-            return
-        expected = {} if expected is None else expected
-        for segment in split_nand_request(request, self.config):
-            mapping = segment.mapping
-            block = self._block_key(mapping)
-            next_page = expected.get(block, self._next_program_page.get(block, 0))
-            if mapping.page != 0 and mapping.page != next_page:
-                raise ValueError("ocp_hbf_0_7 write order violation: block {} requires page {}, received {}"
-                                 .format(block, next_page, mapping.page))
-            expected[block] = mapping.page + 1
-
     def _bandwidth_ceiling_gb_s(self, operation: Optional[Operation | str] = None) -> float:
         """Return the end-to-end payload ceiling for the NAND data path.
 
@@ -873,10 +871,9 @@ class NandCore:
             for segment in split_nand_request(request, self.config)
         )
 
-    def _validate_request(self, request: AccessRequest, *, program_order=None) -> None:
+    def _validate_request(self, request: AccessRequest) -> None:
         """Reject invalid geometry or admission size before mutating calendars."""
         validate_nand_request(request, self.config)
-        self._validate_program_order(request, program_order)
         payload_bytes = self._write_buffer_payload_bytes(request)
         if payload_bytes > self.config.write_buffer_bytes:
             raise ValueError(
@@ -1220,7 +1217,6 @@ class NandCore:
         # an additional per-request timeline transaction is unnecessary.
         if (self._nand_numeric_enabled and not self._nand_state_exposed
                 and type(request) is AccessRequest
-                and self.config.protocol_mode == "generic_nand"
                 and _generic_bulk_span(request, self.config)
                 and (self._nand_numeric_state is not None
                      or (request.address + request.byte_count - 1) // 4096 - request.address // 4096 + 1 >= BULK_MIN_PAGES)
@@ -1245,7 +1241,7 @@ class NandCore:
                 and type(self)._resident_scalar_eligible is _RESIDENT_SCALAR_METHODS["_resident_scalar_eligible"]
                 and self._resident_scalar_eligible(request)):
             self._validate_request(request)
-            result = self._submit_resident_scalar(request)
+            result = self._submit_resident_generic(request)
             if result is not None:
                 return result
         if not (self._nand_numeric_state is not None
@@ -1254,17 +1250,6 @@ class NandCore:
                 and self._resident_generic_bulk_eligible(request)):
             self._nand_publish_numeric()
         self._validate_request(request)
-        if (self.config.protocol_mode == "ocp_hbf_0_7"
-                and request.address // self.config.page_bytes
-                != (request.address + request.byte_count - 1) // self.config.page_bytes):
-            return self._submit_ocp_page_commands(request)
-        if (type(self) is NandCore and not self.capture_details and not self._observe_media
-                and self.config.protocol_mode == "ocp_hbf_0_7"
-                and request.address // self.config.page_bytes
-                == (request.address + request.byte_count - 1) // self.config.page_bytes):
-            result = self._submit_ocp_single_page_summary(request)
-            if result is not None:
-                return result
         return self._submit_scalar_request(request)
 
     def _submit_scalar_request(self, request):
@@ -1387,99 +1372,19 @@ class NandCore:
         self._record_host_admission(host_channel, effective, admitted, result.completion_ns, request.operation)
         return result
 
-    def _submit_ocp_page_commands(self, request):
-        """Split a validated host span into separately admitted page commands."""
-        # submit() prevalidated the complete span and every program frontier.
-        # Reaching a later invalid page must never leave earlier pages scheduled.
-        counters = {}
-        mappings, stages, observations = [], [], []
-        completion = request.arrival_ns
-        transfer_bytes = 0
-        page_count = 0
-        interval_counts = {"resource_intervals": 0, "resource_interval_payloads": 0}
-        intervals_truncated = False
-        details_truncated = False
-        maxima = {"array_units", "bandwidth_ceiling_gb_s", "write_buffer_peak_bytes",
-                  "write_buffer_occupancy_bytes", "write_buffer_draining_bytes",
-                  "host_outstanding_at_admission_peak", "host_read_outstanding_at_admission_peak",
-                  "host_write_outstanding_at_admission_peak", "host_ack_completion_ns",
-                  "media_drain_completion_ns"}
-        for segment in split_nand_request(request, self.config):
-            address = max(request.address, segment.address)
-            size = min(request.address + request.byte_count,
-                       segment.address + self.config.page_bytes) - address
-            result = self.submit(replace(request, address=address, byte_count=size))
-            page_count += 1
-            completion = max(completion, result.completion_ns)
-            transfer_bytes += result.transfer_bytes
-            observations.extend(self._observation_events)
-            if page_count <= self.config.max_expanded_segments and not details_truncated:
-                mappings.extend(result.mapping)
-                stages.extend(result.stages)
-            else:
-                mappings.clear()
-                stages.clear()
-                details_truncated = True
-            for key, value in result.counters.items():
-                if key == "nand_observations":
-                    continue
-                if key in {"resource_busy_ns", "resource_bytes"}:
-                    target = counters.setdefault(key, {})
-                    for resource, count in value.items():
-                        target[resource] = target.get(resource, 0) + count
-                elif key == "resource_last_intervals":
-                    counters.setdefault(key, {}).update(value)
-                elif key in {"resource_intervals", "resource_interval_payloads"}:
-                    target = counters.setdefault(key, {})
-                    for resource, intervals in value.items():
-                        remaining = max(0, self.config.max_expanded_segments - interval_counts[key])
-                        retained = intervals[:remaining]
-                        if retained:
-                            target.setdefault(resource, []).extend(retained)
-                            interval_counts[key] += len(retained)
-                        intervals_truncated |= len(retained) != len(intervals)
-                elif isinstance(value, bool):
-                    counters[key] = counters.get(key, False) or value
-                elif isinstance(value, (int, float)):
-                    counters[key] = (max(counters.get(key, value), value) if key in maxima
-                                     else counters.get(key, 0) + value)
-                elif value is not None or key not in counters:
-                    counters[key] = value
-        self._observation_events = observations
-        counters.update(self._observations())
-        if any(counters.get(key, 0) for key in ("staging_write_pages", "staging_read_hits", "read_cache_hits")):
-            counters["bandwidth_ceiling_gb_s"] = self.config.host_bandwidth_for(request.operation)
-            counters["bandwidth_ceiling_scope"] = (
-                "directional host upper bound for transactions using cached/staged data; host acknowledgement is not media drain")
-        for key in ("resource_intervals", "resource_interval_payloads"):
-            counters[key] = {resource: tuple(intervals)
-                             for resource, intervals in counters.get(key, {}).items()}
-        counters["intervals_truncated"] = counters.get("intervals_truncated", False) or intervals_truncated
-        counters["details_truncated"] = details_truncated
-        return TransactionResult(
-            request_id=request.request_id, operation=request.operation,
-            arrival_ns=request.arrival_ns, completion_ns=completion,
-            logical_bytes=request.byte_count, transfer_bytes=transfer_bytes,
-            mapping=tuple(mappings), stages=tuple(stages), counters=counters)
-
     def _resident_scalar_eligible(self, request):
         if (type(self) is not NandCore or type(request) is not AccessRequest
                 or type(self.timeline) is not ResourceTimeline or self.capture_details
                 or self._observe_media or self._nand_state_exposed
                 or self._cache_use >= 2**63 - 1
-                or self.config.protocol_mode not in ("ocp_hbf_0_7", "generic_nand")
                 or self.config.page_bytes != 4096):
             return False
         # An authored replacement can access arbitrary controller banks. Such
         # callbacks continue to receive the fully published controller state.
-        if self.config.protocol_mode == "generic_nand":
-            from ._nand_acceleration import _generic_resident_writers, has_native_timeline_hooks
-            if not has_native_timeline_hooks() or not _generic_resident_writers(self):
-                return False
-            if _generic_bulk_span(request, self.config):
-                return False
-        elif (request.address // self.config.page_bytes
-                != (request.address + request.byte_count - 1) // self.config.page_bytes):
+        from ._nand_acceleration import _generic_resident_writers, has_native_timeline_hooks
+        if not has_native_timeline_hooks() or not _generic_resident_writers(self):
+            return False
+        if _generic_bulk_span(request, self.config):
             return False
         return (all(name not in self.__dict__ and getattr(NandCore, name) is method
                     for name, method in _RESIDENT_SCALAR_METHODS.items())
@@ -1491,7 +1396,7 @@ class NandCore:
         config = self.config
         return (type(self) is NandCore and type(request) is AccessRequest
                 and self._nand_numeric_enabled and not self._nand_state_exposed
-                and config.protocol_mode == "generic_nand" and config.page_bytes == 4096
+                and config.page_bytes == 4096
                 and _generic_bulk_span(request, config)
                 and has_native_timeline_hooks()
                 and _generic_resident_writers(self)
@@ -1515,68 +1420,6 @@ class NandCore:
                     ("channel_resource_prefix", "nand:channel"),
                     ("host_resource_id", "nand:host"))),
                 tuple(self.timeline.resource_aliases.items()))
-
-    def _submit_resident_scalar(self, request):
-        """Bridge one ordinary scalar command to its resident bank exactly.
-
-        The numeric arrays remain the authoritative state. Python slots for
-        this bank retain their identities, and the existing scalar executor
-        performs every cache/admission/calendar transition and bill. Journals
-        capture the resident preimage before this partial publication, just
-        as for a complete publication.
-        """
-        packed = self._nand_numeric_state
-        config = self.config
-        if config.protocol_mode == "generic_nand":
-            return self._submit_resident_generic(request)
-        base_units = (config.channels * config.targets_per_channel
-                      * config.dies_per_target * config.luns_per_die)
-        bank = request.address // 4096 % (base_units * config.planes_per_lun)
-        unit = bank if config.planes_independent else bank % base_units
-        arrays, buffers, tags, ready, readers, uses, present = packed.arrays
-        bank_keys, tag_prefixes, array_names, pages_per_block = packed.layout
-        name, key = array_names[unit], bank_keys[bank]
-        array_values = self.__dict__["_array_ready"]
-        buffer_values = self.__dict__["_buffer_ready"]
-        cache = self.__dict__["_read_cache"]
-        for token in self._nand_transactions:
-            token.capture_numeric(packed)
-        if packed.dirty_units[unit]:
-            self._touch_frontiers(name)
-            array_values[name], buffer_values[name] = float(arrays[unit]), float(buffers[unit])
-        if packed.dirty_banks[bank]:
-            if self._nand_transactions:
-                self._touch_cache_bank(key)
-            slots = cache.get(key)
-            if slots is None:
-                slots = [_ReadCacheSlot(), _ReadCacheSlot()]
-                cache[key] = slots
-            prefix = tag_prefixes[bank]
-            for index, slot in enumerate(slots):
-                page = int(tags[bank, index])
-                slot.page_key = None if page < 0 else (*prefix, *divmod(page, pages_per_block))
-                slot.ready_ns = float(ready[bank, index])
-                slot.reader_completion_ns = float(readers[bank, index])
-                slot.last_use = int(uses[bank, index])
-        try:
-            return self._submit_ocp_single_page_summary(request)
-        finally:
-            # The scalar executor can raise after a reservation. Retain its
-            # exact partial state; a transaction still restores the captured
-            # preimage, and a later public inspection publishes this state.
-            if name in array_values:
-                arrays[unit] = array_values[name]
-                buffers[unit] = buffer_values.get(name, 0.)
-                packed.dirty_units[unit] = True
-            slots = cache.get(key)
-            if slots is not None:
-                present[bank] = True
-                packed.dirty_banks[bank] = True
-                for index, slot in enumerate(slots):
-                    page = slot.page_key
-                    tags[bank, index] = -1 if page is None else page[-2] * pages_per_block + page[-1]
-                    ready[bank, index], readers[bank, index] = slot.ready_ns, slot.reader_completion_ns
-                    uses[bank, index] = slot.last_use
 
     def _resident_handoff(self, banks, units):
         """Publish only these resident banks and units to their Python slots.
@@ -1786,6 +1629,7 @@ class NandCore:
                 self._tail_pages[page] = (entry[0], entry[1], entry[2], float(end), entry[4])
                 selected.discard(page)
             programs = len(active_pages)
+            self._log_programs(active_pages)
             internal_bytes = int(batch["internal_transfer_bytes"])
             host_bytes = int(batch["host_transfer_bytes"])
             self._tail_flush_started_pages += programs
@@ -2135,6 +1979,7 @@ class NandCore:
                 program_start = max(program_start, float(start_override))
             program = self._media_stage("PAGE_PROGRAM", mapping, program_start,
                                         config.page_program_ns, eligible_ns=internal.end_ns)
+            self._log_programs((page,))
             if self.capture_details:
                 stages.append(StageTiming("STAGING_FLUSH_INTERNAL", internal.start_ns, internal.end_ns,
                                           internal.resource_id, internal.bytes))
@@ -2216,202 +2061,11 @@ class NandCore:
             mapping=tuple(item for result in results for item in result.mapping),
             stages=tuple(item for result in results for item in result.stages), counters=counters)
 
-    def submit_read_pages(self, addresses, arrival_ns, *, link_program=()):
-        """Execute full-page reads interleaved with external links in order.
-
-        Return page completions, one NAND bill and per-link bills, or None if
-        the ordinary per-page executor is needed for the authored features.
-        Arrival may be one timestamp or one timestamp per page. No page,
-        cache or admission transition is skipped by the compiled loop.
-        """
-        try:
-            from ._nand_execution import execute_pages
-        except (ImportError, OSError):
-            return None
-        result = execute_pages(self, addresses, arrival_ns, link_program)
-        if result is not None and self._nand_numeric_state is not None:
-            self._nand_numeric_state.scalar_resource_contract = self._resident_resource_contract()
-        return result
-
-    def submit_write_pages(self, addresses, arrival_ns, *, link_program=()):
-        """Program full pages with each page's incoming links before admission."""
-        try:
-            from ._nand_execution import execute_pages
-        except (ImportError, OSError):
-            return None
-        result = execute_pages(self, addresses, arrival_ns, link_program, operation=Operation.WRITE)
-        if result is not None and self._nand_numeric_state is not None:
-            self._nand_numeric_state.scalar_resource_contract = self._resident_resource_contract()
-        return result
-
-    def _submit_ocp_single_page_summary(self, request: AccessRequest) -> Optional[TransactionResult]:
-        """Execute the same strict page transitions without trace allocations.
-
-        Only the three touched resources need accounting baselines; scanning
-        all resources in the shared machine timeline for every page is wasteful.
-        Multi-lane/custom timelines retain the detailed reservation executor.
-        """
-        timeline, config = self.timeline, self.config
-        if type(timeline) is not ResourceTimeline:
-            return None
-        mapping = map_nand_address(config, request.address // config.page_bytes * config.page_bytes)
-        array_id = self._array_id(mapping)
-        array_resource = self._array_resource_id(mapping)
-        channel = self._channel_id(mapping)
-        host_resource = self._host_id(mapping, request.operation)
-        resources = (array_resource, channel, host_resource)
-        if any(len(timeline.lane_available.get(resource, (0.,))) != 1 for resource in resources):
-            return None
-        if any(not isfinite(value) or value < 0 for resource in resources
-               for value in timeline.lane_available.get(resource, (timeline.ready_ns.get(resource, 0.),))):
-            return None
-        effective_arrival, admitted, host_channel = self._admit_host_request(request, mapping)
-        before_busy = {resource: timeline.busy_ns.get(resource, 0.) for resource in resources}
-        before_bytes = {resource: timeline.bytes_moved.get(resource, 0) for resource in resources}
-        timeline._intervals = {}
-        timeline._interval_limit = timeline._interval_count = 0
-        timeline._intervals_truncated = False
-        timeline._interval_payloads = {}
-        timeline._touched = set()
-        self._observation_events = []
-
-        def reserve(resource, earliest, duration, direction=None, payload=None):
-            timeline._remember_resource(resource)
-            lanes = timeline.lane_available.get(resource)
-            if lanes is None:
-                lanes = [timeline.ready_ns.get(resource, 0.)]
-                timeline.lane_available[resource] = lanes
-            start = max(float(earliest), float(lanes[0]))
-            end = start + float(duration)
-            busy = timeline.busy_ns.get(resource, 0.) + float(duration)
-            if not isfinite(end) or not isfinite(busy):
-                raise ValueError("resource reservation exceeds finite timing range")
-            lanes[0] = end
-            timeline.ready_ns[resource] = end
-            timeline.busy_ns[resource] = busy
-            timeline.last_intervals[resource] = (start, end)
-            timeline._touched.add(resource)
-            timeline._intervals_truncated = True
-            if direction:
-                timeline.directions[resource] = direction
-            timeline.lane_directions.pop(resource, None)
-            if payload is not None:
-                timeline.bytes_moved[resource] = timeline.bytes_moved.get(resource, 0) + payload
-            return end
-
-        base = effective_arrival + config.front_ns
-        dependency = max(base, self.__dict__["_array_ready"].get(array_id, 0.), self.__dict__["_buffer_ready"].get(array_id, 0.))
-        lane_frontier = min(timeline.lane_available.get(array_resource, (0.,)))
-        inherited_frontier = max(dependency, float(lane_frontier))
-        media_queue_wait_ns = 0.0
-        host_bytes = request.byte_count  # Strict requests are already 64-byte aligned.
-        internal_bytes = config.transfer_page_bytes
-        host_ns = host_bytes / self._host_bandwidth(request.operation)
-        internal_ns = internal_bytes / config.internal_bandwidth_gb_s
-        pages_read = pages_programmed = erases = read_cache_hits = read_cache_misses = 0
-        if request.operation is Operation.READ:
-            slot, hit = self._cache_slot(mapping)
-            if hit:
-                internal_bytes = 0
-                completion = reserve(host_resource, max(base, slot.ready_ns), host_ns, "read", host_bytes)
-                slot.reader_completion_ns = max(slot.reader_completion_ns, completion)
-                read_cache_hits = 1
-            else:
-                read_cache_misses = int(slot is not None)
-                media_queue_wait_ns = max(0.0, inherited_frontier - base)
-                read_end = reserve(array_resource, dependency, config.page_read_ns)
-                internal_end = reserve(channel, max(read_end, slot.reader_completion_ns if slot else 0.),
-                                       internal_ns, "read", internal_bytes)
-                completion = reserve(host_resource, internal_end, host_ns, "read", host_bytes)
-                if slot is not None:
-                    slot.page_key = self._staged_key(mapping)
-                    slot.ready_ns = internal_end
-                    slot.reader_completion_ns = completion
-                self._touch_frontiers(array_id)
-                self.__dict__["_array_ready"][array_id] = read_end
-                self._touch_frontiers(array_id)
-                self.__dict__["_buffer_ready"][array_id] = internal_end
-                timeline._remember_resource(array_id)
-                timeline.ready_ns[array_id] = read_end
-                pages_read = 1
-        else:
-            self._invalidate_cache(mapping)
-            if mapping.page == 0:
-                self._invalidate_cache(mapping, block=True)
-                erase_end = reserve(array_resource, dependency, config.block_erase_ns)
-                self._touch_frontiers(array_id)
-                self.__dict__["_array_ready"][array_id] = erase_end
-                timeline._remember_resource(array_id)
-                timeline.ready_ns[array_id] = erase_end
-                erases = 1
-            host_end = reserve(host_resource, base, host_ns, "write", host_bytes)
-            internal_end = reserve(channel, max(host_end, self.__dict__["_buffer_ready"].get(array_id, 0.)),
-                                   internal_ns, "write", internal_bytes)
-            completion = reserve(array_resource, max(internal_end, self.__dict__["_array_ready"].get(array_id, 0.)),
-                                 config.page_program_ns)
-            self._touch_frontiers(array_id)
-            self.__dict__["_array_ready"][array_id] = self.__dict__["_buffer_ready"][array_id] = completion
-            timeline._remember_resource(array_id)
-            timeline.ready_ns[array_id] = completion
-            self._set_program_frontier(self._block_key(mapping), mapping.page + 1)
-            pages_programmed = 1
-        completion = max(base, completion)
-        moved = {resource: timeline.bytes_moved.get(resource, 0) - before_bytes[resource]
-                 for resource in timeline._touched
-                 if timeline.bytes_moved.get(resource, 0) != before_bytes[resource]}
-        busy = {resource: timeline.busy_ns[resource] - before_busy[resource]
-                for resource in timeline._touched if timeline.busy_ns[resource] != before_busy[resource]}
-        self._record_host_admission(host_channel, effective_arrival, admitted,
-                                    completion, request.operation)
-        self._last_media_queue_wait_ns = float(media_queue_wait_ns)
-        return TransactionResult(
-            request_id=request.request_id, operation=request.operation, arrival_ns=request.arrival_ns,
-            completion_ns=completion, logical_bytes=request.byte_count, transfer_bytes=internal_bytes,
-            counters={
-                "host_transfer_bytes": host_bytes, "internal_transfer_bytes": internal_bytes,
-                "physical_read_bytes": pages_read * config.page_bytes,
-                "physical_write_bytes": pages_programmed * config.page_bytes,
-                "pages_read": pages_read, "pages_programmed": pages_programmed,
-                "merge_bytes": 0, "merged_pages": 0, "staging_write_pages": 0,
-                "staging_read_hits": 0, "staging_read_merges": 0,
-                "read_cache_hits": read_cache_hits, "read_cache_misses": read_cache_misses,
-                "erase_operations": erases, "page_count": 1, "details_truncated": False,
-                "bandwidth_ceiling_gb_s": config.host_bandwidth_for(request.operation) if read_cache_hits
-                    else self._bandwidth_ceiling_gb_s(request.operation),
-                "bandwidth_ceiling_scope":
-                    "directional host upper bound for transactions using cached/staged data; host acknowledgement is not media drain"
-                    if read_cache_hits else
-                    "device transfer upper bound: min(directional host, summed independent channels); excludes array latency",
-                "array_units": config.array_units,
-                "write_completion": "media_program_complete" if pages_programmed else "n/a",
-                "host_ack_completion_ns": None,
-                "media_drain_completion_ns": completion if pages_programmed else None,
-                "pages_touched": 1, "read_operations": pages_read, "program_operations": pages_programmed,
-                "rmw_read_operations": 0, "page_access_payload_bytes": request.byte_count,
-                "page_access_capacity_bytes": config.page_bytes, "host_admission_samples": 1,
-                "host_outstanding_at_admission_peak": len(admitted) + 1,
-                "host_read_outstanding_at_admission_peak":
-                    admitted.reads + int(request.operation is Operation.READ),
-                "host_write_outstanding_at_admission_peak":
-                    admitted.writes + int(request.operation is Operation.WRITE),
-                "host_admission_depth_scope": self._admission_depth_scope(),
-                "queue_wait_ns": effective_arrival - request.arrival_ns,
-                "write_buffer_wait_ns": 0., "write_buffer_bytes": 0, "write_buffer_occupancy_bytes": 0,
-                "write_buffer_peak_bytes": 0, "write_buffer_draining_bytes": 0, "buffered_write_mode": False,
-                "resource_busy_ns": busy, "resource_bytes": moved,
-                "resource_last_intervals": {resource: timeline.last_intervals[resource] for resource in timeline._touched},
-                "resource_intervals": {}, "resource_interval_payloads": {},
-                "intervals_truncated": timeline._intervals_truncated,
-                "media_queue_wait_ns": float(media_queue_wait_ns),
-            },
-        )
-
     def _execute_accepted(self, request: AccessRequest) -> TransactionResult:
         first_page = request.address // self.config.page_bytes
         last_page = (request.address + request.byte_count - 1) // self.config.page_bytes
         page_count = last_page - first_page + 1
         if (not self.capture_details and not self._observe_media
-                and self.config.protocol_mode == "generic_nand"
                 and self.config.read_cache_pages_per_bank == 2
                 and page_count >= _bulk_min_pages(self, request.operation)):
             from ._nand_acceleration import execute_buffered_full_pages
@@ -2424,7 +2078,6 @@ class NandCore:
         if (
             not self.capture_details
             and not self._observe_media
-            and self.config.protocol_mode == "generic_nand"
             and self.config.host_channels == 1
             and not self.config.host_full_duplex
             and not self.config.read_cache_pages_per_bank
@@ -2689,16 +2342,6 @@ class NandCore:
                 self.timeline.ready_ns[array_id] = max(self.__dict__["_array_ready"].get(array_id, 0.),
                                                        self.timeline.ready_ns.get(array_id, 0.))
             else:
-                if self.config.protocol_mode == "ocp_hbf_0_7" and m.page == 0:
-                    self._invalidate_cache(m, block=True)
-                    erase = self._media_stage("BLOCK_ERASE", m, dependency, self.config.block_erase_ns,
-                                              eligible_ns=request.arrival_ns + self.config.front_ns)
-                    record(erase)
-                    self._touch_frontiers(array_id)
-                    self.__dict__["_array_ready"][array_id] = erase.end_ns
-                    self.timeline._remember_resource(array_id)
-                    self.timeline.ready_ns[array_id] = erase.end_ns
-                    erases += 1
                 host = self.timeline.transfer(
                     self._host_id(m, Operation.WRITE), host_write_bytes, host_write_origin,
                     self._host_bandwidth(Operation.WRITE),
@@ -2717,6 +2360,7 @@ class NandCore:
                                             self.config.page_program_ns,
                                             eligible_ns=internal.end_ns)
                 record(program)
+                self._log_programs((m.unit,))
                 pages_programmed += 1
                 completion = max(completion, program.end_ns)
                 self._touch_frontiers(array_id)
@@ -2725,8 +2369,6 @@ class NandCore:
                 self.__dict__["_buffer_ready"][array_id] = program.end_ns
                 self.timeline._remember_resource(array_id)
                 self.timeline.ready_ns[array_id] = program.end_ns
-                if self.config.protocol_mode == "ocp_hbf_0_7":
-                    self._set_program_frontier(self._block_key(m), m.page + 1)
         counters = {
             "host_transfer_bytes": host_bytes,
             "internal_transfer_bytes": internal_bytes,
@@ -2844,9 +2486,8 @@ class NandCore:
         # Match scalar submission's pre-admission validation for the whole
         # public batch. Unexpected execution failures still require the owning
         # PhysicalRuntimeContext transaction for rollback.
-        program_order = dict(self._next_program_page)
         for request in requests:
-            self._validate_request(request, program_order=program_order)
+            self._validate_request(request)
         return tuple(self.submit(request) for request in requests)
 
     def run(self, requests: Iterable[AccessRequest]):
@@ -2890,11 +2531,11 @@ def _generic_bulk_span(request, config):
 
 
 _RESIDENT_SCALAR_METHODS = {name: getattr(NandCore, name) for name in (
-    "_validate_request", "_validate_program_order", "_write_buffer_payload_bytes",
-    "_resident_scalar_eligible", "_resident_generic_bulk_eligible", "_submit_resident_scalar", "_submit_resident_generic", "_submit_ocp_single_page_summary",
+    "_validate_request", "_write_buffer_payload_bytes",
+    "_resident_scalar_eligible", "_resident_generic_bulk_eligible", "_submit_resident_generic",
     "_admit_host_request", "_record_host_admission", "_submit_scalar_request", "_cache_slot", "_invalidate_cache",
     "_array_id", "_array_resource_id", "_channel_id", "_host_id", "_host_bandwidth",
-    "_staged_key", "_bank_key", "_block_key", "_set_program_frontier", "_touch_cache_bank",
+    "_staged_key", "_bank_key", "_block_key", "_log_programs", "_touch_cache_bank",
     "_bandwidth_ceiling_gb_s", "_admission_depth_scope", "_resident_resource_contract",
     "_resident_handoff")}
 

@@ -125,8 +125,7 @@ class PhysicalTransactionCapture:
                                                physical(data_motion.resolve_physical_task)))
         for name, many in (("submit", False), ("submit_many", True)):
             self._stack.enter_context(patch.object(DramCore, name, dram(getattr(DramCore, name), many)))
-        for name in ("submit", "submit_read_pages", "submit_write_pages"):
-            self._stack.enter_context(patch.object(NandCore, name, nand(getattr(NandCore, name), name)))
+        self._stack.enter_context(patch.object(NandCore, "submit", nand(NandCore.submit, "submit")))
         return self
 
     def __exit__(self, *args):

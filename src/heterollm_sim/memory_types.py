@@ -807,8 +807,6 @@ class NandConfig:
                 raise ValueError("ocp_hbf_0_7 derives bank parallelism from geometry; parallel_units must be None")
             if not self.planes_independent:
                 raise ValueError("ocp_hbf_0_7 requires independent bank resources (planes_independent=True)")
-            if self.queue_scope != "host_channel":
-                raise ValueError("ocp_hbf_0_7 requires queue_scope=host_channel")
             if self.page_bytes != 4096 or self.host_granularity_bytes != 64:
                 raise ValueError("ocp_hbf_0_7 requires 4096-byte pages and 64-byte host granularity")
             if self.host_channels > 16 or not self.host_full_duplex:
@@ -865,8 +863,8 @@ class NandConfig:
         _positive_int("page_staging_burst_bytes", self.page_staging_burst_bytes)
         _nonnegative("page_staging_latency_ns", self.page_staging_latency_ns)
         if self.page_staging != "none":
-            if self.protocol_mode != "generic_nand" or self.write_buffer_bytes:
-                raise ValueError("page staging requires generic_nand without a host write buffer")
+            if self.write_buffer_bytes:
+                raise ValueError("page staging requires no host write buffer")
             if self.page_bytes % self.page_staging_burst_bytes:
                 raise ValueError("page_staging_burst_bytes must divide page_bytes")
 

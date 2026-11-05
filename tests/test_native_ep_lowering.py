@@ -122,9 +122,10 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # OCP control changed the serialized NAND config and striped the KV blocks,
     # with the same task names, categories and dependencies. So did the HBM4
     # 24Gb 12H organization and its REFpb fields, and the age-free KV stride,
-    # which only moves the NAND KV blocks' addresses.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "f0d5d75949270cb6")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "8ecd0fbc465cbbe4")
+    # which only moves the NAND KV blocks' addresses. The switch to OCP mode
+    # changed only the serialized protocol_mode and its provenance record.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "f9f3a71e6bef1e36")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "fee6158ec4f2b6fc")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():

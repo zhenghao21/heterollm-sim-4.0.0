@@ -41,7 +41,7 @@ def assert_state(fast, scalar):
     assert fast._buffer_ready == scalar._buffer_ready
     assert fast._read_cache == scalar._read_cache
     for name in ("_cache_use", "_acceptance_ns", "_host_acceptance_ns", "_host_inflight",
-                 "_inflight", "_inflight_operations", "_next_program_page", "_block_wear_state"):
+                 "_inflight", "_inflight_operations", "_bank_log", "_block_wear_state"):
         assert getattr(fast, name) == getattr(scalar, name)
 
 

@@ -54,7 +54,7 @@ class NativeTrace:
         self.task = data_motion.execute_prepared_physical_task.__code__
         self.submit = NandCore.submit.__code__
         self.batch = _nand_acceleration.execute_read_batch.__code__
-        self.scalar = NandCore._submit_resident_scalar.__code__
+        self.scalar = NandCore._submit_resident_generic.__code__
         self.gates, self.submits, self.batches, self.scalar_ids, self.bills = [], [], [], [], []
 
     def observe(self, frame, event, value):

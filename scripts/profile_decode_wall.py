@@ -216,10 +216,8 @@ def install_boundaries(collector):
     methods("_compiled_hbm", "_HBMNumericState", ("execute_fr_fcfs", "refresh_resources", "commit_timeline", "commit_controller", "checkpoint"), "hbm_adapter")
     # Installed before any controller captures its run_fr_fcfs instance field.
     module("_hbm_numeric", "run_fr_fcfs", "hbm_numeric_and_thread_wait")
-    module("_nand_execution", "execute_pages", "nand_adapter")
-    methods("nand_core", "NandCore", ("submit", "submit_read_pages", "submit_write_pages", "_submit_ocp_single_page_summary"), "nand_adapter")
+    methods("nand_core", "NandCore", ("submit",), "nand_adapter")
     methods("nand_core", "NandCore", ("_nand_publish_numeric",), "nand_state_publication")
-    module("_compiled_nand", "_run", "nand_numeric")
     methods("live_execution_metrics", "LiveCohortMetrics", ("observe", "summary", "metadata"), "live_metrics_summary")
     for attribute in ("_resource_busy_by_direction", "_summarize_dram_task_traffic", "_summarize_nand_task_traffic", "_summarize_kv_task_traffic"):
         module("planner", attribute, "metrics_summary")

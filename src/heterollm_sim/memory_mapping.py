@@ -230,11 +230,6 @@ def validate_nand_request(request: AccessRequest, config: NandConfig) -> None:
     if config.protocol_mode == "ocp_hbf_0_7":
         if request.operation is Operation.ERASE:
             raise ValueError("ocp_hbf_0_7 ordinary IO erases automatically on page-0 writes; explicit ERASE is unsupported")
-        if start % 64 or request.byte_count % 64:
-            raise ValueError("ocp_hbf_0_7 IO must be 64-byte aligned")
-        if (request.operation is Operation.WRITE
-                and (start % 4096 or request.byte_count % 4096)):
-            raise ValueError("ocp_hbf_0_7 submit requires complete aligned 4 KiB write units; fragment accumulation/pending responses are unsupported")
     if (request.operation is Operation.WRITE and config.partial_page_policy == "reject"
             and (start % config.page_bytes or request.byte_count % config.page_bytes)):
         raise ValueError("partial NAND page write rejected by configuration")

@@ -23,7 +23,7 @@ def test_paper_memory_controls_keep_compute_and_authored_short_request(case):
     assert scenario.workload.scheduler.slo_tpot_ns == 100e6
     assert scenario.simulation.mode == "detailed"
     if case != "paper_hbm4":
-        assert require_physical_memory_config(scenario.hardware.get_component("hbf0")).protocol_mode == "generic_nand"
+        assert require_physical_memory_config(scenario.hardware.get_component("hbf0")).protocol_mode == "ocp_hbf_0_7"
         assert _direct_device_memory(scenario, "hbf0", "gpu0")
         assert scenario.weights_resident
 

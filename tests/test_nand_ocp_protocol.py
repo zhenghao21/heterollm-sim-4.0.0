@@ -142,66 +142,55 @@ def test_flush_invalidates_read_cache_created_while_partial_write_is_staged():
     {"page_bytes": 16384}, {"host_granularity_bytes": 4096},
     {"host_full_duplex": False}, {"read_cache_pages_per_bank": 0},
     {"write_buffer_bytes": PAGE}, {"channels": 32, "host_channels": 32},
-    {"queue_scope": "device"}, {"parallel_units": 1}, {"planes_independent": False},
+    {"parallel_units": 1}, {"planes_independent": False},
 ])
 def test_ocp_contract_rejects_inconsistent_physical_settings(updates):
     with pytest.raises(ValueError, match="ocp_hbf_0_7"):
         config(protocol_mode="ocp_hbf_0_7", **updates)
 
 
-@pytest.mark.parametrize("req", [
-    request("fragment", "write", count=64),
-    request("unaligned-read", address=1),
-    request("unaligned-size", count=65),
-    request("explicit-erase", "erase", count=PAGE),
-    request("skip-page", "write", address=PAGE, count=PAGE),
-])
-def test_ocp_rejects_unsupported_or_illegal_requests_before_mutation(req):
+def test_ocp_rejects_explicit_erase_before_mutation():
     core = NandCore(config(protocol_mode="ocp_hbf_0_7"))
     before = deepcopy(vars(core))
     with pytest.raises(ValueError, match="ocp_hbf_0_7"):
-        core.submit(req)
+        core.submit(request("explicit-erase", "erase", count=PAGE))
     assert vars(core) == before
 
 
-def test_ocp_batch_program_order_autoerase_and_media_completion():
+@pytest.mark.parametrize("address,count,moved", [(0, 32, 64), (1, 64, 128), (96, 32, 64), (0, 65, 128)])
+def test_host_covers_a_sub_64_byte_access_with_whole_64_byte_units(address, count, moved):
     core = NandCore(config(protocol_mode="ocp_hbf_0_7"))
-    results = core.execute_batch([
-        request("page0", "write", count=PAGE),
-        request("page1", "write", address=PAGE, count=PAGE),
-    ])
-    first, second = results
-    assert first.erase_operations == 1
-    assert second.erase_operations == 0
-    assert first.counters["rmw_read_operations"] == second.counters["rmw_read_operations"] == 0
-    assert stage(first, "PAGE_PROGRAM").start_ns >= stage(first, "BLOCK_ERASE").end_ns
-    assert first.completion_ns == stage(first, "PAGE_PROGRAM").end_ns
-    assert first.counters["write_completion"] == "media_program_complete"
-    assert stage(second, "PAGE_PROGRAM").start_ns >= first.completion_ns
-    with pytest.raises(ValueError, match="write order violation"):
-        core.submit(request("rewrite1", "write", address=PAGE, count=PAGE))
-    core.submit(request("cache-page1", address=PAGE))
-    restart = core.submit(request("restart0", "write", count=PAGE))
-    assert restart.erase_operations == 1
-    assert all(slot.page_key is None for slots in core._read_cache.values() for slot in slots)
+    assert core.submit(request("tiny", address=address, count=count)).host_transfer_bytes == moved
 
 
-def test_ocp_invalid_batch_is_rejected_without_programming_valid_prefix():
-    core = NandCore(config(protocol_mode="ocp_hbf_0_7"))
-    with pytest.raises(ValueError, match="write order violation"):
-        core.execute_batch([request("page0", "write", count=PAGE),
-                            request("skip2", "write", address=2 * PAGE, count=PAGE)])
-    assert not core.timeline.ready_ns
-    assert not core._next_program_page
+def test_bank_log_gives_each_bank_its_next_page_in_program_order():
+    core = NandCore(config(protocol_mode="ocp_hbf_0_7", channels=2, host_channels=2,
+                           planes_per_lun=2, planes_independent=True))
+    assert core._bank_log == [0, 0, 0, 0]
+    core.submit(request("stripe", "write", count=5 * PAGE))
+    assert core._bank_log == [2, 1, 1, 1]
+    core.submit(request("same-address-again", "write", count=PAGE))
+    assert core._bank_log == [3, 1, 1, 1]
+    core.submit(request("reads-take-no-page", count=4 * PAGE))
+    assert core._bank_log == [3, 1, 1, 1]
 
 
-def test_ocp_striped_aggregate_write_tracks_order_per_physical_block():
+def test_generic_nand_keeps_no_log():
+    core = NandCore(config())
+    core.submit(request("program", "write", count=PAGE))
+    assert core._bank_log is None
+
+
+def test_programs_on_one_bank_run_one_after_another_in_log_order():
     core = NandCore(config(protocol_mode="ocp_hbf_0_7", channels=2, host_channels=2))
-    result = core.submit(request("stripe", "write", count=4 * PAGE))
-    assert result.pages_programmed == 4
-    assert result.erase_operations == 2
-    assert result.counters["host_admission_samples"] == 4
-    assert set(core._next_program_page.values()) == {2}
+    programs = {}
+    for index in range(16):
+        result = core.submit(request(f"page{index}", "write", address=index * PAGE, count=PAGE))
+        program = stage(result, "PAGE_PROGRAM")
+        programs.setdefault(program.resource_id, []).append((program.start_ns, program.end_ns))
+    assert core._bank_log == [8, 8]
+    for rows in programs.values():
+        assert all(before[1] <= after[0] for before, after in zip(rows, rows[1:]))
 
 
 def test_summary_and_detail_execute_same_host_cache_and_protocol_state():
@@ -218,6 +207,6 @@ def test_summary_and_detail_execute_same_host_cache_and_protocol_state():
                      "pages_programmed", "erase_operations", "read_cache_hits", "read_cache_misses"):
             assert a.counters[name] == b.counters[name]
     assert detailed._read_cache == summary._read_cache
-    assert detailed._next_program_page == summary._next_program_page
+    assert detailed._bank_log == summary._bank_log
     assert detailed._host_inflight == summary._host_inflight
     assert detailed._host_acceptance_ns == summary._host_acceptance_ns
