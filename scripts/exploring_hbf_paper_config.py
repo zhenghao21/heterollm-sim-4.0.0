@@ -243,7 +243,7 @@ def build_paper_hbm_config(configuration_id: str) -> DramConfig | None:
     if not hardware.hbm_stacks:
         return None
     config = resolve_physical_config("hbm4_reference", overrides={
-        "stacks": hardware.hbm_stacks, "dies_per_stack": 16, "die_density_gbits": 32,
+        "stacks": hardware.hbm_stacks, "dies_per_stack": 12, "die_density_gbits": 24,
         "capacity_bytes": hardware.hbm_capacity_bytes,
         "interface_bandwidth_gb_s": hardware.hbm_read_gb_s,
         "read_bandwidth_gb_s": hardware.hbm_read_gb_s,
@@ -259,13 +259,16 @@ def build_paper_hbm_config(configuration_id: str) -> DramConfig | None:
             "capacity_input_scope": "Table I usable capacity in decimal GB",
             "model_scope": "controlled memory mechanism; not the paper serving workload",
             "research_assumptions": [
-                "16H x 32 Gbit covering standard reference organization; not the undisclosed Rubin vendor part",
+                "12H x 24 Gbit standard reference organization, 36 GiB per stack; not the undisclosed Rubin vendor part",
                 "Table I aggregate bandwidth selected as a reference interface budget; vendor pin rate not disclosed",
                 "HBM4 catalog reference normal-operation timing; not a calibrated Rubin speed bin",
                 "tRRD_S 4 ns, tRRD_L 6 ns and tFAW 20 ns taken from the HBM3E reference package "
                 "(JESD238 Table 93 / section 6.3.2.2.1); HBM4 values are not published",
                 "address mapping burst | BG-in-SID | lane | column | bank-in-group | SID | row, a controller "
-                "design choice over the JESD270-4A Table 5 (printed p.7) 16H address organization",
+                "design choice over the JESD270-4A Table 5 (printed p.7) 12H address organization",
+                "REFpb per PC every tREFI/48 = 81.25 ns in bank order, with tREFI 3.9 us, tRFCpb 240 ns and tRREFD "
+                "8 ns from JESD270-4A Table 108; the controller keeps an open row for its queued hits for at most "
+                "one tREFI, and a refreshing bank holds up only its own queue entries",
                 "tRTW 18.56 ns from JESD270-4A Table 108 note 18 (printed pp.194-199) with RL32, WL8 and "
                 "assumed PHY terms 1.5 ns, 0.020 ns, 0.080 ns; tWTR_S 6 nCK, tWTR_L 8 nCK, tRTP 6 nCK assumed",
                 "per-PC FR-FCFS with row-hit priority: read queue 32 and write queue 64 bursts, write drain from "

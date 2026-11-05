@@ -131,7 +131,6 @@ class HbmStandardOrganizationTests(unittest.TestCase):
                 self.assertEqual(config.metadata["effective_addressed_page_bytes"], 1024)
                 self.assertEqual(config.metadata["activated_page_bytes"], 2048)
                 self.assertEqual(config.control_mode, "jedec_hbm")
-                self.assertEqual(config.activated_row_msb, (config.rows_per_bank - 1).bit_length() - 1)
 
     def test_geometry_evidence_uses_original_protocol_files(self):
         for generation in ("HBM2", "HBM2E", "HBM3", "HBM3E", "HBM4"):

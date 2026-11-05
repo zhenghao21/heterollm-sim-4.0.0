@@ -39,7 +39,12 @@
 #define FR_OFF_GRID (-(INT64_C(1) << 61))
 /* A batch keeps at most this many simulated channels to mirror from. */
 #define FR_MIRROR_SOURCES 128
-#define FR_FIELDS 31
+#define FR_FIELDS 34
+/* A PC's columns: last PRE, blocked until, next read and write data, then its
+ * per-bank refresh: the tRREFD gate and the next due time. */
+#define FR_PC 6
+/* Below this a product with the SID count's inverse divides exactly. */
+#define FR_SID_FAST (INT64_C(1) << 24)
 
 static FR_THREAD jmp_buf *fr_escape;
 
@@ -248,8 +253,8 @@ FR_INLINE double fr_row_command(const fr_state *s, int64_t ch, double earliest, 
 
 FR_INLINE double fr_pre_ready(const fr_state *s, int64_t lane, double earliest)
 {
-    if (s->pc[lane * 4] >= 0)
-        earliest = fr_max(earliest, fr_after(s->pc[lane * 4], s->t[19], s->half));
+    if (s->pc[lane * FR_PC] >= 0)
+        earliest = fr_max(earliest, fr_after(s->pc[lane * FR_PC], s->t[19], s->half));
     return earliest;
 }
 
@@ -271,7 +276,7 @@ FR_NOINLINE void fr_record_activate(const fr_state *s, int64_t lane, double anch
 static double fr_precharge_start(const fr_state *s, int64_t lane, int64_t bank, double earliest)
 {
     const double *t = s->t;
-    const double *lane_pc = s->pc + lane * 4;
+    const double *lane_pc = s->pc + lane * FR_PC;
     double half = s->half, inverse = s->inverse;
     double ready = fr_max(fr_max(earliest, s->bf[bank * 7 + 2]), lane_pc[1]);
     if (lane_pc[0] >= 0)
@@ -287,7 +292,7 @@ static void fr_precharge(const fr_state *s, int64_t lane, int64_t bank, double e
                                   s->pre_duration, s->pre_duration_tick, counts);
     double next = fr_after_tick(start, s->t[6], s->ticks[6], s->half, s->inverse);
     counts[1] += 1;
-    s->pc[lane * 4] = start;
+    s->pc[lane * FR_PC] = start;
     s->rows[bank] = -1;
     s->bf[bank * 7 + 1] = next;
     s->bf[bank * 7 + 5] = next;
@@ -431,7 +436,7 @@ FR_NOINLINE void fr_close_expiring(const fr_state *s, int64_t ch, double before,
         while (fr_align(start, step) > latest)
             start = fr_after(start, -step, half);
         start = fr_align(start, step);
-        earliest = fr_pre_ready(s, lane, fr_max(fr_max(bf[bank * 7 + 2], pc[lane * 4 + 1]), resources[ch * 4]));
+        earliest = fr_pre_ready(s, lane, fr_max(fr_max(bf[bank * 7 + 2], pc[lane * FR_PC + 1]), resources[ch * 4]));
         if (channel_int[ch * 2] == bank)
             earliest = fr_max(earliest, fr_after(channel[ch * 2], 2 * t[0], half));
         if (start < earliest)
@@ -445,12 +450,12 @@ FR_NOINLINE void fr_close_expiring(const fr_state *s, int64_t ch, double before,
         double earliest, start, next;
         bank = pending_banks[item];
         lane = fr_floordiv(bank, s->banks);
-        earliest = fr_pre_ready(s, lane, fr_max(fr_max(starts[item], bf[bank * 7 + 2]), pc[lane * 4 + 1]));
+        earliest = fr_pre_ready(s, lane, fr_max(fr_max(starts[item], bf[bank * 7 + 2]), pc[lane * FR_PC + 1]));
         if (channel_int[ch * 2] == bank)
             earliest = fr_max(earliest, fr_after(channel[ch * 2], 2 * t[0], half));
         fr_command(s, ch, 0, earliest, t[2], 0, counts, &start);
         counts[1] += 1;
-        pc[lane * 4] = start;
+        pc[lane * FR_PC] = start;
         rows[bank] = -1;
         next = fr_after(start, t[6], half);
         bf[bank * 7 + 1] = next;
@@ -467,7 +472,7 @@ FR_NOINLINE void fr_refresh_pc(const fr_state *s, int64_t lane, double due, doub
     const double *channel = s->channel;
     double half = s->half;
     int64_t first_bank = lane * s->banks, end_bank = (lane + 1) * s->banks, ch = lane >> 1, bank;
-    double earliest = fr_max(due, pc[lane * 4 + 1]);
+    double earliest = fr_max(due, pc[lane * FR_PC + 1]);
     double start, last_act;
     int opened = 0;
     s->pc_seen[lane] = 1;
@@ -490,7 +495,7 @@ FR_NOINLINE void fr_refresh_pc(const fr_state *s, int64_t lane, double due, doub
         }
         fr_command(s, ch, 0, earliest, t[2], 0, counts, &start);
         counts[1] += 1;
-        pc[lane * 4] = start;
+        pc[lane * FR_PC] = start;
         earliest = fr_after(start, t[6], half);
         for (bank = first_bank; bank < end_bank; ++bank) {
             if (addresses[bank] >= 0 && rows[bank] >= 0) {
@@ -515,12 +520,12 @@ FR_NOINLINE void fr_refresh_pc(const fr_state *s, int64_t lane, double due, doub
     }
     if (start > due + 8 * t[20])
         fr_fail(FR_ERR_REFRESH_POSTPONED);
-    pc[lane * 4 + 1] = fr_after(start, t[21], half);
+    pc[lane * FR_PC + 1] = fr_after(start, t[21], half);
     for (bank = first_bank; bank < end_bank; ++bank) {
         if (addresses[bank] >= 0) {
             rows[bank] = -1;
-            bf[bank * 7 + 1] = pc[lane * 4 + 1];
-            bf[bank * 7 + 5] = pc[lane * 4 + 1];
+            bf[bank * 7 + 1] = pc[lane * FR_PC + 1];
+            bf[bank * 7 + 5] = pc[lane * FR_PC + 1];
         }
     }
     counts[4] += 1;
@@ -563,7 +568,7 @@ FR_NOINLINE int fr_idle_refresh(const fr_state *s, int64_t lane, double arrival,
     if (fr_max(resources[ch * 4], resources[(s->channels + ch) * 4]) > due)
         return 0;
     for (pseudo = 0; pseudo < 2; ++pseudo)
-        if (pc[(ch * 2 + pseudo) * 4 + 1] > due)
+        if (pc[(ch * 2 + pseudo) * FR_PC + 1] > due)
             return 0;
     for (kind = 0; kind < kinds; ++kind) {
         double busy = resources[(ch + kind * s->channels) * 4 + 1];
@@ -588,11 +593,11 @@ FR_NOINLINE int fr_idle_refresh(const fr_state *s, int64_t lane, double arrival,
     for (pseudo = 0; pseudo < 2; ++pseudo) {
         int64_t target = ch * 2 + pseudo;
         s->pc_seen[target] = 1;
-        pc[target * 4 + 1] = last_start + (double)pseudo * t[0] + t[21];
+        pc[target * FR_PC + 1] = last_start + (double)pseudo * t[0] + t[21];
         for (bank = target * s->banks; bank < (target + 1) * s->banks; ++bank) {
             if (addresses[bank] >= 0) {
-                bf[bank * 7 + 1] = pc[target * 4 + 1];
-                bf[bank * 7 + 5] = pc[target * 4 + 1];
+                bf[bank * 7 + 1] = pc[target * FR_PC + 1];
+                bf[bank * 7 + 5] = pc[target * FR_PC + 1];
             }
         }
     }
@@ -630,7 +635,7 @@ FR_NOINLINE int fr_idle_refresh_commands(const fr_state *s, int64_t lane, double
     if (!(resources[row_id * 4] <= due && resources[column_id * 4] <= due))
         return 0;
     for (pseudo = 0; pseudo < 2; ++pseudo)
-        if (!(pc[(ch * 2 + pseudo) * 4 + 1] <= due))
+        if (!(pc[(ch * 2 + pseudo) * FR_PC + 1] <= due))
             return 0;
     for (bank = ch * 2 * s->banks; bank < (ch + 1) * 2 * s->banks; ++bank)
         if (addresses[bank] >= 0 && (rows[bank] >= 0 || !(bf[bank * 7 + 1] <= due)))
@@ -670,11 +675,11 @@ FR_NOINLINE int fr_idle_refresh_commands(const fr_state *s, int64_t lane, double
     for (pseudo = 0; pseudo < 2; ++pseudo) {
         int64_t target = ch * 2 + pseudo;
         s->pc_seen[target] = 1;
-        pc[target * 4 + 1] = pseudo == 0 ? blocked0 : blocked1;
+        pc[target * FR_PC + 1] = pseudo == 0 ? blocked0 : blocked1;
         for (bank = target * s->banks; bank < (target + 1) * s->banks; ++bank) {
             if (addresses[bank] >= 0) {
-                bf[bank * 7 + 1] = pc[target * 4 + 1];
-                bf[bank * 7 + 5] = pc[target * 4 + 1];
+                bf[bank * 7 + 1] = pc[target * FR_PC + 1];
+                bf[bank * 7 + 5] = pc[target * FR_PC + 1];
             }
         }
     }
@@ -720,8 +725,6 @@ FR_NOINLINE void fr_burst_location(const int64_t *g, int64_t cursor, int64_t *ba
     sid = fr_mod(cursor, g[14]);
     *row = fr_floordiv(cursor, g[14]);
     *bank_within = sid * g[15] * g[4] + bg_in_sid * g[4] + bank_in_group;
-    if (g[6] >= 0)
-        *row &= ~(INT64_C(1) << g[6]);
 }
 
 static int64_t fr_binary_shift(int64_t value)
@@ -741,7 +744,7 @@ FR_INLINE double fr_column_edge(const fr_state *s, int64_t lane, int read, int64
 {
     const double *t = s->t;
     const int64_t *ticks = s->ticks;
-    const double *lane_pc = s->pc + lane * 4;
+    const double *lane_pc = s->pc + lane * FR_PC;
     double half = s->half, inverse = s->inverse;
     double data_ready = s->resources[data * 4], start;
     int64_t direction = read ? 1 : 2, latency = read ? 22 : 23;
@@ -769,7 +772,7 @@ FR_NOINLINE double fr_column_start_general(const fr_state *s, int64_t lane, int6
     const double *t = s->t;
     const int64_t *ticks = s->ticks;
     const double *resources = s->resources;
-    const double *lane_pc = s->pc + lane * 4;
+    const double *lane_pc = s->pc + lane * FR_PC;
     const double *lane_history = s->history + lane * s->entries * 4;
     double half = s->half, inverse = s->inverse, grid_limit = s->grid_limit;
     int grouped = s->grouped;
@@ -853,7 +856,7 @@ FR_INLINE double fr_column_start(const fr_state *s, int64_t lane, int64_t within
     top = fr_max(fr_max(same, different), different_sid);
     if (top >= s->grid_limit)
         return fr_column_start_general(s, lane, group, sid, bank_ready, earliest, read, column_bus, data);
-    ready = fr_max(fr_max(fr_max(earliest, bank_ready), s->pc[lane * 4 + 1]), s->resources[column_bus * 4]);
+    ready = fr_max(fr_max(fr_max(earliest, bank_ready), s->pc[lane * FR_PC + 1]), s->resources[column_bus * 4]);
     if (read) {
         if (end_top + s->end_gap + half > ready) {
             for (position = 0; position < entries; ++position) {
@@ -942,7 +945,7 @@ FR_INLINE double fr_activate_start(const fr_state *s, int64_t lane, int64_t bank
 {
     const double *t = s->t;
     const int64_t *ticks = s->ticks;
-    const double *bf = s->bf, *lane_pc = s->pc + lane * 4;
+    const double *bf = s->bf, *lane_pc = s->pc + lane * FR_PC;
     const double *lane_history = s->history + lane * s->entries * 4;
     double half = s->half, inverse = s->inverse, grid_limit = s->grid_limit;
     double row_bus = s->resources[(lane >> 1) * 4];
@@ -953,7 +956,7 @@ FR_INLINE double fr_activate_start(const fr_state *s, int64_t lane, int64_t bank
     if (bf[bank * 7] >= 0)
         ready = fr_max(ready, fr_after_tick(fr_after_tick(bf[bank * 7], t[8], ticks[8], half, inverse),
                                             -t[0], s->clock_back, half, inverse));
-    anchor = fr_after_tick(fr_align(ready, t[0]), t[0], ticks[0], half, inverse);
+    anchor = fr_max(fr_after_tick(fr_align(ready, t[0]), t[0], ticks[0], half, inverse), lane_pc[4]);
     for (previous_group = 0; previous_group < groups; ++previous_group) {
         double stamp = lane_history[previous_group * 4];
         int same_group = previous_group == group;
@@ -1082,6 +1085,268 @@ FR_NOINLINE void fr_recount(const fr_state *s, int64_t ch, fr_queue queues[2][2]
     }
 }
 
+/* A closed bank's queued hits leave both directions' bitsets. */
+static void fr_forget_bank(fr_queue *lane_queues, const int64_t *q, int64_t hit_words, int64_t within)
+{
+    int64_t side;
+    for (side = 0; side < 2; ++side) {
+        fr_queue *other = &lane_queues[side];
+        if (other->pending_hit[within] > 0) {
+            /* Only this bank's hits leave the bitset. */
+            int64_t word;
+            for (word = 0; word < hit_words; ++word) {
+                uint64_t rest = other->hits[word];
+                while (rest) {
+                    int64_t offset = word * 64 + fr_lowest_bit(rest), position = other->head + offset;
+                    rest &= rest - 1;
+                    if (position >= q[side])
+                        position -= q[side];
+                    if (other->items[position].within == within)
+                        other->hits[word] &= ~(UINT64_C(1) << (offset & 63));
+                }
+            }
+            other->pending_hit[within] = 0;
+        }
+        other->dirty = 1;
+    }
+}
+
+/* The first burst of a bank: what a bank first published for its refresh names. */
+static int64_t fr_bank_cursor(const int64_t *g, int64_t lane, int64_t within)
+{
+    int64_t per_sid = g[15] * g[4];
+    int64_t sid = within / per_sid, rest = within % per_sid;
+    return ((sid * g[4] + rest % g[4]) * g[3] * g[0] + lane) * g[15] + rest / g[4];
+}
+
+/* A REFpb's rising edge. It needs the bank closed past tRP and tRC, tRREFD from
+ * the lane's last REFpb, and the ACT gaps and tFAW, which count it as an ACT.
+ * Banks refresh in index order, so the first bank of a SID's set also waits out
+ * the last bank of the set before it. */
+FR_NOINLINE double fr_refresh_bank_start(const fr_state *s, int64_t lane, int64_t within, double earliest)
+{
+    const double *t = s->t;
+    const int64_t *ticks = s->ticks;
+    const double *bank_bf = s->bf + (lane * s->banks + within) * 7, *lane_pc = s->pc + lane * FR_PC;
+    const double *lane_history = s->history + lane * s->entries * 4;
+    double half = s->half, inverse = s->inverse, row_bus = s->resources[(lane >> 1) * 4];
+    double ready = fr_max(fr_max(fr_max(fr_max(earliest, bank_bf[1]), lane_pc[1]), lane_pc[4]), row_bus);
+    double anchor;
+    int64_t group = within / s->g[4], previous;
+    if (within % 16 == 0)
+        ready = fr_max(ready, bank_bf[15 * 7 + 1]);
+    if (bank_bf[0] >= 0)
+        ready = fr_max(ready, fr_after_tick(bank_bf[0], t[8], ticks[8], half, inverse));
+    anchor = fr_align(ready, t[0]);
+    for (previous = 0; previous < s->g[5]; ++previous) {
+        double stamp = lane_history[previous * 4], gap = previous == group ? t[14] : t[15];
+        if (stamp >= 0 && gap > 0)
+            anchor = fr_max(anchor, fr_after_tick(stamp, gap, ticks[previous == group ? 14 : 15], half, inverse));
+    }
+    for (;;) {
+        double start;
+        anchor = fr_faw_ready(s, lane, anchor);
+        start = fr_align(anchor, t[0]);
+        if (t[30] <= 0 || start == anchor)
+            return start;
+        anchor = start;
+    }
+}
+
+/* Issue a lane's next REFpb and move its due time on. */
+FR_NOINLINE void fr_refresh_bank(const fr_state *s, int64_t lane, int64_t within, double earliest, double *counts)
+{
+    const double *t = s->t;
+    int64_t ch = lane >> 1, bank = lane * s->banks + within;
+    double *lane_pc = s->pc + lane * FR_PC, *bank_bf = s->bf + bank * 7;
+    double due = lane_pc[5], start, done;
+    start = fr_row_command(s, ch, earliest, t[0], s->pre_duration, s->pre_duration_tick, counts);
+    counts[4] += 1;
+    if (start > due + 8 * t[20])
+        fr_fail(FR_ERR_REFRESH_POSTPONED);
+    lane_pc[4] = fr_after_tick(start, t[32], s->ticks[32], s->half, s->inverse);
+    done = fr_after_tick(start, t[31], s->ticks[31], s->half, s->inverse);
+    bank_bf[1] = done;
+    bank_bf[5] = done;
+    if (t[30] > 0) {
+        fr_faw_prune(s, lane, fr_max(0., s->resources[ch * 4]));
+        fr_record_activate(s, lane, start);
+    }
+    lane_pc[5] = (double)(fr_round(due / t[33]) + 1) * t[33];
+}
+
+/* Whether a lane's due REFpb, or the PRE before it, replaces the plan it was
+ * compared with. It goes when no later than the plan, and ahead of a row command
+ * once its bank is ready: an ACT's anchor lies a clock after its start, so a
+ * REFpb under the same gaps would otherwise lose to every ACT. An open row with
+ * queued hits stays open for them. A REFpb one tREFI late takes the lane.
+ *
+ * Returns the plan start below which this cannot change. The times it compares
+ * only rise until a command reaches this bank, which resets the caller's copy.
+ */
+FR_NOINLINE double fr_plan_refresh(const fr_state *s, int64_t lane, const fr_queue *lane_queues,
+                                   double *plan_start, int64_t *plan_kind, int64_t *plan_offset, int64_t *target)
+{
+    const double *t = s->t;
+    const double *lane_pc = s->pc + lane * FR_PC;
+    double planned = *plan_start, due = lane_pc[5], late = due + t[20], when, floor_;
+    int64_t within = fr_mod(fr_round(due / t[33]), s->banks), bank = lane * s->banks + within, kind;
+    int take;
+    *target = within;
+    if (s->rows[bank] >= 0) {
+        kind = 4;
+        if (lane_queues[0].pending_hit[within] > 0 || lane_queues[1].pending_hit[within] > 0) {
+            if (late > planned)
+                return late;
+            take = 0;
+            when = fr_precharge_start(s, lane, bank, due);
+            floor_ = late;
+        } else {
+            when = fr_precharge_start(s, lane, bank, due);
+            take = when <= planned;
+            floor_ = fr_min(when, late);
+        }
+    } else {
+        const double *bank_bf = s->bf + bank * 7;
+        double ready = fr_max(fr_max(due, bank_bf[1]), lane_pc[4]);
+        if (bank_bf[0] >= 0)
+            ready = fr_max(ready, fr_after_tick(bank_bf[0], t[8], s->ticks[8], s->half, s->inverse));
+        kind = 3;
+        when = fr_refresh_bank_start(s, lane, within, due);
+        take = when <= planned || ((*plan_kind == 1 || *plan_kind == 2) && ready <= planned);
+        floor_ = fr_min(ready, late);
+    }
+    if (take || late <= planned) {
+        *plan_start = when;
+        *plan_kind = kind;
+        *plan_offset = within;
+        return due;
+    }
+    return floor_;
+}
+
+/* From this time on nothing the channel has done can delay a REFpb or its PRE. */
+FR_NOINLINE double fr_refresh_floor(const fr_state *s, int64_t ch)
+{
+    const double *t = s->t;
+    const double *history = s->history + 2 * ch * s->entries * 4;
+    double gap = fr_max(t[14], t[15]);
+    double floor_ = fr_max(s->resources[ch * 4], s->channel[ch * 2] + 2 * t[0]);
+    int64_t lane, bank, entry;
+    for (lane = 2 * ch; lane < 2 * ch + 2; ++lane) {
+        const double *lane_pc = s->pc + lane * FR_PC;
+        int64_t count = s->window_counts[lane];
+        floor_ = fr_max(fr_max(fr_max(floor_, lane_pc[1]), lane_pc[4]), lane_pc[0] + t[19]);
+        if (count)
+            floor_ = fr_max(floor_, s->windows[lane * s->window_capacity + count - 1] + t[30]);
+    }
+    for (entry = 0; entry < 2 * s->entries; ++entry)
+        floor_ = fr_max(floor_, history[entry * 4] + gap);
+    for (bank = 2 * ch * s->banks; bank < (2 * ch + 2) * s->banks; ++bank) {
+        const double *bank_bf = s->bf + bank * 7;
+        floor_ = fr_max(fr_max(floor_, bank_bf[1]), bank_bf[0] + t[8]);
+        if (s->rows[bank] >= 0)
+            floor_ = fr_max(floor_, bank_bf[2]);
+    }
+    return floor_;
+}
+
+/* Skip the REFpb of a gap that nothing after the gap can see.
+ *
+ * Past the floor each goes at its due time, or a tRP after its row's PRE, and
+ * every delay it adds has ended before ``latest``. A skipped one therefore adds
+ * only its counts and bus time and closes its open row. The REFpb from ``latest``
+ * on are simulated, which leaves the row bus, the gates and the tFAW window as
+ * if none had been skipped; both lanes then have the same due time.
+ */
+FR_NOINLINE int fr_skip_refresh_gap(const fr_state *s, int64_t ch, double latest, double *counts)
+{
+    const double *t = s->t;
+    double step = t[33], total;
+    int64_t resume = fr_ifloor(latest / step), banks = s->banks, commands = 0;
+    int64_t pseudo, within;
+    if (step < fr_max(t[30], t[6] + t[32]) + 4 * t[0])
+        return 0;
+    if (t[29] > 0) {
+        for (pseudo = 0; pseudo < 2; ++pseudo) {
+            int64_t lane = 2 * ch + pseudo, first = fr_round(s->pc[lane * FR_PC + 5] / step);
+            int64_t skipped = resume - first, phase = fr_mod(first, banks);
+            if (skipped <= 0)
+                continue;
+            for (within = 0; within < banks; ++within) {
+                int64_t bank = lane * banks + within, turn = within - phase + (within < phase ? banks : 0);
+                if (s->rows[bank] >= 0
+                        && s->bf[bank * 7] + t[29] <= (double)(turn < skipped ? first + turn : resume) * step)
+                    return 0;
+            }
+        }
+    }
+    for (pseudo = 0; pseudo < 2; ++pseudo) {
+        int64_t lane = 2 * ch + pseudo, first = fr_round(s->pc[lane * FR_PC + 5] / step);
+        int64_t skipped = resume - first, phase = fr_mod(first, banks);
+        if (skipped <= 0)
+            continue;
+        for (within = 0; within < banks; ++within) {
+            int64_t bank = lane * banks + within, turn = within - phase + (within < phase ? banks : 0);
+            if (s->rows[bank] >= 0 && turn < skipped) {
+                s->rows[bank] = -1;
+                counts[1] += 1;
+                commands += 1;
+            }
+        }
+        counts[4] += (double)skipped;
+        commands += skipped;
+        s->pc[lane * FR_PC + 5] = (double)resume * step;
+    }
+    if (!commands)
+        return 0;
+    total = (double)commands * s->pre_duration;
+    s->resources[ch * 4 + 1] += total;
+    counts[5] += total;
+    return 1;
+}
+
+/* REFpb that fell due in the gap before this batch, in time order. They run
+ * before the mirror check, so channels that ended the last batch a few REFpb
+ * apart meet the batch in the same state. */
+FR_NOINLINE void fr_refresh_gap(const fr_state *s, int64_t ch, double first_arrival, double *counts)
+{
+    const double *t = s->t;
+    const double *pc = s->pc + 2 * ch * FR_PC;
+    double step = s->precharge_step, duration = s->pre_duration;
+    double latest = first_arrival - (t[31] + t[6] + t[30] + 4 * t[0]);
+    double deadline = fr_next_active_deadline(s, ch);
+    double skip_floor = latest - fr_min(pc[5], pc[FR_PC + 5]) >= t[33] ? fr_refresh_floor(s, ch) : HUGE_VAL;
+    for (;;) {
+        int64_t lane = 2 * ch + (pc[FR_PC + 5] < pc[5]), within, bank;
+        double due = s->pc[lane * FR_PC + 5], when, horizon;
+        int opened;
+        if (!(due < first_arrival))
+            return;
+        if (due >= skip_floor) {
+            skip_floor = HUGE_VAL;
+            if (fr_skip_refresh_gap(s, ch, latest, counts)) {
+                deadline = fr_next_active_deadline(s, ch);
+                continue;
+            }
+        }
+        within = fr_mod(fr_round(due / t[33]), s->banks);
+        bank = lane * s->banks + within;
+        opened = s->rows[bank] >= 0;
+        when = opened ? fr_precharge_start(s, lane, bank, due) : fr_refresh_bank_start(s, lane, within, due);
+        horizon = fr_after(when, opened ? fr_max(duration, t[19]) : duration, s->half);
+        if (deadline < horizon + step && deadline < fr_align(horizon, step)) {
+            fr_close_expiring(s, ch, fr_align(horizon, step), counts);
+            deadline = fr_next_active_deadline(s, ch);
+        } else if (opened) {
+            fr_precharge(s, lane, bank, due, counts);
+            deadline = fr_next_active_deadline(s, ch);
+        } else {
+            fr_refresh_bank(s, lane, within, when, counts);
+        }
+    }
+}
+
 /* Each lane's stream per request: its first burst with the lane bits removed,
  * and its length. The bank and row of a burst do not depend on its lane, so
  * equal signatures are equal command streams. */
@@ -1143,7 +1408,7 @@ static int fr_state_matches(const fr_state *s, const fr_sources *o, int64_t sour
     int64_t rids[4];
     double half = s->half, pre_floor, activate_floor, row_floor, column_floor, end_floor, frontier;
     const double *resources_before = o->resources_before + source * 16;
-    const double *pc_before = o->pc_before + source * 8;
+    const double *pc_before = o->pc_before + source * 2 * FR_PC;
     const double *bf_before = o->bf_before + source * span_banks * 7;
     const double *history_before = o->history_before + source * 2 * entries * 4;
     if (s->channel[ch * 2] != o->channel_before[source * 2] || s->channel[ch * 2 + 1] != o->channel_before[source * 2 + 1])
@@ -1166,14 +1431,16 @@ static int fr_state_matches(const fr_state *s, const fr_sources *o, int64_t sour
             return 0;
     pre_floor = lowest - t[19] - half;
     for (pseudo = 0; pseudo < 2; ++pseudo) {
-        const double *mine = s->pc + (first_lane + pseudo) * 4;
-        const double *theirs = pc_before + pseudo * 4;
-        if (mine[2] != theirs[2] || mine[3] != theirs[3]
+        const double *mine = s->pc + (first_lane + pseudo) * FR_PC;
+        const double *theirs = pc_before + pseudo * FR_PC;
+        if (mine[2] != theirs[2] || mine[3] != theirs[3] || mine[5] != theirs[5]
+                || fr_max(mine[4], lowest) != fr_max(theirs[4], lowest)
                 || fr_max(mine[1], lowest) != fr_max(theirs[1], lowest)
                 || fr_max(mine[0], pre_floor) != fr_max(theirs[0], pre_floor))
             return 0;
     }
-    activate_floor = lowest - t[8] + t[0] - half;
+    /* A REFpb waits for tRC from its own edge, an ACT from one clock before it. */
+    activate_floor = lowest - t[8] + (s->g[6] ? 0. : t[0]) - half;
     for (offset = 0; offset < span_banks; ++offset) {
         int64_t bank = first_bank + offset;
         const double *mine = s->bf + bank * 7;
@@ -1226,7 +1493,7 @@ static void fr_capture_before(const fr_state *s, const fr_sources *o, int64_t so
     memcpy(o->rows_before + source * span_banks, s->rows + first_bank, (size_t)span_banks * sizeof(int64_t));
     memcpy(o->addresses_before + source * span_banks, s->addresses + first_bank, (size_t)span_banks * sizeof(int64_t));
     memcpy(o->bf_before + source * span_banks * 7, s->bf + first_bank * 7, (size_t)span_banks * 7 * sizeof(double));
-    memcpy(o->pc_before + source * 8, s->pc + first_lane * 4, 8 * sizeof(double));
+    memcpy(o->pc_before + source * 2 * FR_PC, s->pc + first_lane * FR_PC, 2 * FR_PC * sizeof(double));
     memcpy(o->history_before + source * 2 * entries * 4, s->history + first_lane * entries * 4,
            (size_t)(2 * entries * 4) * sizeof(double));
     memcpy(o->windows_before + source * 2 * capacity, s->windows + first_lane * capacity,
@@ -1263,7 +1530,7 @@ static void fr_capture_after(const fr_state *s, const fr_sources *o, int64_t sou
     memcpy(o->rows_after + source * span_banks, s->rows + first_bank, (size_t)span_banks * sizeof(int64_t));
     memcpy(o->addresses_after + source * span_banks, s->addresses + first_bank, (size_t)span_banks * sizeof(int64_t));
     memcpy(o->bf_after + source * span_banks * 7, s->bf + first_bank * 7, (size_t)span_banks * 7 * sizeof(double));
-    memcpy(o->pc_after + source * 8, s->pc + first_lane * 4, 8 * sizeof(double));
+    memcpy(o->pc_after + source * 2 * FR_PC, s->pc + first_lane * FR_PC, 2 * FR_PC * sizeof(double));
     memcpy(o->history_after + source * 2 * entries * 4, s->history + first_lane * entries * 4,
            (size_t)(2 * entries * 4) * sizeof(double));
     memcpy(o->windows_after + source * 2 * capacity, s->windows + first_lane * capacity,
@@ -1357,8 +1624,8 @@ static void fr_apply_source(const fr_state *s, const fr_sources *o, int64_t sour
     }
     for (pseudo = 0; pseudo < 2; ++pseudo) {
         int64_t lane = first_lane + pseudo;
-        const double *pc_after = o->pc_after + (source * 2 + pseudo) * 4;
-        const double *pc_before = o->pc_before + (source * 2 + pseudo) * 4;
+        const double *pc_after = o->pc_after + (source * 2 + pseudo) * FR_PC;
+        const double *pc_before = o->pc_before + (source * 2 + pseudo) * FR_PC;
         const double *history_after = o->history_after + (source * 2 + pseudo) * entries * 4;
         const double *history_before = o->history_before + (source * 2 + pseudo) * entries * 4;
         const double *windows_after = o->windows_after + (source * 2 + pseudo) * capacity;
@@ -1366,9 +1633,9 @@ static void fr_apply_source(const fr_state *s, const fr_sources *o, int64_t sour
         int64_t counts_after = o->counts_after[source * 2 + pseudo];
         int changed;
         s->pc_seen[lane] = s->pc_seen[lane] || o->seen_after[source * 2 + pseudo];
-        for (field = 0; field < 4; ++field)
+        for (field = 0; field < FR_PC; ++field)
             if (pc_after[field] != pc_before[field])
-                s->pc[lane * 4 + field] = pc_after[field];
+                s->pc[lane * FR_PC + field] = pc_after[field];
         for (entry = 0; entry < entries; ++entry)
             for (field = 0; field < 4; ++field)
                 if (history_after[entry * 4 + field] != history_before[entry * 4 + field])
@@ -1419,9 +1686,10 @@ static void fr_apply_source(const fr_state *s, const fr_sources *o, int64_t sour
 
 /* Whether no row this channel holds open reaches tRASmax while it can still matter.
  *
- * The first refresh closes every addressed bank, so those rows only have to
- * outlast the source's first refresh; a row a refresh leaves open has to
- * outlast its whole batch. Rows opened in the batch are the source's own.
+ * The first REFab, or a whole round of REFpb on both PCs, closes every addressed
+ * bank, so those rows only have to outlast that point of the source; a row a
+ * refresh leaves open has to outlast its whole batch. Rows opened in the batch
+ * are the source's own.
  */
 static int fr_open_rows_safe(const fr_state *s, const fr_sources *o, int64_t source, int64_t ch)
 {
@@ -1509,8 +1777,8 @@ static void fr_lay_out(fr_arena *arena, const fr_args *a, int mirror, int64_t ca
     o->addresses_after = (int64_t *)fr_carve(arena, c * span_banks, sizeof(int64_t));
     o->bf_before = (double *)fr_carve(arena, c * span_banks * 7, sizeof(double));
     o->bf_after = (double *)fr_carve(arena, c * span_banks * 7, sizeof(double));
-    o->pc_before = (double *)fr_carve(arena, c * 8, sizeof(double));
-    o->pc_after = (double *)fr_carve(arena, c * 8, sizeof(double));
+    o->pc_before = (double *)fr_carve(arena, c * 2 * FR_PC, sizeof(double));
+    o->pc_after = (double *)fr_carve(arena, c * 2 * FR_PC, sizeof(double));
     o->history_before = (double *)fr_carve(arena, c * 2 * entries * 4, sizeof(double));
     o->history_after = (double *)fr_carve(arena, c * 2 * entries * 4, sizeof(double));
     o->windows_before = (double *)fr_carve(arena, c * 2 * capacity, sizeof(double));
@@ -1565,8 +1833,9 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
     fr_queue queues[2][2];
     int64_t ticks[FR_FIELDS];
     int64_t index, request, ch, pseudo, direction, depth, hit_words, total_bursts, capacity_sources, source_count;
-    int64_t lane_shift, column_shift, bank_shift, sid_shift, row_mask, follow_tick, clock_back;
+    int64_t lane_shift, column_shift, bank_shift, follow_tick, clock_back;
     int64_t stripe_shift = a->stripe_shift, stripe_mask = g[15] - 1, stripe_step;
+    uint64_t sid_inverse;
     int64_t column_duration_tick, recovery_ticks[2], groups;
     double grid_limit, plain_limit, column_duration, recovery[2], first_arrival;
     int binary, mirror, grouped;
@@ -1589,9 +1858,8 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
     lane_shift = fr_binary_shift(g[0]);
     column_shift = fr_binary_shift(g[3]);
     bank_shift = fr_binary_shift(g[4]);
-    sid_shift = fr_binary_shift(g[14]);
-    binary = fr_imin(fr_imin(fr_imin(lane_shift, column_shift), bank_shift), sid_shift) >= 0;
-    row_mask = g[6] >= 0 ? ~(INT64_C(1) << g[6]) : -1;
+    sid_inverse = (UINT64_C(0x100000000) + (uint64_t)g[14] - 1) / (uint64_t)g[14];
+    binary = fr_imin(fr_imin(lane_shift, column_shift), bank_shift) >= 0;
     grouped = g[12] != 0;
     grid_limit = t[0] * FR_TWO48;
     plain_limit = half * FR_TWO44;
@@ -1751,6 +2019,8 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
         double reach = -HUGE_VAL, reach_open = -HUGE_VAL, active_deadline, close_before;
         double traffic_floor[2], last_column[2], act_floor[2], plan_start[2], faw_expiry[2], end_top[2];
         int64_t reads_since[2], last_group[2], lane_request[2], plan_kind[2], plan_direction[2], plan_offset[2];
+        double refresh_floor[2];
+        int64_t refresh_target[2], refresh_issued[2];
         int draining[2], stale[2];
         for (pseudo = 0; pseudo < 2; ++pseudo) {
             int64_t lane = 2 * ch + pseudo;
@@ -1763,9 +2033,25 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
         }
         if (!reached)
             continue;
+        if (g[6]) {
+            for (pseudo = 0; pseudo < 2; ++pseudo) {
+                int64_t lane = 2 * ch + pseudo;
+                double *due = pc + lane * FR_PC + 5;
+                pc_seen[lane] = 1;
+                if (*due < 0) {
+                    /* The current maintenance epoch, not history before the model; bank 0 opens it. */
+                    *due = fr_max(t[20], (double)fr_ifloor(fr_divide(first_arrival, t[20])) * t[20]);
+                    for (index = 0; index < banks; ++index)
+                        if (addresses[lane * banks + index] < 0)
+                            addresses[lane * banks + index] = fr_bank_cursor(g, lane, index) * g[9];
+                }
+            }
+            fr_refresh_gap(s, ch, first_arrival, mirror ? a->channel_counts + (ch - a->channel_first) * 7 : tally);
+        }
         if (mirror) {
-            if (channel[ch * 2 + 1] >= 0) {
-                double lowest = fr_min(first_arrival, channel[ch * 2 + 1]);
+            if (g[6] || channel[ch * 2 + 1] >= 0) {
+                double lowest = g[6] ? fr_min(fr_min(first_arrival, pc[2 * ch * FR_PC + 5]), pc[(2 * ch + 1) * FR_PC + 5])
+                                     : fr_min(first_arrival, channel[ch * 2 + 1]);
                 int mirrored = 0;
                 int64_t source;
                 fr_signature(a, ch, lanes, tables.signature);
@@ -1833,6 +2119,10 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
             act_floor[pseudo] = 0.;
             plan_start[pseudo] = HUGE_VAL;
             faw_expiry[pseudo] = -HUGE_VAL;
+            /* Never reached without per-bank refresh: a planned start is finite. */
+            refresh_floor[pseudo] = g[6] ? pc[(2 * ch + pseudo) * FR_PC + 5] : HUGE_VAL;
+            refresh_target[pseudo] = -1;
+            refresh_issued[pseudo] = 0;
             end_top[pseudo] = -1.;
             for (index = 0; index < entries; ++index)
                 end_top[pseudo] = fr_max(end_top[pseudo], history[((2 * ch + pseudo) * entries + index) * 4 + 3]);
@@ -1879,9 +2169,10 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                         if (binary) {
                             /* The burst location for non-negative cursors. */
                             int64_t block = cursor >> (stripe_shift + lane_shift + column_shift);
-                            bank_within = ((block >> bank_shift) & (g[14] - 1)) * g[15] * g[4];
+                            int64_t rest = block >> bank_shift;
+                            row = rest < FR_SID_FAST ? (int64_t)(((uint64_t)rest * sid_inverse) >> 32) : rest / g[14];
+                            bank_within = (rest - row * g[14]) * g[15] * g[4];
                             bank_within += (cursor & stripe_mask) * g[4] + (block & (g[4] - 1));
-                            row = (block >> (bank_shift + sid_shift)) & row_mask;
                         } else {
                             fr_burst_location(g, cursor, &bank_within, &row);
                         }
@@ -1921,6 +2212,9 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 if (waiting_reads + waiting_writes == 0) {
                     plan_start[pseudo] = HUGE_VAL;
                     plan_kind[pseudo] = -1;
+                    if (g[6])
+                        refresh_floor[pseudo] = fr_plan_refresh(s, lane, queues[pseudo], plan_start + pseudo, plan_kind + pseudo,
+                                                                plan_offset + pseudo, refresh_target + pseudo);
                     continue;
                 }
                 if (!draining[pseudo] && waiting_reads && waiting_writes >= q[2] && reads_since[pseudo] >= q[4]) {
@@ -1986,7 +2280,9 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
             hits_scanned:
                 if (queue->dirty) {
                     int unserved = 0;
-                    int64_t word;
+                    int64_t word, in_refresh = -1;
+                    /* A bank closed past the next tRP is refreshing; it holds up only its own entries. */
+                    double refresh_floor = resources[row_bus * 4] + t[6];
                     /* The oldest entry without a queued hit on its bank's open row. */
                     for (word = 0; word << 6 < waiting && row_offset < 0; ++word) {
                         uint64_t rest = ~queue->hits[word];
@@ -2003,10 +2299,18 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                             if (lane_rows[bank_within] >= 0 && queue->pending_hit[bank_within] > 0
                                     && !(forced && offset == 0))
                                 continue;
+                            if (g[6] && lane_rows[bank_within] < 0 && lane_bf[bank_within * 7 + 1] > refresh_floor
+                                    && !(forced && offset == 0)) {
+                                if (in_refresh < 0)
+                                    in_refresh = offset;
+                                continue;
+                            }
                             row_offset = offset;
                             break;
                         }
                     }
+                    if (row_offset < 0)
+                        row_offset = in_refresh;
                     queue->dirty = unserved;
                 }
                 start = HUGE_VAL;
@@ -2042,7 +2346,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                         int64_t live;
                         double row_floor = fr_max(fr_max(fr_max(fr_max(entry, act_floor[pseudo]),
                                                                 lane_bf[bank_within * 7 + 1]),
-                                                         pc[lane * 4 + 1]), resources[row_bus * 4]);
+                                                         pc[lane * FR_PC + 1]), resources[row_bus * 4]);
                         /* The row bus alone bounds later ACTs, so it alone may prune tFAW history. */
                         if (faw_expiry[pseudo] <= fr_max(0., resources[row_bus * 4]))
                             faw_expiry[pseudo] = fr_faw_prune(s, lane, fr_max(0., resources[row_bus * 4]));
@@ -2075,7 +2379,13 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 plan_kind[pseudo] = kind;
                 plan_direction[pseudo] = direction;
                 plan_offset[pseudo] = chosen;
+                if (refresh_floor[pseudo] <= start)
+                    refresh_floor[pseudo] = fr_plan_refresh(s, lane, queues[pseudo], plan_start + pseudo, plan_kind + pseudo,
+                                                            plan_offset + pseudo, refresh_target + pseudo);
             }
+            /* An idle lane plans REFpb for as long as the other has traffic. */
+            if (g[6] && queues[0][0].count + queues[0][1].count + queues[1][0].count + queues[1][1].count == 0)
+                break;
             if (plan_start[0] == plan_start[1]) {
                 if (plan_kind[0] < 0)
                     break;
@@ -2091,26 +2401,33 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 continue;
             }
             lane = 2 * ch + pseudo;
-            direction = plan_direction[pseudo];
             chosen = plan_offset[pseudo];
-            read = direction == 0;
-            queue = &queues[pseudo][direction];
-            capacity = q[direction];
-            slot = queue->head + chosen;
-            if (slot >= capacity)
-                slot -= capacity;
-            item = &queue->items[slot];
-            bank_within = item->within;
-            bank = lane * banks + bank_within;
-            row = item->row;
-            request = item->request;
-            entry = item->entry;
-            group = bank_group[bank_within];
-            history_entry = bank_entry[bank_within];
             /* A row command holds the row bus, and a PRE also blocks the PC's next
              * PRE: a deadline inside that span could no longer get its own PRE. */
-            horizon = kind == 0 ? fr_after_tick(start, recovery[direction], recovery_ticks[direction], half, inverse)
-                                : fr_after(start, kind == 1 ? fr_max(t[2] * t[0], t[19]) : t[1] * t[0], half);
+            if (kind >= 3) {
+                bank_within = chosen;
+                bank = lane * banks + bank_within;
+                entry = start;
+                horizon = fr_after(start, kind == 4 ? fr_max(t[2] * t[0], t[19]) : t[2] * t[0], half);
+            } else {
+                direction = plan_direction[pseudo];
+                read = direction == 0;
+                queue = &queues[pseudo][direction];
+                capacity = q[direction];
+                slot = queue->head + chosen;
+                if (slot >= capacity)
+                    slot -= capacity;
+                item = &queue->items[slot];
+                bank_within = item->within;
+                bank = lane * banks + bank_within;
+                row = item->row;
+                request = item->request;
+                entry = item->entry;
+                group = bank_group[bank_within];
+                history_entry = bank_entry[bank_within];
+                horizon = kind == 0 ? fr_after_tick(start, recovery[direction], recovery_ticks[direction], half, inverse)
+                                    : fr_after(start, kind == 1 ? fr_max(t[2] * t[0], t[19]) : t[1] * t[0], half);
+            }
             if (stale_deadline) {
                 active_deadline = fr_next_active_deadline(s, ch);
                 stale_deadline = 0;
@@ -2142,10 +2459,31 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 fr_recount(s, ch, queues, hit_words);
                 stale[0] = 1;
                 stale[1] = 1;
+                if (g[6]) {
+                    refresh_floor[0] = pc[2 * ch * FR_PC + 5];
+                    refresh_floor[1] = pc[(2 * ch + 1) * FR_PC + 5];
+                }
                 continue;
             }
-            if (kind == 1) {
-                fr_precharge(s, lane, bank, entry, tally);
+            if (bank_within == refresh_target[pseudo])
+                refresh_floor[pseudo] = pc[lane * FR_PC + 5];
+            if (kind == 3) {
+                fr_refresh_bank(s, lane, bank_within, start, tally);
+                refresh_floor[pseudo] = pc[lane * FR_PC + 5];
+                refresh_target[pseudo] = -1;
+                faw_expiry[pseudo] = -HUGE_VAL;
+                refresh_issued[pseudo] += 1;
+                if (!refreshed && refresh_issued[0] >= banks && refresh_issued[1] >= banks) {
+                    refreshed = 1;
+                    reach_open = fr_max(reach, resources[row_bus * 4]);
+                }
+                stale[pseudo] = 1;
+                last_pseudo = pseudo;
+                continue;
+            }
+            if (kind == 1 || kind == 4) {
+                /* A PRE for a REFpb is due at the REFpb's time and is not an early close. */
+                fr_precharge(s, lane, bank, kind == 4 ? pc[lane * FR_PC + 5] : entry, tally);
                 /* The channel deadline a full rescan would give after this bank
                  * closed: closing a bank whose own deadline lies above the
                  * minimum leaves it unchanged. An open bank mapped since the
@@ -2155,31 +2493,11 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                     active_deadline = fr_next_active_deadline(s, ch);
                     stale_deadline = 0;
                 }
-                stats[lane * stat_fields + 4] += 1;
-                early[pseudo * banks + bank_within] = 1;
-                {
-                    int64_t side;
-                    for (side = 0; side < 2; ++side) {
-                        fr_queue *other = &queues[pseudo][side];
-                        if (other->pending_hit[bank_within] > 0) {
-                            /* Only this bank's hits leave the bitset. */
-                            int64_t word;
-                            for (word = 0; word < hit_words; ++word) {
-                                uint64_t rest = other->hits[word];
-                                while (rest) {
-                                    int64_t offset = word * 64 + fr_lowest_bit(rest), position = other->head + offset;
-                                    rest &= rest - 1;
-                                    if (position >= q[side])
-                                        position -= q[side];
-                                    if (other->items[position].within == bank_within)
-                                        other->hits[word] &= ~(UINT64_C(1) << (offset & 63));
-                                }
-                            }
-                            other->pending_hit[bank_within] = 0;
-                        }
-                        other->dirty = 1;
-                    }
+                if (kind == 1) {
+                    stats[lane * stat_fields + 4] += 1;
+                    early[pseudo * banks + bank_within] = 1;
                 }
+                fr_forget_bank(queues[pseudo], q, hit_words, bank_within);
                 stale[pseudo] = 1;
                 last_pseudo = pseudo;
                 continue;
@@ -2282,7 +2600,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 moved[data] += g[9];
                 directions[data] = read ? 1 : 2;
                 touched[data] = 1;
-                pc[lane * 4 + (read ? 2 : 3)] = fr_after_tick(data_start, t[turnaround], ticks[turnaround], half, inverse);
+                pc[lane * FR_PC + (read ? 2 : 3)] = fr_after_tick(data_start, t[turnaround], ticks[turnaround], half, inverse);
                 if (read) {
                     double own;
                     bf[bank * 7 + 2] = fr_max(bf[bank * 7 + 2], fr_after_tick(command, t[9], ticks[9], half, inverse));

@@ -42,8 +42,9 @@ TIMING_FIELDS = ARRAY_UNKNOWN | {"command_clock_ns", "activate_command_cycles",
     "precharge_command_cycles", "column_command_cycles", "precharge_to_activate_ns",
     "minimum_active_ns", "maximum_active_ns", "activate_cycle_ns", "precharge_to_precharge_ns",
     "column_same_group_ns", "column_different_group_ns", "column_different_sid_ns",
-    "refresh_interval_ns", "refresh_cycle_ns", "read_latency_ns", "write_latency_ns",
-    "refresh_policy", "activated_row_msb", "close_ns", "burst_interval_ns"}
+    "refresh_interval_ns", "refresh_cycle_ns", "refresh_bank_cycle_ns", "refresh_bank_gap_ns",
+    "read_latency_ns", "write_latency_ns",
+    "refresh_policy", "close_ns", "burst_interval_ns"}
 
 
 def family(generation):
@@ -78,6 +79,16 @@ def refresh_cycle_ns_for(generation: str, density: int, height: int):
     if gen == "HBM2" and density == 16:
         return {4: 350., 8: 450.}.get(height)
     return None
+
+
+def refresh_bank_cycle_ns_for(generation: str, density: int):
+    """JEDEC tRFCpb table lookup; only HBM4 refreshes per bank here."""
+    return {24: 240., 32: 280.}.get(density) if family(generation) == "HBM4" else None
+
+
+def refresh_bank_gap_ns_for(clock: float) -> float:
+    """JEDEC tRREFD: REFpb to REFpb, and REFpb to ACT of another bank."""
+    return max(3 * clock, 8.)
 
 
 def clock_ns_for(generation: str, width: int, lanes: int, interface_gb_s: float) -> float:
@@ -123,6 +134,13 @@ def _organization_refresh(payload):
     if payload.get("data_lanes") not in (None, org["channels"] * 2):
         return None
     return refresh_cycle_ns_for(gen, density, height)
+
+
+def _organization_bank_refresh(payload):
+    """tRFCpb of a recognized geometry; HBM4 rows are density * 512."""
+    if _organization_refresh(payload) is None:
+        return None
+    return refresh_bank_cycle_ns_for(str(payload.get("generation", "")).upper(), payload["rows_per_bank"] // 512)
 
 
 def _access_precharge_windows(payload, clock, gen):
@@ -174,7 +192,7 @@ def validate_hbm_timing_constraints(payload: Mapping):
             source=source or (ac_source if category == "standard_limit" else None),
             related_values=related_values)
 
-    for name in selected & (TIMING_FIELDS - {"refresh_policy", "activated_row_msb"}):
+    for name in selected & (TIMING_FIELDS - {"refresh_policy"}):
         value = payload.get(name)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
             _input_error(payload, name, "timing must be finite and non-negative", "时序必须是有限的非负数。", "填写有效数值；不要使用负数、NaN 或无穷大。")
@@ -238,6 +256,23 @@ def validate_hbm_timing_constraints(payload: Mapping):
                  f"将最大开行时间设在 (0, {limit:g}] ns 内，同时保证足以完成读写恢复；不能用 0 停用这项限制。",
                  f"Choose 0 < maximum_active_ns <= {limit:g} ns while preserving access recovery time; zero cannot disable the limit.",
                  rule="maximum_active_limit", related_values={"maximum_ns": limit, "refresh_interval_ns": interval or 3900.})
+    if payload.get("refresh_policy") == "per_bank":
+        cycle_minimum = _organization_bank_refresh(payload)
+        if gen != "HBM4" or not _positive(interval) or not _positive(payload.get("refresh_bank_cycle_ns")):
+            fail("refresh_bank_cycle_ns", "per_bank refresh requires HBM4, positive tRFCpb and positive tREFI",
+                 "每 bank 刷新只支持 HBM4，且 tRFCpb 和 tREFI 都必须大于 0。",
+                 "提供适用的 tRFCpb/tREFI；其他代际使用 all_bank 或明确关闭刷新。",
+                 "Supply applicable positive tRFCpb/tREFI; other generations use all_bank or disabled refresh.",
+                 category="model_limit", rule="refresh_inputs", related_values={"refresh_interval_ns": interval})
+        if cycle_minimum is not None:
+            minimum("refresh_bank_cycle_ns", cycle_minimum, "tRFCpb AC table for the actual density", "按当前密度查询 tRFCpb 表得到该下限")
+        minimum("refresh_bank_gap_ns", refresh_bank_gap_ns_for(clock), "tRREFD AC minimum: max(3*tCK, 8 ns)", "tRREFD 不小于 max(3 个时钟周期, 8 ns)")
+        if payload["refresh_bank_cycle_ns"] > interval:
+            fail("refresh_bank_cycle_ns", "periodic per_bank policy cannot sustain tRFCpb > tREFI",
+                 f"单 bank 刷新耗时 {payload['refresh_bank_cycle_ns']:g} ns，超过刷新间隔 {interval:g} ns，该 bank 将一直处于刷新中。",
+                 "重新选择可排程的刷新配置，使 tRFCpb≤tREFI；仍须满足 tRFCpb 表中下限和支持的刷新间隔范围。",
+                 "Choose a feasible refresh configuration with tRFCpb <= tREFI, preserving the device-table minimum and supported refresh interval range.",
+                 category="model_limit", rule="refresh_schedule", related_values={"refresh_interval_ns": interval, "maximum_ns": interval})
     if payload.get("refresh_policy") == "all_bank":
         if not _positive(interval) or not _positive(payload.get("refresh_cycle_ns")):
             fail("refresh_cycle_ns", "all_bank refresh requires positive tRFC and tREFI", "启用全 bank 刷新时，刷新耗时和刷新间隔都必须大于 0。",
@@ -289,7 +324,7 @@ def _authored_timing_fields(payload, previous, explicit, provenance):
     """
     if previous:
         return explicit
-    for name in TIMING_FIELDS - {"refresh_policy", "activated_row_msb"}:
+    for name in TIMING_FIELDS - {"refresh_policy"}:
         if name in payload:
             value = payload[name]
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
@@ -338,6 +373,8 @@ def _authored_timing_fields(payload, previous, explicit, provenance):
     if expected["maximum_active_ns"] < minimum_window:
         explicit.add("maximum_active_ns")
     expected["refresh_cycle_ns"] = _organization_refresh(context) or 0.
+    expected["refresh_bank_cycle_ns"] = _organization_bank_refresh(context) or 0.
+    expected["refresh_bank_gap_ns"] = refresh_bank_gap_ns_for(clock) if expected["refresh_bank_cycle_ns"] else 0.
     for name, default in (("read_latency_ns", 32), ("write_latency_ns", 8)):
         cycles = provenance.get(name, {}).get("cycles", default)
         if not _positive(cycles):
@@ -662,9 +699,6 @@ def normalize_hbm_dependencies(payload: Mapping, *, previous: Mapping | None = N
     meta["operating_point_basis"] = operating_basis
     result["burst_interval_ns"] = result["burst_bytes"] * lanes / interface
     record("burst_interval_ns", "derived_from_input", "full DQ burst duration from physical interface; direction caps only pace starts")
-    if automatic("activated_row_msb"):
-        result["activated_row_msb"] = None if gen == "HBM2" else (result["rows_per_bank"] - 1).bit_length() - 1
-        record("activated_row_msb", "standard_command_semantics", "effective RA highest bit chooses the activated page half")
 
     for name, value in reference_timings(generation, clock).items():
         if automatic(name):
@@ -721,8 +755,19 @@ def normalize_hbm_dependencies(payload: Mapping, *, previous: Mapping | None = N
             result["refresh_interval_ns"] = 3900.0 if result.get("refresh_cycle_ns", 0) > 0 else 0.0
             record("refresh_interval_ns", "standard_reference" if result["refresh_interval_ns"] else "unknown",
                    "selected 3900ns periodic refresh interval; vendor applicability unverified")
+    bank_refresh = refresh_bank_cycle_ns_for(generation, density) if standard else None
+    if automatic("refresh_bank_cycle_ns") or provenance.get("refresh_bank_cycle_ns", {}).get("status") in {"unknown", "unknown_disabled"}:
+        result["refresh_bank_cycle_ns"] = bank_refresh or 0.0
+        record("refresh_bank_cycle_ns", "standard_reference" if bank_refresh is not None else "unknown",
+               "JEDEC tRFCpb table selected by generation and density" if bank_refresh is not None else "no applicable known tRFCpb entry; per-bank refresh is unavailable")
+    if automatic("refresh_bank_gap_ns") or provenance.get("refresh_bank_gap_ns", {}).get("status") in {"unknown", "unknown_disabled"}:
+        result["refresh_bank_gap_ns"] = refresh_bank_gap_ns_for(clock) if result.get("refresh_bank_cycle_ns", 0) > 0 else 0.0
+        record("refresh_bank_gap_ns", "standard_reference" if result["refresh_bank_gap_ns"] else "unknown",
+               "JEDEC tRREFD = max(3 tCK, 8 ns)")
     if "refresh_policy" not in explicit and provenance.get("refresh_policy", {}).get("status") in AUTOMATIC | {"controller_policy", "unknown_disabled"}:
-        result["refresh_policy"] = "all_bank" if result.get("refresh_cycle_ns", 0) > 0 and result.get("refresh_interval_ns", 0) > 0 else "disabled"
+        result["refresh_policy"] = ("disabled" if not result.get("refresh_interval_ns", 0) > 0
+                                    else "per_bank" if result.get("refresh_bank_cycle_ns", 0) > 0
+                                    else "all_bank" if result.get("refresh_cycle_ns", 0) > 0 else "disabled")
     if automatic("maximum_active_ns"):
         result["maximum_active_ns"] = 9 * (result.get("refresh_interval_ns") or 3900.0)
         record("maximum_active_ns", "derived_from_input", "tRASmax = 9*tREFI; 3900ns reference remains when automatic refresh is unavailable",

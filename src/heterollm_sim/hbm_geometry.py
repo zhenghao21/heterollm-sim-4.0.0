@@ -13,7 +13,8 @@ import math
 from typing import Any
 
 from .memory_types import DRAM_BANK_GROUP_TIMING_FIELDS, DramConfig
-from ._hbm_dependencies import (organization_for, refresh_cycle_ns_for, clock_ns_for,
+from ._hbm_dependencies import (organization_for, refresh_cycle_ns_for, refresh_bank_cycle_ns_for,
+                                refresh_bank_gap_ns_for, clock_ns_for,
                                 reference_timings, normalize_hbm_dependencies)
 
 
@@ -263,6 +264,7 @@ def make_hbm_geometry_config(
             "leaves base-organization physical stack height vendor-specific"
         )
 
+    refresh_bank_ns = refresh_bank_cycle_ns_for(generation, density)
     hbm4_rtw = None
     hbm4_wtr_s = hbm4_wtr_l = hbm4_rtp = None
     if hbm4:
@@ -295,7 +297,6 @@ def make_hbm_geometry_config(
         activate_command_cycles=1.5 if hbm3 or hbm4 else 2.0,
         precharge_command_cycles=0.5 if hbm3 or hbm4 else 1.0,
         column_command_cycles=1.0,
-        activated_row_msb=(rows - 1).bit_length() - 1 if hbm3 or hbm4 else None,
         activate_to_read_ns=14.0, activate_to_write_ns=14.0,
         precharge_to_activate_ns=reference_rp,
         minimum_active_ns=reference_ras, maximum_active_ns=9 * 3900.0,
@@ -308,9 +309,11 @@ def make_hbm_geometry_config(
         column_same_group_ns=timing_reference["column_same_group_ns"],
         column_different_group_ns=timing_reference["column_different_group_ns"],
         column_different_sid_ns=timing_reference["column_different_sid_ns"],
-        refresh_policy="all_bank" if refresh_ns is not None else "disabled",
+        refresh_policy="disabled" if refresh_ns is None else "per_bank" if refresh_bank_ns else "all_bank",
         refresh_interval_ns=3900.0 if refresh_ns is not None else 0.0,
         refresh_cycle_ns=refresh_ns or 0.0,
+        refresh_bank_cycle_ns=refresh_bank_ns or 0.0,
+        refresh_bank_gap_ns=refresh_bank_gap_ns_for(clock_ns) if refresh_bank_ns else 0.0,
         metadata=metadata,
     )
     config.metadata.update({
@@ -378,7 +381,7 @@ def make_hbm_geometry_config(
                       "HBM3": "JESD238 pp.26,34-46,161-165", "HBM3E": "JESD238 pp.26,34-46,161-165",
                       "HBM4": "JESD270-4A pp.33,41-55,194-199"}[generation])
     record(("control_mode", "activate_command_cycles", "precharge_command_cycles",
-            "column_command_cycles", "activated_row_msb"), "standard_command_semantics", organization_source, control_basis)
+            "column_command_cycles"), "standard_command_semantics", organization_source, control_basis)
     record(("command_clock_ns",), "derived_from_input", organization_source,
            "CK derived from authored physical DQ operating point using the JEDEC CK/DQ ratio; not a certified speed bin")
     for name, supplied in (("read_latency_ns", supplied_read_latency), ("write_latency_ns", supplied_write_latency)):
@@ -398,7 +401,12 @@ def make_hbm_geometry_config(
     record(("activate_to_read_ns", "activate_to_write_ns", "write_to_precharge_ns"),
            "assumption", "simulator", "retained analytical tRCD14ns/tWR15ns; normative AC minimum cells are unspecified")
     record(("refresh_policy",), "controller_policy", "simulator",
-           "periodic REFab per PC; no postponement/pull-in or per-bank optimization; disabled where tRFC is unresolved")
+           "periodic REFpb per PC in bank order, postponed at most one tREFI under traffic" if refresh_bank_ns
+           else "periodic REFab per PC; no postponement/pull-in or per-bank optimization; disabled where tRFC is unresolved")
+    record(("refresh_bank_cycle_ns",), "standard_reference" if refresh_bank_ns else "unknown", organization_source,
+           "AC tRFCpb table for the selected density; not defined here for HBM2/3")
+    record(("refresh_bank_gap_ns",), "standard_reference" if refresh_bank_ns else "unknown", organization_source,
+           "AC tRREFD = max(3 tCK, 8 ns); not defined here for HBM2/3")
     record(("refresh_interval_ns",), "standard_reference" if refresh_ns is not None else "unknown", organization_source,
            "selected 3900ns periodic refresh interval within the supported range; vendor applicability unverified; unknown tRFC disables automatic refresh")
     record(("refresh_cycle_ns",), "standard_reference" if refresh_ns is not None else "unknown", organization_source,
@@ -416,7 +424,8 @@ def make_hbm_geometry_config(
         timing_basis="JEDEC command rules and stated minima; IDD example, legal MR reference selections and unknown vendor timings are separately labelled",
         timing_validation="not_a_vendor_speed_bin",
         unconfigured_timing_parameters=inactive + ([] if refresh_ns is not None else ["refresh_cycle_ns"]),
-        control_limitations=["training, parity/ECC transport, auto-precharge and per-bank refresh are not implemented",
+        control_limitations=["training, parity/ECC transport and auto-precharge are not implemented",
+                             *([] if refresh_bank_ns else ["per-bank refresh is not implemented"]),
                              "address mapping, request scheduling, queue scope, open-page behavior and bandwidth-cap pacing are model policies, not JEDEC scheduling requirements",
                              "electrical PHY turnaround offsets and unspecified array timing gates require vendor inputs"],
         accounting_basis="command bus occupancy, DQ busy time and dependency wait are separate; one full 32B DQ burst is charged once; WR recovery limits PRE and is not a write-completion tail",

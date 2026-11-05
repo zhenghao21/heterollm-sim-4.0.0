@@ -45,6 +45,8 @@ def hbm4(**overrides):
 
 
 CONFIG = hbm4()
+REFAB = hbm4(refresh_policy="all_bank")
+TWELVE_HIGH = hbm4(dies_per_stack=12, die_density_gbits=24)
 
 
 def numeric_core(config=CONFIG):
@@ -81,7 +83,8 @@ class Recorder(_FrFcfsController):
         self.entry = None
 
     def issue(self, lane, lanes, kind, start):
-        self.entry = lane["queues"][lane["direction"]][lane["offset"]]
+        if kind < 3:
+            self.entry = lane["queues"][lane["direction"]][lane["offset"]]
         return super().issue(lane, lanes, kind, start)
 
     def precharge(self, mapping, old, bank, earliest):
@@ -91,6 +94,14 @@ class Recorder(_FrFcfsController):
             return super().precharge(mapping, old, bank, earliest)
         finally:
             self.entry = served
+
+    def refresh_bank(self, key, within, mapping, earliest):
+        self.entry = dict(mapping=mapping, row=None)
+        return super().refresh_bank(key, within, mapping, earliest)
+
+    def skip_refresh_gap(self, lanes, latest):
+        """The checker follows every command."""
+        return False
 
     def command(self, key, kind, earliest, cycles, name, *, rising=False):
         transfer = super().command(key, kind, earliest, cycles, name, rising=rising)
@@ -132,6 +143,11 @@ def check_legal(log, config=CONFIG):
         def bank_key(mapping):
             return (mapping.bank_group, mapping.bank)
         last_refresh_end = -1.
+        last_bank_refresh = None
+        window = []
+        refreshed = {}
+        set_seen = defaultdict(set)
+        set_end = {}
         for event in events:
             name, start, mapping = event["name"], event["start"], event["mapping"]
             if name == "REFRESH_ALL":
@@ -144,6 +160,46 @@ def check_legal(log, config=CONFIG):
                         assert start >= state["anchor"] + config.minimum_active_ns - slack
                         state["open"] = None
                 continue
+            if name == "REFRESH_BANK":
+                state = banks.setdefault(bank_key(mapping), {"open": None})
+                group = mapping.bank_group
+                within = group * config.banks_per_group + mapping.bank
+                sid = within // 16
+                assert state.get("open") is None, event
+                assert abs(start / ck - round(start / ck)) < 1e-6, event
+                if state.get("precharged") is not None:
+                    assert start >= state["precharged"] + config.precharge_to_activate_ns - slack
+                if "anchor" in state:
+                    assert start >= state["anchor"] + config.activate_cycle_ns - slack
+                    checked["REFpb tRC"] += 1
+                if "act_allowed" in state:
+                    assert start >= state["act_allowed"] - slack
+                for other_group, other_anchor in activates[-8:]:
+                    gap = config.activate_same_group_ns if other_group == group else config.activate_different_group_ns
+                    assert start >= other_anchor + gap - slack
+                    checked["REFpb tRRD"] += 1
+                if last_bank_refresh is not None:
+                    assert start >= last_bank_refresh + config.refresh_bank_gap_ns - slack
+                    checked["REFpb tRREFD"] += 1
+                window = sorted(window + [start])
+                if len(window) >= 5:
+                    assert window[-1] >= window[-5] + config.four_activate_window_ns - slack
+                    checked["REFpb tFAW"] += 1
+                assert within not in set_seen[sid], event
+                if not set_seen[sid] and sid in set_end:
+                    assert start >= set_end[sid] - slack
+                    checked["REFpb set"] += 1
+                set_seen[sid].add(within)
+                if len(set_seen[sid]) == 16:
+                    set_seen[sid].clear()
+                    set_end[sid] = start + config.refresh_bank_cycle_ns
+                if within in refreshed:
+                    assert start - refreshed[within] <= 9 * config.refresh_interval_ns + slack
+                refreshed[within] = start
+                state["act_allowed"] = start + config.refresh_bank_cycle_ns
+                last_bank_refresh = start
+                checked["REFpb"] += 1
+                continue
             assert start >= last_refresh_end - slack, event
             state = banks.setdefault(bank_key(mapping), {"open": None})
             group = mapping.bank_group
@@ -153,6 +209,8 @@ def check_legal(log, config=CONFIG):
                 assert state.get("open") is None
                 if "act_allowed" in state:
                     assert anchor >= state["act_allowed"] - slack
+                if last_bank_refresh is not None:
+                    assert anchor >= last_bank_refresh + config.refresh_bank_gap_ns - slack
                 if "anchor" in state:
                     assert anchor >= state["anchor"] + config.activate_cycle_ns - slack
                     checked["tRC"] += 1
@@ -163,9 +221,9 @@ def check_legal(log, config=CONFIG):
                     gap = config.activate_same_group_ns if other_group == group else config.activate_different_group_ns
                     assert anchor >= other_anchor + gap - slack
                     checked["tRRD_L" if other_group == group else "tRRD_S"] += 1
-                anchors = [item[1] for item in activates] + [anchor]
-                if len(anchors) >= 5:
-                    assert anchors[-1] >= anchors[-5] + config.four_activate_window_ns - slack
+                window = sorted(window + [anchor])
+                if len(window) >= 5:
+                    assert window[-1] >= window[-5] + config.four_activate_window_ns - slack
                     checked["tFAW"] += 1
                 activates.append((group, anchor))
                 state.update(open=event["row"], anchor=anchor, ready_col=anchor + config.activate_to_read_ns)
@@ -248,10 +306,136 @@ def test_refresh_stream_stays_legal():
     arrival = CONFIG.refresh_interval_ns - 100.
     items = [request(index, READ, address(index % 2, group=index % 2, column=index // 4, bank=(index // 8) % 8),
                      arrival=arrival) for index in range(1500)]
-    results, log = run_recorded(items)
+    results, log = run_recorded(items, config=REFAB)
     assert any(event["name"] == "REFRESH_ALL" for event in log)
-    check_legal(log)
+    check_legal(log, REFAB)
     assert max(result.completion_ns for result in results) > CONFIG.refresh_interval_ns
+
+
+def dense_stream(config, count=2500, arrival=0.):
+    """Row misses and hits over every SID of two PCs in one channel."""
+    rng = random.Random(5)
+    sids = config.sid_count
+    return [request(index, rng.choice((READ, READ, WRITE)), address(
+        rng.randrange(2), group=rng.randrange(2), bank=rng.randrange(8), column=rng.randrange(32),
+        sid=rng.randrange(sids), row=rng.randrange(3), config=config), arrival=arrival) for index in range(count)]
+
+
+@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH), ids=("16H", "12H"))
+def test_per_bank_refresh_under_traffic_meets_every_constraint(config):
+    results, log = run_recorded(dense_stream(config), config=config)
+    checked = check_legal(log, config)
+    for name in ("REFpb", "REFpb tRC", "REFpb tRRD", "REFpb tRREFD", "REFpb tFAW", "tFAW", "tRRD_L", "tRRD_S"):
+        assert checked[name] > 0, name
+    span = max(result.completion_ns for result in results)
+    step = config.refresh_interval_ns / config.bank_count
+    # Each PC refreshes in step, at most one tREFI late.
+    for pseudo in range(2):
+        starts = [event["start"] for event in log if event["name"] == "REFRESH_BANK" and event["key"][2] == pseudo]
+        assert len(starts) >= (span - 2 * config.refresh_interval_ns) // step
+        for number, start in enumerate(starts):
+            assert start - (config.refresh_interval_ns + number * step) <= 1.1 * config.refresh_interval_ns
+    assert not any(event["name"] == "REFRESH_ALL" for event in log)
+
+
+@pytest.mark.parametrize("dies,density", ((4, 24), (8, 24), (12, 24), (16, 32)))
+def test_a_gap_catches_up_every_refresh_in_every_organization(dies, density):
+    config = hbm4(dies_per_stack=dies, die_density_gbits=density, capacity_bytes=64 * GB)
+    first = [request("a", READ, address(0, config=config)), request("b", READ, address(1, config=config))]
+    gap = 3 * config.refresh_interval_ns
+    second = [request("c", READ, address(0, row=1, config=config), arrival=gap)]
+    _, log = run_recorded(first, second, config=config)
+    checked = check_legal(log, config)
+    step = config.refresh_interval_ns / config.bank_count
+    # The epoch opens at one tREFI; the last batch adds the REFpb due while it runs.
+    expected = 2 * round((gap - config.refresh_interval_ns) / step)
+    assert expected <= sum(event["name"] == "REFRESH_BANK" for event in log) <= expected + 2 * round(400. / step)
+    assert checked["REFpb"] >= expected
+
+
+@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH), ids=("16H", "12H"))
+def test_skipping_a_gap_changes_nothing_later_commands_can_see(config, monkeypatch):
+    def run(skip):
+        if not skip:
+            monkeypatch.setattr(_FrFcfsController, "skip_refresh_gap", lambda self, lanes, latest: False)
+        core = reference_core(config)
+        results = []
+        interval = config.refresh_interval_ns
+        for arrival in (0., 1.5 * interval, 1.5 * interval + 300., 2.1 * interval, 40 * interval, 40 * interval + 700.):
+            results += core.submit_many(dense_stream(config, 200, arrival))
+        monkeypatch.undo()
+        timeline = core.timeline
+        return ([result.completion_ns for result in results], sorted(timeline.ready_ns.items()),
+                sorted(timeline.bytes_moved.items()), sorted((key, bank.open_row) for key, bank in core._banks.items()),
+                {key: (state["refresh_gate"], state["next_refresh"], state["activate_window"])
+                 for key, state in core._hbm_control_state["pcs"].items()},
+                sum(result.counters.get("refresh_commands", 0) for result in results),
+                sum(result.counters.get("precharge_commands", 0) for result in results)), dict(timeline.busy_ns)
+    skipped, skipped_busy = run(True)
+    stepped, stepped_busy = run(False)
+    assert skipped == stepped
+    assert skipped_busy == pytest.approx(stepped_busy, rel=1e-9)
+
+
+def test_a_gap_after_traffic_skips_refresh_that_cannot_be_seen():
+    config = TWELVE_HIGH
+    core = reference_core(config)
+    calls = []
+
+    class Counting(_FrFcfsController):
+        def refresh_bank(self, key, within, mapping, earliest):
+            calls.append(key)
+            return super().refresh_bank(key, within, mapping, earliest)
+
+    Counting(core, tuple(dense_stream(config, 100))).execute()
+    calls.clear()
+    results = Counting(core, tuple(dense_stream(config, 100, 20 * config.refresh_interval_ns))).execute()
+    total = sum(result.counters.get("refresh_commands", 0) for result in results)
+    assert total >= 2 * 18 * config.bank_count
+    # Only the REFpb a later command could see, and those the batch itself runs over, are simulated.
+    assert len(calls) < total / 4
+
+
+def test_a_refreshing_bank_holds_up_only_its_own_entries():
+    step = CONFIG.refresh_interval_ns / CONFIG.bank_count
+    due = CONFIG.refresh_interval_ns + 3 * step
+    # A row on the bank due next is opened and refreshed, then its next row must wait tRFCpb.
+    refreshed = address(0, bank=3)
+    first = [request("open", READ, refreshed, arrival=due - 60.)]
+    blocked = request("blocked", READ, address(0, bank=3, row=1), arrival=due + 20.)
+    others = [request(f"other{index}", READ, address(0, bank=index + 4, sid=1), arrival=due + 20.)
+              for index in range(3)]
+    results, log = run_recorded(first, [blocked, *others])
+    completions = {result.request_id: result.completion_ns for result in results}
+    assert all(completions[item.request_id] < completions["blocked"] for item in others)
+    refresh = next(event["start"] for event in log if event["name"] == "REFRESH_BANK"
+                   and event["mapping"].bank == 3 and event["mapping"].bank_group == 0)
+    assert completions["blocked"] >= refresh + CONFIG.refresh_bank_cycle_ns
+    check_legal(log)
+
+
+def test_queued_hits_keep_a_row_open_past_the_refresh_it_is_due():
+    step = CONFIG.refresh_interval_ns / CONFIG.bank_count
+    due = CONFIG.refresh_interval_ns + 3 * step
+    # A run of hits on the bank whose REFpb falls due in the middle of it, then one more entry to end after it.
+    items = [request(index, READ, address(0, bank=3, column=index), arrival=due - 15.) for index in range(30)]
+    items.append(request("last", READ, address(0, bank=4, sid=1), arrival=due + 400.))
+    results, log = run_recorded(items)
+    assert sum(result.counters["row_hits"] for result in results) == 29
+    refresh = next(event["start"] for event in log if event["name"] == "REFRESH_BANK"
+                   and event["mapping"].bank == 3 and event["mapping"].bank_group == 0 and event["key"][2] == 0)
+    columns = [event["start"] for event in log if event["name"] == "READ_COMMAND" and event["mapping"].bank == 3]
+    assert refresh > max(columns) > due
+    check_legal(log)
+
+
+def test_refresh_commands_are_counted_on_both_paths():
+    compiled, scalar = numeric_core(), reference_core()
+    items = dense_stream(CONFIG, 600, CONFIG.refresh_interval_ns)
+    left = compiled.submit_many(items)
+    right = scalar.submit_many(items)
+    counts = [sum(result.counters.get("refresh_commands", 0) for result in results) for results in (left, right)]
+    assert counts[0] == counts[1] > 0
 
 
 def test_mapping_keeps_one_lane_row_stream_with_alternating_groups():
@@ -299,14 +483,31 @@ def batches_of(seed):
     return batches
 
 
+@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH, REFAB), ids=("16H", "12H", "REFab"))
 @pytest.mark.parametrize("seed", range(6))
-def test_scalar_and_compiled_paths_are_bit_identical(seed):
-    compiled, scalar = numeric_core(), reference_core()
+def test_scalar_and_compiled_paths_are_bit_identical(seed, config):
+    compiled, scalar = numeric_core(config), reference_core(config)
     first, second = [], []
     for items in batches_of(seed):
         first += compiled.submit_many(items)
         second += scalar.submit_many(items)
     assert fingerprint(compiled, first) == fingerprint(scalar, second)
+
+
+@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH), ids=("16H", "12H"))
+def test_dense_traffic_with_refresh_is_bit_identical_on_both_paths(config):
+    compiled, scalar = numeric_core(config), reference_core(config)
+    first, second = [], []
+    for arrival in (0., 9000., 9100., 11000., 60000., 500000.):
+        items = dense_stream(config, 500, arrival)
+        first += compiled.submit_many(items)
+        second += scalar.submit_many(items)
+    assert fingerprint(compiled, first) == fingerprint(scalar, second)
+    left, right = compiled._hbm_control_state, scalar._hbm_control_state
+    assert left["pcs"].keys() == right["pcs"].keys()
+    for key, state in right["pcs"].items():
+        for name in ("last_precharge", "blocked_until", "refresh_gate", "next_refresh", "scheduler_stats"):
+            assert left["pcs"][key][name] == state[name], (key, name)
 
 
 def test_controller_state_publishes_identically_on_both_paths():
@@ -318,7 +519,7 @@ def test_controller_state_publishes_identically_on_both_paths():
     assert left["pcs"].keys() == right["pcs"].keys()
     for key, state in right["pcs"].items():
         for name in ("activate", "column", "write_end", "last_precharge", "blocked_until",
-                     "next_data_start", "activate_window", "scheduler_stats"):
+                     "next_data_start", "activate_window", "scheduler_stats", "refresh_gate", "next_refresh"):
             assert left["pcs"][key][name] == state[name], (key, name)
     assert left["channels"] == right["channels"]
 
@@ -540,12 +741,13 @@ def test_kernel_reports_its_failures_as_python_errors():
 
 
 @pytest.mark.parametrize("seed", range(3))
-@pytest.mark.parametrize("policy", ("all_bank", "disabled"))
-def test_channel_mirror_matches_simulating_every_channel(seed, policy):
+@pytest.mark.parametrize("policy,overrides", (
+    ("all_bank", {}), ("disabled", {}), ("per_bank", {}), ("per_bank", {"dies_per_stack": 12, "die_density_gbits": 24})))
+def test_channel_mirror_matches_simulating_every_channel(seed, policy, overrides):
     from heterollm_sim._compiled_hbm import _pack_hbm_numeric
     from heterollm_sim._hbm_numeric import _run_fr_fcfs_channels
 
-    config = hbm4(refresh_policy=policy)
+    config = hbm4(refresh_policy=policy, **overrides)
     packed = _pack_hbm_numeric(numeric_core(config), request("x", READ, 0, ))
     channels = config.lane_count // 2
     whole = [array.copy() for array in packed.arrays]

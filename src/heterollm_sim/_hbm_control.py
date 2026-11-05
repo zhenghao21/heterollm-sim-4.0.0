@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from bisect import insort
 
-from .memory_mapping import split_dram_request
+from .memory_mapping import map_dram_address, split_dram_request
 from .memory_types import Operation, StageTiming, TransactionResult
 from ._hbm_clock import align_clock, clock_after
 
@@ -37,7 +37,7 @@ class _Controller:
         self.counts = dict(activate_commands=0, precharge_commands=0,
                            read_commands=0, write_commands=0,
                            row_command_bus_busy_ns=0.0, column_command_bus_busy_ns=0.0)
-        if self.config.refresh_policy == "all_bank":
+        if self.config.refresh_policy != "disabled":
             self.counts["refresh_commands"] = 0
 
     def validate_calendars(self):
@@ -59,7 +59,8 @@ class _Controller:
         return self.pcs.setdefault(key, {"activate": {}, "activate_window": [],
             "column": {"read": {}, "write": {}}, "write_end": {},
             "last_precharge": None, "blocked_until": 0.0,
-            "next_data_start": {"read": 0.0, "write": 0.0}})
+            "next_data_start": {"read": 0.0, "write": 0.0},
+            "refresh_gate": 0.0, "next_refresh": -1.0})
 
     def bank(self, mapping):
         from .dram_core import _BankState
@@ -149,7 +150,7 @@ class _Controller:
         # ACT array timings are anchored at the second rising CK edge.
         # Align the external/request constraint before shifting its anchor;
         # adding and subtracting a CK must never erase a late arrival's ULP.
-        anchor = self.after(self.align(ready, self.clock), self.clock)
+        anchor = max(self.after(self.align(ready, self.clock), self.clock), pc["refresh_gate"])
         # Unlike an arbitrary bank-ready time, the shared row-port frontier
         # proves that no later HBM ACT can be inserted before it. Pruning at
         # this frontier bounds the live tFAW calendar even inside a huge request.
@@ -427,9 +428,6 @@ class _Controller:
             return True
         return False
 
-    def active_row(self, mapping):
-        msb = self.config.activated_row_msb
-        return mapping.row if msb is None else mapping.row & ~(1 << msb)
 
 
 def fr_queue_parameters(c):
@@ -467,6 +465,9 @@ class _FrFcfsController(_Controller):
         self.counted = 0
         self.q = fr_queue_parameters(self.config)
         self.groups_per_sid = self.config.bank_groups_per_sid
+        self.per_bank = self.config.refresh_policy == "per_bank"
+        self.refresh_step = self.config.refresh_interval_ns / self.config.bank_count
+        self.refresh_targets = {}
 
     def pc(self, key):
         state = super().pc(key)
@@ -527,6 +528,220 @@ class _FrFcfsController(_Controller):
                 tuple(self.request_stages[index]), counters))
         return tuple(results)
 
+    def refresh_within(self, due):
+        return round(due / self.refresh_step) % self.config.bank_count
+
+    def refresh_target(self, key, within):
+        """A bank's first burst, which names the bank a REFpb reaches, and its id."""
+        target = self.refresh_targets.get((key, within))
+        if target is None:
+            c = self.config
+            lane = (key[0] * c.channels + key[1]) * 2 + key[2]
+            per_sid = self.groups_per_sid * c.banks_per_group
+            sid, rest = divmod(within, per_sid)
+            cursor = ((sid * c.banks_per_group + rest % c.banks_per_group) * (c.row_bytes // c.burst_bytes) * c.lane_count
+                      + lane) * self.groups_per_sid + rest // c.banks_per_group
+            mapping = map_dram_address(c, cursor * c.burst_bytes)
+            target = self.refresh_targets[(key, within)] = (mapping, self.core._bank_id(mapping))
+        return target
+
+    def refresh_bank_start(self, key, within, mapping, bank, earliest):
+        """A REFpb's rising edge; ``fr_refresh_bank_start`` in the kernel."""
+        c, pc = self.config, self.pc(key)
+        row_bus = self.timeline.available_ns(self.bus_id(key, "row"))
+        ready = max(earliest, bank["activate_ready"], pc["blocked_until"], pc["refresh_gate"], row_bus)
+        if within % 16 == 0:
+            ready = max(ready, self.banks[self.refresh_target(key, within + 15)[1]]["activate_ready"])
+        if bank["last_activate"] is not None:
+            ready = max(ready, self.after(bank["last_activate"], c.activate_cycle_ns))
+        anchor = self.align(ready, self.clock)
+        while True:
+            # Planning prunes nothing: only an issued REFpb or an ACT plan does.
+            anchor = self.core._bank_group_activate_ready(pc, mapping.bank_group, anchor, 0.0,
+                                                          clock_quantum=self.clock / 2)
+            start = self.align(anchor, self.clock)
+            if c.four_activate_window_ns <= 0 or start == anchor:
+                return start
+            anchor = start
+
+    def refresh_bank(self, key, within, mapping, earliest):
+        c, pc = self.config, self.pc(key)
+        old, bank = self.bank(mapping)
+        due = pc["next_refresh"]
+        command = self.command(key, "row", earliest, c.precharge_command_cycles, "REFRESH_BANK", rising=True)
+        self.counts["refresh_commands"] += 1
+        if command.start_ns > due + 8 * c.refresh_interval_ns:
+            raise ValueError("HBM periodic refresh missed the maximum eight postponed intervals")
+        pc["refresh_gate"] = self.after(command.start_ns, c.refresh_bank_gap_ns)
+        bank["activate_ready"] = self.after(command.start_ns, c.refresh_bank_cycle_ns)
+        old.ready_ns = bank["activate_ready"]
+        if c.four_activate_window_ns > 0:
+            frontier = max(0.0, self.timeline.available_ns(self.bus_id(key, "row")))
+            calendar = pc["activate_window"]
+            expired = 0
+            while expired < len(calendar) and self.after(calendar[expired], c.four_activate_window_ns) <= frontier:
+                expired += 1
+            del calendar[:expired]
+            insort(calendar, command.start_ns)
+        pc["next_refresh"] = (round(due / self.refresh_step) + 1) * self.refresh_step
+
+    def refresh_floor(self, lanes):
+        """``fr_refresh_floor``: from this time on nothing done can delay a REFpb or its PRE."""
+        c = self.config
+        key = lanes[0]["key"]
+        floor = self.timeline.available_ns(self.bus_id(key, "row"))
+        channel = self.channels.get(key[:2], {})
+        if "last_activate_start" in channel:
+            floor = max(floor, channel["last_activate_start"] + 2 * self.clock)
+        gap = max(c.activate_same_group_ns, c.activate_different_group_ns)
+        for lane in lanes:
+            pc = self.pc(lane["key"])
+            floor = max(floor, pc["blocked_until"], pc["refresh_gate"], *(stamp + gap for stamp in pc["activate"].values()))
+            if pc["last_precharge"] is not None:
+                floor = max(floor, pc["last_precharge"] + c.precharge_to_precharge_ns)
+            if pc["activate_window"]:
+                floor = max(floor, pc["activate_window"][-1] + c.four_activate_window_ns)
+            for within in range(c.bank_count):
+                old, bank = self.bank(self.refresh_target(lane["key"], within)[0])
+                floor = max(floor, bank["activate_ready"])
+                if bank["last_activate"] is not None:
+                    floor = max(floor, bank["last_activate"] + c.activate_cycle_ns)
+                if old.open_row is not None:
+                    floor = max(floor, bank["precharge_ready"])
+        return floor
+
+    def skip_refresh_gap(self, lanes, latest):
+        """``fr_skip_refresh_gap``: skip the REFpb of a gap that nothing after it can see."""
+        c = self.config
+        step = self.refresh_step
+        if step < max(c.four_activate_window_ns, c.precharge_to_activate_ns + c.refresh_bank_gap_ns) + 4 * self.clock:
+            return False
+        resume = math.floor(latest / step)
+        plans = []
+        for lane in lanes:
+            pc = self.pc(lane["key"])
+            first = round(pc["next_refresh"] / step)
+            skipped = resume - first
+            if skipped <= 0:
+                continue
+            closing = []
+            for within in range(c.bank_count):
+                old, bank = self.bank(self.refresh_target(lane["key"], within)[0])
+                if old.open_row is None:
+                    continue
+                turn = (within - first) % c.bank_count
+                if (c.maximum_active_ns > 0 and bank["last_activate"] + c.maximum_active_ns
+                        <= (first + turn if turn < skipped else resume) * step):
+                    return False
+                if turn < skipped:
+                    closing.append(old)
+            plans.append((pc, skipped, closing))
+        commands = 0
+        for pc, skipped, closing in plans:
+            for old in closing:
+                old.open_row = None
+            self.counts["precharge_commands"] += len(closing)
+            self.counts["refresh_commands"] += skipped
+            commands += len(closing) + skipped
+            pc["next_refresh"] = resume * step
+        if not commands:
+            return False
+        self._active_deadlines.pop(lanes[0]["key"][:2], None)
+        total = commands * (c.precharge_command_cycles * self.clock)
+        row_id = self.bus_id(lanes[0]["key"], "row")
+        self.timeline.busy_ns[row_id] = self.timeline.busy_ns.get(row_id, 0.0) + total
+        self.counts["row_command_bus_busy_ns"] += total
+        self.timeline._intervals_truncated = True
+        if self.core.capture_details:
+            self.drop_details()
+        return True
+
+    def refresh_horizon(self, start, kind):
+        """How long a REFpb, or the PRE before it, holds what a deadline would need."""
+        c = self.config
+        duration = c.precharge_command_cycles * self.clock
+        return self.after(start, max(duration, c.precharge_to_precharge_ns) if kind == 4 else duration)
+
+    def refresh_gap(self, lanes, arrival):
+        """REFpb that fell due in the gap before this batch, in time order; ``fr_refresh_gap``."""
+        c = self.config
+        self.stages = self.request_stages[0]
+        first, second = (self.pc(lane["key"]) for lane in lanes)
+        latest = arrival - (c.refresh_bank_cycle_ns + c.precharge_to_activate_ns + c.four_activate_window_ns + 4 * self.clock)
+        skip_floor = (self.refresh_floor(lanes) if latest - min(first["next_refresh"], second["next_refresh"]) >= self.refresh_step
+                      else math.inf)
+        while True:
+            lane = lanes[1] if second["next_refresh"] < first["next_refresh"] else lanes[0]
+            key = lane["key"]
+            due = self.pc(key)["next_refresh"]
+            if not due < arrival:
+                return
+            if due >= skip_floor:
+                skip_floor = math.inf
+                if self.skip_refresh_gap(lanes, latest):
+                    continue
+            within = self.refresh_within(due)
+            mapping = self.refresh_target(key, within)[0]
+            old, bank = self.bank(mapping)
+            opened = old.open_row is not None
+            when = (self.precharge_start(mapping, bank, due) if opened
+                    else self.refresh_bank_start(key, within, mapping, bank, due))
+            if self.maintain_before(mapping, self.refresh_horizon(when, 4 if opened else 3)):
+                continue
+            if opened:
+                self.precharge(mapping, old, bank, due)
+            else:
+                self.refresh_bank(key, within, mapping, when)
+
+    def plan_refresh(self, lane):
+        """Whether the lane's due REFpb, or the PRE before it, replaces its plan; ``fr_plan_refresh``."""
+        c = self.config
+        key, planned = lane["key"], lane["start"]
+        pc = self.pc(key)
+        due = pc["next_refresh"]
+        if due > planned:
+            return
+        within = self.refresh_within(due)
+        mapping, rid = self.refresh_target(key, within)
+        old, bank = self.bank(mapping)
+        if old.open_row is not None:
+            when = self.precharge_start(mapping, bank, due)
+            kind = 4
+            take = (when <= planned and lane["pending_hit"][0].get(rid, 0) == 0
+                    and lane["pending_hit"][1].get(rid, 0) == 0)
+        else:
+            when = self.refresh_bank_start(key, within, mapping, bank, due)
+            kind = 3
+            take = when <= planned
+            if not take and lane["kind"] in (1, 2):
+                ready = max(due, bank["activate_ready"], pc["refresh_gate"])
+                if bank["last_activate"] is not None:
+                    ready = max(ready, self.after(bank["last_activate"], c.activate_cycle_ns))
+                take = ready <= planned
+        if take or due + c.refresh_interval_ns <= planned:
+            lane["start"], lane["kind"], lane["offset"] = when, kind, within
+
+    def issue_refresh(self, lane, lanes, kind, start):
+        key, within = lane["key"], lane["offset"]
+        mapping, rid = self.refresh_target(key, within)
+        lane["stale_only"] = True
+        self.stages = self.request_stages[0]
+        self.request = _FrFcfsIssue(Operation.READ, 0.0)
+        if self.maintain_before(mapping, self.refresh_horizon(start, kind)):
+            self.recount(lanes)
+            lanes[0]["stale"] = lanes[1]["stale"] = True
+            return
+        if kind == 4:
+            old, bank = self.bank(mapping)
+            self.precharge(mapping, old, bank, self.pc(key)["next_refresh"])
+            lane["pending_hit"][0].pop(rid, None)
+            lane["pending_hit"][1].pop(rid, None)
+            lane["dirty"][0] = lane["dirty"][1] = True
+        else:
+            self.refresh_bank(key, within, mapping, start)
+        lane["stale"] = True
+        lane["stale_only"] = False
+
     def enqueue(self, lane, direction):
         capacity = self.q[direction]
         queue, pending = lane["queues"][direction], lane["pending"][direction]
@@ -536,7 +751,7 @@ class _FrFcfsController(_Controller):
             lane["cursor"][direction] += 1
             mapping = segment.mapping
             old, bank = self.bank(mapping)
-            row = self.active_row(mapping)
+            row = mapping.row
             within = mapping.bank_group * self.config.banks_per_group + mapping.bank
             rid = self.core._bank_id(mapping)
             entry = dict(index=index, segment=segment, mapping=mapping, old=old, bank=bank, row=row,
@@ -570,6 +785,8 @@ class _FrFcfsController(_Controller):
         reads, writes = queues
         if not reads and not writes:
             lane["start"], lane["kind"] = math.inf, -1
+            if self.per_bank:
+                self.plan_refresh(lane)
             return
         if not lane["draining"] and reads and len(writes) >= q[2] and lane["reads_since"] >= q[4]:
             lane["draining"] = True
@@ -611,6 +828,9 @@ class _FrFcfsController(_Controller):
                     break
         if lane["dirty"][direction]:
             unserved = False
+            in_refresh = -1
+            # A bank closed past the next tRP is refreshing; it holds up only its own entries.
+            refresh_floor = self.timeline.available_ns(self.bus_id(key, "row")) + c.precharge_to_activate_ns
             for offset, entry in enumerate(queue):
                 if entry["old"].open_row == entry["row"]:
                     continue
@@ -619,8 +839,15 @@ class _FrFcfsController(_Controller):
                         and lane["pending_hit"][direction].get(entry["rid"], 0) > 0
                         and not (forced and offset == 0)):
                     continue
+                if (self.per_bank and entry["old"].open_row is None
+                        and entry["bank"]["activate_ready"] > refresh_floor and not (forced and offset == 0)):
+                    if in_refresh < 0:
+                        in_refresh = offset
+                    continue
                 row_offset = offset
                 break
+            if row_offset < 0:
+                row_offset = in_refresh
             lane["dirty"][direction] = unserved
         start, kind, chosen = math.inf, -1, -1
         self.request = _FrFcfsIssue(Operation.READ if read else Operation.WRITE, 0.0)
@@ -643,6 +870,8 @@ class _FrFcfsController(_Controller):
         if kind < 0:
             raise ValueError("HBM scheduler has queued work but no eligible command")
         lane["start"], lane["kind"], lane["direction"], lane["offset"] = start, kind, direction, chosen
+        if self.per_bank:
+            self.plan_refresh(lane)
 
     def run_channel(self, channel_key, pseudo_lanes):
         q, c = self.q, self.config
@@ -663,12 +892,26 @@ class _FrFcfsController(_Controller):
                     self.timeline.available_ns(self.core._data_id(mapping)), -c.read_latency_ns)
             else:
                 lanes[pseudo]["stats"] = [0.0] * _FR_STAT_COUNT
+        if self.per_bank:
+            arrival = min(request.arrival_ns for request in self.requests)
+            for lane in lanes:
+                pc = self.pc(lane["key"])
+                if pc["next_refresh"] < 0:
+                    # The current maintenance epoch, not history before the model; bank 0 opens it.
+                    pc["next_refresh"] = max(c.refresh_interval_ns,
+                                             math.floor(arrival / c.refresh_interval_ns) * c.refresh_interval_ns)
+                    for within in range(c.bank_count):
+                        self.bank(self.refresh_target(lane["key"], within)[0])
+            self.refresh_gap(lanes, arrival)
         last_pseudo = 1
         while True:
             for lane in lanes:
                 if lane["stale"]:
                     lane["stale"] = False
                     self.plan(lane)
+            # An idle lane plans REFpb for as long as the other has traffic.
+            if self.per_bank and not any(queue for lane in lanes for queue in lane["queues"]):
+                break
             if lanes[0]["start"] == lanes[1]["start"]:
                 if lanes[0]["kind"] < 0:
                     break
@@ -690,6 +933,9 @@ class _FrFcfsController(_Controller):
                 lane["stats"][9] = max(lane["stats"][9], wait)
 
     def issue(self, lane, lanes, kind, start):
+        if kind >= 3:
+            self.issue_refresh(lane, lanes, kind, start)
+            return
         c = self.config
         lane["stale_only"] = True
         direction, offset = lane["direction"], lane["offset"]

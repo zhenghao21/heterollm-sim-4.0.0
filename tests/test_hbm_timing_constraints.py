@@ -130,10 +130,11 @@ def test_conservative_refresh_and_maximum_active_assumptions_remain_explicit():
         assert config.metadata["parameter_provenance"][field]["status"] == "explicit_assumption"
 
 
-def test_periodic_refresh_rejects_a_cycle_longer_than_its_interval():
+@pytest.mark.parametrize("overrides", ({"refresh_bank_cycle_ns": 500.},
+                                       {"refresh_policy": "all_bank", "refresh_cycle_ns": 500.}))
+def test_periodic_refresh_rejects_a_cycle_longer_than_its_interval(overrides):
     with pytest.raises(ValueError):
-        reconfigure_physical_config(reference("HBM4"), overrides={
-            "refresh_cycle_ns": 500., "refresh_interval_ns": 450.})
+        reconfigure_physical_config(reference("HBM4"), overrides={**overrides, "refresh_interval_ns": 450.})
 
 
 def test_unknown_device_array_delays_do_not_acquire_idd_example_minima():
@@ -162,7 +163,7 @@ def test_unknown_refresh_duration_stays_unknown_instead_of_inheriting_a_table_va
 
 
 @pytest.mark.parametrize("path", PATHS)
-@pytest.mark.parametrize("field,value", [("maximum_active_ns", 1.), ("refresh_cycle_ns", 4000.)])
+@pytest.mark.parametrize("field,value", [("maximum_active_ns", 1.), ("refresh_bank_cycle_ns", 4000.)])
 def test_manual_coupled_violation_is_rejected_before_automatic_provenance_can_hide_it(path, field, value):
     config = reference("HBM4")
     assert config.refresh_interval_ns == 3900.
@@ -234,7 +235,7 @@ def test_refresh_policy_requires_capacity_for_both_pcs_on_the_shared_command_bus
 
 
 @pytest.mark.parametrize("field,value", [("column_same_group_ns", 0.),
-    ("maximum_active_ns", 1.), ("refresh_cycle_ns", 4000.)])
+    ("maximum_active_ns", 1.), ("refresh_bank_cycle_ns", 4000.)])
 def test_removing_all_parameter_sources_cannot_hide_an_invalid_manual_value(field, value):
     payload = asdict(reference("HBM4"))
     del payload["metadata"]["parameter_provenance"]

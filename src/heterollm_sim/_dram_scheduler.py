@@ -79,10 +79,8 @@ def schedule_requests(core, requests):
         elif c.scheduler == "row_hit_first":
             def hit(entry):
                 mapping = map_dram_address(c, entry[1].address)
-                row = (mapping.row if c.control_mode != "jedec_hbm" or c.activated_row_msb is None
-                       else mapping.row & ~(1 << c.activated_row_msb))
                 bank = core._banks.get(core._bank_id(mapping))
-                return bank is not None and bank.open_row == row
+                return bank is not None and bank.open_row == mapping.row
             selected = next((entry for entry in available if hit(entry)), available[0])
         else:
             same = [entry for entry in available if entry[1].operation.value == core._scheduler_direction]

@@ -29,7 +29,7 @@ _DRAM_RESEARCH_BASE = {
     "subchannels_per_channel": 1, "pseudo_channels_per_channel": 2,
     "stacks": 1, "dies_per_stack": 1, "ranks_per_channel": 1,
     "bank_geometry_scope": "per_die", "stack_interface_mode": "shared",
-    "control_mode": "analytical", "activated_row_msb": None, "refresh_policy": "disabled",
+    "control_mode": "analytical", "refresh_policy": "disabled",
     "address_mapping": "bank_interleaved", "scheduler": "fcfs", "scheduler_window": 16,
     "queue_scope": "device", "read_queue_depth_per_pc": 32, "write_queue_depth_per_pc": 64,
     "write_high_watermark": 0.85, "write_low_watermark": 0.50, "min_reads_per_switch": 16,

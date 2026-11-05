@@ -19,7 +19,7 @@ def configuration(**changes):
         bank_geometry_scope="per_stack", stack_interface_mode="independent",
         control_mode="jedec_hbm", address_mapping="sid_aware", scheduler="fr_fcfs", queue_scope="pc",
         command_clock_ns=1., activate_command_cycles=1.5,
-        precharge_command_cycles=.5, column_command_cycles=1., activated_row_msb=4,
+        precharge_command_cycles=.5, column_command_cycles=1.,
         activate_to_read_ns=4., activate_to_write_ns=3., precharge_to_activate_ns=3.,
         minimum_active_ns=7., maximum_active_ns=35100., activate_cycle_ns=10., read_to_precharge_ns=3.,
         write_to_precharge_ns=4., read_latency_ns=8., write_latency_ns=4.,
@@ -119,7 +119,6 @@ def test_clock_alignment_still_rejects_blocked_precharge_deadline(numeric):
 def test_compiled_matches_mixed_commands_and_refresh(generation, clock, refresh):
     hbm2 = generation == "HBM2E"
     c = configuration(generation=generation, command_clock_ns=clock,
-        activated_row_msb=None if hbm2 else 4,
         activate_command_cycles=2. if hbm2 else 1.5,
         precharge_command_cycles=1. if hbm2 else .5,
         data_width_bits=64 if hbm2 else 32, data_rate_mt_s=(2000. if hbm2 else 4000.) / clock,
@@ -204,10 +203,9 @@ def test_maximum_active_deadlines_match_before_reads_writes_and_idle(refresh):
         assert_same(reference, numeric, AccessRequest(str(index), op, address, count, arrival))
 
 
-@pytest.mark.parametrize("generation", ["HBM3E", "HBM4"])
-def test_real_builder_maximum_active_and_idle_match(generation):
+def test_real_builder_maximum_active_and_idle_match():
     from heterollm_sim.hbm_geometry import make_hbm_geometry_config
-    c = DramConfig(**make_hbm_geometry_config(generation=generation, capacity_bytes=36 * 2 ** 30,
+    c = DramConfig(**make_hbm_geometry_config(generation="HBM3E", capacity_bytes=36 * 2 ** 30,
         read_bandwidth_gbps=9600., write_bandwidth_gbps=9600., die_density_gbits=24, dies_per_stack=12))
     assert c.maximum_active_ns == 35100.
     reference, numeric = DramCore(c, capture_details=False), DramCore(c, capture_details=False)

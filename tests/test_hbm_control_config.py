@@ -32,7 +32,7 @@ def test_generational_command_clock_latency_and_refresh(generation, density, rf,
     assert config.column_different_group_ns == 2 * ck
     assert config.precharge_to_precharge_ns == (1 if generation in {"HBM2", "HBM2E"} else 2) * ck
     assert config.maximum_active_ns == 35100
-    assert config.refresh_policy == "all_bank"
+    assert config.refresh_policy == ("per_bank" if generation == "HBM4" else "all_bank")
     assert (config.refresh_interval_ns, config.refresh_cycle_ns) == (3900, rf)
     assert config.metadata["refresh_interval_scope"]
     p = config.metadata["parameter_provenance"]
@@ -50,14 +50,18 @@ def test_hbm3_tbd_refresh_is_not_copied_from_hbm4():
     assert (third.refresh_policy, third.refresh_cycle_ns) == ("disabled", 0)
     assert third.maximum_active_ns == fourth.maximum_active_ns == 35100
     assert "refresh_cycle_ns" in third.metadata["unconfigured_timing_parameters"]
-    assert (fourth.refresh_policy, fourth.refresh_cycle_ns) == ("all_bank", 450)
+    assert (fourth.refresh_policy, fourth.refresh_cycle_ns) == ("per_bank", 450)
+    assert (fourth.refresh_bank_cycle_ns, fourth.refresh_bank_gap_ns) == (240, 8)
+    assert (third.refresh_bank_cycle_ns, third.refresh_bank_gap_ns) == (0, 0)
 
 
 @pytest.mark.parametrize("update", [
     {"command_clock_ns": -1.}, {"activate_command_cycles": 2},
     {"read_latency_ns": 4.5}, {"write_latency_ns": 17},
-    {"activated_row_msb": 0}, {"refresh_cycle_ns": 0, "refresh_policy": "all_bank"},
+    {"refresh_cycle_ns": 0, "refresh_policy": "all_bank"},
     {"ranks_per_channel": 2}, {"data_lanes": 64},
+    {"generation": "HBM4", "refresh_policy": "per_bank", "refresh_bank_cycle_ns": 100.},
+    {"generation": "HBM4", "refresh_policy": "per_bank", "refresh_bank_gap_ns": 1.},
 ])
 def test_invalid_authored_control_contract_is_rejected(update):
     with pytest.raises(ValueError):

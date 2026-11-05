@@ -17,7 +17,7 @@ def config(**overrides):
         bank_geometry_scope="per_stack", stack_interface_mode="independent",
         control_mode="jedec_hbm", address_mapping="sid_aware", scheduler="fr_fcfs", queue_scope="pc",
         command_clock_ns=1., activate_command_cycles=1.5,
-        precharge_command_cycles=.5, column_command_cycles=1., activated_row_msb=2,
+        precharge_command_cycles=.5, column_command_cycles=1.,
         activate_to_read_ns=4., activate_to_write_ns=3., precharge_to_activate_ns=3.,
         minimum_active_ns=7., maximum_active_ns=35100., activate_cycle_ns=10., read_to_precharge_ns=3.,
         write_to_precharge_ns=4., read_latency_ns=8., write_latency_ns=4.,
@@ -105,17 +105,15 @@ def test_physical_channels_and_stacks_have_separate_command_buses():
 @pytest.mark.parametrize("generation,rows,bit,latency", [
     ("HBM3E", 24576, 14, 8.), ("HBM4", 12288, 13, 17.),
 ])
-def test_effective_row_msb_selects_the_same_activated_page(generation, rows, bit, latency):
-    c = config(generation=generation, rows_per_bank=rows, activated_row_msb=bit,
-               read_latency_ns=latency)
+def test_other_half_of_an_activated_page_is_a_conflict(generation, rows, bit, latency):
+    c = config(generation=generation, rows_per_bank=rows, read_latency_ns=latency)
     core = DramCore(c)
     core.submit(request(c, row=0))
     other_half = core.submit(request(c, row=1 << bit))
-    assert other_half.counters["row_hits"] == 1
-    assert other_half.counters["activate_commands"] == 0
-    different = core.submit(request(c, row=1))
-    assert different.counters["row_conflicts"] == 1
-    assert different.counters["precharge_commands"] == 1
+    assert other_half.counters["row_conflicts"] == 1
+    assert other_half.counters["activate_commands"] == 1
+    assert core.submit(request(c, row=1 << bit)).counters["row_hits"] == 1
+
 
 
 def test_read_and_write_recovery_gate_precharge_without_charging_write_completion():
@@ -242,7 +240,7 @@ def test_long_idle_does_not_expand_unbounded_detail_stages():
 
 def test_hbm2_command_encoding_uses_two_clock_activate():
     c = config(generation="HBM2E", data_width_bits=64, data_rate_mt_s=2000.,
-               activate_command_cycles=2., precharge_command_cycles=1., activated_row_msb=None)
+               activate_command_cycles=2., precharge_command_cycles=1.)
     result = DramCore(c).submit(request(c))
     assert stage(result, "ACTIVATE").end_ns == 2.
     assert stage(result, "READ_COMMAND").start_ns == 5.  # second rising edge + tRCD

@@ -135,7 +135,8 @@ def test_explicit_experimental_refresh_survives_reconfiguration_as_an_assumption
     for values in ({"dies_per_stack": 16}, {"rows_per_bank": 12000}):
         changed = reconfigure_physical_config(experimental, overrides=values)
         assert changed.refresh_cycle_ns == 777.
-        assert changed.refresh_policy == "all_bank"
+        # tRFCpb is known only for a standard organization.
+        assert changed.refresh_policy == ("per_bank" if "dies_per_stack" in values else "all_bank")
         assert status(changed, "refresh_cycle_ns") == "explicit_assumption"
 
 

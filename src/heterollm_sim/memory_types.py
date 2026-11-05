@@ -89,6 +89,7 @@ HBM_CONTROL_TIMING_FIELDS = (
     "precharge_to_activate_ns", "minimum_active_ns", "maximum_active_ns", "activate_cycle_ns",
     "read_to_precharge_ns", "write_to_precharge_ns", "column_different_sid_ns",
     "read_to_write_command_ns", "precharge_to_precharge_ns", "refresh_interval_ns", "refresh_cycle_ns",
+    "refresh_bank_cycle_ns", "refresh_bank_gap_ns",
 )
 
 
@@ -338,10 +339,11 @@ class DramConfig:
     column_different_sid_ns: float = 0.0
     read_to_write_command_ns: float = 0.0
     precharge_to_precharge_ns: float = 0.0
-    activated_row_msb: Optional[int] = None
     refresh_policy: str = "disabled"
     refresh_interval_ns: float = 0.0
     refresh_cycle_ns: float = 0.0
+    refresh_bank_cycle_ns: float = 0.0
+    refresh_bank_gap_ns: float = 0.0
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, Any]) -> "DramConfig":
@@ -412,23 +414,10 @@ class DramConfig:
                 raise ValueError(f"{name} must be in [0, 1]")
         if self.write_low_watermark > self.write_high_watermark:
             raise ValueError("write_low_watermark cannot exceed write_high_watermark")
-        if self.refresh_policy not in {"disabled", "all_bank"}:
-            raise ValueError("refresh_policy must be disabled or all_bank")
+        if self.refresh_policy not in {"disabled", "all_bank", "per_bank"}:
+            raise ValueError("refresh_policy must be disabled, all_bank or per_bank")
         for name in HBM_CONTROL_TIMING_FIELDS:
             _nonnegative(name, getattr(self, name))
-        if self.activated_row_msb is not None:
-            if (isinstance(self.activated_row_msb, bool)
-                    or not isinstance(self.activated_row_msb, int)
-                    or self.activated_row_msb < 0):
-                if kind is MemoryKind.HBM and self.control_mode == "jedec_hbm":
-                    raise _hbm_config_error(self, "activated_row_msb", category="invalid_input",
-                        rule="invalid_row_address_msb", label="有效行地址最高位",
-                        requirement_en="activated_row_msb must be a non-negative integer or None",
-                        requirement_zh="行地址最高位必须是非负整数，或在不使用该字段时填 null。",
-                        remedy_zh="使用所选代际和 rows_per_bank 对应的有效行地址最高位；建议通过公共配置入口重新生成。",
-                        remedy_en="Use the effective row-address MSB for this generation and rows_per_bank, or regenerate through the public config entry point.",
-                        related_values={"rows_per_bank": self.rows_per_bank})
-                raise ValueError("activated_row_msb must be a non-negative integer or None")
         if self.control_mode == "jedec_hbm":
             _positive_int("rows_per_bank", self.rows_per_bank)
             if kind is not MemoryKind.HBM or generation not in {"HBM2", "HBM2E", "HBM3", "HBM3E", "HBM4"}:
@@ -470,19 +459,14 @@ class DramConfig:
                     remedy_zh="按所选 HBM 代际重新生成几何配置，修正列出的冲突字段；不能把等效组织标为此控制器支持的真实组织。",
                     remedy_en="Regenerate geometry for the selected HBM generation and correct the listed conflicts; an equivalent organization is not supported physical geometry.",
                     related_values={"conflicts": conflicts, "channels": self.channels})
-            if self.activated_row_msb != (None if hbm2 else (self.rows_per_bank - 1).bit_length() - 1):
-                expected_msb = None if hbm2 else (self.rows_per_bank - 1).bit_length() - 1
-                raise _hbm_config_error(self, "activated_row_msb", category="model_limit",
-                    rule="row_address_msb_conflict", label="有效行地址最高位",
-                    requirement_en="jedec_hbm activated_row_msb must identify the effective row address MSB",
-                    requirement_zh=f"当前控制器按有效行地址选择激活页；rows_per_bank={self.rows_per_bank} 时，此字段需要为 {'null' if expected_msb is None else expected_msb}。",
-                    remedy_zh=f"将 activated_row_msb 设为 {'null' if expected_msb is None else expected_msb}，或通过公共配置入口更新行数及其依赖参数。",
-                    remedy_en=f"Set activated_row_msb to {expected_msb}, or update the row count and dependencies through the public config entry point.",
-                    related_values={"rows_per_bank": self.rows_per_bank, "required_value": expected_msb})
         elif self.refresh_policy != "disabled":
             raise ValueError("automatic refresh requires jedec_hbm control")
         if self.refresh_policy == "all_bank" and (self.refresh_interval_ns <= 0 or self.refresh_cycle_ns <= 0):
             raise ValueError("all_bank refresh requires positive refresh_interval_ns and refresh_cycle_ns")
+        if self.refresh_policy == "per_bank" and (
+                self.refresh_interval_ns <= 0 or self.refresh_bank_cycle_ns <= 0 or self.refresh_bank_gap_ns <= 0):
+            raise ValueError("per_bank refresh requires positive refresh_interval_ns, refresh_bank_cycle_ns "
+                             "and refresh_bank_gap_ns")
         if 0 < self.maximum_active_ns < self.minimum_active_ns:
             raise ValueError("maximum_active_ns cannot be shorter than minimum_active_ns")
         for name in ("channels", "subchannels_per_channel", "pseudo_channels_per_channel", "stacks", "dies_per_stack", "ranks_per_channel", "bank_groups_per_rank", "banks_per_group", "rows_per_bank", "row_bytes", "burst_bytes", "data_width_bits"):

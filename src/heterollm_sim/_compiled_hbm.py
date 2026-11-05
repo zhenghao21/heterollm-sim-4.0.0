@@ -160,8 +160,8 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     bf = np.zeros((total_banks, 7), dtype=np.float64)
     bf[:, 0] = -1
     addresses = np.full(total_banks, -1, dtype=np.int64)
-    pc = np.zeros((lanes, 4), dtype=np.float64)
-    pc[:, 0] = -1
+    pc = np.zeros((lanes, 6), dtype=np.float64)
+    pc[:, 0] = pc[:, 5] = -1
     history = np.full((lanes, history_entries, 4), -1., dtype=np.float64)
     pc_seen = np.zeros(lanes, dtype=np.bool_)
     # At most four unexpired past ACTs plus the existing future reservations.
@@ -225,7 +225,8 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
             windows[lane, :len(calendar)] = calendar
             stats[lane] = previous.get("scheduler_stats", 0.)
             pc[lane] = [previous["last_precharge"] if previous["last_precharge"] is not None else -1.,
-                        previous["blocked_until"], previous["next_data_start"]["read"], previous["next_data_start"]["write"]]
+                        previous["blocked_until"], previous["next_data_start"]["read"], previous["next_data_start"]["write"],
+                        previous["refresh_gate"], previous["next_refresh"]]
             for group, value in previous["activate"].items():
                 history[lane, group, 0] = value
             for which, entries in ((1, previous["column"]["read"]),
@@ -249,14 +250,15 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
         return None
     g = np.array([lanes, banks, c.bank_groups_per_sid,
                   c.row_bytes // c.burst_bytes, c.banks_per_group, groups,
-                  -1 if c.activated_row_msb is None else c.activated_row_msb,
+                  c.refresh_policy == "per_bank",
                   c.generation in {"HBM2", "HBM2E"}, c.refresh_policy == "all_bank", c.burst_bytes,
                   history_stride, 0], dtype=np.int64)
     t = np.array([getattr(c, field) for field in TIMING_FIELDS] + [
         c.burst_bytes / c.effective_lane_bandwidth_gb_s,
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.READ),
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.WRITE),
-        c.maximum_active_ns, c.four_activate_window_ns], dtype=np.float64)
+        c.maximum_active_ns, c.four_activate_window_ns,
+        c.refresh_bank_cycle_ns, c.refresh_bank_gap_ns, c.refresh_interval_ns / banks], dtype=np.float64)
     # ACT anchors and column commands are emitted on the clock grid.
     # Restored/authored state may contain arbitrary timestamps, so prove that
     # invariant before using the monotone, grouped history reductions in the
@@ -523,7 +525,7 @@ class _HBMNumericState:
                             bandwidth_ceiling_gb_s=c.directional_bandwidth_gb_s(request.operation),
                             host_transfer_bytes=0, internal_transfer_bytes=0,
                             pages_read=0, pages_programmed=0, erase_operations=0)
-            if c.refresh_policy == "all_bank":
+            if c.refresh_policy != "disabled":
                 counters["refresh_commands"] = int(counts[4]) if first else 0
             results.append(TransactionResult(request.request_id, request.operation, request.arrival_ns,
                                              float(out_float[index, 0]), request.byte_count, physical,
@@ -598,7 +600,8 @@ class _HBMNumericState:
                                        if entry[3] >= 0},
                             last_precharge=values[0] if values[0] >= 0 else None,
                             blocked_until=values[1],
-                            next_data_start={"read": values[2], "write": values[3]})
+                            next_data_start={"read": values[2], "write": values[3]},
+                            refresh_gate=values[4], next_refresh=values[5])
         for ch in np.flatnonzero(changed_channels):
             key = channel_keys[ch]
             if channel[ch, 0] >= 0 or channel[ch, 1] >= 0:

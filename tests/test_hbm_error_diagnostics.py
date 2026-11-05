@@ -67,19 +67,6 @@ def test_explicit_raw_clock_conflict_reports_the_ck_dq_relationship():
     assert error.details["source"] == "JESD270-4A"
 
 
-@pytest.mark.parametrize("value,category", [(-1, "invalid_input"), (99, "model_limit")])
-def test_explicit_row_address_msb_error_keeps_the_authored_value(value, category):
-    with pytest.raises(HBMConfigError, match="activated_row_msb") as captured:
-        DramConfig.from_mapping(reference(metadata={}, activated_row_msb=value))
-    error = captured.value
-    assert error.details["field"] == "activated_row_msb"
-    assert error.details["value"] == value
-    assert error.details["category"] == category
-    assert error.details["related_values"]["rows_per_bank"] == 12288
-    if value == 99:
-        assert error.details["related_values"]["required_value"] == 13
-
-
 def test_non_mapping_metadata_keeps_the_normalizer_diagnostic():
     with pytest.raises(HBMConfigError, match="metadata must be a mapping") as captured:
         DramConfig.from_mapping(reference(metadata=None))

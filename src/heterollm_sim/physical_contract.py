@@ -166,7 +166,7 @@ def parse_required_physical_config(component_id, kind, raw):
     if kind in NAND_COMPONENT_KINDS and "max_outstanding_write_requests" not in raw:
         missing.append("max_outstanding_write_requests")  # Explicit None shares the combined limit.
     if raw.get("control_mode") == "jedec_hbm":
-        missing += sorted(name for name in (*HBM_CONTROL_TIMING_FIELDS, "activated_row_msb", "refresh_policy")
+        missing += sorted(name for name in (*HBM_CONTROL_TIMING_FIELDS, "refresh_policy")
                           if name not in raw)
     if raw.get("scheduler") == "fr_fcfs":
         missing += sorted(name for name in DRAM_FR_FCFS_FIELDS if raw.get(name) is None)
@@ -441,7 +441,7 @@ def reconfigure_physical_config(config, *, overrides=None, expand_geometry=False
             timing_fields = set(HBM_CONTROL_TIMING_FIELDS) | set(DRAM_BANK_GROUP_TIMING_FIELDS) | {
                 "read_latency_ns", "write_latency_ns", "open_ns", "close_ns", "burst_interval_ns",
                 "read_recovery_ns", "write_recovery_ns", "read_to_write_ns", "write_to_read_ns",
-                "refresh_policy", "control_mode", "activated_row_msb",
+                "refresh_policy", "control_mode",
             }
             for name in timing_fields.intersection(updates):
                 if payload[name] != getattr(parsed, name):

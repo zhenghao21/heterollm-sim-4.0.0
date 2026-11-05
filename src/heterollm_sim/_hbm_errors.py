@@ -14,6 +14,8 @@ _LABELS = {
     "read_latency_ns": "读延迟（RL）", "write_latency_ns": "写延迟（WL）",
     "refresh_cycle_ns": "全 bank 刷新耗时（tRFCab）",
     "refresh_interval_ns": "平均刷新间隔（tREFI）",
+    "refresh_bank_cycle_ns": "单 bank 刷新耗时（tRFCpb）",
+    "refresh_bank_gap_ns": "单 bank 刷新命令间隔（tRREFD）",
     "maximum_active_ns": "最大开行时间（tRASmax）",
     "minimum_active_ns": "最小开行时间（tRASmin）",
     "activate_cycle_ns": "同 bank 重复激活间隔（tRC）",
@@ -35,7 +37,6 @@ _LABELS = {
     "banks_per_group": "每组 bank 数", "rows_per_bank": "每 bank 行数",
     "row_bytes": "行大小", "burst_bytes": "突发传输大小", "data_width_bits": "数据宽度",
     "data_lanes": "数据通道数", "capacity_bytes": "可见容量",
-    "activated_row_msb": "有效行地址最高位",
     "bank_geometry_scope": "bank 几何统计范围", "stack_interface_mode": "堆叠接口模式",
 }
 

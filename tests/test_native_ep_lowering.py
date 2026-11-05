@@ -107,8 +107,9 @@ def test_ep1_toy_lowering_is_byte_identical_to_the_single_group_graph():
     # The digest covers each task's serialized physical config: the HBM4 queue
     # fields and assumed turnaround timings changed it, then the per-layer KV
     # block pools (buffer ids and offsets) and their 256-token blocks, not the graph.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "62901e60b885f9b5")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "b72f9460651a4bfa")
+    # So did the HBM4 24Gb 12H organization and its REFpb fields.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "6e38b36b96ac825c")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "1fccd56ff0ea8d77")
 
 
 def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
@@ -119,9 +120,10 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # unchanged. The serialized HBM4 queue fields and timings changed it again,
     # and the per-layer KV block pools and their 256-token blocks once more.
     # OCP control changed the serialized NAND config and striped the KV blocks,
-    # with the same task names, categories and dependencies.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "a6bdd641d975fcf0")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "c5077d314c39b68e")
+    # with the same task names, categories and dependencies. So did the HBM4
+    # 24Gb 12H organization and its REFpb fields.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "c1d4a289a7be4882")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "0f448a8d6a421fab")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():
