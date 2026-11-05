@@ -1,4 +1,4 @@
-"""Continue search from all verified scientific history without rerunning it."""
+"""Continue a search from its saved rows without rerunning them."""
 from pathlib import Path
 import sys
 
@@ -11,16 +11,25 @@ import run_exploring_hbf_native as run
 LAYOUT = {"dp": 1, "tp": 8, "pp": 1, "ep": 1}
 
 
-def _row(case, batch, tpot_ms, *, wall=1.):
+def _tpot_ms(batch):
+    return 20. + .035 * batch
+
+
+def _rate(batch):
+    return batch / 8 / (_tpot_ms(batch) / 1e3)
+
+
+def _row(case, batch):
     params = run.parameters(case, LAYOUT, batch, "fast")
+    tpot_ms = _tpot_ms(batch)
     return {"candidate_id": run.params_candidate_id(params), "parameters": params,
         "backend": run.BACKEND, "runner_contract": run.FAST_CONTRACT,
         "status": "completed" if tpot_ms <= 100 else "slo_rejected",
-        "metrics": {"tokens_per_second_per_gpu": float(batch),
-            "cluster_tokens_per_second": float(batch * 8), "mean_complete_request_tpot_ns": tpot_ms * 1e6},
+        "metrics": {"tokens_per_second_per_gpu": _rate(batch),
+            "cluster_tokens_per_second": _rate(batch) * 8, "mean_complete_request_tpot_ns": tpot_ms * 1e6},
         "diagnostics": {"metric_bounds": {"mean_complete_request_tpot_ns": {
             "estimate": tpot_ms * 1e6, "lower": tpot_ms * 1e6, "upper": tpot_ms * 1e6}}},
-        "wall_seconds": wall, "finished_at": "2026-10-26T10:00:00Z"}
+        "wall_seconds": 1., "finished_at": "2026-10-26T10:00:00Z"}
 
 
 def _screen(capacity=5000):
@@ -30,43 +39,48 @@ def _screen(capacity=5000):
         "skipped_layouts": []}
 
 
-def test_complete_history_preserves_the_larger_passing_batch_under_new_wall_projection(tmp_path):
+def _finish_search(directory, case):
+    """Save what the search asks for, as its workers would, until it asks for nothing."""
+    ran = []
+    while True:
+        plan, _planned, _point = run.search_case(directory, case, _screen())
+        if not plan["next"]:
+            return ran
+        for layout, batch in plan["next"]:
+            assert layout == LAYOUT
+            assert batch not in ran, f"B{batch} was asked for again after it was saved"
+            run.save_candidate(directory, _row(case, batch))
+            ran.append(batch)
+
+
+def test_a_finished_search_replays_from_its_rows_and_keeps_them_unchanged(tmp_path):
     case = run.case_matrix()[0]
-    rows = [_row(case, 1000, 50, wall=900), _row(case, 2292, 90, wall=2061.9)]
-    for row in rows:
-        run.save_candidate(tmp_path, row)
-    original = {row["candidate_id"]: (tmp_path / "candidates" / (row["candidate_id"] + ".json")).read_bytes()
-                for row in rows}
+    ran = _finish_search(tmp_path, case)
+    saved = {path.name: path.read_bytes() for path in (tmp_path / "candidates").iterdir()}
     plan, planned, point = run.search_case(tmp_path, case, _screen())
     assert not plan["next"]
-    assert set(point["candidate_ids"]) == set(original)
-    assert point["selected"]["parameters"]["batch_size"] == 2292
-    assert set(plan["historical_candidate_ids"]) == set(original)
-    assert {(tuple(layout.values()), batch) for layout, batch in planned} == {
-        (tuple(LAYOUT.values()), 1000), (tuple(LAYOUT.values()), 2292)}
-    for identity, data in original.items():
-        assert (tmp_path / "candidates" / (identity + ".json")).read_bytes() == data
+    assert {batch for _layout, batch in planned} == set(ran)
+    passing = [batch for batch in ran if _tpot_ms(batch) <= 100]
+    assert point["selected"]["parameters"]["batch_size"] == max(passing, key=_rate)
+    assert {path.name: path.read_bytes() for path in (tmp_path / "candidates").iterdir()} == saved
 
 
-def test_refinement_keeps_old_acceptance_and_negative_evidence_without_scheduling_old_points(tmp_path):
+def test_a_search_resumes_where_its_rows_end_without_scheduling_them_again(tmp_path):
     case = run.case_matrix()[0]
-    rows = [_row(case, 100, 30), _row(case, 200, 60), _row(case, 300, 99), _row(case, 310, 102)]
-    for row in rows:
-        run.save_candidate(tmp_path, row)
-    plan, planned, point = run.search_case(tmp_path, case, _screen())
-    assert len(plan["next"]) == 1
-    layout, batch = plan["next"][0]
-    assert layout == LAYOUT and 300 < batch < 310
-    assert batch not in {100, 200, 300, 310}
-    assert set(point["candidate_ids"]) == {row["candidate_id"] for row in rows}
-    assert {n for _, n in planned} == {100, 200, 300, 310, batch}
-    assert {row["batch"] for row in plan["layouts"][0]["runs"]} == {100, 200, 300, 310}
+    ran = _finish_search(tmp_path / "whole", case)
+    assert len(ran) >= 3
+    resumed = tmp_path / "resumed"
+    for batch in ran[:-1]:
+        run.save_candidate(resumed, _row(case, batch))
+    plan, planned, _point = run.search_case(resumed, case, _screen())
+    assert plan["next"] == [(LAYOUT, ran[-1])]
+    assert {batch for _layout, batch in planned} == set(ran)
 
 
-def test_search_history_rejects_foreign_backend_instead_of_relabeling_it(tmp_path):
+def test_a_saved_row_of_another_backend_is_refused_instead_of_relabeled(tmp_path):
     case = run.case_matrix()[0]
-    row = _row(case, 100, 30)
+    row = _row(case, run.search_plan.default_first_batch(_screen()["layouts"][0]))
     row["backend"] = "another_backend"
     run.save_candidate(tmp_path, row)
     with pytest.raises(RuntimeError, match="parameters/backend differ"):
-        run._search_history(tmp_path, [case])
+        run.search_case(tmp_path, case, _screen())

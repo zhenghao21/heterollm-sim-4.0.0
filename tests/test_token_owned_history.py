@@ -224,6 +224,7 @@ def test_native_authored_control_observer_keeps_foreign_calendar_frontier(observ
     from heterollm_sim.execution_control import ExecutionControl
     from heterollm_sim.serving import _OnlineRuntime
     from test_native_kernel_physical_cost import native_task
+    from types import SimpleNamespace as NS
 
     first, _ = native_task(1.)
     rows = tuple(_PreparedExecutionTask(
@@ -259,6 +260,9 @@ def test_native_authored_control_observer_keeps_foreign_calendar_frontier(observ
             return False
 
         runtime = object.__new__(_OnlineRuntime)
+        # A layout the TP mirror would take, which an authored observer must keep it from.
+        runtime.plan = NS(scenario=NS(simulation=NS(mode="fast", native_window=NS(tp_rank_symmetry="on")),
+                                      placement=NS(parallel=NS(pp_degree=1, tp_degree=2))))
         runtime._execution_resource_kernel = kernel
         runtime._live_cohort_metrics = Observer()
         runtime._pending_prefetches = ()

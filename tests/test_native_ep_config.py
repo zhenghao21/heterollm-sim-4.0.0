@@ -52,7 +52,7 @@ def test_layout_validation_follows_batch_and_model_graph():
 def test_builder_rejects_unsplittable_ep_before_building_any_hardware():
     with pytest.raises(ValueError, match="ep > 1 requires a model with MoE layers"):
         build_native_comparison_scenario("llama3_405b", "HBM4", "SHORT", batch_size=8, tp=4, ep=2)
-    with pytest.raises(ValueError, match="batch_size 6 must be divisible by ep 4"):
+    with pytest.raises(ValueError, match="batch_size must be divisible by ep \\* pipeline_microbatches"):
         build_native_comparison_scenario("llama4_maverick", "HBM4", "SHORT", batch_size=6, tp=2, ep=4)
     with pytest.raises(ValueError, match="num_experts must be divisible by ep 3"):
         build_native_comparison_scenario("llama4_maverick", "HBM4", "SHORT", batch_size=6, tp=2, ep=3)

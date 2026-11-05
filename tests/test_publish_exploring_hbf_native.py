@@ -21,7 +21,7 @@ def test_node_subprocess_contains_only_nonsecret_cli_path_and_snapshot_uses_stdi
         assert command[-2] == "--cli-root"
         assert "token" not in " ".join(command).lower()
         assert "env" not in options
-        assert options["timeout"] == 30
+        assert options["timeout"] == 120
         assert json.loads(options["input"]) == snapshot()
         return NS(returncode=0, stdout=json.dumps({"ok": True, "verified": True,
             "observed_at": snapshot()["observed_at"], "key": publish.UPLOAD_KEY, "http_status": 200}))
