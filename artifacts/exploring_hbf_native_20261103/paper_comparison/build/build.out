@@ -1,0 +1,109 @@
+{
+ "norm_geomean": 1.2836526100903192,
+ "norm_mean_diff": 0.17004644807059077,
+ "norm_within_015": 15,
+ "norm_count": 24,
+ "order_agree": 56,
+ "order_total": 60,
+ "abs_ratio": {
+  "HBM4": [
+   0.5212537729000603,
+   0.6348476925699625
+  ],
+  "HBF": [
+   0.6712101491821055,
+   0.8706478632883214
+  ],
+  "HBF+": [
+   0.7139295203750526,
+   0.8265989271624397
+  ],
+  "CONV": [
+   0.6483812490576348,
+   0.846698082101756
+  ],
+  "CONV+": [
+   0.7271444906794509,
+   0.9238189847879844
+  ]
+ },
+ "abs_ratio_all": [
+  0.5212537729000603,
+  0.9238189847879844
+ ],
+ "slo_count": 23,
+ "cap_count": 7,
+ "slo_tpot_ratio": [
+  0.6840127940228107,
+  1.0178213687622253
+ ],
+ "slo_batch_ratio": [
+  0.4843463997908099,
+  0.9285983948948402
+ ],
+ "cap_tpot_ratio": [
+  0.6866415764520782,
+  1.7856042699824217
+ ],
+ "cap_batch_ratio": [
+  0.43170103092783507,
+  0.9405940594059405
+ ],
+ "bw_fraction": {
+  "HBM4": [
+   0.4240607015978768,
+   0.64879543484018
+  ],
+  "HBF": [
+   0.49533142598486246,
+   0.6370126506282567
+  ],
+  "HBF+": [
+   0.5766877888679675,
+   0.7520736647246407
+  ],
+  "CONV": [
+   0.4728584561487229,
+   0.5544710021870971
+  ],
+  "CONV+": [
+   0.8124923493060353,
+   0.909964564705277
+  ]
+ },
+ "layout_byte_factor": [
+  0.8986596687819499,
+  2.323370332927827
+ ],
+ "candidates": 416
+}
+llama3_405b      SHORT HBM4  bound capacity abs 0.63 batch 0.43 tpot 0.69 bw 0.61 layout_bytes 1.73
+llama3_405b      SHORT HBF   bound slo      abs 0.79 batch 0.71 tpot 0.90 bw 0.54 layout_bytes 2.25
+llama3_405b      SHORT HBF+  bound slo      abs 0.72 batch 0.49 tpot 0.68 bw 0.70 layout_bytes 2.32
+llama3_405b      SHORT CONV  bound slo      abs 0.65 batch 0.64 tpot 0.99 bw 0.47 layout_bytes 1.26
+llama3_405b      SHORT CONV+ bound slo      abs 0.73 batch 0.72 tpot 0.99 bw 0.81 layout_bytes 1.32
+llama3_405b      MID   HBM4  bound capacity abs 0.52 batch 0.93 tpot 1.79 bw 0.42 layout_bytes 1.15
+llama3_405b      MID   HBF   bound slo      abs 0.77 batch 0.79 tpot 1.02 bw 0.50 layout_bytes 1.31
+llama3_405b      MID   HBF+  bound slo      abs 0.74 batch 0.74 tpot 0.99 bw 0.75 layout_bytes 1.60
+llama3_405b      MID   CONV  bound slo      abs 0.68 batch 0.67 tpot 0.99 bw 0.49 layout_bytes 1.09
+llama3_405b      MID   CONV+ bound slo      abs 0.80 batch 0.79 tpot 0.99 bw 0.85 layout_bytes 1.11
+llama3_405b      LONG  HBM4  bound capacity abs 0.61 batch 0.77 tpot 1.25 bw 0.63 layout_bytes 1.00
+llama3_405b      LONG  HBF   bound slo      abs 0.72 batch 0.69 tpot 0.96 bw 0.59 layout_bytes 1.01
+llama3_405b      LONG  HBF+  bound slo      abs 0.77 batch 0.72 tpot 0.94 bw 0.74 layout_bytes 1.01
+llama3_405b      LONG  CONV  bound slo      abs 0.76 batch 0.68 tpot 0.90 bw 0.54 layout_bytes 1.00
+llama3_405b      LONG  CONV+ bound slo      abs 0.90 batch 0.92 tpot 1.02 bw 0.91 layout_bytes 1.00
+llama4_maverick  SHORT HBM4  bound capacity abs 0.63 batch 0.91 tpot 1.44 bw 0.63 layout_bytes 1.10
+llama4_maverick  SHORT HBF   bound slo      abs 0.67 batch 0.48 tpot 0.72 bw 0.53 layout_bytes 1.09
+llama4_maverick  SHORT HBF+  bound capacity abs 0.71 batch 0.91 tpot 1.28 bw 0.58 layout_bytes 1.09
+llama4_maverick  SHORT CONV  bound slo      abs 0.80 batch 0.81 tpot 1.01 bw 0.53 layout_bytes 1.13
+llama4_maverick  SHORT CONV+ bound slo      abs 0.87 batch 0.88 tpot 1.01 bw 0.89 layout_bytes 1.11
+llama4_maverick  MID   HBM4  bound capacity abs 0.61 batch 0.94 tpot 1.53 bw 0.61 layout_bytes 1.05
+llama4_maverick  MID   HBF   bound slo      abs 0.87 batch 0.78 tpot 0.89 bw 0.64 layout_bytes 1.04
+llama4_maverick  MID   HBF+  bound slo      abs 0.76 batch 0.52 tpot 0.69 bw 0.70 layout_bytes 1.05
+llama4_maverick  MID   CONV  bound slo      abs 0.85 batch 0.84 tpot 0.99 bw 0.53 layout_bytes 1.04
+llama4_maverick  MID   CONV+ bound slo      abs 0.92 batch 0.93 tpot 1.01 bw 0.91 layout_bytes 1.05
+llama4_maverick  LONG  HBM4  bound capacity abs 0.63 batch 0.92 tpot 1.46 bw 0.65 layout_bytes 1.02
+llama4_maverick  LONG  HBF   bound slo      abs 0.84 batch 0.83 tpot 0.99 bw 0.63 layout_bytes 1.02
+llama4_maverick  LONG  HBF+  bound slo      abs 0.83 batch 0.82 tpot 0.99 bw 0.72 layout_bytes 1.02
+llama4_maverick  LONG  CONV  bound slo      abs 0.75 batch 0.54 tpot 0.72 bw 0.55 layout_bytes 0.90
+llama4_maverick  LONG  CONV+ bound slo      abs 0.85 batch 0.85 tpot 1.00 bw 0.88 layout_bytes 1.01

@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HBF 论文对照</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --native: #2a78d6; --paper: #eb6834; --link: #c3c2b7;
+  --hover: rgba(42, 120, 214, .07); --mode: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --native: #3987e5; --paper: #d95926; --link: #4a4a46;
+    --hover: rgba(57, 135, 229, .12); --mode: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --native: #3987e5; --paper: #d95926; --link: #4a4a46;
+  --hover: rgba(57, 135, 229, .12); --mode: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+header { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: .01em; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+h3 { font-size: 14px; margin: 0 0 6px; color: var(--ink-2); font-weight: 600; }
+p { margin: 6px 0; }
+.meta { color: var(--ink-2); font-size: 13px; }
+.theme { display: inline-flex; border: 1px solid var(--axis); border-radius: 8px; overflow: hidden; }
+.theme button { background: none; border: 0; color: var(--ink-2); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.theme button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; }
+section { background: var(--surface); border: 1px solid var(--grid); border-radius: 12px; padding: 18px; margin-top: 18px; }
+.lead { color: var(--ink-2); font-size: 13px; margin-bottom: 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; margin: 14px 0 6px; }
+.tile { border: 1px solid var(--grid); border-radius: 10px; padding: 12px 14px; }
+.tile b { display: block; font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--ink-2); font-size: 13px; }
+ol.findings { padding-left: 20px; margin: 10px 0 0; }
+ol.findings li { margin: 8px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin: 4px 0 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.legend i.ring { background: var(--surface) !important; border: 2px solid var(--native); }
+.legend i.line { width: 18px; height: 0; border-radius: 0; border-top: 2px dashed var(--ink-2); vertical-align: 3px; }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px 18px; }
+.panels.two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.panel { min-width: 0; }
+.chart { width: 100%; }
+.chart svg { display: block; overflow: visible; }
+svg text { fill: var(--ink-2); font-size: 12px; }
+svg .label { fill: var(--ink); }
+svg .group { fill: var(--ink); font-weight: 600; }
+svg .tick { fill: var(--muted); font-size: 11px; }
+.note { font-size: 13px; color: var(--ink-2); }
+ul.compact { margin: 6px 0; padding-left: 20px; }
+ul.compact li { margin: 4px 0; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 8px 24px; }
+.tablewrap { overflow-x: auto; margin-top: 10px; }
+table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; width: 100%; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; }
+th { color: var(--ink-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+td.l, th.l { text-align: left; }
+tr.gstart td { border-top: 1px solid var(--axis); }
+summary { cursor: pointer; font-weight: 600; }
+#tip { position: fixed; pointer-events: none; z-index: 10; max-width: 320px; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--axis); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); opacity: 0; transition: opacity .08s; }
+#tip b { font-weight: 600; }
+#tip .k { color: var(--ink-2); }
+code { font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <h1>HBF 论文对照</h1>
+    <div class="meta">native 物理仿真全量扫描 vs Exploring HBF（arXiv 2608.13868）Fig. 3 / Fig. 4 · 8 GPU · TPOT SLO 100 ms · 每 GPU 吞吐</div>
+    <div class="meta" id="scanmeta"></div>
+  </div>
+  <div class="theme" role="group" aria-label="主题">
+    <button data-t="auto">自动</button><button data-t="light">浅色</button><button data-t="dark">深色</button>
+  </div>
+</header>
+
+<section>
+  <h2>结论</h2>
+  <div class="tiles" id="tiles"></div>
+  <ol class="findings">
+    <li><b>相对趋势和排序与论文一致，比上一轮更接近。</b>以 8-GPU HBM4 为 1 的归一化每 GPU 吞吐，24 个非 HBM4 点 native/论文的几何平均为 0.99×（上一轮 1.15×），平均差 −0.01（+0.10），18/24 点差值在 ±0.15 以内（16/24）；6 组×10 对配置的相对排序 56/60 对一致（55/60）。HBF、HBF+ 与 HBM4 同一档（native 0.58–1.41，论文 0.76–1.29），CONV、CONV+ 明显落后（native 0.15–0.27，论文 0.16–0.29），这一主结论两边相同。</li>
+    <li><b>4 对排序不一致。</b>Maverick SHORT 的 HBF+ 低于 HBF（0.58 vs 0.66，论文 0.98 vs 0.89），Maverick MID 的 HBF+ 低于 HBM4（0.97 vs 1.00，论文 1.19 vs 1.00），原因见第 3 条。405B SHORT 的 HBF+ 高于 HBM4（1.16 vs 1.00，论文 0.98 vs 1.00），论文接近平局，而 native 的 HBM4 在这里选了 DP2/TP4。Maverick MID 的 CONV 高于 CONV+（0.21 vs 0.18，论文 0.16 vs 0.20），差值小，CONV+ 带宽利用率已到 0.86，这一对没有单独定位。</li>
+    <li><b>最大偏差在 Maverick SHORT/MID 的 HBF/HBF+，native 都低于论文。</b>超出 ±0.15 的 6 个点（论文/native）：Maverick SHORT HBF+ 0.98/0.58、SHORT HBF 0.89/0.66、MID HBF+ 1.19/0.97、MID HBF 1.00/0.81；另有 405B LONG HBF 1.08/1.28、405B SHORT HBF+ 0.98/1.16 偏高。上一轮的 405B SHORT HBF+ 异常（0.70）已消失，那是 KV 地址混叠，已由多 rank 分页 KV 解决。查过的三个点：
+      <ul class="compact">
+        <li>Maverick SHORT HBF+（EP8）：B3088 为 55.5 ms、吞吐 6958；B4096 为 80.8 ms，吞吐反降到 6339；更大的点因区间过宽未被接受（B6048 估计 7541，TPOT 82.9–126.9 ms）。what-if 拆分（B6048，非扫描结果）：当前配置 100.26 ms（吞吐 7541）；SRAM 放得下全部尾块 86.27 ms（8763）；KV 每请求一块 68.91 ms（10971）；两者都改 59.06 ms（12801，归一化 1.06）；再把页编程时间压到接近 0（此项在 256 token 块上测）47.06 ms（16064，纯计算受限）。机制是时间线上直接看到的：100 µs 的页编程没有挂起，会阻塞同 plane 上的读。256 token 块的尾页落点近似随机，一层内同一 plane 最多堆 4 次编程（下一层的读等 300–400 µs）；溢出时这些编程进入关键路径，kv_materialize 为 507–607 µs；每请求一块时只有 2 次。主机命令额度放大 100 倍，TPOT 不变。</li>
+        <li>Maverick MID HBF+（EP8）：B1504 为 49.9 ms；到 B1672，PD 导入多出 20.5–49 ms，TPOT 区间拉宽到 74–102.6 ms，估计吞吐也不再增长。论文的 Prefill 节点理想，没有这项开销。</li>
+        <li>Maverick MID HBF（EP8）：B2776 为 106 ms 未通过，再插值约 B2604，与它不足一个搜索步长，于是停在通过端 B1648（65.5 ms）。吞吐只低约 4%，但 batch 明显被低估。</li>
+      </ul>
+      Maverick SHORT HBF 的带宽利用率只有 0.51，具体开销没有单独定位。</li>
+    <li><b>绝对吞吐系统性偏低，为论文的 0.37–0.80×（上一轮 0.26–0.72×），差距来自 batch。</b>23 个论文 SLO 受限点的 TPOT 比为 0.50–0.98，全部低于论文，batch 比为 0.25–0.77。其中 5 点 TPOT 明显低于 SLO（49.9–77.5 ms）：继续加 batch 吞吐不再上升，或搜索停在了通过端、区间上限。7 个论文容量受限点里，native 的 6 个 HBM4 同样受容量限制，batch 比 0.77–0.94，TPOT 却是论文的 1.25–1.79×（论文 24–34 ms）；例外是 405B SHORT，DP2/TP4 使 batch 比降到 0.43，TPOT 比 0.69。Maverick SHORT HBF+ 在论文中受容量限制，在 native 中吞吐先于容量不再上升（第 3 条），batch 比 0.50。</li>
+    <li><b>batch 偏小有多种原因，带宽用不满只是其中之一。</b>native 选中点的带宽利用率（每 GPU 每步实际读写字节 ÷ 步时长 ÷ 标称带宽）HBM4 为 0.42–0.63，HBF 0.51–0.72，HBF+ 0.43–0.78，CONV 0.47–0.54，CONV+ 0.81–0.89，都高于上一轮。但在 23 个 SLO 受限点上，利用率与 batch 比几乎不相关（对数相关系数 0.01）：CONV+ 利用率最高，batch 比仍只有 0.46–0.67。一步的字节预算是 batch × 每请求 KV 字节 = 有效带宽 × TPOT − 权重等其它字节，按它把这 23 点分组（括号内为 batch 比）：
+      <ul class="compact">
+        <li>LONG 的 HBF、HBF+（4 点，0.54–0.71）：KV 占每步字节 70–86%，带宽效率的影响最直接。405B 的利用率只有 0.59–0.65；Maverick 这两点选了 DP2，每步其它字节约 205 GB，单副本权重约 100 GB。</li>
+        <li>CONV、CONV+（12 点，0.43–0.77）：KV 只占 23–52%，权重等固定字节把总字节差放大到 KV。405B MID CONV+ 每步总字节 181 GB，论文按单副本估算为 232 GB，少 22%，KV 字节少 50%。</li>
+        <li>405B SHORT/MID 的 HBF、HBF+（4 点，0.45–0.57）：选 DP4/TP2，每步字节是单副本的 1.85–2.52 倍，KV 只占 21–39%。论文布局未公开；Fig. 4 中 405B SHORT HBF+ 从 1 到 16 GPU 每 GPU 吞吐不变，推测论文也用多副本，所以多读权重不单独算作与论文的差异。</li>
+        <li>Maverick MID 的 HBF、HBF+（2 点，0.25–0.33）：TPOT 只用到 50–66 ms，原因见第 3 条。</li>
+        <li>Maverick SHORT HBF（1 点，0.44）：利用率 0.51，选 DP2/TP1，每步字节是单副本的 1.35 倍，没有单独定位。</li>
+      </ul>
+      论文容量受限的 HBM4 是另一种情况：除 405B SHORT 外的 5 点 batch 比 0.77–0.94，差距主要在 TPOT（第 4 条）。这 5 点 native 利用率 0.42–0.63，论文隐含利用率 0.68–0.93（（权重/8 + 论文 batch × 每请求 KV 字节）÷ 论文 TPOT ÷ 标称带宽，按单副本估算，是下界）。两者之比 1.37–1.60，与 TPOT 比 1.25–1.79 同一量级，指向 native 按 JEDEC 支付的行切换、tRRD/tFAW、刷新；这是量级对照，没有逐项拆分。</li>
+    <li><b>batch 增益方向一致，幅度偏小。</b>native 中 HBF 相对 HBM4 的 batch/GPU 增益为 0.98–3.91×，HBF+ 为 1.08–4.30×；论文图读数为 1.31–4.51× 和 1.67–5.31×。两边都是 LONG 增益最大；HBF+ 高于 HBF 都是 5/6 个负载，唯一例外都是 Maverick SHORT。405B SHORT HBF 为 0.98×，是唯一没有增益的点（这里 HBM4 的最大 batch 是 TP8 B941，117.6/GPU）。论文随上下文单调增长，native 有两处不单调：405B MID HBF+（1.48，低于 SHORT 的 1.59）和 Maverick MID HBF（1.38，低于 SHORT 的 1.56），这两点都停在通过端，比值被低估。native 值是下界：取全部实测点中 TPOT 上界 ≤ 100 ms 的最大 batch，含最大 batch 搜索的接受点，仍受预测区间和搜索步长限制。</li>
+    <li><b>墙钟不影响这份对照；有 4 个 case 的选中点受 forecast 区间限制。</b>最终审计：可能改变结果的墙钟受限布局 0 个，因墙钟被拒的点 0 个，最长单点 13892 s，上限 21600 s。区间限制与墙钟无关：选中结果标为“区间上限”的是 405B CONV MID、405B HBF SHORT、Maverick CONV SHORT、Maverick HBF+ MID。另有被拒点的估计吞吐高于选中值的 4 个 case，高 4–7%（405B CONV MID 174 vs 165、405B HBF+ MID 1070 vs 1020、Maverick CONV SHORT 1942 vs 1812、Maverick HBF+ SHORT 7244 vs 6958）；只有区间乐观端更高的 3 个 case 为 405B CONV+ MID、405B HBF SHORT、Maverick HBF SHORT。把这些值全部代入，60 对排序的结果不变。</li>
+  </ol>
+</section>
+
+<section>
+  <h2>图 1 · 归一化每 GPU 吞吐（HBM4 = 1）</h2>
+  <p class="lead">每行一对点：论文 Fig. 4 读数 vs native 选中点；连线长度即偏差。虚线为 HBM4 基准。</p>
+  <div class="legend"><span><i style="background:var(--paper)"></i>论文</span><span><i style="background:var(--native)"></i>native</span><span><i class="line"></i>HBM4 = 1</span></div>
+  <div class="panels" id="fig1"></div>
+</section>
+
+<section>
+  <h2>图 2 · 绝对每 GPU 吞吐比（native ÷ 论文）</h2>
+  <p class="lead">论文 HBM4 取图上标注的取整值（如 3.3K），其它配置为 HBM4 标注 × 归一化读数。颜色越深比值越高；全部低于 1。</p>
+  <div class="chart" id="fig2"></div>
+</section>
+
+<section>
+  <h2>图 3 · 吞吐差距分解：TPS = batch/GPU ÷ TPOT</h2>
+  <p class="lead">两图行序相同，对数横轴，1 表示与论文相同。论文 TPOT 由论文 batch/GPU ÷ 论文 TPS 反推。实心点为论文 SLO 受限，空心点为论文容量受限。</p>
+  <div class="legend"><span><i style="background:var(--native)"></i>论文 SLO 受限（隐含 TPOT ≥ 90 ms）</span><span><i class="ring"></i>论文容量受限</span><span><i class="line"></i>与论文相同</span></div>
+  <div class="panels two">
+    <div class="panel"><h3>batch/GPU 比（native ÷ 论文）</h3><div class="chart" id="fig3a"></div></div>
+    <div class="panel"><h3>TPOT 比（native ÷ 论文隐含）</h3><div class="chart" id="fig3b"></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>图 4 · native 选中点每步做了多少</h2>
+  <p class="lead">左：带宽利用率 = 每 GPU 每步读写字节 ÷ 步时长 ÷ 标称带宽（HBM4 12.8、HBF 12.8、HBF+ 12.8、CONV 4.05、CONV+ 2.8 TB/s）。论文按恒定标称带宽处理，相当于 1。右：每步字节 ÷ 单副本字节（权重/8 + 同 batch 的 KV），大于 1 说明布局复制了权重或有额外中间数据；论文布局未公开，大于 1 不能直接算作与论文的差异。</p>
+  <div class="panels two">
+    <div class="panel"><h3>带宽利用率</h3><div class="chart" id="fig4a"></div></div>
+    <div class="panel"><h3>每步字节 ÷ 单副本字节</h3><div class="chart" id="fig4b"></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>图 5 · HBF / HBF+ 的 batch/GPU 增益（相对 HBM4）</h2>
+  <p class="lead">论文为 Fig. 3 读数（±0.02）；native 为该 case 全部实测点中 TPOT 上界 ≤ 100 ms 的最大 batch/GPU（含最大 batch 搜索的接受点），除以 HBM4 的同一量，是下界。</p>
+  <div class="legend"><span><i style="background:var(--paper)"></i>论文</span><span><i style="background:var(--native)"></i>native（下界）</span><span><i class="line"></i>与 HBM4 相同</span></div>
+  <div class="chart" id="fig5"></div>
+</section>
+
+<section>
+  <h2>口径与差异来源</h2>
+  <div class="cols">
+    <div>
+      <h3>对齐的构造</h3>
+      <ul class="compact">
+        <li>同一模型（Llama 3.1 405B、Llama 4 Maverick，BF16）与 Table I 五种硬件参数。</li>
+        <li>同一负载均值 ⟨1,660, 373⟩、⟨5.9K, 499⟩、⟨103.5K, 1.1K⟩，Decode 节点 PD 分离，连续批处理补位。</li>
+        <li>在容量、SRAM 与 TPOT ≤ 100 ms 约束下，搜索 DP/TP/PP/EP 布局与 batch，取每 GPU 吞吐最大者。</li>
+      </ul>
+      <h3>论文为达到峰值所做的简化（native 不采用）</h3>
+      <ul class="compact">
+        <li>硬件按标称峰值、效率 1；存储为恒定带宽。native 用 JEDEC HBM 时序（行冲突、tRRD/tFAW、刷新）和 NAND 页读/平面并行。</li>
+        <li>理想 Prefill 节点、批处理零停顿。native 的 PD 导入要付出 KV 写入时间与导入池等待。</li>
+        <li>SRAM 只放中间激活。native 的 HBF+/CONV+ 还把 KV 尾块暂存在 SRAM，放不下的写 NAND。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>native 已知建模缺口</h3>
+      <ul class="compact">
+        <li>HBM 地址映射为线性混合基交织，没有厂商的 XOR 哈希；NAND 无 FTL/GC，尾页写入按地址固定落到 plane，控制器不做均衡，也没有编程挂起。</li>
+        <li>HBM 的 FR-FCFS 只在同一批请求内重排。</li>
+        <li>GPU 计时为 roofline（峰值 × 效率 + L1/L2 复用），没有 SM/warp 周期模型。</li>
+      </ul>
+      <h3>读数精度</h3>
+      <ul class="compact">
+        <li>论文 HBM4 绝对值为图上取整标注；其它 Fig. 4 值由 PDF 矢量坐标读出，约 ±0.01；Fig. 3 batch 比约 ±0.02。</li>
+        <li>native 全部 30 个 case 完成，所有选中布局均为 PP1。KV 为多 rank 物理分页（256 token 一块）。没有结果受墙钟限制；搜索结论为“区间上限”的点是下界，上限来自 forecast 区间过宽。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <details open>
+    <summary>全量数据表（30 个 case）</summary>
+    <div class="tablewrap"><table id="tbl"></table></div>
+  </details>
+</section>
+</main>
+<div id="tip" role="tooltip"></div>
+<script>
+const DATA = {"rows": [{"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "SHORT", "hardware": "HBM4", "paper_tps": 3300.0, "paper_norm_tps": 1.0, "paper_batch_per_gpu": 194.0, "native_tps": 2074.636306827272, "native_tpot_ms": 40.36620176718278, "native_tpot_upper_ms": 40.674523354666704, "native_ttft_ms": 248.84016312410407, "layout": {"dp": 2, "tp": 4, "pp": 1, "ep": 1}, "batch_per_replica": 335, "native_batch_per_gpu": 83.75, "native_max_passing_batch_per_gpu": 117.625, "search_result": "native_capacity_limited", "layouts_screened": 14, "points_run": 5, "pruned": 12, "native_norm_tps": 1.0, "native_norm_batch": 1.0, "native_norm_max_batch": 1.0, "paper_norm_batch": 1.0, "native_step_bytes_per_gpu": 313858145160.0, "native_context_bytes_per_gpu": 80178739200.0, "native_achieved_tb_s": 7.834208897330972, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6120475701039821, "paper_tpot_ms": 58.78787878787879, "paper_bound": "capacity", "abs_ratio": 0.628677668735537, "batch_ratio": 0.43170103092783507, "tpot_ratio": 0.6866415764520782, "single_copy_bytes_per_gpu": 181641239200.0, "layout_byte_factor": 1.727901365033189}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "SHORT", "hardware": "HBF", "paper_tps": 2515.92, "paper_norm_tps": 0.7624, "paper_batch_per_gpu": 253.558, "native_tps": 1491.1475338104792, "native_tpot_ms": 77.12158424502995, "native_tpot_upper_ms": 77.25439019870518, "native_ttft_ms": 445.81715633925455, "layout": {"dp": 4, "tp": 2, "pp": 1, "ep": 1}, "batch_per_replica": 230, "native_batch_per_gpu": 115.0, "native_max_passing_batch_per_gpu": 115.0, "search_result": "native_interval_limited", "layouts_screened": 16, "points_run": 14, "pruned": 13, "native_norm_tps": 0.7187512957829614, "native_norm_batch": 1.373134328358209, "native_norm_max_batch": 0.9776833156216791, "paper_norm_batch": 1.307, "native_step_bytes_per_gpu": 533688738408.0, "native_context_bytes_per_gpu": 110304681984.0, "native_achieved_tb_s": 7.672171794564227, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.5993884214503302, "paper_tpot_ms": 100.78142389265159, "paper_bound": "slo", "abs_ratio": 0.5926847967385606, "batch_ratio": 0.45354514548939495, "tpot_ratio": 0.7652361046930318, "single_copy_bytes_per_gpu": 211767181984.0, "layout_byte_factor": 2.5201673526935946}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "SHORT", "hardware": "HBF+", "paper_tps": 3249.1800000000003, "paper_norm_tps": 0.9846, "paper_batch_per_gpu": 326.69599999999997, "native_tps": 2405.9348475105626, "native_tpot_ms": 77.51171542938854, "native_tpot_upper_ms": 78.13487365735108, "native_ttft_ms": 351.09288415937203, "layout": {"dp": 4, "tp": 2, "pp": 1, "ep": 1}, "batch_per_replica": 373, "native_batch_per_gpu": 186.5, "native_max_passing_batch_per_gpu": 186.5, "search_result": "slo_accepted", "layouts_screened": 18, "points_run": 12, "pruned": 14, "native_norm_tps": 1.1596899367821936, "native_norm_batch": 2.226865671641791, "native_norm_max_batch": 1.585547290116897, "paper_norm_batch": 1.684, "native_step_bytes_per_gpu": 625513759668.0, "native_context_bytes_per_gpu": 178547281920.0, "native_achieved_tb_s": 8.533843798439278, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6667065467530686, "paper_tpot_ms": 100.54721498962813, "paper_bound": "slo", "abs_ratio": 0.7404744727933086, "batch_ratio": 0.5708671058109068, "tpot_ratio": 0.7708986811557555, "single_copy_bytes_per_gpu": 280009781920.0, "layout_byte_factor": 2.233899670857613}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "SHORT", "hardware": "CONV", "paper_tps": 790.02, "paper_norm_tps": 0.2394, "paper_batch_per_gpu": 78.958, "native_tps": 422.31708662206665, "native_tpot_ms": 94.41844127821302, "native_tpot_upper_ms": 94.74681020494702, "native_ttft_ms": 394.15865831785396, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 319, "native_batch_per_gpu": 39.875, "native_max_passing_batch_per_gpu": 39.875, "search_result": "bracket_passing_end", "layouts_screened": 3, "points_run": 3, "pruned": 2, "native_norm_tps": 0.20356198589231933, "native_norm_batch": 0.4761194029850746, "native_norm_max_batch": 0.3390010626992561, "paper_norm_batch": 0.407, "native_step_bytes_per_gpu": 167061516804.0, "native_context_bytes_per_gpu": 38372447232.0, "native_achieved_tb_s": 1.9668565518678855, "nominal_tb_s": 4.05, "native_bandwidth_fraction": 0.48564359305379895, "paper_tpot_ms": 99.9443052074631, "paper_bound": "slo", "abs_ratio": 0.5345650573682523, "batch_ratio": 0.5050153246029535, "tpot_ratio": 0.9447105673727026, "single_copy_bytes_per_gpu": 139834947232.0, "layout_byte_factor": 1.1947050441319824}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "SHORT", "hardware": "CONV+", "paper_tps": 957.33, "paper_norm_tps": 0.2901, "paper_batch_per_gpu": 95.836, "native_tps": 567.7691834282152, "native_tpot_ms": 82.92924255923235, "native_tpot_upper_ms": 85.42843601836499, "native_ttft_ms": 490.30162965947204, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 377, "native_batch_per_gpu": 47.125, "native_max_passing_batch_per_gpu": 47.125, "search_result": "bracket_passing_end", "layouts_screened": 3, "points_run": 3, "pruned": 2, "native_norm_tps": 0.27367167033555917, "native_norm_batch": 0.5626865671641791, "native_norm_max_batch": 0.40063761955366634, "paper_norm_batch": 0.494, "native_step_bytes_per_gpu": 182021378616.0, "native_context_bytes_per_gpu": 45115499520.0, "native_achieved_tb_s": 2.4290449366226103, "nominal_tb_s": 2.8, "native_bandwidth_fraction": 0.8675160487937894, "paper_tpot_ms": 100.10759090386804, "paper_bound": "slo", "abs_ratio": 0.593075724596759, "batch_ratio": 0.49172544763971787, "tpot_ratio": 0.8284011413167276, "single_copy_bytes_per_gpu": 146577999520.0, "layout_byte_factor": 1.2418055861866493}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "MID", "hardware": "HBM4", "paper_tps": 1800.0, "paper_norm_tps": 1.0, "paper_batch_per_gpu": 61.5, "native_tps": 938.2567912201085, "native_tpot_ms": 61.00814589106607, "native_tpot_upper_ms": 61.769286036571835, "native_ttft_ms": 472.4307992940057, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 458, "native_batch_per_gpu": 57.25, "native_max_passing_batch_per_gpu": 57.25, "search_result": "native_capacity_limited", "layouts_screened": 14, "points_run": 7, "pruned": 12, "native_norm_tps": 1.0, "native_norm_batch": 1.0, "native_norm_max_batch": 1.0, "paper_norm_batch": 1.0, "native_step_bytes_per_gpu": 327119938992.0, "native_context_bytes_per_gpu": 181947322368.0, "native_achieved_tb_s": 5.427976980452823, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.4240607015978768, "paper_tpot_ms": 34.166666666666664, "paper_bound": "capacity", "abs_ratio": 0.5212537729000603, "batch_ratio": 0.9308943089430894, "tpot_ratio": 1.7856042699824217, "single_copy_bytes_per_gpu": 283409822368.0, "layout_byte_factor": 1.1542293638900192}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "MID", "hardware": "HBF", "paper_tps": 1494.72, "paper_norm_tps": 0.8304, "paper_batch_per_gpu": 146.4315, "native_tps": 892.6570625582613, "native_tpot_ms": 90.17536053355339, "native_tpot_upper_ms": 90.84141083160189, "native_ttft_ms": 1071.2099791989756, "layout": {"dp": 4, "tp": 2, "pp": 1, "ep": 1}, "batch_per_replica": 161, "native_batch_per_gpu": 80.5, "native_max_passing_batch_per_gpu": 80.5, "search_result": "slo_accepted", "layouts_screened": 16, "points_run": 5, "pruned": 14, "native_norm_tps": 0.9513995218701807, "native_norm_batch": 1.4061135371179039, "native_norm_max_batch": 1.4061135371179039, "paper_norm_batch": 2.381, "native_step_bytes_per_gpu": 672846007932.0, "native_context_bytes_per_gpu": 255983357952.0, "native_achieved_tb_s": 8.273251168476264, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6463477475372081, "paper_tpot_ms": 97.9658397559409, "paper_bound": "slo", "abs_ratio": 0.5972068765777278, "batch_ratio": 0.5497451026589224, "tpot_ratio": 0.9204775946207813, "single_copy_bytes_per_gpu": 357445857952.0, "layout_byte_factor": 1.8823718136981569}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "MID", "hardware": "HBF+", "paper_tps": 1943.2799999999997, "paper_norm_tps": 1.0796, "paper_batch_per_gpu": 189.297, "native_tps": 1019.9193670052756, "native_tpot_ms": 83.3394556635917, "native_tpot_upper_ms": 83.53696008094649, "native_ttft_ms": 994.4623659053054, "layout": {"dp": 4, "tp": 2, "pp": 1, "ep": 1}, "batch_per_replica": 170, "native_batch_per_gpu": 85.0, "native_max_passing_batch_per_gpu": 85.0, "search_result": "bracket_passing_end", "layouts_screened": 17, "points_run": 12, "pruned": 15, "native_norm_tps": 1.087036487824376, "native_norm_batch": 1.48471615720524, "native_norm_max_batch": 1.48471615720524, "paper_norm_batch": 3.078, "native_step_bytes_per_gpu": 687842469720.0, "native_context_bytes_per_gpu": 270140129280.0, "native_achieved_tb_s": 9.274082729146139, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.7245377132145421, "paper_tpot_ms": 97.41107817710264, "paper_bound": "slo", "abs_ratio": 0.5248442669122698, "batch_ratio": 0.44902983142891856, "tpot_ratio": 0.8555439198822193, "single_copy_bytes_per_gpu": 371602629280.0, "layout_byte_factor": 1.8510161541449037}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "MID", "hardware": "CONV", "paper_tps": 345.96000000000004, "paper_norm_tps": 0.1922, "paper_batch_per_gpu": 33.948, "native_tps": 165.36003265455452, "native_tpot_ms": 88.44201336206264, "native_tpot_upper_ms": 88.79088487088221, "native_ttft_ms": 1121.2903730645694, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 117, "native_batch_per_gpu": 14.625, "native_max_passing_batch_per_gpu": 14.625, "search_result": "native_interval_limited", "layouts_screened": 3, "points_run": 4, "pruned": 2, "native_norm_tps": 0.17624176473001643, "native_norm_batch": 0.2554585152838428, "native_norm_max_batch": 0.2554585152838428, "paper_norm_batch": 0.552, "native_step_bytes_per_gpu": 157333765932.0, "native_context_bytes_per_gpu": 46550762496.0, "native_achieved_tb_s": 1.9028712707667987, "nominal_tb_s": 4.05, "native_bandwidth_fraction": 0.4698447582140244, "paper_tpot_ms": 98.12695109261185, "paper_bound": "slo", "abs_ratio": 0.47797442668098766, "batch_ratio": 0.43080593849416754, "tpot_ratio": 0.9013019601372451, "single_copy_bytes_per_gpu": 148013262496.0, "layout_byte_factor": 1.0629707316683996}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "MID", "hardware": "CONV+", "paper_tps": 421.38, "paper_norm_tps": 0.2341, "paper_batch_per_gpu": 41.082, "native_tps": 238.28663099332056, "native_tpot_ms": 86.55499069036037, "native_tpot_upper_ms": 86.74872934892717, "native_ttft_ms": 888.5504437038276, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 165, "native_batch_per_gpu": 20.625, "native_max_passing_batch_per_gpu": 20.625, "search_result": "bracket_passing_end", "layouts_screened": 3, "points_run": 4, "pruned": 2, "native_norm_tps": 0.25396739274698216, "native_norm_batch": 0.36026200873362446, "native_norm_max_batch": 0.36026200873362446, "paper_norm_batch": 0.668, "native_step_bytes_per_gpu": 180585902700.0, "native_context_bytes_per_gpu": 65548707840.0, "native_achieved_tb_s": 2.262549371504222, "nominal_tb_s": 2.8, "native_bandwidth_fraction": 0.8080533469657936, "paper_tpot_ms": 97.49394845507618, "paper_bound": "slo", "abs_ratio": 0.5654910792949844, "batch_ratio": 0.5020446911055937, "tpot_ratio": 0.8877985973687759, "single_copy_bytes_per_gpu": 167011207840.0, "layout_byte_factor": 1.081280143024921}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "LONG", "hardware": "HBM4", "paper_tps": 147.0, "paper_norm_tps": 1.0, "paper_batch_per_gpu": 3.75, "native_tps": 90.2852406888271, "native_tpot_ms": 31.843073898424358, "native_tpot_upper_ms": 31.962903834300953, "native_ttft_ms": 12374.698617020196, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 23, "native_batch_per_gpu": 2.875, "native_max_passing_batch_per_gpu": 2.875, "search_result": "native_capacity_limited", "layouts_screened": 13, "points_run": 8, "pruned": 11, "native_norm_tps": 1.0, "native_norm_batch": 1.0, "native_norm_max_batch": 1.0, "paper_norm_batch": 1.0, "native_step_bytes_per_gpu": 256849888932.0, "native_context_bytes_per_gpu": 154399537152.0, "native_achieved_tb_s": 8.09716011865113, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6325906342696195, "paper_tpot_ms": 25.510204081632654, "paper_bound": "capacity", "abs_ratio": 0.6141853108083476, "batch_ratio": 0.7666666666666667, "tpot_ratio": 1.2482484968182348, "single_copy_bytes_per_gpu": 255862037152.0, "layout_byte_factor": 1.0038608767091663}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "LONG", "hardware": "HBF", "paper_tps": 158.9511, "paper_norm_tps": 1.0813, "paper_batch_per_gpu": 15.89625, "native_tps": 115.23104652880969, "native_tpot_ms": 97.62978198919532, "native_tpot_upper_ms": 97.75359980444968, "native_ttft_ms": 11121.739932176697, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 90, "native_batch_per_gpu": 11.25, "native_max_passing_batch_per_gpu": 11.25, "search_result": "slo_accepted", "layouts_screened": 15, "points_run": 6, "pruned": 13, "native_norm_tps": 1.2762999317458723, "native_norm_batch": 3.9130434782608696, "native_norm_max_batch": 3.9130434782608696, "paper_norm_batch": 4.239, "native_step_bytes_per_gpu": 712615251096.0, "native_context_bytes_per_gpu": 604225714176.0, "native_achieved_tb_s": 7.599292574098749, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.5936947323514647, "paper_tpot_ms": 100.0071720170543, "paper_bound": "slo", "abs_ratio": 0.7249465183242499, "batch_ratio": 0.7077140835102619, "tpot_ratio": 0.9762278046673136, "single_copy_bytes_per_gpu": 705688214176.0, "layout_byte_factor": 1.0098160019975513}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "LONG", "hardware": "HBF+", "paper_tps": 189.8946, "paper_norm_tps": 1.2918, "paper_batch_per_gpu": 18.9975, "native_tps": 127.47318176111527, "native_tpot_ms": 97.07789119665793, "native_tpot_upper_ms": 97.44151516489647, "native_ttft_ms": 10662.780576993333, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 99, "native_batch_per_gpu": 12.375, "native_max_passing_batch_per_gpu": 12.375, "search_result": "native_slo_within_step", "layouts_screened": 17, "points_run": 5, "pruned": 15, "native_norm_tps": 1.4118939129869343, "native_norm_batch": 4.304347826086956, "native_norm_max_batch": 4.304347826086956, "paper_norm_batch": 5.066, "native_step_bytes_per_gpu": 773776500084.0, "native_context_bytes_per_gpu": 664589528064.0, "native_achieved_tb_s": 8.361244646406789, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6532222380005304, "paper_tpot_ms": 100.0423392766303, "paper_bound": "slo", "abs_ratio": 0.6712838688467986, "batch_ratio": 0.6514015001973944, "tpot_ratio": 0.9703680651471446, "single_copy_bytes_per_gpu": 766052028064.0, "layout_byte_factor": 1.0100834822401314}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "LONG", "hardware": "CONV", "paper_tps": 24.4755, "paper_norm_tps": 0.1665, "paper_batch_per_gpu": 2.39625, "native_tps": 17.66949151503678, "native_tpot_ms": 84.89173814976888, "native_tpot_upper_ms": 85.06402259594495, "native_ttft_ms": 45244.72079170949, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 12, "native_batch_per_gpu": 1.5, "native_max_passing_batch_per_gpu": 1.5, "search_result": "bracket_passing_end", "layouts_screened": 3, "points_run": 4, "pruned": 2, "native_norm_tps": 0.1957074199528982, "native_norm_batch": 0.5217391304347826, "native_norm_max_batch": 0.5217391304347826, "paper_norm_batch": 0.639, "native_step_bytes_per_gpu": 182037900240.0, "native_context_bytes_per_gpu": 80562585600.0, "native_achieved_tb_s": 2.1731301053072354, "nominal_tb_s": 4.05, "native_bandwidth_fraction": 0.5365753346437618, "paper_tpot_ms": 97.90402647545504, "paper_bound": "slo", "abs_ratio": 0.7219256609685922, "batch_ratio": 0.6259780907668231, "tpot_ratio": 0.8670913874114422, "single_copy_bytes_per_gpu": 182025085600.0, "layout_byte_factor": 1.0000704004063932}, {"model": "llama3_405b", "model_label": "Llama3 405B", "workload": "LONG", "hardware": "CONV+", "paper_tps": 30.6201, "paper_norm_tps": 0.2083, "paper_batch_per_gpu": 2.9962500000000003, "native_tps": 19.38395875051727, "native_tpot_ms": 70.93494102565552, "native_tpot_upper_ms": 70.94527760101973, "native_ttft_ms": 41789.49996808173, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 11, "native_batch_per_gpu": 1.375, "native_max_passing_batch_per_gpu": 1.375, "search_result": "bracket_passing_end", "layouts_screened": 3, "points_run": 4, "pruned": 2, "native_norm_tps": 0.2146968718544498, "native_norm_batch": 0.4782608695652174, "native_norm_max_batch": 0.4782608695652174, "paper_norm_batch": 0.799, "native_step_bytes_per_gpu": 175230271188.0, "native_context_bytes_per_gpu": 73843596288.0, "native_achieved_tb_s": 2.4978342427953013, "nominal_tb_s": 2.8, "native_bandwidth_fraction": 0.8920836581411791, "paper_tpot_ms": 97.85239107644979, "paper_bound": "slo", "abs_ratio": 0.6330468793543218, "batch_ratio": 0.45890696704213596, "tpot_ratio": 0.7249178098288441, "single_copy_bytes_per_gpu": 175306096288.0, "layout_byte_factor": 0.9995674702614139}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "SHORT", "hardware": "HBM4", "paper_tps": 19000.0, "paper_norm_tps": 1.0, "paper_batch_per_gpu": 460.0, "native_tps": 12062.106158829289, "native_tpot_ms": 34.81967085075291, "native_tpot_upper_ms": 34.8841241049391, "native_ttft_ms": 184.35991845635945, "layout": {"dp": 1, "tp": 1, "pp": 1, "ep": 8}, "batch_per_replica": 3360, "native_batch_per_gpu": 420.0, "native_max_passing_batch_per_gpu": 476.25, "search_result": "native_capacity_limited", "layouts_screened": 30, "points_run": 11, "pruned": 27, "native_norm_tps": 1.0, "native_norm_batch": 1.0, "native_norm_max_batch": 1.0, "paper_norm_batch": 1.0, "native_step_bytes_per_gpu": 279119438400.0, "native_context_bytes_per_gpu": 152723128320.0, "native_achieved_tb_s": 8.03244883206199, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6275350650048429, "paper_tpot_ms": 24.210526315789473, "paper_bound": "capacity", "abs_ratio": 0.6348476925699625, "batch_ratio": 0.9130434782608695, "tpot_ratio": 1.4382037960093592, "single_copy_bytes_per_gpu": 252848128320.0, "layout_byte_factor": 1.1039015406384638}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "SHORT", "hardware": "HBF", "paper_tps": 16872.0, "paper_norm_tps": 0.888, "paper_batch_per_gpu": 1682.68, "native_tps": 7991.929730111443, "native_tpot_ms": 93.21750753729422, "native_tpot_upper_ms": 93.59673377247546, "native_ttft_ms": 313.570509082374, "layout": {"dp": 2, "tp": 1, "pp": 1, "ep": 4}, "batch_per_replica": 2980, "native_batch_per_gpu": 745.0, "native_max_passing_batch_per_gpu": 745.0, "search_result": "native_slo_within_step", "layouts_screened": 35, "points_run": 36, "pruned": 27, "native_norm_tps": 0.6625650300931455, "native_norm_batch": 1.7738095238095237, "native_norm_max_batch": 1.5643044619422573, "paper_norm_batch": 3.658, "native_step_bytes_per_gpu": 500355297216.0, "native_context_bytes_per_gpu": 271268511744.0, "native_achieved_tb_s": 6.498163117486104, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.5076689935536018, "paper_tpot_ms": 99.73210052157421, "paper_bound": "slo", "abs_ratio": 0.4736800456443482, "batch_ratio": 0.4427460955142986, "tpot_ratio": 0.9346790757418095, "single_copy_bytes_per_gpu": 371393511744.0, "layout_byte_factor": 1.3472375833019206}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "SHORT", "hardware": "HBF+", "paper_tps": 18585.8, "paper_norm_tps": 0.9782, "paper_batch_per_gpu": 768.1999999999999, "native_tps": 6957.797737824725, "native_tpot_ms": 55.47668849659027, "native_tpot_upper_ms": 55.665102119412005, "native_ttft_ms": 295.7533937895373, "layout": {"dp": 1, "tp": 1, "pp": 1, "ep": 8}, "batch_per_replica": 3088, "native_batch_per_gpu": 386.0, "native_max_passing_batch_per_gpu": 512.0, "search_result": "best_measured_point", "layouts_screened": 35, "points_run": 69, "pruned": 26, "native_norm_tps": 0.5768310812562131, "native_norm_batch": 0.919047619047619, "native_norm_max_batch": 1.0750656167979002, "paper_norm_batch": 1.67, "native_step_bytes_per_gpu": 266305322016.0, "native_context_bytes_per_gpu": 140359827456.0, "native_achieved_tb_s": 5.557857328641875, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.43420760380014645, "paper_tpot_ms": 41.33263028763894, "paper_bound": "capacity", "abs_ratio": 0.37436094964030203, "batch_ratio": 0.5024733142410831, "tpot_ratio": 1.34220077721938, "single_copy_bytes_per_gpu": 240484827456.0, "layout_byte_factor": 1.107368497352392}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "SHORT", "hardware": "CONV", "paper_tps": 3100.8, "paper_norm_tps": 0.1632, "paper_batch_per_gpu": 307.28000000000003, "native_tps": 1812.435074813061, "native_tpot_ms": 88.27880385008064, "native_tpot_upper_ms": 88.41852532960544, "native_ttft_ms": 316.89400298914666, "layout": {"dp": 1, "tp": 2, "pp": 1, "ep": 4}, "batch_per_replica": 1280, "native_batch_per_gpu": 160.0, "native_max_passing_batch_per_gpu": 170.0, "search_result": "native_interval_limited", "layouts_screened": 35, "points_run": 12, "pruned": 31, "native_norm_tps": 0.15025859090838664, "native_norm_batch": 0.38095238095238093, "native_norm_max_batch": 0.3569553805774278, "paper_norm_batch": 0.668, "native_step_bytes_per_gpu": 171809362944.0, "native_context_bytes_per_gpu": 58290634752.0, "native_achieved_tb_s": 1.982982840751132, "nominal_tb_s": 4.05, "native_bandwidth_fraction": 0.48962539277805733, "paper_tpot_ms": 99.09700722394223, "paper_bound": "slo", "abs_ratio": 0.5845056355821274, "batch_ratio": 0.5206977349648528, "tpot_ratio": 0.8908321888125813, "single_copy_bytes_per_gpu": 158415634752.0, "layout_byte_factor": 1.0845480196002617}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "SHORT", "hardware": "CONV+", "paper_tps": 3836.1, "paper_norm_tps": 0.2019, "paper_batch_per_gpu": 380.88, "native_tps": 2336.200548648652, "native_tpot_ms": 90.95572557490131, "native_tpot_upper_ms": 91.55763515280202, "native_ttft_ms": 433.0579656394645, "layout": {"dp": 1, "tp": 2, "pp": 1, "ep": 4}, "batch_per_replica": 1700, "native_batch_per_gpu": 212.5, "native_max_passing_batch_per_gpu": 212.5, "search_result": "slo_accepted", "layouts_screened": 35, "points_run": 16, "pruned": 31, "native_norm_tps": 0.19368098057556776, "native_norm_batch": 0.5059523809523809, "native_norm_max_batch": 0.4461942257217848, "paper_norm_batch": 0.828, "native_step_bytes_per_gpu": 192349464720.0, "native_context_bytes_per_gpu": 77270630400.0, "native_achieved_tb_s": 2.2694921652092153, "nominal_tb_s": 2.8, "native_bandwidth_fraction": 0.8105329161461483, "paper_tpot_ms": 99.28833972002816, "paper_bound": "slo", "abs_ratio": 0.609004079311971, "batch_ratio": 0.557918504515858, "tpot_ratio": 0.916076609110163, "single_copy_bytes_per_gpu": 177395630400.0, "layout_byte_factor": 1.0842965200793355}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "MID", "hardware": "HBM4", "paper_tps": 6300.0, "paper_norm_tps": 1.0, "paper_batch_per_gpu": 151.5, "native_tps": 3867.4610319859944, "native_tpot_ms": 36.845373125127566, "native_tpot_upper_ms": 36.98236225153828, "native_ttft_ms": 220.48452404062937, "layout": {"dp": 1, "tp": 2, "pp": 1, "ep": 4}, "batch_per_replica": 1140, "native_batch_per_gpu": 142.5, "native_max_passing_batch_per_gpu": 149.125, "search_result": "native_capacity_limited", "layouts_screened": 30, "points_run": 12, "pruned": 26, "native_norm_tps": 1.0, "native_norm_batch": 1.0, "native_norm_max_batch": 1.0, "paper_norm_batch": 1.0, "native_step_bytes_per_gpu": 285360519120.0, "native_context_bytes_per_gpu": 172372377600.0, "native_achieved_tb_s": 7.779819565893887, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6077984035854599, "paper_tpot_ms": 24.047619047619047, "paper_bound": "capacity", "abs_ratio": 0.6138827034898404, "batch_ratio": 0.9405940594059405, "tpot_ratio": 1.5321838329260968, "single_copy_bytes_per_gpu": 272497377600.0, "layout_byte_factor": 1.0472046433374558}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "MID", "hardware": "HBF", "paper_tps": 6284.25, "paper_norm_tps": 0.9975, "paper_batch_per_gpu": 624.6345, "native_tps": 3143.4893685301645, "native_tpot_ms": 65.53225177391812, "native_tpot_upper_ms": 65.5685848557764, "native_ttft_ms": 449.35795747710546, "layout": {"dp": 1, "tp": 1, "pp": 1, "ep": 8}, "batch_per_replica": 1648, "native_batch_per_gpu": 206.0, "native_max_passing_batch_per_gpu": 206.0, "search_result": "bracket_passing_end", "layouts_screened": 35, "points_run": 41, "pruned": 27, "native_norm_tps": 0.8128044064392136, "native_norm_batch": 1.4456140350877194, "native_norm_max_batch": 1.3813914501257334, "paper_norm_batch": 4.123, "native_step_bytes_per_gpu": 372864846048.0, "native_context_bytes_per_gpu": 249285623808.0, "native_achieved_tb_s": 7.122879169815499, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.5564749351418358, "paper_tpot_ms": 99.39682539682539, "paper_bound": "slo", "abs_ratio": 0.5002171092063754, "batch_ratio": 0.32979286286620413, "tpot_ratio": 0.6592992433338936, "single_copy_bytes_per_gpu": 349410623808.0, "layout_byte_factor": 1.067125097641244}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "MID", "hardware": "HBF+", "paper_tps": 7481.88, "paper_norm_tps": 1.1876, "paper_batch_per_gpu": 743.4105, "native_tps": 3764.3566480449563, "native_tpot_ms": 49.942132736459335, "native_tpot_upper_ms": 49.944991585777885, "native_ttft_ms": 381.38741131862633, "layout": {"dp": 1, "tp": 1, "pp": 1, "ep": 8}, "batch_per_replica": 1504, "native_batch_per_gpu": 188.0, "native_max_passing_batch_per_gpu": 236.25, "search_result": "native_interval_limited", "layouts_screened": 35, "points_run": 43, "pruned": 25, "native_norm_tps": 0.973340550017619, "native_norm_batch": 1.3192982456140352, "native_norm_max_batch": 1.584241408214585, "paper_norm_batch": 4.907, "native_step_bytes_per_gpu": 350730732480.0, "native_context_bytes_per_gpu": 227410575360.0, "native_achieved_tb_s": 8.486573950475373, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6630135898808884, "paper_tpot_ms": 99.36145728079039, "paper_bound": "slo", "abs_ratio": 0.5031297812909263, "batch_ratio": 0.2528885454267864, "tpot_ratio": 0.502630839997902, "single_copy_bytes_per_gpu": 327535575360.0, "layout_byte_factor": 1.0708172145712898}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "MID", "hardware": "CONV", "paper_tps": 1008.0, "paper_norm_tps": 0.16, "paper_batch_per_gpu": 98.9295, "native_tps": 804.4641066788411, "native_tpot_ms": 95.09429843857421, "native_tpot_upper_ms": 95.17136013573159, "native_ttft_ms": 463.60901036683174, "layout": {"dp": 1, "tp": 4, "pp": 1, "ep": 2}, "batch_per_replica": 612, "native_batch_per_gpu": 76.5, "native_max_passing_batch_per_gpu": 76.5, "search_result": "slo_accepted", "layouts_screened": 35, "points_run": 9, "pruned": 32, "native_norm_tps": 0.2080083289852148, "native_norm_batch": 0.5368421052631579, "native_norm_max_batch": 0.5129924559932942, "paper_norm_batch": 0.653, "native_step_bytes_per_gpu": 199698897696.0, "native_context_bytes_per_gpu": 92619227136.0, "native_achieved_tb_s": 2.135838187402512, "nominal_tb_s": 4.05, "native_bandwidth_fraction": 0.5273674536796326, "paper_tpot_ms": 98.14434523809524, "paper_bound": "slo", "abs_ratio": 0.7980794709115486, "batch_ratio": 0.7732779403514624, "tpot_ratio": 0.96892284734162, "single_copy_bytes_per_gpu": 192744227136.0, "layout_byte_factor": 1.0360823805897585}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "MID", "hardware": "CONV+", "paper_tps": 1251.81, "paper_norm_tps": 0.1987, "paper_batch_per_gpu": 123.16949999999999, "native_tps": 692.9587273266551, "native_tpot_ms": 92.33922646398591, "native_tpot_upper_ms": 93.66000413755539, "native_ttft_ms": 510.6353459713556, "layout": {"dp": 1, "tp": 4, "pp": 1, "ep": 2}, "batch_per_replica": 512, "native_batch_per_gpu": 64.0, "native_max_passing_batch_per_gpu": 64.0, "search_result": "native_slo_within_step", "layouts_screened": 35, "points_run": 7, "pruned": 32, "native_norm_tps": 0.17917665403620403, "native_norm_batch": 0.44912280701754387, "native_norm_max_batch": 0.4291701592623638, "paper_norm_batch": 0.813, "native_step_bytes_per_gpu": 183776317440.0, "native_context_bytes_per_gpu": 77416366080.0, "native_achieved_tb_s": 2.394923794040946, "nominal_tb_s": 2.8, "native_bandwidth_fraction": 0.8553299264431949, "paper_tpot_ms": 98.39312675246242, "paper_bound": "slo", "abs_ratio": 0.5535654191344175, "batch_ratio": 0.5196091564876045, "tpot_ratio": 0.9384723253718024, "single_copy_bytes_per_gpu": 177541366080.0, "layout_byte_factor": 1.0351183022732322}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "LONG", "hardware": "HBM4", "paper_tps": 1300.0, "paper_norm_tps": 1.0, "paper_batch_per_gpu": 31.0, "native_tps": 800.18024875753, "native_tpot_ms": 32.02366550746791, "native_tpot_upper_ms": 32.132758756413, "native_ttft_ms": 932.8809709367741, "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}, "batch_per_replica": 205, "native_batch_per_gpu": 25.625, "native_max_passing_batch_per_gpu": 28.5, "search_result": "native_capacity_limited", "layouts_screened": 30, "points_run": 14, "pruned": 24, "native_norm_tps": 1.0, "native_norm_batch": 1.0, "native_norm_max_batch": 1.0, "paper_norm_batch": 1.0, "native_step_bytes_per_gpu": 255249113040.0, "native_context_bytes_per_gpu": 152779837440.0, "native_achieved_tb_s": 8.001827179709805, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.6251427484148284, "paper_tpot_ms": 23.846153846153847, "paper_bound": "capacity", "abs_ratio": 0.615523268275023, "batch_ratio": 0.8266129032258065, "tpot_ratio": 1.3429279083776866, "single_copy_bytes_per_gpu": 252904837440.0, "layout_byte_factor": 1.0092693980223142}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "LONG", "hardware": "HBF", "paper_tps": 1388.92, "paper_norm_tps": 1.0684, "paper_batch_per_gpu": 139.965, "native_tps": 888.2712348562397, "native_tpot_ms": 92.31279455865055, "native_tpot_upper_ms": 92.66728727466342, "native_ttft_ms": 3059.530865763268, "layout": {"dp": 2, "tp": 2, "pp": 1, "ep": 2}, "batch_per_replica": 328, "native_batch_per_gpu": 82.0, "native_max_passing_batch_per_gpu": 82.0, "search_result": "native_slo_within_step", "layouts_screened": 35, "points_run": 22, "pruned": 29, "native_norm_tps": 1.1100889283826887, "native_norm_batch": 3.2, "native_norm_max_batch": 2.8771929824561404, "paper_norm_batch": 4.515, "native_step_bytes_per_gpu": 696733385280.0, "native_context_bytes_per_gpu": 488951709696.0, "native_achieved_tb_s": 9.156048216085619, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.7153162668816889, "paper_tpot_ms": 100.77254269504363, "paper_bound": "slo", "abs_ratio": 0.6395409633789129, "batch_ratio": 0.5858607509020112, "tpot_ratio": 0.9160510600393021, "single_copy_bytes_per_gpu": 589076709696.0, "layout_byte_factor": 1.1827549346494406}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "LONG", "hardware": "HBF+", "paper_tps": 1627.6, "paper_norm_tps": 1.252, "paper_batch_per_gpu": 164.703, "native_tps": 1057.9582182885606, "native_tpot_ms": 84.83234173300208, "native_tpot_upper_ms": 85.10584058682619, "native_ttft_ms": 1372.1103819866732, "layout": {"dp": 2, "tp": 4, "pp": 1, "ep": 1}, "batch_per_replica": 359, "native_batch_per_gpu": 89.75, "native_max_passing_batch_per_gpu": 99.5, "search_result": "best_measured_point", "layouts_screened": 35, "points_run": 24, "pruned": 28, "native_norm_tps": 1.3221498780197238, "native_norm_batch": 3.502439024390244, "native_norm_max_batch": 3.491228070175439, "paper_norm_batch": 5.313, "native_step_bytes_per_gpu": 739400958576.0, "native_context_bytes_per_gpu": 535101874176.0, "native_achieved_tb_s": 9.958628294071536, "nominal_tb_s": 12.8, "native_bandwidth_fraction": 0.7780178354743387, "paper_tpot_ms": 101.19378225608259, "paper_bound": "slo", "abs_ratio": 0.6500111933451467, "batch_ratio": 0.5449202503900961, "tpot_ratio": 0.8383157526252356, "single_copy_bytes_per_gpu": 635226874176.0, "layout_byte_factor": 1.1639950837016018}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "LONG", "hardware": "CONV", "paper_tps": 237.38000000000002, "paper_norm_tps": 0.1826, "paper_batch_per_gpu": 23.87, "native_tps": 173.48474317362667, "native_tpot_ms": 95.10918369976089, "native_tpot_upper_ms": 95.17416791344111, "native_ttft_ms": 4032.90504653568, "layout": {"dp": 2, "tp": 4, "pp": 1, "ep": 1}, "batch_per_replica": 66, "native_batch_per_gpu": 16.5, "native_max_passing_batch_per_gpu": 16.5, "search_result": "native_slo_within_step", "layouts_screened": 35, "points_run": 14, "pruned": 30, "native_norm_tps": 0.21680707995855056, "native_norm_batch": 0.6439024390243903, "native_norm_max_batch": 0.5789473684210527, "paper_norm_batch": 0.77, "native_step_bytes_per_gpu": 205011954720.0, "native_context_bytes_per_gpu": 98392227840.0, "native_achieved_tb_s": 2.201454817848732, "nominal_tb_s": 4.05, "native_bandwidth_fraction": 0.5435690908268473, "paper_tpot_ms": 100.5560704355885, "paper_bound": "slo", "abs_ratio": 0.7308313386705985, "batch_ratio": 0.6912442396313364, "tpot_ratio": 0.9458323429681291, "single_copy_bytes_per_gpu": 198517227840.0, "layout_byte_factor": 1.032716187661227}, {"model": "llama4_maverick", "model_label": "Llama4 Maverick", "workload": "LONG", "hardware": "CONV+", "paper_tps": 279.24, "paper_norm_tps": 0.2148, "paper_batch_per_gpu": 27.900000000000002, "native_tps": 199.23361310888112, "native_tpot_ms": 94.10972910958607, "native_tpot_upper_ms": 94.40111385311242, "native_ttft_ms": 3870.9773258784026, "layout": {"dp": 1, "tp": 4, "pp": 1, "ep": 2}, "batch_per_replica": 150, "native_batch_per_gpu": 18.75, "native_max_passing_batch_per_gpu": 18.75, "search_result": "best_measured_point", "layouts_screened": 35, "points_run": 17, "pruned": 29, "native_norm_tps": 0.24898591713334423, "native_norm_batch": 0.7317073170731707, "native_norm_max_batch": 0.6578947368421053, "paper_norm_batch": 0.9, "native_step_bytes_per_gpu": 215551934640.0, "native_context_bytes_per_gpu": 111790694400.0, "native_achieved_tb_s": 2.382837617566535, "nominal_tb_s": 2.8, "native_bandwidth_fraction": 0.8510134348451912, "paper_tpot_ms": 99.91405242801892, "paper_bound": "slo", "abs_ratio": 0.7134852209886875, "batch_ratio": 0.6720430107526881, "tpot_ratio": 0.9419068371527173, "single_copy_bytes_per_gpu": 211915694400.0, "layout_byte_factor": 1.0171589001479826}], "candidate_counts": {"completed": 272, "slo_rejected": 148, "forecast_rejected": 167, "capacity_rejected": 4}, "total_candidates": 591, "scan_dir": "F:\\codex_project\\37_LLMsim\\heterollm-sim-4.0.0\\artifacts\\exploring_hbf_native_20261102", "paper_note": "HBM4 labels are rounded published annotations; other Figure 4 values read from PDF vector coordinates, approximately +/-0.01 in normalized units, not author raw data. Figure 3 batch ratios are graph readings approximately +/-0.02. Derived absolute non-HBM4 TPS inherits rounded HBM4 anchor.", "summary": {"norm_geomean": 0.9871973921883395, "norm_mean_diff": -0.011499349237057708, "norm_within_015": 18, "norm_count": 24, "order_agree": 56, "order_total": 60, "abs_ratio": {"HBM4": [0.5212537729000603, 0.6348476925699625], "HBF": [0.4736800456443482, 0.7249465183242499], "HBF+": [0.37436094964030203, 0.7404744727933086], "CONV": [0.47797442668098766, 0.7980794709115486], "CONV+": [0.5535654191344175, 0.7134852209886875]}, "abs_ratio_all": [0.37436094964030203, 0.7980794709115486], "slo_count": 23, "cap_count": 7, "slo_tpot_ratio": [0.502630839997902, 0.9762278046673136], "slo_batch_ratio": [0.2528885454267864, 0.7732779403514624], "cap_tpot_ratio": [0.6866415764520782, 1.7856042699824217], "cap_batch_ratio": [0.43170103092783507, 0.9405940594059405], "bw_fraction": {"HBM4": [0.4240607015978768, 0.6325906342696195], "HBF": [0.5076689935536018, 0.7153162668816889], "HBF+": [0.43420760380014645, 0.7780178354743387], "CONV": [0.4698447582140244, 0.5435690908268473], "CONV+": [0.8080533469657936, 0.8920836581411791]}, "layout_byte_factor": [0.9995674702614139, 2.5201673526935946], "candidates": 591}};
+const HW = ["HBM4", "HBF", "HBF+", "CONV", "CONV+"], WL = ["SHORT", "MID", "LONG"];
+const MODELS = [["llama3_405b", "Llama3 405B", "405B"], ["llama4_maverick", "Llama4 Maverick", "Maverick"]];
+const RESULT = {native_capacity_limited: "容量/准入上限", native_interval_limited: "区间上限", slo_accepted: "SLO 接受",
+  bracket_passing_end: "区间通过端", native_slo_within_step: "距 100 ms 不足一步", best_measured_point: "最佳实测点"};
+const ROWS = {};
+for (const r of DATA.rows) ROWS[r.model + "|" + r.workload + "|" + r.hardware] = r;
+const get = (m, w, h) => ROWS[m + "|" + w + "|" + h];
+const SVGNS = "http://www.w3.org/2000/svg";
+const f0 = v => v.toLocaleString("en-US", {maximumFractionDigits: 0});
+const f1 = v => v.toLocaleString("en-US", {minimumFractionDigits: 1, maximumFractionDigits: 1});
+const f2 = v => v.toFixed(2);
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const tip = document.getElementById("tip");
+function showTip(ev, html) {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + w > innerWidth - 8) x = Math.max(8, ev.clientX - w - 14);
+  if (y + h > innerHeight - 8) y = Math.max(8, ev.clientY - h - 14);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.style.opacity = 0; };
+function caseTip(r) {
+  const L = r.layout, m = MODELS.find(x => x[0] === r.model)[1];
+  return `<b>${m} · ${r.workload} · ${r.hardware}</b><br>` +
+    `<span class="k">每 GPU 吞吐</span> 论文 ${f0(r.paper_tps)} · native ${f1(r.native_tps)}（${f2(r.abs_ratio)}×）<br>` +
+    `<span class="k">归一化</span> 论文 ${f2(r.paper_norm_tps)} · native ${f2(r.native_norm_tps)}<br>` +
+    `<span class="k">batch/GPU</span> 论文 ${f1(r.paper_batch_per_gpu)} · native ${f1(r.native_batch_per_gpu)}（${f2(r.batch_ratio)}×）<br>` +
+    `<span class="k">TPOT</span> 论文隐含 ${f1(r.paper_tpot_ms)} ms · native ${f1(r.native_tpot_ms)} ms（${f2(r.tpot_ratio)}×）<br>` +
+    `<span class="k">带宽利用率</span> ${f2(r.native_bandwidth_fraction)}（${f2(r.native_achieved_tb_s)} / ${f2(r.nominal_tb_s)} TB/s）<br>` +
+    `<span class="k">布局</span> DP${L.dp}/TP${L.tp}/PP${L.pp}/EP${L.ep} · 每副本 B${r.batch_per_replica} · ${RESULT[r.search_result] || r.search_result}`;
+}
+
+// Horizontal row chart: one row per item, one dot per series, optional connector between the two series.
+function rowChart(host, items, cfg) {
+  host.innerHTML = "";
+  const W = Math.max(260, host.clientWidth), narrow = W < 420;
+  const labelW = cfg.labelW ? cfg.labelW(narrow) : (narrow ? 70 : 92), right = 14, rowH = 22, groupH = 24, axisH = 26;
+  const pw = W - labelW - right;
+  let h = 6;
+  for (const it of items) h += it.group ? groupH : rowH;
+  const H = h + axisH;
+  const svg = el("svg", {width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": cfg.aria}, host);
+  const [a, b] = cfg.domain;
+  const x = cfg.log ? v => labelW + (Math.log(v) - Math.log(a)) / (Math.log(b) - Math.log(a)) * pw
+                    : v => labelW + (v - a) / (b - a) * pw;
+  for (const t of cfg.ticks) {
+    el("line", {x1: x(t), x2: x(t), y1: 4, y2: h, stroke: css("--grid"), "stroke-width": 1}, svg);
+    el("text", {x: x(t), y: h + 16, "text-anchor": "middle", class: "tick"}, svg, cfg.tickFmt ? cfg.tickFmt(t) : t);
+  }
+  el("line", {x1: labelW, x2: labelW + pw, y1: h, y2: h, stroke: css("--axis"), "stroke-width": 1}, svg);
+  if (cfg.ref !== undefined)
+    el("line", {x1: x(cfg.ref), x2: x(cfg.ref), y1: 4, y2: h, stroke: css("--ink-2"), "stroke-width": 1.5, "stroke-dasharray": "4 3"}, svg);
+  let y = 6;
+  for (const it of items) {
+    if (it.group) {
+      el("text", {x: 0, y: y + 16, class: "group"}, svg, it.group);
+      y += groupH; continue;
+    }
+    const cy = y + rowH / 2;
+    const hit = el("rect", {x: 0, y, width: W, height: rowH, fill: "transparent"}, svg);
+    el("text", {x: labelW - 8, y: cy + 4, "text-anchor": "end", class: "label"}, svg, it.label);
+    const vals = cfg.series.map(s => s.value(it.row)).map(v => v == null ? null : Math.min(b, Math.max(a, v)));
+    if (cfg.series.length === 2 && vals[0] != null && vals[1] != null)
+      el("line", {x1: x(vals[0]), x2: x(vals[1]), y1: cy, y2: cy, stroke: css("--link"), "stroke-width": 2}, svg);
+    cfg.series.forEach((s, i) => {
+      if (vals[i] == null) return;
+      const hollow = s.hollow && s.hollow(it.row), color = css(s.color);
+      el("circle", {cx: x(vals[i]), cy, r: 5, fill: hollow ? css("--surface") : color,
+        stroke: hollow ? color : css("--surface"), "stroke-width": 2}, svg);
+    });
+    hit.addEventListener("pointermove", ev => { hit.setAttribute("fill", css("--hover")); showTip(ev, cfg.tip(it.row)); });
+    hit.addEventListener("pointerleave", () => { hit.setAttribute("fill", "transparent"); hideTip(); });
+    svg.appendChild(hit);  // keep the hit target on top of the marks
+    y += rowH;
+  }
+}
+
+function allCaseItems(models, hardware) {
+  const items = [];
+  for (const [m, , short] of MODELS) for (const w of WL) {
+    items.push({group: short + " · " + w});
+    for (const hw of hardware) items.push({label: hw, row: get(m, w, hw)});
+  }
+  return items;
+}
+
+function fig1() {
+  const host = document.getElementById("fig1");
+  host.innerHTML = "";
+  const charts = [];
+  for (const [m, label] of MODELS) for (const w of WL) {
+    const panel = document.createElement("div"); panel.className = "panel";
+    panel.innerHTML = `<h3>${label} · ${w}</h3>`;
+    const c = document.createElement("div"); c.className = "chart"; panel.appendChild(c); host.appendChild(panel);
+    charts.push([c, m, label, w]);
+  }
+  // Size each chart only after every panel is in the grid, so auto-fit has settled the column width.
+  for (const [c, m, label, w] of charts) {
+    rowChart(c,["HBF", "HBF+", "CONV", "CONV+"].map(h => ({label: h, row: get(m, w, h)})), {
+      aria: label + " " + w + " 归一化吞吐", domain: [0, 1.8], ticks: [0, 0.5, 1, 1.5], ref: 1,
+      labelW: n => 56, tip: caseTip,
+      series: [{color: "--paper", value: r => r.paper_norm_tps}, {color: "--native", value: r => r.native_norm_tps}]});
+  }
+}
+
+function fig2() {
+  const host = document.getElementById("fig2");
+  host.innerHTML = "";
+  const W = Math.max(300, host.clientWidth), narrow = W < 520;
+  const labelW = narrow ? 104 : 160, cellH = 40, headH = 26, gap = 2;
+  const cw = (W - labelW) / HW.length, H = headH + 6 * cellH;
+  const svg = el("svg", {width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "绝对吞吐比热力图"}, host);
+  const dark = css("--mode") === "dark";
+  const ramp = dark ? ["#104281", "#184f95", "#1c5cab", "#256abf", "#2a78d6", "#3987e5", "#5598e7", "#6da7ec", "#86b6ef", "#9ec5f4", "#b7d3f6"]
+                    : ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"];
+  const lum = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+    return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+  HW.forEach((hw, j) => el("text", {x: labelW + j * cw + cw / 2, y: 17, "text-anchor": "middle", class: "label"}, svg, hw));
+  let i = 0;
+  for (const [m, , short] of MODELS) for (const w of WL) {
+    const y = headH + i * cellH;
+    el("text", {x: 0, y: y + cellH / 2 + 4, class: "label"}, svg, short + " · " + w);
+    HW.forEach((hw, j) => {
+      const r = get(m, w, hw), t = Math.min(1, Math.max(0, (r.abs_ratio - 0.2) / 0.6));
+      const fill = ramp[Math.round(t * (ramp.length - 1))];
+      const g = el("g", {}, svg);
+      el("rect", {x: labelW + j * cw + gap / 2, y: y + gap / 2, width: cw - gap, height: cellH - gap, rx: 4, fill}, g);
+      el("text", {x: labelW + j * cw + cw / 2, y: y + cellH / 2 + 4, "text-anchor": "middle",
+        style: `fill:${lum(fill) > 0.28 ? "#0b0b0b" : "#ffffff"};font-variant-numeric:tabular-nums;font-size:13px`}, g, f2(r.abs_ratio));
+      g.addEventListener("pointermove", ev => showTip(ev, caseTip(r)));
+      g.addEventListener("pointerleave", hideTip);
+    });
+    i++;
+  }
+}
+
+function fig3() {
+  const items = allCaseItems(MODELS, HW), ticks = [0.25, 0.5, 1, 2], fmt = t => t + "×";
+  const hollow = r => r.paper_bound === "capacity";
+  rowChart(document.getElementById("fig3a"), items, {aria: "batch 比", domain: [0.2, 3], log: true, ticks, tickFmt: fmt, ref: 1,
+    tip: caseTip, series: [{color: "--native", value: r => r.batch_ratio, hollow}]});
+  rowChart(document.getElementById("fig3b"), items, {aria: "TPOT 比", domain: [0.2, 3], log: true, ticks, tickFmt: fmt, ref: 1,
+    tip: caseTip, series: [{color: "--native", value: r => r.tpot_ratio, hollow}]});
+}
+
+function fig4() {
+  const items = allCaseItems(MODELS, HW);
+  const tipBytes = r => caseTip(r) + `<br><span class="k">每 GPU 每步</span> ${f1(r.native_step_bytes_per_gpu / 1e9)} GB（KV ${f1(r.native_context_bytes_per_gpu / 1e9)} GB），单副本 ${f1(r.single_copy_bytes_per_gpu / 1e9)} GB`;
+  rowChart(document.getElementById("fig4a"), items, {aria: "带宽利用率", domain: [0, 1], ticks: [0, 0.25, 0.5, 0.75, 1], ref: 1,
+    tip: tipBytes, series: [{color: "--native", value: r => r.native_bandwidth_fraction}]});
+  rowChart(document.getElementById("fig4b"), items, {aria: "每步字节比", domain: [0.5, 3], ticks: [0.5, 1, 1.5, 2, 2.5, 3], tickFmt: t => t + "×", ref: 1,
+    tip: tipBytes, series: [{color: "--native", value: r => r.layout_byte_factor}]});
+}
+
+function fig5() {
+  const items = [];
+  for (const [m, , short] of MODELS) for (const w of WL) {
+    items.push({group: short + " · " + w});
+    for (const hw of ["HBF", "HBF+"]) items.push({label: hw, row: get(m, w, hw)});
+  }
+  rowChart(document.getElementById("fig5"), items, {aria: "batch 增益", domain: [0, 6], ticks: [0, 1, 2, 3, 4, 5, 6], tickFmt: t => t + "×", ref: 1,
+    tip: r => caseTip(r) + `<br><span class="k">batch 增益</span> 论文 ${f2(r.paper_norm_batch)}× · native ≥ ${f2(r.native_norm_max_batch)}×`,
+    series: [{color: "--paper", value: r => r.paper_norm_batch}, {color: "--native", value: r => r.native_norm_max_batch}]});
+}
+
+function tiles() {
+  const s = DATA.summary;
+  const t = [[f2(s.norm_geomean) + "×", "归一化吞吐 native/论文 几何平均（24 点）"],
+             [s.order_agree + "/" + s.order_total, "配置两两排序一致"],
+             [f2(s.abs_ratio_all[0]) + "–" + f2(s.abs_ratio_all[1]) + "×", "绝对每 GPU 吞吐 native/论文"],
+             [f2(s.slo_tpot_ratio[0]) + "–" + f2(s.slo_tpot_ratio[1]) + "×", "SLO 受限点 TPOT 比（差距在 batch）"]];
+  document.getElementById("tiles").innerHTML = t.map(([v, l]) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`).join("");
+  const scan = DATA.scan_dir.split(/[\\/]/).pop();
+  document.getElementById("scanmeta").textContent = `扫描 ${scan} · 30/30 case · ${s.candidates} 个候选点`;
+}
+
+function table() {
+  const head = ["模型", "负载", "配置", "论文 TPS/GPU", "native TPS/GPU", "比值", "论文归一化", "native 归一化",
+    "论文 batch/GPU", "native batch/GPU", "论文隐含 TPOT", "native TPOT", "带宽利用率", "布局", "每副本 batch", "搜索结论"];
+  let html = "<thead><tr>" + head.map((h, i) => `<th class="${i < 3 || i > 12 ? "l" : ""}">${h}</th>`).join("") + "</tr></thead><tbody>";
+  for (const [m, , short] of MODELS) for (const w of WL) HW.forEach((hw, k) => {
+    const r = get(m, w, hw), L = r.layout;
+    html += `<tr class="${k === 0 ? "gstart" : ""}"><td class="l">${short}</td><td class="l">${w}</td><td class="l">${hw}</td>` +
+      `<td>${f0(r.paper_tps)}</td><td>${f1(r.native_tps)}</td><td>${f2(r.abs_ratio)}</td><td>${f2(r.paper_norm_tps)}</td><td>${f2(r.native_norm_tps)}</td>` +
+      `<td>${f1(r.paper_batch_per_gpu)}</td><td>${f1(r.native_batch_per_gpu)}</td><td>${f1(r.paper_tpot_ms)} ms</td><td>${f1(r.native_tpot_ms)} ms</td>` +
+      `<td>${f2(r.native_bandwidth_fraction)}</td><td class="l">DP${L.dp}/TP${L.tp}/PP${L.pp}/EP${L.ep}</td><td class="l">B${r.batch_per_replica}</td>` +
+      `<td class="l">${RESULT[r.search_result] || r.search_result}</td></tr>`;
+  });
+  document.getElementById("tbl").innerHTML = html + "</tbody>";
+}
+
+function render() { fig1(); fig2(); fig3(); fig4(); fig5(); }
+function setTheme(t) {
+  if (t === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  document.querySelectorAll(".theme button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t)));
+  try { localStorage.setItem("theme", t); } catch (e) {}
+  render();
+}
+document.querySelectorAll(".theme button").forEach(b => b.addEventListener("click", () => setTheme(b.dataset.t)));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+let saved = "auto";
+try { saved = localStorage.getItem("theme") || "auto"; } catch (e) {}
+const forced = new URLSearchParams(location.search).get("theme");
+tiles(); table(); setTheme(forced || saved);
+let timer;
+addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(render, 120); });
+</script>
+</body>
+</html>

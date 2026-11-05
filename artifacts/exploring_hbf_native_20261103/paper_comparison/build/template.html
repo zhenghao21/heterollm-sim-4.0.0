@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HBF 论文对照</title>
+<style>
+:root {
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --native: #2a78d6; --paper: #eb6834; --link: #c3c2b7;
+  --hover: rgba(42, 120, 214, .07); --mode: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --native: #3987e5; --paper: #d95926; --link: #4a4a46;
+    --hover: rgba(57, 135, 229, .12); --mode: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --native: #3987e5; --paper: #d95926; --link: #4a4a46;
+  --hover: rgba(57, 135, 229, .12); --mode: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 15px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 64px; }
+header { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: .01em; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+h3 { font-size: 14px; margin: 0 0 6px; color: var(--ink-2); font-weight: 600; }
+p { margin: 6px 0; }
+.meta { color: var(--ink-2); font-size: 13px; }
+.theme { display: inline-flex; border: 1px solid var(--axis); border-radius: 8px; overflow: hidden; }
+.theme button { background: none; border: 0; color: var(--ink-2); padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.theme button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; }
+section { background: var(--surface); border: 1px solid var(--grid); border-radius: 12px; padding: 18px; margin-top: 18px; }
+.lead { color: var(--ink-2); font-size: 13px; margin-bottom: 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; margin: 14px 0 6px; }
+.tile { border: 1px solid var(--grid); border-radius: 10px; padding: 12px 14px; }
+.tile b { display: block; font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--ink-2); font-size: 13px; }
+ol.findings { padding-left: 20px; margin: 10px 0 0; }
+ol.findings li { margin: 8px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin: 4px 0 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.legend i.ring { background: var(--surface) !important; border: 2px solid var(--native); }
+.legend i.line { width: 18px; height: 0; border-radius: 0; border-top: 2px dashed var(--ink-2); vertical-align: 3px; }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px 18px; }
+.panels.two { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.panel { min-width: 0; }
+.chart { width: 100%; }
+.chart svg { display: block; overflow: visible; }
+svg text { fill: var(--ink-2); font-size: 12px; }
+svg .label { fill: var(--ink); }
+svg .group { fill: var(--ink); font-weight: 600; }
+svg .tick { fill: var(--muted); font-size: 11px; }
+.note { font-size: 13px; color: var(--ink-2); }
+ul.compact { margin: 6px 0; padding-left: 20px; }
+ul.compact li { margin: 4px 0; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 8px 24px; }
+.tablewrap { overflow-x: auto; margin-top: 10px; }
+table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; width: 100%; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--grid); text-align: right; white-space: nowrap; }
+th { color: var(--ink-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+td.l, th.l { text-align: left; }
+tr.gstart td { border-top: 1px solid var(--axis); }
+summary { cursor: pointer; font-weight: 600; }
+#tip { position: fixed; pointer-events: none; z-index: 10; max-width: 320px; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--axis); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12); opacity: 0; transition: opacity .08s; }
+#tip b { font-weight: 600; }
+#tip .k { color: var(--ink-2); }
+code { font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <h1>HBF 论文对照</h1>
+    <div class="meta">native 物理仿真全量扫描 vs Exploring HBF（arXiv 2608.13868）Fig. 3 / Fig. 4 · 8 GPU · TPOT SLO 100 ms · 每 GPU 吞吐</div>
+    <div class="meta" id="scanmeta"></div>
+  </div>
+  <div class="theme" role="group" aria-label="主题">
+    <button data-t="auto">自动</button><button data-t="light">浅色</button><button data-t="dark">深色</button>
+  </div>
+</header>
+
+<section>
+  <h2>结论</h2>
+  <div class="tiles" id="tiles"></div>
+  <ol class="findings">
+    <li><b>主结论和排序与论文一致，但 NAND 配置相对 HBM4 比论文更高。</b>以 8-GPU HBM4 为 1，24 个非 HBM4 点 native/论文的几何平均为 1.28×（上一轮 0.99×），平均差 +0.17（−0.01），15/24 点差值在 ±0.15 以内（18/24）；6 组×10 对配置的相对排序 56/60 对一致（56/60）。HBF、HBF+ 与 HBM4 同一档或更高（native 0.94–1.64，论文 0.76–1.29），CONV、CONV+ 明显落后（native 0.21–0.36，论文 0.16–0.29），这一点两边相同。不同的是 24 点 native 全部不低于论文，所以这是系统性偏差，不是个别点。这一轮只改了 NAND 控制：HBM4 吞吐基本不变（为上一轮的 1.00–1.02 倍），NAND 配置为上一轮的 0.98–1.91 倍。绝对吞吐比的几何平均：HBM4 0.61，HBF 0.77，HBF+ 0.75，CONV 0.74，CONV+ 0.84。归一化偏高主要因为分母 HBM4 离论文最远（见第 4 条）。</li>
+    <li><b>4 对排序不一致，全是 HBM4 与 HBF/HBF+ 对调。</b>405B SHORT HBF+ 高于 HBM4（1.13，论文 0.98）、Maverick SHORT HBF+ 高于 HBM4（1.10，论文 0.98）、Maverick MID HBF 高于 HBM4（1.41，论文 1.00）：这 3 对在论文里接近平局。只有 405B MID HBF 是明确反转（1.23，论文 0.83）。上一轮的另外 3 对（Maverick SHORT HBF+ 低于 HBF、Maverick MID HBF+ 低于 HBM4、Maverick MID CONV 高于 CONV+）已消失。</li>
+    <li><b>超出 ±0.15 的 9 个点全部偏高。</b>论文/native：405B MID HBF+ 1.08/1.54、405B MID HBF 0.83/1.23、Maverick MID HBF 1.00/1.41、Maverick LONG HBF+ 1.25/1.64、Maverick LONG HBF 1.07/1.42、405B LONG HBF+ 1.29/1.62、Maverick MID HBF+ 1.19/1.46、405B LONG HBF 1.08/1.27、405B SHORT HBF 0.76/0.95。除最后一个外，都是 MID、LONG 上 KV 占每步字节一半以上的点。上一轮最大的偏差 Maverick SHORT HBF+（0.58，论文 0.98）现在是 1.10，回到 ±0.15 以内：OCP 不允许设备内读改写，KV 改为主机条带布局后，一层的刷写不再堆在同一 bank 上。这个布局依赖所有请求步调一致；扫描的稳态模型里请求长度相同，<b>还没有用长度不一的负载验证过</b>，因此这部分提升可能偏乐观。</li>
+    <li><b>绝对吞吐系统性偏低，为论文的 0.52–0.92×（上一轮 0.37–0.80×），NAND 配置的差距来自 batch，HBM4 的差距来自 TPOT。</b>23 个论文 SLO 受限点的 TPOT 比为 0.68–1.02，batch 比为 0.48–0.93。其中 4 点 TPOT 明显低于 SLO，搜索停在通过端：405B SHORT HBF+（B323 为 68.8 ms，B481 为 105 ms）、Maverick MID HBF+（B3088 为 68.2 ms，B4672 为 106 ms）这两点下一个实测 batch 的估计吞吐反而略低；Maverick SHORT HBF（B6520 为 72.0 ms，B9296 为 99.1–100.4 ms，只差区间上沿，吞吐最多高 3.6%）；Maverick LONG CONV（B103 为 72.1 ms，B159 为 102.7 ms）。7 个论文容量受限点在 native 中也都受容量限制。其中 5 个 HBM4 的 batch 比为 0.77–0.94，TPOT 却是论文的 1.25–1.79×（论文 24–34 ms，native 32–61 ms），这就是第 1 条里分母偏低的来源；405B SHORT HBM4 选了 DP2/TP4，batch 比 0.43、TPOT 比 0.69；Maverick SHORT HBF+ 的 batch 比 0.91、TPOT 比 1.28。</li>
+    <li><b>batch 偏小的原因因组而异。</b>native 选中点的带宽利用率（每 GPU 每步实际读写字节 ÷ 步时长 ÷ 标称带宽）：HBM4 0.42–0.65，HBF 0.50–0.64，HBF+ 0.58–0.75，CONV 0.47–0.55，CONV+ 0.81–0.91。23 个 SLO 受限点上，利用率与 batch 比的对数相关系数为 0.42（上一轮 0.01）。按组（括号内为 batch 比）：
+      <ul class="compact">
+        <li>CONV+（6 点，0.72–0.93）：利用率已到 0.81–0.91，接近标称，差距最小。</li>
+        <li>CONV（6 点，0.54–0.84）：利用率 0.47–0.55；标称带宽是 HBM 1.6 与 NAND 2.45 TB/s 之和，两者不会同时满载。Maverick LONG CONV 的 0.54 停在通过端（第 4 条）。</li>
+        <li>LONG 的 HBF、HBF+（4 点，0.69–0.83）：KV 占每步字节 85–87%，利用率 0.59–0.74，带宽效率的影响最直接。</li>
+        <li>405B SHORT、MID 的 HBF、HBF+（4 点，0.49–0.79）：选 DP2 或 DP4，每步字节是单副本的 1.31–2.32 倍。论文布局未公开，所以多读权重不单独算作与论文的差异。</li>
+        <li>Maverick SHORT HBF 与 MID HBF、HBF+（3 点，0.48–0.78）：都是 EP8；0.48 和 0.52 两点 TPOT 只用到 72 和 68 ms（第 4 条）。</li>
+      </ul>
+      论文容量受限的 5 个 HBM4，native 利用率 0.42–0.65，论文隐含利用率 0.68–0.93（按单副本估算，是下界）。两者之比 1.37–1.60，与 TPOT 比 1.25–1.79 同一量级，指向 native 按 JEDEC 支付的行切换、tRRD/tFAW、刷新；这是量级对照，没有逐项拆分。</li>
+    <li><b>batch 增益方向一致，幅度接近；HBF+ 的容量上限和论文对得上。</b>native 中 HBF 相对 HBM4 的 batch/GPU 增益为 1.67–4.08×，HBF+ 为 1.59–4.78×；论文图读数为 1.31–4.51× 和 1.67–5.31×。两边都随上下文单调增长（上一轮 native 有两处不单调，已消失）。HBF+ 高于 HBF 都是 5/6 个负载，唯一例外都是 Maverick SHORT（native 1.59 vs 2.12，论文 1.67 vs 3.66）。native 这里的上限来自 SRAM 容量：每请求 logits 为 404096 字节 ÷ (TP×EP)，320 MB SRAM 约放得下 792 请求/GPU，再减去 SRAM 里的其它内容；选中点 701、实测最大 757，论文读数 768。全部 18 个容量拒绝点中有 17 个在这个 case。native 值是下界：取全部实测点中 TPOT 上界 ≤ 100 ms 的最大 batch。</li>
+    <li><b>墙钟不影响这份对照，选中点也都不受 forecast 区间限制。</b>最终审计：可能改变结果的墙钟受限布局 0 个，因墙钟被拒的点 0 个，最长单点 4153 s，上限 21600 s；超过 3000 s 的 13 个点都跑完了。选中点的结论：SLO 接受 8、距 100 ms 不足一步 8、容量上限 7、通过端 6、最佳实测点 1，没有“区间上限”（上一轮 4 个）。TPOT 下界 ≤ 100 ms 但被拒的点有 4 个 case 的乐观吞吐高于选中值，高 1.8–9.2%。其中最高的 405B LONG HBF（DP2/TP4，decode 估计 92 ms）和 405B LONG HBF+ 被拒是因为 Prefill 放不下（<code>native_prefill_placement_infeasible</code>），与 TPOT 无关。把这些值全部代入，60 对排序仍是 56/60。</li>
+  </ol>
+</section>
+
+<section>
+  <h2>图 1 · 归一化每 GPU 吞吐（HBM4 = 1）</h2>
+  <p class="lead">每行一对点：论文 Fig. 4 读数 vs native 选中点；连线长度即偏差。虚线为 HBM4 基准。</p>
+  <div class="legend"><span><i style="background:var(--paper)"></i>论文</span><span><i style="background:var(--native)"></i>native</span><span><i class="line"></i>HBM4 = 1</span></div>
+  <div class="panels" id="fig1"></div>
+</section>
+
+<section>
+  <h2>图 2 · 绝对每 GPU 吞吐比（native ÷ 论文）</h2>
+  <p class="lead">论文 HBM4 取图上标注的取整值（如 3.3K），其它配置为 HBM4 标注 × 归一化读数。颜色越深比值越高；全部低于 1。</p>
+  <div class="chart" id="fig2"></div>
+</section>
+
+<section>
+  <h2>图 3 · 吞吐差距分解：TPS = batch/GPU ÷ TPOT</h2>
+  <p class="lead">两图行序相同，对数横轴，1 表示与论文相同。论文 TPOT 由论文 batch/GPU ÷ 论文 TPS 反推。实心点为论文 SLO 受限，空心点为论文容量受限。</p>
+  <div class="legend"><span><i style="background:var(--native)"></i>论文 SLO 受限（隐含 TPOT ≥ 90 ms）</span><span><i class="ring"></i>论文容量受限</span><span><i class="line"></i>与论文相同</span></div>
+  <div class="panels two">
+    <div class="panel"><h3>batch/GPU 比（native ÷ 论文）</h3><div class="chart" id="fig3a"></div></div>
+    <div class="panel"><h3>TPOT 比（native ÷ 论文隐含）</h3><div class="chart" id="fig3b"></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>图 4 · native 选中点每步做了多少</h2>
+  <p class="lead">左：带宽利用率 = 每 GPU 每步读写字节 ÷ 步时长 ÷ 标称带宽（HBM4 12.8、HBF 12.8、HBF+ 12.8、CONV 4.05、CONV+ 2.8 TB/s）。论文按恒定标称带宽处理，相当于 1。右：每步字节 ÷ 单副本字节（权重/8 + 同 batch 的 KV），大于 1 说明布局复制了权重或有额外中间数据；论文布局未公开，大于 1 不能直接算作与论文的差异。</p>
+  <div class="panels two">
+    <div class="panel"><h3>带宽利用率</h3><div class="chart" id="fig4a"></div></div>
+    <div class="panel"><h3>每步字节 ÷ 单副本字节</h3><div class="chart" id="fig4b"></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>图 5 · HBF / HBF+ 的 batch/GPU 增益（相对 HBM4）</h2>
+  <p class="lead">论文为 Fig. 3 读数（±0.02）；native 为该 case 全部实测点中 TPOT 上界 ≤ 100 ms 的最大 batch/GPU（含最大 batch 搜索的接受点），除以 HBM4 的同一量，是下界。</p>
+  <div class="legend"><span><i style="background:var(--paper)"></i>论文</span><span><i style="background:var(--native)"></i>native（下界）</span><span><i class="line"></i>与 HBM4 相同</span></div>
+  <div class="chart" id="fig5"></div>
+</section>
+
+<section>
+  <h2>口径与差异来源</h2>
+  <div class="cols">
+    <div>
+      <h3>对齐的构造</h3>
+      <ul class="compact">
+        <li>同一模型（Llama 3.1 405B、Llama 4 Maverick，BF16）与 Table I 五种硬件的几何和时序参数。</li>
+        <li>同一负载均值 ⟨1,660, 373⟩、⟨5.9K, 499⟩、⟨103.5K, 1.1K⟩，Decode 节点 PD 分离，连续批处理补位。</li>
+        <li>在容量、SRAM 与 TPOT ≤ 100 ms 约束下，搜索 DP/TP/PP/EP 布局与 batch，取每 GPU 吞吐最大者。</li>
+      </ul>
+      <h3>论文为达到峰值所做的简化（native 不采用）</h3>
+      <ul class="compact">
+        <li>硬件按标称峰值、效率 1；存储为恒定带宽。native 用 JEDEC HBM 时序（行冲突、tRRD/tFAW、刷新）和 NAND 页读/平面并行。</li>
+        <li>理想 Prefill 节点、批处理零停顿。native 的 PD 导入要付出 KV 写入时间与导入池等待。</li>
+        <li>SRAM 只放中间激活。native 的 HBF+/CONV+ 还把 KV 尾页暂存在 SRAM，放不下的写 NAND。</li>
+      </ul>
+      <h3>native 已知建模缺口</h3>
+      <ul class="compact">
+        <li>HBM 地址映射为线性混合基交织，没有厂商的 XOR 哈希；FR-FCFS 只在同一批请求内重排。</li>
+        <li>GPU 计时为 roofline（峰值 × 效率 + L1/L2 复用），没有 SM/warp 周期模型。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>NAND 控制按 OCP HBF v0.7（论文未规定协议）</h3>
+      <ul class="compact">
+        <li>无 FTL、无 GC，写只有整 4 KiB，块内按页号连续写。部分页写由主机读旧页、合并后写回；刷写也走主机链路。读 64 B–4 KiB，不跨页。</li>
+        <li>KV 用主机条带布局：搜索步长，让一层的刷写不落在同一 bank，写在哪个 bank 就读哪个 bank。它依赖请求步调一致，<b>长度不一的负载还没验证</b>。HBM4 仍是 256 token 分页块。</li>
+      </ul>
+      <h3>研究假设（OCP 或论文未给定，结论依赖它们）</h3>
+      <ul class="compact">
+        <li>块大小 1 MiB、擦除时间 2 ms，由 OCP 留给产品决定。</li>
+        <li>每 256 次每 bank 编程，所有 plane 一起擦除一次，约占 TPOT 的 0.7%。OCP 没有说明同时擦除的功耗是否允许；若只能分 N 组擦除，这项约放大 N 倍。</li>
+        <li>PD 缓冲每请求 64 MiB。在途导入写会在每 bank 排约 5 次编程，导入 GPU 上每次 NAND 读等 300–500 µs，这是影响较大的参数，未调整。</li>
+      </ul>
+      <h3>未建模（列为限制）</h3>
+      <ul class="compact">
+        <li>NAND 刷新和读干扰（OCP 规定由主机负责）、磨损均衡的 zone 重映射、出错重试、热节流；KV 高频写入对寿命的影响也没有评估。</li>
+      </ul>
+      <h3>读数精度</h3>
+      <ul class="compact">
+        <li>论文 HBM4 绝对值为图上取整标注；其它 Fig. 4 值由 PDF 矢量坐标读出，约 ±0.01；Fig. 3 batch 比约 ±0.02。</li>
+        <li>native 全部 30 个 case 完成，所有选中布局均为 PP1。没有结果受墙钟限制。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <details open>
+    <summary>全量数据表（30 个 case）</summary>
+    <div class="tablewrap"><table id="tbl"></table></div>
+  </details>
+</section>
+</main>
+<div id="tip" role="tooltip"></div>
+<script>
+const DATA = __DATA__;
+const HW = ["HBM4", "HBF", "HBF+", "CONV", "CONV+"], WL = ["SHORT", "MID", "LONG"];
+const MODELS = [["llama3_405b", "Llama3 405B", "405B"], ["llama4_maverick", "Llama4 Maverick", "Maverick"]];
+const RESULT = {native_capacity_limited: "容量/准入上限", native_interval_limited: "区间上限", slo_accepted: "SLO 接受",
+  bracket_passing_end: "区间通过端", native_slo_within_step: "距 100 ms 不足一步", best_measured_point: "最佳实测点"};
+const ROWS = {};
+for (const r of DATA.rows) ROWS[r.model + "|" + r.workload + "|" + r.hardware] = r;
+const get = (m, w, h) => ROWS[m + "|" + w + "|" + h];
+const SVGNS = "http://www.w3.org/2000/svg";
+const f0 = v => v.toLocaleString("en-US", {maximumFractionDigits: 0});
+const f1 = v => v.toLocaleString("en-US", {minimumFractionDigits: 1, maximumFractionDigits: 1});
+const f2 = v => v.toFixed(2);
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+const tip = document.getElementById("tip");
+function showTip(ev, html) {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + w > innerWidth - 8) x = Math.max(8, ev.clientX - w - 14);
+  if (y + h > innerHeight - 8) y = Math.max(8, ev.clientY - h - 14);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.style.opacity = 0; };
+function caseTip(r) {
+  const L = r.layout, m = MODELS.find(x => x[0] === r.model)[1];
+  return `<b>${m} · ${r.workload} · ${r.hardware}</b><br>` +
+    `<span class="k">每 GPU 吞吐</span> 论文 ${f0(r.paper_tps)} · native ${f1(r.native_tps)}（${f2(r.abs_ratio)}×）<br>` +
+    `<span class="k">归一化</span> 论文 ${f2(r.paper_norm_tps)} · native ${f2(r.native_norm_tps)}<br>` +
+    `<span class="k">batch/GPU</span> 论文 ${f1(r.paper_batch_per_gpu)} · native ${f1(r.native_batch_per_gpu)}（${f2(r.batch_ratio)}×）<br>` +
+    `<span class="k">TPOT</span> 论文隐含 ${f1(r.paper_tpot_ms)} ms · native ${f1(r.native_tpot_ms)} ms（${f2(r.tpot_ratio)}×）<br>` +
+    `<span class="k">带宽利用率</span> ${f2(r.native_bandwidth_fraction)}（${f2(r.native_achieved_tb_s)} / ${f2(r.nominal_tb_s)} TB/s）<br>` +
+    `<span class="k">布局</span> DP${L.dp}/TP${L.tp}/PP${L.pp}/EP${L.ep} · 每副本 B${r.batch_per_replica} · ${RESULT[r.search_result] || r.search_result}`;
+}
+
+// Horizontal row chart: one row per item, one dot per series, optional connector between the two series.
+function rowChart(host, items, cfg) {
+  host.innerHTML = "";
+  const W = Math.max(260, host.clientWidth), narrow = W < 420;
+  const labelW = cfg.labelW ? cfg.labelW(narrow) : (narrow ? 70 : 92), right = 14, rowH = 22, groupH = 24, axisH = 26;
+  const pw = W - labelW - right;
+  let h = 6;
+  for (const it of items) h += it.group ? groupH : rowH;
+  const H = h + axisH;
+  const svg = el("svg", {width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": cfg.aria}, host);
+  const [a, b] = cfg.domain;
+  const x = cfg.log ? v => labelW + (Math.log(v) - Math.log(a)) / (Math.log(b) - Math.log(a)) * pw
+                    : v => labelW + (v - a) / (b - a) * pw;
+  for (const t of cfg.ticks) {
+    el("line", {x1: x(t), x2: x(t), y1: 4, y2: h, stroke: css("--grid"), "stroke-width": 1}, svg);
+    el("text", {x: x(t), y: h + 16, "text-anchor": "middle", class: "tick"}, svg, cfg.tickFmt ? cfg.tickFmt(t) : t);
+  }
+  el("line", {x1: labelW, x2: labelW + pw, y1: h, y2: h, stroke: css("--axis"), "stroke-width": 1}, svg);
+  if (cfg.ref !== undefined)
+    el("line", {x1: x(cfg.ref), x2: x(cfg.ref), y1: 4, y2: h, stroke: css("--ink-2"), "stroke-width": 1.5, "stroke-dasharray": "4 3"}, svg);
+  let y = 6;
+  for (const it of items) {
+    if (it.group) {
+      el("text", {x: 0, y: y + 16, class: "group"}, svg, it.group);
+      y += groupH; continue;
+    }
+    const cy = y + rowH / 2;
+    const hit = el("rect", {x: 0, y, width: W, height: rowH, fill: "transparent"}, svg);
+    el("text", {x: labelW - 8, y: cy + 4, "text-anchor": "end", class: "label"}, svg, it.label);
+    const vals = cfg.series.map(s => s.value(it.row)).map(v => v == null ? null : Math.min(b, Math.max(a, v)));
+    if (cfg.series.length === 2 && vals[0] != null && vals[1] != null)
+      el("line", {x1: x(vals[0]), x2: x(vals[1]), y1: cy, y2: cy, stroke: css("--link"), "stroke-width": 2}, svg);
+    cfg.series.forEach((s, i) => {
+      if (vals[i] == null) return;
+      const hollow = s.hollow && s.hollow(it.row), color = css(s.color);
+      el("circle", {cx: x(vals[i]), cy, r: 5, fill: hollow ? css("--surface") : color,
+        stroke: hollow ? color : css("--surface"), "stroke-width": 2}, svg);
+    });
+    hit.addEventListener("pointermove", ev => { hit.setAttribute("fill", css("--hover")); showTip(ev, cfg.tip(it.row)); });
+    hit.addEventListener("pointerleave", () => { hit.setAttribute("fill", "transparent"); hideTip(); });
+    svg.appendChild(hit);  // keep the hit target on top of the marks
+    y += rowH;
+  }
+}
+
+function allCaseItems(models, hardware) {
+  const items = [];
+  for (const [m, , short] of MODELS) for (const w of WL) {
+    items.push({group: short + " · " + w});
+    for (const hw of hardware) items.push({label: hw, row: get(m, w, hw)});
+  }
+  return items;
+}
+
+function fig1() {
+  const host = document.getElementById("fig1");
+  host.innerHTML = "";
+  const charts = [];
+  for (const [m, label] of MODELS) for (const w of WL) {
+    const panel = document.createElement("div"); panel.className = "panel";
+    panel.innerHTML = `<h3>${label} · ${w}</h3>`;
+    const c = document.createElement("div"); c.className = "chart"; panel.appendChild(c); host.appendChild(panel);
+    charts.push([c, m, label, w]);
+  }
+  // Size each chart only after every panel is in the grid, so auto-fit has settled the column width.
+  for (const [c, m, label, w] of charts) {
+    rowChart(c,["HBF", "HBF+", "CONV", "CONV+"].map(h => ({label: h, row: get(m, w, h)})), {
+      aria: label + " " + w + " 归一化吞吐", domain: [0, 1.8], ticks: [0, 0.5, 1, 1.5], ref: 1,
+      labelW: n => 56, tip: caseTip,
+      series: [{color: "--paper", value: r => r.paper_norm_tps}, {color: "--native", value: r => r.native_norm_tps}]});
+  }
+}
+
+function fig2() {
+  const host = document.getElementById("fig2");
+  host.innerHTML = "";
+  const W = Math.max(300, host.clientWidth), narrow = W < 520;
+  const labelW = narrow ? 104 : 160, cellH = 40, headH = 26, gap = 2;
+  const cw = (W - labelW) / HW.length, H = headH + 6 * cellH;
+  const svg = el("svg", {width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "绝对吞吐比热力图"}, host);
+  const dark = css("--mode") === "dark";
+  const ramp = dark ? ["#104281", "#184f95", "#1c5cab", "#256abf", "#2a78d6", "#3987e5", "#5598e7", "#6da7ec", "#86b6ef", "#9ec5f4", "#b7d3f6"]
+                    : ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab", "#184f95"];
+  const lum = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
+    return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+  HW.forEach((hw, j) => el("text", {x: labelW + j * cw + cw / 2, y: 17, "text-anchor": "middle", class: "label"}, svg, hw));
+  let i = 0;
+  for (const [m, , short] of MODELS) for (const w of WL) {
+    const y = headH + i * cellH;
+    el("text", {x: 0, y: y + cellH / 2 + 4, class: "label"}, svg, short + " · " + w);
+    HW.forEach((hw, j) => {
+      const r = get(m, w, hw), t = Math.min(1, Math.max(0, (r.abs_ratio - 0.2) / 0.6));
+      const fill = ramp[Math.round(t * (ramp.length - 1))];
+      const g = el("g", {}, svg);
+      el("rect", {x: labelW + j * cw + gap / 2, y: y + gap / 2, width: cw - gap, height: cellH - gap, rx: 4, fill}, g);
+      el("text", {x: labelW + j * cw + cw / 2, y: y + cellH / 2 + 4, "text-anchor": "middle",
+        style: `fill:${lum(fill) > 0.28 ? "#0b0b0b" : "#ffffff"};font-variant-numeric:tabular-nums;font-size:13px`}, g, f2(r.abs_ratio));
+      g.addEventListener("pointermove", ev => showTip(ev, caseTip(r)));
+      g.addEventListener("pointerleave", hideTip);
+    });
+    i++;
+  }
+}
+
+function fig3() {
+  const items = allCaseItems(MODELS, HW), ticks = [0.25, 0.5, 1, 2], fmt = t => t + "×";
+  const hollow = r => r.paper_bound === "capacity";
+  rowChart(document.getElementById("fig3a"), items, {aria: "batch 比", domain: [0.2, 3], log: true, ticks, tickFmt: fmt, ref: 1,
+    tip: caseTip, series: [{color: "--native", value: r => r.batch_ratio, hollow}]});
+  rowChart(document.getElementById("fig3b"), items, {aria: "TPOT 比", domain: [0.2, 3], log: true, ticks, tickFmt: fmt, ref: 1,
+    tip: caseTip, series: [{color: "--native", value: r => r.tpot_ratio, hollow}]});
+}
+
+function fig4() {
+  const items = allCaseItems(MODELS, HW);
+  const tipBytes = r => caseTip(r) + `<br><span class="k">每 GPU 每步</span> ${f1(r.native_step_bytes_per_gpu / 1e9)} GB（KV ${f1(r.native_context_bytes_per_gpu / 1e9)} GB），单副本 ${f1(r.single_copy_bytes_per_gpu / 1e9)} GB`;
+  rowChart(document.getElementById("fig4a"), items, {aria: "带宽利用率", domain: [0, 1], ticks: [0, 0.25, 0.5, 0.75, 1], ref: 1,
+    tip: tipBytes, series: [{color: "--native", value: r => r.native_bandwidth_fraction}]});
+  rowChart(document.getElementById("fig4b"), items, {aria: "每步字节比", domain: [0.5, 3], ticks: [0.5, 1, 1.5, 2, 2.5, 3], tickFmt: t => t + "×", ref: 1,
+    tip: tipBytes, series: [{color: "--native", value: r => r.layout_byte_factor}]});
+}
+
+function fig5() {
+  const items = [];
+  for (const [m, , short] of MODELS) for (const w of WL) {
+    items.push({group: short + " · " + w});
+    for (const hw of ["HBF", "HBF+"]) items.push({label: hw, row: get(m, w, hw)});
+  }
+  rowChart(document.getElementById("fig5"), items, {aria: "batch 增益", domain: [0, 6], ticks: [0, 1, 2, 3, 4, 5, 6], tickFmt: t => t + "×", ref: 1,
+    tip: r => caseTip(r) + `<br><span class="k">batch 增益</span> 论文 ${f2(r.paper_norm_batch)}× · native ≥ ${f2(r.native_norm_max_batch)}×`,
+    series: [{color: "--paper", value: r => r.paper_norm_batch}, {color: "--native", value: r => r.native_norm_max_batch}]});
+}
+
+function tiles() {
+  const s = DATA.summary;
+  const t = [[f2(s.norm_geomean) + "×", "归一化吞吐 native/论文 几何平均（24 点）"],
+             [s.order_agree + "/" + s.order_total, "配置两两排序一致"],
+             [f2(s.abs_ratio_all[0]) + "–" + f2(s.abs_ratio_all[1]) + "×", "绝对每 GPU 吞吐 native/论文"],
+             [f2(s.slo_tpot_ratio[0]) + "–" + f2(s.slo_tpot_ratio[1]) + "×", "SLO 受限点 TPOT 比（差距在 batch）"]];
+  document.getElementById("tiles").innerHTML = t.map(([v, l]) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`).join("");
+  const scan = DATA.scan_dir.split(/[\\/]/).pop();
+  document.getElementById("scanmeta").textContent = `扫描 ${scan} · 30/30 case · ${s.candidates} 个候选点`;
+}
+
+function table() {
+  const head = ["模型", "负载", "配置", "论文 TPS/GPU", "native TPS/GPU", "比值", "论文归一化", "native 归一化",
+    "论文 batch/GPU", "native batch/GPU", "论文隐含 TPOT", "native TPOT", "带宽利用率", "布局", "每副本 batch", "搜索结论"];
+  let html = "<thead><tr>" + head.map((h, i) => `<th class="${i < 3 || i > 12 ? "l" : ""}">${h}</th>`).join("") + "</tr></thead><tbody>";
+  for (const [m, , short] of MODELS) for (const w of WL) HW.forEach((hw, k) => {
+    const r = get(m, w, hw), L = r.layout;
+    html += `<tr class="${k === 0 ? "gstart" : ""}"><td class="l">${short}</td><td class="l">${w}</td><td class="l">${hw}</td>` +
+      `<td>${f0(r.paper_tps)}</td><td>${f1(r.native_tps)}</td><td>${f2(r.abs_ratio)}</td><td>${f2(r.paper_norm_tps)}</td><td>${f2(r.native_norm_tps)}</td>` +
+      `<td>${f1(r.paper_batch_per_gpu)}</td><td>${f1(r.native_batch_per_gpu)}</td><td>${f1(r.paper_tpot_ms)} ms</td><td>${f1(r.native_tpot_ms)} ms</td>` +
+      `<td>${f2(r.native_bandwidth_fraction)}</td><td class="l">DP${L.dp}/TP${L.tp}/PP${L.pp}/EP${L.ep}</td><td class="l">B${r.batch_per_replica}</td>` +
+      `<td class="l">${RESULT[r.search_result] || r.search_result}</td></tr>`;
+  });
+  document.getElementById("tbl").innerHTML = html + "</tbody>";
+}
+
+function render() { fig1(); fig2(); fig3(); fig4(); fig5(); }
+function setTheme(t) {
+  if (t === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  document.querySelectorAll(".theme button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.t === t)));
+  try { localStorage.setItem("theme", t); } catch (e) {}
+  render();
+}
+document.querySelectorAll(".theme button").forEach(b => b.addEventListener("click", () => setTheme(b.dataset.t)));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+let saved = "auto";
+try { saved = localStorage.getItem("theme") || "auto"; } catch (e) {}
+const forced = new URLSearchParams(location.search).get("theme");
+tiles(); table(); setTheme(forced || saved);
+let timer;
+addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(render, 120); });
+</script>
+</body>
+</html>
