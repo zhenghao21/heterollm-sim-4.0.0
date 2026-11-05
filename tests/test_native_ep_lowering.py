@@ -121,9 +121,10 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # and the per-layer KV block pools and their 256-token blocks once more.
     # OCP control changed the serialized NAND config and striped the KV blocks,
     # with the same task names, categories and dependencies. So did the HBM4
-    # 24Gb 12H organization and its REFpb fields.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "c1d4a289a7be4882")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "0f448a8d6a421fab")
+    # 24Gb 12H organization and its REFpb fields, and the age-free KV stride,
+    # which only moves the NAND KV blocks' addresses.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "f0d5d75949270cb6")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "8ecd0fbc465cbbe4")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():

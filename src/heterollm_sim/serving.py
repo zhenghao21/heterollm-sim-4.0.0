@@ -63,6 +63,7 @@ from .event_kernel import (
     _validated_phase_sequence,
 )
 from .execution_control import ExecutionControl
+from .kv_placement import KVTailRing, settled_seed_blocks
 from ._token_binding import AuthoredTokenProgram
 from .llama_graph_runtime import LlamaGraphRuntime
 from .cuda_graph_serving import CudaGraphServingRuntime
@@ -3386,9 +3387,16 @@ class _KVBlockTables:
     id order; a release appends the freed blocks in their logical order and an
     allocation takes from the head. The ``chunk`` KV group serves the layers
     with chunked attention as a ring of at most ``ring`` blocks per request.
+
+    On striped NAND KV (``place_seeds``) a request's first allocation instead
+    picks from the free list by the banks of the other tails (see
+    kv_placement). ``slots`` are the group's slots in landing order, as the rows
+    each slot's occupant holds at the run's first step, and ``seeds`` the seeds
+    still to take the head of their planned list. With one output length the
+    step an import joins is the landing of the slot the FIFO pool gives it.
     """
 
-    __slots__ = ("counts", "ring", "free", "head", "tables")
+    __slots__ = ("counts", "ring", "free", "head", "tables", "rings", "slots", "seeds", "output", "tails")
 
     def __init__(self, groups: int, counts: Mapping[str, int], ring: int = 0) -> None:
         self.counts = dict(counts)
@@ -3397,6 +3405,11 @@ class _KVBlockTables:
                      for group in range(groups) for kind, count in self.counts.items()}
         self.head = dict.fromkeys(self.free, 0)
         self.tables: Dict[str, Dict[str, array]] = {}
+        self.rings: Dict[Tuple[int, str], KVTailRing] = {}
+        self.slots: Dict[int, deque] = {}
+        self.seeds: Dict[int, deque] = {}
+        self.output = 0
+        self.tails: Dict[str, Dict[str, int]] = {}
 
     def __deepcopy__(self, memo):
         result = type(self).__new__(type(self))
@@ -3406,6 +3419,11 @@ class _KVBlockTables:
         result.head = dict(self.head)
         result.tables = {request: {kind: blocks[:] for kind, blocks in table.items()}
                          for request, table in self.tables.items()}
+        result.rings = {key: ring.copy() for key, ring in self.rings.items()}
+        result.slots = {group: slots.copy() for group, slots in self.slots.items()}
+        result.seeds = {group: seeds.copy() for group, seeds in self.seeds.items()}
+        result.output = self.output
+        result.tails = {request: dict(tails) for request, tails in self.tails.items()}
         return result
 
     def settle(self, ages_by_group, prompt: int, output: int, group_pool: int, tokens_per_block: int) -> None:
@@ -3418,13 +3436,49 @@ class _KVBlockTables:
                 self.free[group, kind] = array("q", settled)
                 self.head[group, kind] = 0
 
-    def order_by_admission(self, ages_by_group) -> None:
-        """Seeds (youngest first) take blocks so that older means lower, as FIFO admissions would."""
+    def place_seeds(self, ages_by_group, prompt: int, output: int, group_pool: int, geometry) -> None:
+        """Start from the layout the host's placement reaches, and place every later request by it.
+
+        ``geometry`` maps each KV group to its ``KVTailRing`` arguments.
+        """
+        self.output = output
         for (group, kind), free in self.free.items():
-            seeds = len(ages_by_group[group])
-            if seeds > len(free) or list(ages_by_group[group]) != sorted(ages_by_group[group]):
+            ages = tuple(ages_by_group[group])
+            if len(ages) > len(free) or list(ages) != sorted(ages):
                 raise ValueError("striped KV needs its seeds, youngest first, within the pool")
-            self.free[group, kind] = array("q", (*range(seeds - 1, -1, -1), *range(seeds, len(free))))
+            self.free[group, kind] = array("q", settled_seed_blocks(ages, prompt, output, len(free), geometry[kind], group_pool))
+            self.rings[group, kind] = KVTailRing(*geometry[kind])
+        for group, ages in enumerate(ages_by_group):
+            self.slots[group] = deque(prompt + age for age in reversed(ages))
+            self.seeds[group] = deque(prompt + age for age in ages)
+
+    def _place(self, group: int, request_id: str) -> None:
+        """Put the block of a request's tail at the head of each free list, and note where the tail is."""
+        seeded = bool(self.seeds[group])
+        if seeded:
+            rows = self.seeds[group].popleft()
+        else:
+            rows = self.slots[group].popleft() - self.output
+            self.slots[group].append(rows)
+        tails = self.tails[request_id] = {}
+        for kind in self.counts:
+            key = group, kind
+            free, head, ring = self.free[key], self.head[key], self.rings[key]
+            if head >= len(free):
+                raise RuntimeError("KV block free list is exhausted")
+            if not seeded:
+                pick = ring.pick(free[head:], rows)
+                if pick:
+                    free.insert(head, free.pop(head + pick))
+            tails[kind] = ring.position(free[head], rows)
+            ring.add(tails[kind])
+
+    def tail_sharing(self):
+        """Per KV group, the worst EP group's (most K and V tails on one bank, tails on a shared bank, tails)."""
+        worst = {}
+        for (_group, kind), ring in self.rings.items():
+            worst[kind] = max(worst.get(kind, (0, 0, 0)), ring.sharing())
+        return worst
 
     def blocks_for_pages(self, kind: str, pages: int) -> int:
         return min(pages, self.ring) if kind == "chunk" else pages
@@ -3446,6 +3500,8 @@ class _KVBlockTables:
             if pages <= 0:
                 return {}
             table = self.tables[request_id] = {kind: array("q") for kind in self.counts}
+            if self.rings:
+                self._place(group, request_id)
         freed = {}
         for kind, blocks in table.items():
             key, target = (group, kind), self.blocks_for_pages(kind, pages)
@@ -3467,6 +3523,8 @@ class _KVBlockTables:
                 del blocks[target:]
         if pages <= 0:
             del self.tables[request_id]
+            for kind, position in self.tails.pop(request_id, {}).items():
+                self.rings[group, kind].add(position, -1)
         return freed
 
     def table(self, request_id: str) -> Mapping[str, Tuple[int, ...]]:
@@ -6377,7 +6435,8 @@ class _OnlineRuntime:
         self._external_buffer_peak_bytes = 0
         contract = stationary_refill_contract(self)
         if contract is not None and self.plan.scenario.placement.kv_policy.stripe_stride_pages:
-            self.ledger.blocks.order_by_admission(contract[0])
+            self.ledger.blocks.place_seeds(*contract, _kv_tail_geometry(self.plan.scenario, self._kv_block_layout,
+                                                                        contract[1], contract[2]))
         elif contract is not None:
             self.ledger.blocks.settle(*contract, self._kv_block_layout["tokens_per_block"])
         self._decode_window = {}
@@ -18725,6 +18784,23 @@ def _with_kv_block_pools(plan: ServingPlan):
     plan = replace(plan, kv_policy=replace(policy, capacity_pages=counts["full"],
                                            capacity_bytes=counts["full"] * policy.bytes_per_page))
     return plan, {"tokens_per_block": per_block, "pool_blocks": counts, "ring": ring}
+
+
+def _kv_tail_geometry(scenario, layout, prompt, output):
+    """Each KV group's ``KVTailRing`` arguments on striped NAND KV: every block stride is the policy's
+    stride modulo the banks, and V's pool starts a pool's bytes and the phase after K's."""
+    from .planner import kv_block_pools
+
+    policy = scenario.placement.kv_policy
+    geometry = {}
+    for row in kv_block_pools(scenario, 0, layout["tokens_per_block"]):
+        config, kind = row["memory_config"], row["kind"]
+        chunk = row["attention_chunk_size"] or 0
+        shift = (layout["pool_blocks"][kind] * policy.stripe_stride_pages
+                 + policy.stripe_phase_bytes // config.page_bytes) % config.array_units
+        geometry[kind] = (config.array_units, max(1, config.page_bytes // row["row_bytes"]), policy.stripe_stride_pages,
+                          shift, chunk if prompt + output > chunk else 0)
+    return geometry
 
 
 def _model_max_sequence_length(scenario: ScenarioConfig) -> int:

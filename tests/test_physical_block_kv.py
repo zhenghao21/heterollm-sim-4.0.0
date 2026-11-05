@@ -1,13 +1,20 @@
 """Physical KV in per-rank, per-layer block pools addressed through request block tables."""
+from collections import deque
+import copy
 from dataclasses import replace
+import math
 from pathlib import Path
 import itertools
+import random
 import sys
 import unittest
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from hbf_hbm_experiments import scenario
-from heterollm_sim.native_stationary import kv_block_peak, kv_stripe_layout
+from heterollm_sim.kv_placement import KVTailRing, kv_stripe_layout
+from heterollm_sim.native_stationary import kv_block_peak
 from heterollm_sim.memory_types import KVRuns
 from heterollm_sim.planner import (_generic_kv_accesses, _generic_kv_read_rows, _kv_block_runs, kv_block_geometry,
                                    _parallel_plan, _execution_layers, _subtract_direct_buffer_accesses)
@@ -15,48 +22,111 @@ from heterollm_sim.reporting import run_scenario
 from heterollm_sim.serving import RequestStatus, _KVBlockTables, _settled_free_list
 
 
-class KVStripeTests(unittest.TestCase):
+class KVPlacementTests(unittest.TestCase):
+    # (group's requests, its prepared imports, prompt, output, tokens per page, banks), from the native comparison.
+    POINTS = ((701, 4, 1660, 373, 2, 3200), (815, 6, 1660, 373, 2, 2800), (386, 2, 5900, 499, 2, 3200),
+              (323, 2, 1660, 373, 4, 3200), (550, 4, 1660, 373, 16, 2048), (66, 2, 1660, 373, 2, 2800))
+
     @staticmethod
-    def seed_ages(batch, output, ep):
-        return tuple(tuple((2 * index + 1) * output // (2 * batch) for index in range(group, batch, ep))
-                     for group in range(ep))
+    def geometry(layout, per_page, banks, chunk=0):
+        shift = (layout["pool_blocks"] * layout["stride_pages"] + layout["phase_pages"]) % banks
+        return banks, per_page, layout["stride_pages"], shift, chunk
 
-    def test_a_layer_programs_each_bank_at_most_once_in_any_step(self):
-        for batch, ep, prompt, output, per_page, banks in ((3088, 8, 1660, 373, 2, 3200), (6048, 8, 1660, 373, 2, 3200),
-                                                           (1504, 8, 5900, 499, 2, 3200), (612, 2, 5900, 499, 8, 2048),
-                                                           (104, 8, 103500, 1100, 2, 3200)):
-            groups = self.seed_ages(batch, output, ep)
-            layout = kv_stripe_layout(groups, prompt, output, per_page, banks, batch // ep + 16)
-            stride, phase = layout["stride_pages"], layout["phase_pages"]
-            self.assertEqual(layout["pool_blocks"] * stride % banks, 0)
+    def test_the_stride_holds_a_block_spreads_the_pool_and_needs_no_ages(self):
+        for live, prepared, prompt, output, per_page, banks in self.POINTS:
+            layout = kv_stripe_layout(prompt, output, per_page, banks, live + prepared)
+            stride, pool = layout["stride_pages"], layout["pool_blocks"]
+            self.assertGreater(pool, live + prepared)
             self.assertGreaterEqual(stride, -(-(prompt + output - 1) // per_page))
-            self.assertEqual((layout["flush_collisions"], layout["spill_collisions"]), (0, 0))
-            for ages in groups:
-                for step in range(output):
-                    used = set()
-                    for slot, age in enumerate(ages):
-                        generation, held = divmod(age + step, output)
-                        if (prompt + held) % per_page == 0:
-                            # The oldest slot took the lowest block.
-                            index = generation * len(ages) + len(ages) - 1 - slot
-                            bank = index * stride + (prompt + held - 1) // per_page
-                            pair = {bank % banks, (bank + phase) % banks}
-                            self.assertEqual(len(pair), 2)
-                            self.assertFalse(used & pair)
-                            used |= pair
+            self.assertEqual(math.gcd(stride, banks), 1)
+            self.assertGreaterEqual(len({block * stride % banks for block in range(pool)}), min(pool, banks))
+            # V's tail starts the history's pages after K's, so an import rolls round the banks.
+            self.assertEqual(self.geometry(layout, per_page, banks)[3], -(-(prompt - 1) // per_page) % banks)
 
-    def test_seeds_take_blocks_oldest_lowest_and_admissions_follow(self):
-        blocks = _KVBlockTables(1, {"full": 6})
-        blocks.order_by_admission([[0, 2, 4]])
-        for name in ("young", "middle", "old", "next"):
+    def test_a_block_picked_at_join_keeps_unequal_lengths_off_each_others_banks(self):
+        """No request's length is used, and lengths vary by half either way."""
+        rng = random.Random(1)
+        for live, prepared, prompt, output, per_page, banks in self.POINTS[:2]:
+            longest = 2 * (prompt + output)
+            layout = kv_stripe_layout(longest, 0, per_page, banks, live + prepared)
+            ring = KVTailRing(*self.geometry(layout, per_page, banks))
+            shift = ring.shift
+            free = deque(rng.sample(range(layout["pool_blocks"]), layout["pool_blocks"]))
+            tails, ends = {}, {}
+
+            def admit(seat, step):
+                rows, life = round(prompt * rng.uniform(.5, 1.5)), round(output * rng.uniform(.5, 1.5))
+                options = np.fromiter(free, dtype=np.int64, count=len(free))
+                block = int(options[ring.pick(options, rows - step)])
+                free.remove(block)
+                tails[seat] = block, ring.position(block, rows - step)
+                ring.add(tails[seat][1])
+                ends[seat] = step + life
+
+            for seat in range(live):
+                admit(seat, -rng.randrange(output))
+            for step in range(2 * output):
+                for seat in [seat for seat, end in ends.items() if end <= step]:
+                    block, position = tails[seat]
+                    ring.add(position, -1)
+                    free.append(block)
+                    admit(seat, step)
+                pages = (np.array([position for _block, position in tails.values()]) + step) % ring.length // per_page
+                banks_used = np.concatenate((pages, (pages + shift) % banks))
+                self.assertEqual(len(np.unique(banks_used)), 2 * live)
+
+    def test_block_tables_keep_every_tail_on_its_own_bank_through_refills(self):
+        live, prepared, prompt, output, per_page, banks = 323, 2, 1660, 373, 4, 3200
+        layout = kv_stripe_layout(prompt, output, per_page, banks, live + prepared)
+        geometry = self.geometry(layout, per_page, banks)
+        stride, shift = geometry[2], geometry[3]
+        ages = [(2 * index + 1) * output // (2 * live) for index in range(live)]
+        blocks = _KVBlockTables(1, {"full": layout["pool_blocks"]})
+        blocks.place_seeds([ages], prompt, output, prepared, {"full": geometry})
+        requests = {f"seed{index}": prompt + age for index, age in enumerate(ages)}
+        for name in requests:
             blocks.resize(0, name, 1, 0)
-        self.assertEqual([blocks.table(name)["full"] for name in ("young", "middle", "old", "next")],
-                         [(2,), (1,), (0,), (3,)])
-        blocks.resize(0, "old", 0, 1)
-        blocks.resize(0, "after", 1, 0)
-        self.assertEqual(blocks.table("after")["full"], (4,))
+        self.assertEqual(blocks.tail_sharing()["full"], (1, 0, 2 * live))
+        # Oldest first; the two imports land in the two slots that free next.
+        order, created = deque(sorted(requests, key=requests.get, reverse=True)), 0
+        waiting = deque()
+
+        def start_import():
+            nonlocal created
+            name = f"fresh{created}"
+            created += 1
+            blocks.resize(0, name, 1, 0)
+            waiting.append(name)
+
+        for _ in range(prepared):
+            start_import()
+        ages_now = {name: requests[name] - prompt for name in requests}
+        for step in range(2 * output):
+            running = {name: age + step for name, age in ages_now.items()}
+            pages = [blocks.table(name)["full"][0] * stride + (prompt + age) // per_page for name, age in running.items()]
+            used = [page % banks for page in pages] + [(page + shift) % banks for page in pages]
+            self.assertEqual(len(set(used)), 2 * live)
+            for name, age in tuple(running.items()):
+                if age == output - 1:
+                    blocks.resize(0, name, 0, 1)
+                    del ages_now[name]
+                    ages_now[waiting.popleft()] = -step - 1
+                    start_import()
+        self.assertEqual(len(ages_now), live)
+
+    def test_seeds_out_of_order_are_refused_and_a_release_clears_the_tail(self):
+        layout = kv_stripe_layout(1660, 373, 2, 3200, 8)
+        geometry = {"full": self.geometry(layout, 2, 3200)}
         with self.assertRaises(ValueError):
-            _KVBlockTables(1, {"full": 6}).order_by_admission([[4, 2, 0]])
+            _KVBlockTables(1, {"full": layout["pool_blocks"]}).place_seeds([[4, 2, 0]], 1660, 373, 1, geometry)
+        blocks = _KVBlockTables(1, {"full": layout["pool_blocks"]})
+        blocks.place_seeds([[0, 2, 4]], 1660, 373, 1, geometry)
+        for name in ("young", "middle", "old"):
+            blocks.resize(0, name, 1, 0)
+        copied = copy.deepcopy(blocks)
+        blocks.resize(0, "old", 0, 1)
+        self.assertEqual(blocks.tail_sharing()["full"][2], 4)
+        self.assertEqual(copied.tail_sharing()["full"][2], 6)
 
 
 class KVBlockTableTests(unittest.TestCase):

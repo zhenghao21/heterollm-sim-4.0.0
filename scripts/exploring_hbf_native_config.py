@@ -121,16 +121,15 @@ def native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool, tokens_p
                          pool // ep, tokens_per_block, ring)
 
 
-def native_kv_stripe(layers, prompt, output, batch_size, tp, ep, published, blocks):
+def native_kv_stripe(layers, prompt, output, tp, published, blocks):
     """The host's bank-striped KV placement for one NAND-backed deployment."""
-    from heterollm_sim.native_stationary import kv_stripe_layout
+    from heterollm_sim.kv_placement import kv_stripe_layout
     rows = {_physical_kv_width_for_rank(layer, tp) * _DTYPE_BYTES[layer.dtype] for layer in layers
             if layer.sequence_mixer != "linear_attention" and layer.kv_heads}
     if len(rows) != 1:
         raise ValueError("a KV stripe needs one row size per deployment")
-    ages = tuple(tuple(group) for group in native_seed_ages_by_group(batch_size, output, ep))
     chunk = min((layer.attention_chunk_size for layer in layers if layer.attention_chunk_size), default=0)
-    return kv_stripe_layout(ages, prompt, output, max(1, PAGE_BYTES // rows.pop()),
+    return kv_stripe_layout(prompt, output, max(1, PAGE_BYTES // rows.pop()),
                             published.hbf_stacks * published.dies_per_hbf_stack * published.planes_per_hbf_die, blocks, chunk)
 
 
@@ -405,7 +404,7 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
             if import_pool is None else import_pool)
     kv_peaks = native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool, tokens_per_block)
     pool_blocks = {kind: max(peaks) for kind, peaks in kv_peaks.items()}
-    stripe = (native_kv_stripe(layers, prompt, output, batch_size, tp, ep, published, max(pool_blocks.values()))
+    stripe = (native_kv_stripe(layers, prompt, output, tp, published, max(pool_blocks.values()))
               if published.hbf_stacks else None)
     if stripe:
         pool_blocks = dict.fromkeys(pool_blocks, stripe["pool_blocks"])
@@ -492,6 +491,9 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
             "Native NAND page service with OCP HBF v0.7 control and Table I geometry and timing; the host owns KV placement and "
             "block opens and there is no FTL or GC. Block size and erase time are research assumptions; every plane erasing at once "
             "is not stated by OCP.",
+            "NAND-backed KV: the host starts an import as a slot frees, fixes the step it joins and picks the free block that keeps "
+            "its tail off the other tails' banks, knowing no request's length; reads and writes follow the block's address. The pick "
+            "costs no time. Blocks mix requests of unequal lifetimes in real use, which holds extra NAND but moves no data.",
             "8x40MB intermediate SRAM is modeled as a pooled 8-port array; bandwidth/latency/credits are explicit research inputs.",
             "External Prefill producer source uses native DDR5 service geometry expanded to at least world x 100 GB/s; PD links and target KV writes remain the intended bottlenecks (research assumption).",
             "PD import (user approved 2026-10-24): one stream per target rank, all streams concurrent; each import owns a %d MiB source buffer cut into 1 MiB chunk slots dealt round-robin to its streams; a chunk holds its slot from source read until its target write completes (RDMA source-buffer semantics), so a stream keeps at most its slot count in flight while adjacent chunks' reads, links and writes overlap on the native timelines." % (PD_BUFFER_BYTES // 1024**2),

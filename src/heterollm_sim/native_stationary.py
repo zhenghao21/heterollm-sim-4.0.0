@@ -52,14 +52,11 @@ from array import array
 from collections import defaultdict
 from dataclasses import asdict, replace
 from fractions import Fraction
-from functools import lru_cache
 import json
 import math
 import re
 from statistics import fmean
 import time
-
-import numpy as np
 
 from .execution_control import ExecutionControl, NativeFastWallBudgetError, _NativeLayerSamplingCutoff
 from .native_fast_window import (NativeLayerWindowSample, NativeWindowForecast, _checked_budget,
@@ -1480,94 +1477,6 @@ def block_open_stall_ns(runtime, requests, output):
                 for owner, config in configs.items()), default=0.)
 
 
-@lru_cache(maxsize=1024)
-def kv_stripe_layout(ages_by_group, prompt, output, per_page, banks, blocks, chunk=0):
-    """Host placement of NAND-backed KV: stride, K/V phase and pool blocks.
-
-    The physical bank is the low address bits, and a bank log gives any
-    program the bank's next page number, so a whole-request block striped
-    over consecutive banks writes and reads on the banks its address names.
-    Admission n's tail at step T is on bank n * stride + position // per_page,
-    with position falling by the admission spacing as n grows. So the banks
-    of two tails differ by dn * stride - m for a small set of (dn, m), fixed
-    by the ages, and the search only has to avoid zero:
-
-    * ``flush``: tails that fill a page in one step, whose 100 us programs
-      would otherwise stack on one plane and hold up the next layer's reads;
-    * ``spill``: any two live tails, which program together when the
-      scratchpad is short;
-    * the bank spread of the stripes, since each layer reads them all.
-
-    ``blocks * stride`` wraps to a whole number of bank turns, so a FIFO
-    free list cycling through the pool never breaks the pattern. An import
-    writes K and V of each layer in turn, so each pool's phase is about the
-    pages of the smallest kind's history: the next pool starts where this one
-    ended and the import rolls round the banks, one program at a time on each,
-    instead of stacking every layer's programs on the same banks. It avoids
-    every tail difference, since V programs beside K in a flush.
-    """
-    flush, spill = set(), set()
-    readers = []
-    for ages in ages_by_group:
-        admitted = np.array([-age for age in reversed(ages)] + [output - age for age in reversed(ages)], dtype=np.int64)
-        count = len(ages)
-        for dn in range(count):
-            for dt in np.unique(admitted[dn:dn + count] - admitted[:count]):
-                dt = int(dt)
-                if dt < output and (dn or dt):
-                    spill.update({(dn, dt // per_page), (dn, -(-dt // per_page))})
-                    if dt % per_page == 0:
-                        flush.add((dn, dt // per_page))
-        readers.append(np.array([-(-(prompt + age) // per_page) for age in reversed(ages)], dtype=np.int64))
-    flush_pairs = np.array(sorted(flush), dtype=np.int64).reshape(-1, 2)
-    spill_pairs = np.array(sorted(spill), dtype=np.int64).reshape(-1, 2)
-    pages = -(-(prompt + output - 1) // per_page)
-    span = blocks + max(len(ages) for ages in ages_by_group)
-
-    def spread(stride):
-        worst = 0
-        for held in readers:
-            start = np.arange(len(held), dtype=np.int64) * stride % banks
-            whole, rest = np.divmod(held, banks)
-            end = start + rest
-            cover = (np.cumsum(np.bincount(start, minlength=banks) - np.bincount(end % banks, minlength=banks))
-                     + int(np.count_nonzero(end >= banks)) + int(whole.sum()))
-            worst = max(worst, int(cover.max()) - math.ceil(float(cover.mean())))
-        return worst
-
-    best = None
-    for stride in range(pages, pages + banks):
-        turn = banks // math.gcd(stride, banks)
-        if turn > span:
-            continue
-        flush_hits = int(np.count_nonzero((flush_pairs[:, 0] * stride - flush_pairs[:, 1]) % banks == 0))
-        spill_hits = int(np.count_nonzero((spill_pairs[:, 0] * stride - spill_pairs[:, 1]) % banks == 0))
-        pool = -(-blocks // turn) * turn
-        key = (flush_hits, spill_hits, spread(stride), pool * stride)
-        if best is None or key < best[0]:
-            best = key, stride, pool
-    if best is None:
-        raise ValueError("no KV stripe stride turns over the banks within the pool")
-    (flush_hits, spill_hits, excess, _), stride, pool = best
-
-    def forbidden(pairs):
-        values = (pairs[:, 0] * stride - pairs[:, 1]) % banks
-        mask = np.zeros(banks, dtype=np.bool_)
-        mask[values] = mask[-values % banks] = mask[0] = True
-        return mask
-
-    history = -(-min(prompt - 1, chunk or prompt - 1) // per_page) % banks
-    mask = forbidden(spill_pairs)
-    if mask.all():
-        mask = forbidden(flush_pairs)
-    phase = history
-    if not mask.all():
-        free = np.flatnonzero(~mask)
-        phase = int(free[np.searchsorted(free, history) % len(free)])
-    return {"stride_pages": stride, "phase_pages": phase, "pool_blocks": pool,
-            "flush_collisions": flush_hits, "spill_collisions": spill_hits, "read_excess_pages": excess}
-
-
 def kv_block_admission(runtime):
     """The refill cycle's KV block peak of every EP group against its pools.
 
@@ -1897,6 +1806,8 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
             prepared["window_shards"] = sample_control.window_shards
             diagnostics["physical_admission_cutoff_ns"] = runtime.now
             diagnostics.update(kv_block_admission(runtime))
+            if runtime.ledger.blocks.rings:
+                diagnostics["kv_tail_bank_sharing"] = runtime.ledger.blocks.tail_sharing()
             admission = admission_reasons(runtime, prepared)
             if admission:
                 budget = {"accepted": False, "reasons": admission}

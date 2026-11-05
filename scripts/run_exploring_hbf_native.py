@@ -54,8 +54,13 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # SID-aware per-PC FR-FCFS controller; v21 results describe older physics.
 # v24 follows OCP HBF v0.7 control on NAND (striped KV, host merge, flush over
 # the host link, block opens) and corrects the unfinished-import extra.
-FAST_CONTRACT = "native_stationary_layout_fast_v25"
-# Prefill runs on HBM4 and v24 changes neither its physics nor its forecast.
+# v25 refreshes HBM4 per bank on the 24Gb 12H part and stops counting the page's
+# other half as a row hit.
+# v26 places NAND KV by the rule a host can follow without knowing request
+# lengths, in place of a stride searched from the seeds' ages.
+FAST_CONTRACT = "native_stationary_layout_fast_v26"
+# Prefill runs on HBM4, so it follows v25; v26 changes neither its physics nor
+# its forecast.
 PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v24"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # sample a whole prompt by its stage blocks and a chunked one by the
