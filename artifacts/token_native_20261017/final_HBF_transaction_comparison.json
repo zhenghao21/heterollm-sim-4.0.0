@@ -1,6 +1,0 @@
-{
-  "exactly_equal": false,
-  "first_different_record": 7,
-  "baseline_kind": "physical_task",
-  "candidate_kind": "dram_request"
-}

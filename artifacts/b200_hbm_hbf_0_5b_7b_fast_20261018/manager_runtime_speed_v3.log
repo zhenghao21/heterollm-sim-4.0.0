@@ -1,8 +1,0 @@
-started qwen2_5-0_5b__HBM__P524288__D1024 pid=46920
-started qwen2_5-0_5b__HBF__P524288__D1024 pid=12760
-started qwen2_5-1_5b__HBM__P524288__D1024 pid=12968
-started qwen2_5-1_5b__HBF__P524288__D1024 pid=6712
-started qwen2_5-3b__HBM__P524288__D1024 pid=33588
-started qwen2_5-3b__HBF__P524288__D1024 pid=41140
-started qwen2_5-7b__HBM__P524288__D1024 pid=18512
-started qwen2_5-7b__HBF__P524288__D1024 pid=35524

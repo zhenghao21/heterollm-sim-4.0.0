@@ -1,7 +1,0 @@
-{
-  "schema": "fast-validation-runtime/v1",
-  "runtime_root": "F:/codex_project/37_LLMsim/heterollm-sim-4.0.0/tmp/fast_long_validation_v1_20261017",
-  "reason": "User requested that the running eight-request validation finish on its original version while Prefill and adaptive sampling are developed separately.",
-  "already_started_workers": "Existing workers retain their loaded original modules. Later workers run the retained src and scripts, including native extensions and model data.",
-  "formal_scan": "paused"
-}

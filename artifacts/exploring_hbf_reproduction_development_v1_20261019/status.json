@@ -1,9 +1,0 @@
-{
-  "status": "running",
-  "processed": 4,
-  "total": 30,
-  "successful": 3,
-  "infeasible": 1,
-  "failed": 0,
-  "latest": "primary__llama3_405b__CONV__MID__G8__S0p1"
-}

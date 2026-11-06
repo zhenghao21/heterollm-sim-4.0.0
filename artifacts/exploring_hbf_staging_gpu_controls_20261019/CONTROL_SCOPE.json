@@ -1,6 +1,0 @@
-{
-  "status": "excluded_from_paper_primary",
-  "reason": "HBF prefetch charged the GPU-output transfer before filling the logic-die read staging; consume did not reserve that transfer at the actual consumer time. These are development control results, not valid logic-die staging primary results. HBM4 follows a distinct GPU-side read-buffer path and is unaffected.",
-  "original_directory": "artifacts/exploring_hbf_reproduction_20261019",
-  "completed_points": 12
-}
