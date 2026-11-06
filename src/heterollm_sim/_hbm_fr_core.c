@@ -41,8 +41,9 @@
 #define FR_MIRROR_SOURCES 128
 #define FR_FIELDS 34
 /* A PC's columns: last PRE, blocked until, next read and write data, then its
- * per-bank refresh: the tRREFD gate and the next due time. */
-#define FR_PC 6
+ * per-bank refresh: the tRREFD gate, the next due time, and the tRFCpb gate
+ * after the last REFpb completing a 16-bank SID group. */
+#define FR_PC 7
 /* Below this a product with the SID count's inverse divides exactly. */
 #define FR_SID_FAST (INT64_C(1) << 24)
 
@@ -1130,7 +1131,7 @@ FR_NOINLINE double fr_refresh_bank_start(const fr_state *s, int64_t lane, int64_
     const double *bank_bf = s->bf + (lane * s->banks + within) * 7, *lane_pc = s->pc + lane * FR_PC;
     const double *lane_history = s->history + lane * s->entries * 4;
     double half = s->half, inverse = s->inverse, row_bus = s->resources[(lane >> 1) * 4];
-    double ready = fr_max(fr_max(fr_max(fr_max(earliest, bank_bf[1]), lane_pc[1]), lane_pc[4]), row_bus);
+    double ready = fr_max(fr_max(fr_max(fr_max(fr_max(earliest, bank_bf[1]), lane_pc[1]), lane_pc[4]), lane_pc[6]), row_bus);
     double anchor;
     int64_t group = within / s->g[4], previous;
     if (within % 16 == 0)
@@ -1160,7 +1161,7 @@ FR_NOINLINE void fr_refresh_bank(const fr_state *s, int64_t lane, int64_t within
     int64_t ch = lane >> 1, bank = lane * s->banks + within;
     double *lane_pc = s->pc + lane * FR_PC, *bank_bf = s->bf + bank * 7;
     double due = lane_pc[5], start, done;
-    start = fr_row_command(s, ch, earliest, t[0], s->pre_duration, s->pre_duration_tick, counts);
+    start = fr_row_command(s, ch, fr_max(earliest, lane_pc[6]), t[0], s->pre_duration, s->pre_duration_tick, counts);
     counts[4] += 1;
     if (start > due + 8 * t[20])
         fr_fail(FR_ERR_REFRESH_POSTPONED);
@@ -1168,6 +1169,8 @@ FR_NOINLINE void fr_refresh_bank(const fr_state *s, int64_t lane, int64_t within
     done = fr_after_tick(start, t[31], s->ticks[31], s->half, s->inverse);
     bank_bf[1] = done;
     bank_bf[5] = done;
+    if (within % 16 == 15)
+        lane_pc[6] = fr_after_tick(start, t[31], s->ticks[31], s->half, s->inverse);
     if (t[30] > 0) {
         fr_faw_prune(s, lane, fr_max(0., s->resources[ch * 4]));
         fr_record_activate(s, lane, start);
@@ -1208,7 +1211,7 @@ FR_NOINLINE double fr_plan_refresh(const fr_state *s, int64_t lane, const fr_que
         }
     } else {
         const double *bank_bf = s->bf + bank * 7;
-        double ready = fr_max(fr_max(due, bank_bf[1]), lane_pc[4]);
+        double ready = fr_max(fr_max(fr_max(due, bank_bf[1]), lane_pc[4]), lane_pc[6]);
         if (bank_bf[0] >= 0)
             ready = fr_max(ready, fr_after_tick(bank_bf[0], t[8], s->ticks[8], s->half, s->inverse));
         kind = 3;
@@ -1236,7 +1239,7 @@ FR_NOINLINE double fr_refresh_floor(const fr_state *s, int64_t ch)
     for (lane = 2 * ch; lane < 2 * ch + 2; ++lane) {
         const double *lane_pc = s->pc + lane * FR_PC;
         int64_t count = s->window_counts[lane];
-        floor_ = fr_max(fr_max(fr_max(floor_, lane_pc[1]), lane_pc[4]), lane_pc[0] + t[19]);
+        floor_ = fr_max(fr_max(fr_max(fr_max(floor_, lane_pc[1]), lane_pc[4]), lane_pc[6]), lane_pc[0] + t[19]);
         if (count)
             floor_ = fr_max(floor_, s->windows[lane * s->window_capacity + count - 1] + t[30]);
     }
@@ -1249,6 +1252,25 @@ FR_NOINLINE double fr_refresh_floor(const fr_state *s, int64_t ch)
             floor_ = fr_max(floor_, bank_bf[2]);
     }
     return floor_;
+}
+
+/* The tRFCpb gate left by the last completed group in a skipped interval.
+ * Idle-gap skipping does not issue each command, so retain the same group
+ * boundary state that the command loop would have produced.  There are at
+ * most one such boundary every 16 banks; this is outside the hot per-command
+ * path and keeps the exact clock-grid alignment of the real command. */
+static double fr_refresh_skip_group_gate(const fr_state *s, int64_t lane, int64_t first, int64_t skipped)
+{
+    const double *t = s->t;
+    double gate = s->pc[lane * FR_PC + 6], step = t[33];
+    int64_t resume = first + skipped;
+    int64_t boundary = first + (15 - fr_mod(first, 16));
+    for (; boundary < resume; boundary += 16) {
+        double due = (double)boundary * step;
+        double start = fr_align(fr_max(due, gate), t[0]);
+        gate = fr_after_tick(start, t[31], s->ticks[31], s->half, s->inverse);
+    }
+    return gate;
 }
 
 /* Skip the REFpb of a gap that nothing after the gap can see.
@@ -1265,6 +1287,7 @@ FR_NOINLINE int fr_skip_refresh_gap(const fr_state *s, int64_t ch, double latest
     double step = t[33], total;
     int64_t resume = fr_ifloor(latest / step), banks = s->banks, commands = 0;
     int64_t pseudo, within;
+    double group_gate[2] = {0., 0.};
     if (step < fr_max(t[30], t[6] + t[32]) + 4 * t[0])
         return 0;
     if (t[29] > 0) {
@@ -1273,6 +1296,9 @@ FR_NOINLINE int fr_skip_refresh_gap(const fr_state *s, int64_t ch, double latest
             int64_t skipped = resume - first, phase = fr_mod(first, banks);
             if (skipped <= 0)
                 continue;
+            group_gate[pseudo] = fr_refresh_skip_group_gate(s, lane, first, skipped);
+            if (group_gate[pseudo] > latest)
+                return 0;
             for (within = 0; within < banks; ++within) {
                 int64_t bank = lane * banks + within, turn = within - phase + (within < phase ? banks : 0);
                 if (s->rows[bank] >= 0
@@ -1297,6 +1323,7 @@ FR_NOINLINE int fr_skip_refresh_gap(const fr_state *s, int64_t ch, double latest
         counts[4] += (double)skipped;
         commands += skipped;
         s->pc[lane * FR_PC + 5] = (double)resume * step;
+        s->pc[lane * FR_PC + 6] = group_gate[pseudo];
     }
     if (!commands)
         return 0;
@@ -1435,6 +1462,7 @@ static int fr_state_matches(const fr_state *s, const fr_sources *o, int64_t sour
         const double *theirs = pc_before + pseudo * FR_PC;
         if (mine[2] != theirs[2] || mine[3] != theirs[3] || mine[5] != theirs[5]
                 || fr_max(mine[4], lowest) != fr_max(theirs[4], lowest)
+                || fr_max(mine[6], lowest) != fr_max(theirs[6], lowest)
                 || fr_max(mine[1], lowest) != fr_max(theirs[1], lowest)
                 || fr_max(mine[0], pre_floor) != fr_max(theirs[0], pre_floor))
             return 0;

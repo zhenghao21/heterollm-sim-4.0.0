@@ -7,6 +7,7 @@ import pytest
 from heterollm_sim.dram_core import DramCore
 from heterollm_sim.memory_transfer import ResourceTimeline
 from heterollm_sim.memory_types import AccessRequest, DramConfig
+from heterollm_sim.physical_presets import resolve_physical_config
 
 
 def config(**overrides):
@@ -273,6 +274,32 @@ def test_summary_and_batch_use_new_control_semantics_without_legacy_acceleration
         assert a.completion_ns == b.completion_ns
         assert a.counters["resource_busy_ns"] == b.counters["resource_busy_ns"]
         assert a.stages == a.mapping == ()
+
+
+def test_refpb_group_gap_matches_numeric_and_reference_controllers():
+    c = resolve_physical_config("hbm4_reference", overrides={
+        "stacks": 8, "dies_per_stack": 16, "die_density_gbits": 32,
+        "capacity_bytes": 288 * 10 ** 9, "interface_bandwidth_gb_s": 12800.,
+        "read_bandwidth_gb_s": 12800., "write_bandwidth_gb_s": 12800.,
+        "activate_different_group_ns": 4., "activate_same_group_ns": 6.,
+        "four_activate_window_ns": 20.,
+    })
+    first = [request(c, row=index % 3,
+                     bank=((index % 3) * 2 + (index % 2)) * c.banks_per_group + index % 8,
+                     pc=index % 2, column=index // 8)
+             for index in range(40)]
+    late = [request(c, row=1, bank=0, pc=0, time=5000.)]
+    reference = DramCore(c, capture_details=True)
+    numeric = DramCore(c, capture_details=False)
+    numeric._hbm_numeric_enabled = True
+    for batch in (first, late):
+        expected = reference.submit_many(batch)
+        actual = numeric.submit_many(batch)
+        assert [item.completion_ns for item in actual] == [item.completion_ns for item in expected]
+        assert [item.counters.get("refresh_commands", 0) for item in actual] == [
+            item.counters.get("refresh_commands", 0) for item in expected]
+    assert numeric._hbm_control_state == reference._hbm_control_state
+    assert reference._hbm_control_state["pcs"][(0, 0, 0)]["refresh_group_gate"] >= 0.
 
 
 def test_maximum_active_closes_a_row_during_long_idle_without_refresh():

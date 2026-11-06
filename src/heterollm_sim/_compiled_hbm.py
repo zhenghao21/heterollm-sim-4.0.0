@@ -160,7 +160,7 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     bf = np.zeros((total_banks, 7), dtype=np.float64)
     bf[:, 0] = -1
     addresses = np.full(total_banks, -1, dtype=np.int64)
-    pc = np.zeros((lanes, 6), dtype=np.float64)
+    pc = np.zeros((lanes, 7), dtype=np.float64)
     pc[:, 0] = pc[:, 5] = -1
     history = np.full((lanes, history_entries, 4), -1., dtype=np.float64)
     pc_seen = np.zeros(lanes, dtype=np.bool_)
@@ -226,7 +226,7 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
             stats[lane] = previous.get("scheduler_stats", 0.)
             pc[lane] = [previous["last_precharge"] if previous["last_precharge"] is not None else -1.,
                         previous["blocked_until"], previous["next_data_start"]["read"], previous["next_data_start"]["write"],
-                        previous["refresh_gate"], previous["next_refresh"]]
+                        previous["refresh_gate"], previous["next_refresh"], previous.get("refresh_group_gate", 0.)]
             for group, value in previous["activate"].items():
                 history[lane, group, 0] = value
             for which, entries in ((1, previous["column"]["read"]),
@@ -601,7 +601,7 @@ class _HBMNumericState:
                             last_precharge=values[0] if values[0] >= 0 else None,
                             blocked_until=values[1],
                             next_data_start={"read": values[2], "write": values[3]},
-                            refresh_gate=values[4], next_refresh=values[5])
+                            refresh_gate=values[4], next_refresh=values[5], refresh_group_gate=values[6])
         for ch in np.flatnonzero(changed_channels):
             key = channel_keys[ch]
             if channel[ch, 0] >= 0 or channel[ch, 1] >= 0:

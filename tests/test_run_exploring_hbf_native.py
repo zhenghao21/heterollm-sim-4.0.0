@@ -253,7 +253,7 @@ def test_prefill_contract_invalidates_old_rejection_without_changing_decode(tmp_
         runner=lambda *a, **k: pytest.fail("current Prefill cache rerun"))
     assert result == again == run.read_json(path) and len(runs) == 1
     assert params == original_params and "prefill_contract" not in params
-    assert params["runner_contract"] == run.FAST_CONTRACT == "native_stationary_layout_fast_v26"
+    assert params["runner_contract"] == run.FAST_CONTRACT == "native_stationary_layout_fast_v27"
 
 
 def test_native_fast_runner_uses_upper_bound_and_keeps_full_traffic_unknown():
@@ -801,8 +801,8 @@ def test_progress_keeps_committed_counters_when_next_task_count_resets(tmp_path,
 
 
 # The approved scoped defaults require a separate fast cache contract.
-def test_contracts_keep_detailed_v17_and_separate_current_physics_fast_v26():
-    assert run.CONTRACT.endswith("_v17") and run.FAST_CONTRACT.endswith("_v26")
+def test_contracts_keep_detailed_v17_and_separate_current_physics_fast_v27():
+    assert run.CONTRACT.endswith("_v17") and run.FAST_CONTRACT.endswith("_v27")
     assert "tp8" not in run.CONTRACT and "tp8" not in run.FAST_CONTRACT
     assert run.parameters(run.case_matrix()[0], LAYOUT, 1)["runner_contract"] == run.CONTRACT
     assert run.DEFAULT_DIRECTORY.name != "exploring_hbf_native_20261019"

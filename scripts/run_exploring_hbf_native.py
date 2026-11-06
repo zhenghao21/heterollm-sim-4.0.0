@@ -58,10 +58,12 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # other half as a row hit.
 # v26 places NAND KV by the rule a host can follow without knowing request
 # lengths, in place of a stride searched from the seeds' ages.
-FAST_CONTRACT = "native_stationary_layout_fast_v26"
-# Prefill runs on HBM4, so it follows v25; v26 changes neither its physics nor
-# its forecast.
-PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v24"
+# v27 holds every REFpb of a PC off for tRFCpb after the one that completes a
+# SID's 16-bank group.
+FAST_CONTRACT = "native_stationary_layout_fast_v27"
+# Prefill runs on HBM4, so its runner follows v25 (as v24) and v27 (as v25); v26
+# changes neither its physics nor its forecast.
+PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v25"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # sample a whole prompt by its stage blocks and a chunked one by the
 # conditional chunk forecast; detailed passes retain the complete native

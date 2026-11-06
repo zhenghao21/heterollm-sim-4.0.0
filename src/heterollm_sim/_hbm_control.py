@@ -56,11 +56,13 @@ class _Controller:
         return (mapping.stack, mapping.channel, mapping.pseudo_channel)
 
     def pc(self, key):
-        return self.pcs.setdefault(key, {"activate": {}, "activate_window": [],
+        state = self.pcs.setdefault(key, {"activate": {}, "activate_window": [],
             "column": {"read": {}, "write": {}}, "write_end": {},
             "last_precharge": None, "blocked_until": 0.0,
             "next_data_start": {"read": 0.0, "write": 0.0},
-            "refresh_gate": 0.0, "next_refresh": -1.0})
+            "refresh_gate": 0.0, "refresh_group_gate": 0.0, "next_refresh": -1.0})
+        state.setdefault("refresh_group_gate", 0.0)
+        return state
 
     def bank(self, mapping):
         from .dram_core import _BankState
@@ -549,7 +551,8 @@ class _FrFcfsController(_Controller):
         """A REFpb's rising edge; ``fr_refresh_bank_start`` in the kernel."""
         c, pc = self.config, self.pc(key)
         row_bus = self.timeline.available_ns(self.bus_id(key, "row"))
-        ready = max(earliest, bank["activate_ready"], pc["blocked_until"], pc["refresh_gate"], row_bus)
+        ready = max(earliest, bank["activate_ready"], pc["blocked_until"],
+                    pc["refresh_gate"], pc["refresh_group_gate"], row_bus)
         if within % 16 == 0:
             ready = max(ready, self.banks[self.refresh_target(key, within + 15)[1]]["activate_ready"])
         if bank["last_activate"] is not None:
@@ -573,6 +576,8 @@ class _FrFcfsController(_Controller):
         if command.start_ns > due + 8 * c.refresh_interval_ns:
             raise ValueError("HBM periodic refresh missed the maximum eight postponed intervals")
         pc["refresh_gate"] = self.after(command.start_ns, c.refresh_bank_gap_ns)
+        if within % 16 == 15:
+            pc["refresh_group_gate"] = self.after(command.start_ns, c.refresh_bank_cycle_ns)
         bank["activate_ready"] = self.after(command.start_ns, c.refresh_bank_cycle_ns)
         old.ready_ns = bank["activate_ready"]
         if c.four_activate_window_ns > 0:
@@ -596,7 +601,8 @@ class _FrFcfsController(_Controller):
         gap = max(c.activate_same_group_ns, c.activate_different_group_ns)
         for lane in lanes:
             pc = self.pc(lane["key"])
-            floor = max(floor, pc["blocked_until"], pc["refresh_gate"], *(stamp + gap for stamp in pc["activate"].values()))
+            floor = max(floor, pc["blocked_until"], pc["refresh_gate"], pc["refresh_group_gate"],
+                        *(stamp + gap for stamp in pc["activate"].values()))
             if pc["last_precharge"] is not None:
                 floor = max(floor, pc["last_precharge"] + c.precharge_to_precharge_ns)
             if pc["activate_window"]:
@@ -624,6 +630,15 @@ class _FrFcfsController(_Controller):
             skipped = resume - first
             if skipped <= 0:
                 continue
+            gate = pc["refresh_group_gate"]
+            boundary = first + ((15 - first) % 16)
+            while boundary < resume:
+                due = boundary * step
+                start = self.align(max(due, gate), self.clock)
+                gate = self.after(start, c.refresh_bank_cycle_ns)
+                boundary += 16
+            if gate > latest:
+                return False
             closing = []
             for within in range(c.bank_count):
                 old, bank = self.bank(self.refresh_target(lane["key"], within)[0])
@@ -635,15 +650,16 @@ class _FrFcfsController(_Controller):
                     return False
                 if turn < skipped:
                     closing.append(old)
-            plans.append((pc, skipped, closing))
+            plans.append((pc, skipped, closing, gate))
         commands = 0
-        for pc, skipped, closing in plans:
+        for pc, skipped, closing, gate in plans:
             for old in closing:
                 old.open_row = None
             self.counts["precharge_commands"] += len(closing)
             self.counts["refresh_commands"] += skipped
             commands += len(closing) + skipped
             pc["next_refresh"] = resume * step
+            pc["refresh_group_gate"] = gate
         if not commands:
             return False
         self._active_deadlines.pop(lanes[0]["key"][:2], None)
@@ -714,7 +730,7 @@ class _FrFcfsController(_Controller):
             kind = 3
             take = when <= planned
             if not take and lane["kind"] in (1, 2):
-                ready = max(due, bank["activate_ready"], pc["refresh_gate"])
+                ready = max(due, bank["activate_ready"], pc["refresh_gate"], pc["refresh_group_gate"])
                 if bank["last_activate"] is not None:
                     ready = max(ready, self.after(bank["last_activate"], c.activate_cycle_ns))
                 take = ready <= planned

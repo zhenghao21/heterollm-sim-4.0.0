@@ -367,7 +367,8 @@ def test_skipping_a_gap_changes_nothing_later_commands_can_see(config, monkeypat
         timeline = core.timeline
         return ([result.completion_ns for result in results], sorted(timeline.ready_ns.items()),
                 sorted(timeline.bytes_moved.items()), sorted((key, bank.open_row) for key, bank in core._banks.items()),
-                {key: (state["refresh_gate"], state["next_refresh"], state["activate_window"])
+                {key: (state["refresh_gate"], state["refresh_group_gate"], state["next_refresh"],
+                        state["activate_window"])
                  for key, state in core._hbm_control_state["pcs"].items()},
                 sum(result.counters.get("refresh_commands", 0) for result in results),
                 sum(result.counters.get("precharge_commands", 0) for result in results)), dict(timeline.busy_ns)
@@ -506,7 +507,8 @@ def test_dense_traffic_with_refresh_is_bit_identical_on_both_paths(config):
     left, right = compiled._hbm_control_state, scalar._hbm_control_state
     assert left["pcs"].keys() == right["pcs"].keys()
     for key, state in right["pcs"].items():
-        for name in ("last_precharge", "blocked_until", "refresh_gate", "next_refresh", "scheduler_stats"):
+        for name in ("last_precharge", "blocked_until", "refresh_gate", "refresh_group_gate",
+                     "next_refresh", "scheduler_stats"):
             assert left["pcs"][key][name] == state[name], (key, name)
 
 
@@ -519,7 +521,8 @@ def test_controller_state_publishes_identically_on_both_paths():
     assert left["pcs"].keys() == right["pcs"].keys()
     for key, state in right["pcs"].items():
         for name in ("activate", "column", "write_end", "last_precharge", "blocked_until",
-                     "next_data_start", "activate_window", "scheduler_stats", "refresh_gate", "next_refresh"):
+                     "next_data_start", "activate_window", "scheduler_stats", "refresh_gate",
+                     "refresh_group_gate", "next_refresh"):
             assert left["pcs"][key][name] == state[name], (key, name)
     assert left["channels"] == right["channels"]
 
