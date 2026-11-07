@@ -40,8 +40,9 @@ PD_BUFFER_BYTES = 64 * 1024**2
 # Tokens of one physical KV block. FIFO free lists mix fully over a long run, so
 # a block is about a request's contiguous extent in a settled layout. Measured at
 # HBM4 SHORT B322: 16 tokens (vLLM's default) 95.6 ms, 256 tokens 43.6 ms, for
-# about 6% more pool capacity. NAND-backed KV instead stripes a whole request's
-# rows over consecutive banks (see kv_stripe_layout), in the same round multiple.
+# about 6% more pool capacity. NAND-backed KV uses a sequential host page
+# cursor; channel/DLU mapping is arithmetic
+# and the page table stores compact runs rather than a per-page list.
 NATIVE_KV_BLOCK_TOKENS = 256
 PHYSICAL_WINDOW_ASSUMPTION = (
     "Bounded physical execution has no sampled suffix; the fast path reports its conditional sampling interval "
@@ -121,16 +122,18 @@ def native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool, tokens_p
                          pool // ep, tokens_per_block, ring)
 
 
-def native_kv_stripe(layers, prompt, output, tp, published, blocks):
-    """The host's bank-striped KV placement for one NAND-backed deployment."""
-    from heterollm_sim.kv_placement import kv_stripe_layout
+def native_kv_sequential(layers, prompt, output, tp, published, blocks):
+    """The host's sequential-channel KV placement for one NAND deployment."""
+    from heterollm_sim.kv_placement import kv_sequential_layout
     rows = {_physical_kv_width_for_rank(layer, tp) * _DTYPE_BYTES[layer.dtype] for layer in layers
             if layer.sequence_mixer != "linear_attention" and layer.kv_heads}
     if len(rows) != 1:
-        raise ValueError("a KV stripe needs one row size per deployment")
+        raise ValueError("sequential KV placement needs one row size per deployment")
     chunk = min((layer.attention_chunk_size for layer in layers if layer.attention_chunk_size), default=0)
-    return kv_stripe_layout(prompt, output, max(1, PAGE_BYTES // rows.pop()),
-                            published.hbf_stacks * published.dies_per_hbf_stack * published.planes_per_hbf_die, blocks, chunk)
+    return kv_sequential_layout(
+        prompt, output, max(1, PAGE_BYTES // rows.pop()),
+        published.hbf_stacks * published.dies_per_hbf_stack,
+        published.planes_per_hbf_die, blocks)
 
 
 def native_capacity_batch(capacity, batch_size, pool, layers, prompt, output, ep, quantum,
@@ -192,7 +195,8 @@ def gpu_reference(component_id: str):
     return _gpu_profile_from_dict(raw)
 
 
-def sram_reference(host_owner: str = "hbf0.memory", stacks: int = 8) -> SramConfig:
+def sram_reference(host_owner: str = "hbf0.memory", stacks: int = 8,
+                   host_channels: int | None = None) -> SramConfig:
     """Table I's logic-die SRAM: one 40 MB partition per HBF stack.
 
     Each port is a stack's partition behind that stack's host channel, so
@@ -201,18 +205,19 @@ def sram_reference(host_owner: str = "hbf0.memory", stacks: int = 8) -> SramConf
     staged KV tail pages live in NandCore's per-stack staging accounting,
     whose valid bytes share each partition with the activations.
     """
+    ports = stacks if host_channels is None else host_channels
     rate = stacks * STACK_INTERFACE_GB_S
     return SramConfig(capacity_bytes=stacks * 40 * MB, burst_bytes=64,
         interface_bandwidth_gb_s=rate, read_bandwidth_gb_s=rate,
         write_bandwidth_gb_s=rate, read_latency_ns=LOGIC_DIE_SRAM_LATENCY_NS,
         write_latency_ns=LOGIC_DIE_SRAM_LATENCY_NS,
-        ports=stacks, max_outstanding_requests=256, metadata={
-            "port_resource_ids": {direction: [f"{host_owner}:nand:host:{stack}:{direction}"
-                                              for stack in range(stacks)]
+        ports=ports, max_outstanding_requests=256, metadata={
+            "port_resource_ids": {direction: [f"{host_owner}:nand:host:{channel}:{direction}"
+                                              for channel in range(ports)]
                                   for direction in ("read", "write")},
             "source_capacity": "paper: 8 stacks x 40 decimal MB per stack",
-            "research_organization": "one 40 MB partition per stack on its logic die; activations interleave 64 B "
-                                     "bursts over stacks; each port is that stack's host channel",
+            "research_organization": "one 40 MB partition per stack on its logic die, split across its sixteen "
+                                     "die-local host channels; activations interleave 64 B bursts over stacks",
             "research_timing": "stack host channel 1.6 TB/s per direction shared with NAND, 1 ns pipeline latency, "
                                "64B burst, 256 combined credits; not paper measurements"})
 
@@ -220,16 +225,17 @@ def sram_reference(host_owner: str = "hbf0.memory", stacks: int = 8) -> SramConf
 def _add_sram(template):
     hbf = template.hardware.get_component("hbf0")
     host_owner = str(hbf.metadata.get("memory_service_owner") or "hbf0.memory")
-    stacks = require_physical_memory_config(hbf).host_channels
-    config = sram_reference(host_owner, stacks)
+    nand = require_physical_memory_config(hbf)
+    stacks = int(nand.metadata.get("stack_count", max(1, nand.host_channels // 16)))
+    config = sram_reference(host_owner, stacks, nand.host_channels)
     owner = "sram0.sram_fabric"
     rate = config.read_bandwidth_gb_s
     profile = HostMemoryProfile(bandwidth_gb_s=rate, efficiency=1.,
         read_bandwidth_gb_s=rate, write_bandwidth_gb_s=rate,
         read_latency_ns=config.read_latency_ns, write_latency_ns=config.write_latency_ns,
-        transaction_bytes=64, max_outstanding_requests=256, parallel_lanes=stacks, resource_id=owner,
+        transaction_bytes=64, max_outstanding_requests=256, parallel_lanes=config.ports, resource_id=owner,
         name="native logic-die SRAM research reference")
-    port = PortSpec("host", "SRAM", role="endpoint", version="1", lanes=stacks,
+    port = PortSpec("host", "SRAM", role="endpoint", version="1", lanes=config.ports,
                     bandwidth_gbps=rate * 8, payload="streaming")
     sram = ComponentSpec("sram0", "sram", cost_profile_id="native-sram",
         ports=(port,), capacity_bytes=config.capacity_bytes, bandwidth_gbps=rate * 8,
@@ -237,7 +243,6 @@ def _add_sram(template):
         metadata={"physical_memory_config": config, "memory_service_owner": owner,
                   "cost_profile_template": asdict(profile), "writable": True})
     # Staged KV tails share each stack's partition with these activations.
-    nand = require_physical_memory_config(hbf)
     hbf = replace(hbf, metadata={**hbf.metadata, "physical_memory_config": replace(
         nand, metadata={**nand.metadata, "page_staging_shared_owner": owner})})
     components = tuple(replace(c, ports=c.ports + (replace(port, port_id="sram0", role="controller"),))
@@ -404,10 +409,10 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
             if import_pool is None else import_pool)
     kv_peaks = native_kv_block_peaks(layers, prompt, output, batch_size, ep, pool, tokens_per_block)
     pool_blocks = {kind: max(peaks) for kind, peaks in kv_peaks.items()}
-    stripe = (native_kv_stripe(layers, prompt, output, tp, published, max(pool_blocks.values()))
-              if published.hbf_stacks else None)
-    if stripe:
-        pool_blocks = dict.fromkeys(pool_blocks, stripe["pool_blocks"])
+    placement = (native_kv_sequential(layers, prompt, output, tp, published, max(pool_blocks.values()))
+                 if published.hbf_stacks else None)
+    if placement:
+        pool_blocks = dict.fromkeys(pool_blocks, placement["pool_blocks"])
     pd_physical = replace(pd_source, capacity_bytes=pool * PD_BUFFER_BYTES, channels=channels,
         interface_bandwidth_gb_s=pd_bandwidth_gb_s, read_bandwidth_gb_s=pd_bandwidth_gb_s,
         write_bandwidth_gb_s=pd_bandwidth_gb_s,
@@ -476,8 +481,7 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
             kv_policy=replace(template.placement.kv_policy, cache_component=weight0, allocation_policy="lazy",
                               dtype="bf16", pool_blocks=pool_blocks["full"],
                               chunk_pool_blocks=pool_blocks.get("chunk", 0),
-                              stripe_stride_pages=stripe["stride_pages"] if stripe else 0,
-                              stripe_phase_bytes=stripe["phase_pages"] * PAGE_BYTES if stripe else 0)),
+                              nand_placement_mode=placement["placement_mode"] if placement else "sequential_channel")),
         workload=replace(template.workload, name="native-decode-node-continuous",
             requests=tuple(requests),
             request_count=batch_size * 4, scheduler=scheduler, metadata={"native_paper_comparison": True,
@@ -494,7 +498,8 @@ def build_native_comparison_scenario(model_id: str, hardware_id: str, workload_i
             "NAND-backed KV: the host starts an import as a slot frees, fixes the step it joins and picks the free block that keeps "
             "its tail off the other tails' banks, knowing no request's length; reads and writes follow the block's address. The pick "
             "costs no time. Blocks mix requests of unequal lifetimes in real use, which holds extra NAND but moves no data.",
-            "8x40MB intermediate SRAM is modeled as a pooled 8-port array; bandwidth/latency/credits are explicit research inputs.",
+            "8x40MB intermediate SRAM is modeled as a 320MB pool split across 128 die-local channel ports; "
+            "aggregate bandwidth/latency/credits are explicit research inputs.",
             "External Prefill producer source uses native DDR5 service geometry expanded to at least world x 100 GB/s; PD links and target KV writes remain the intended bottlenecks (research assumption).",
             "PD import (user approved 2026-10-24): one stream per target rank, all streams concurrent; each import owns a %d MiB source buffer cut into 1 MiB chunk slots dealt round-robin to its streams; a chunk holds its slot from source read until its target write completes (RDMA source-buffer semantics), so a stream keeps at most its slot count in flight while adjacent chunks' reads, links and writes overlap on the native timelines." % (PD_BUFFER_BYTES // 1024**2),
             "External producer streams prompt-1 KV tokens; native one-token final-prompt generates the first visible output and pays its complete cost.",

@@ -59,20 +59,20 @@ def test_nand_builder_uses_actual_die_plane_counts_not_effective_units(name, pla
             config.luns_per_die, config.planes_per_lun) == (hardware.hbf_stacks * 16, 1, 1, 1, planes)
     assert config.array_units == hardware.hbf_stacks * 16 * planes
     assert (config.page_bytes, config.page_read_ns, config.page_program_ns) == (4096, read_ns, 100000)
-    # One 1.6 TB/s host channel per stack; Table I's NAND rates are the
+    # Sixteen 100 GB/s host channels per stack; Table I's NAND rates are the
     # array ceilings that the page timings enforce.
-    assert config.host_channels == hardware.hbf_stacks
+    assert config.host_channels == hardware.hbf_stacks * 16
     assert config.host_read_bandwidth_gb_s == config.host_write_bandwidth_gb_s == hardware.hbf_stacks * 1600.
     assert abs(config.array_units * 4096 / read_ns / hardware.hbf_read_gb_s - 1) < .03
     assert abs(config.array_units * 4096 / 100000 / hardware.hbf_write_gb_s - 1) < .03
     logic_die = hardware.intermediate_storage == "logic_die_SRAM"
     assert config.page_staging == ("logic_die" if logic_die else "external")
-    assert config.page_staging_bytes_per_host_channel == (40_000_000 if logic_die else 0)
+    assert config.page_staging_bytes_per_host_channel == (2_500_000 if logic_die else 0)
     assert config.capacity_bytes == hardware.hbf_capacity_bytes
     assert config.computed_capacity_bytes >= config.capacity_bytes
     assert config.computed_capacity_bytes - config.capacity_bytes < (
         config.channels * config.planes_per_lun * config.block_bytes)
-    assert config.queue_scope == "device"
+    assert config.queue_scope == "host_channel"
     assert config.metadata["physical_config_profile_id"] == "hbf_synthetic"
     assert "local choices, not parameters sourced" in config.metadata["research_assumptions"]["basis"]
     assert config.protocol_mode == "ocp_hbf_0_7"
@@ -196,7 +196,9 @@ def test_native_paper_two_slot_overwrite_waits_for_the_live_reader(name):
 def test_native_read_buffers_do_not_retime_the_directional_interface(name):
     config = paper.build_paper_nand_config(name, assumptions=paper.default_research_assumptions(name))
     # OCP requires the two read pages per bank; the control steps outside it.
-    without_cache = replace(config, protocol_mode="generic_nand", read_cache_pages_per_bank=0)
+    without_cache = replace(config, protocol_mode="generic_nand", read_cache_pages_per_bank=0,
+                            host_channels=1, host_full_duplex=False, queue_scope="device",
+                            page_staging="none", page_staging_bytes_per_host_channel=0)
     # Separate cores avoid changing media state between read/write controls.
     for operation, expected in (("read", config.host_read_bandwidth_gb_s),
                                 ("write", config.host_write_bandwidth_gb_s)):
@@ -206,7 +208,9 @@ def test_native_read_buffers_do_not_retime_the_directional_interface(name):
         assert buffered.bandwidth_ceiling_gb_s == plain.bandwidth_ceiling_gb_s == expected
         assert buffered.host_transfer_bytes == plain.host_transfer_bytes
         assert buffered.internal_transfer_bytes == plain.internal_transfer_bytes
-        assert buffered.completion_ns == plain.completion_ns
+        # OCP's per-die 100 GB/s lane is intentionally slower than the
+        # generic single-link control that keeps the aggregate rate.
+        assert buffered.completion_ns >= plain.completion_ns
 
 
 def test_reject_and_host_transfer_granularity_remain_explicit_independent_controls():

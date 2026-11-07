@@ -144,17 +144,17 @@ _HBF_REFERENCE_GROUPS = (
       "host_granularity_bytes": 64, "write_buffer_bytes": 0},
      _HBF_OCP_SOURCE,
      "Selected 16-channel composition with OCP full-duplex, two cache pages per bank, 64 B read granularity and media-complete ordinary writes; protocol subset only."),
-    ({"host_bandwidth_gb_s": 1536.0, "host_read_bandwidth_gb_s": 1536.0,
-      "host_write_bandwidth_gb_s": 1536.0},
+    ({"host_bandwidth_gb_s": 1600.0, "host_read_bandwidth_gb_s": 1600.0,
+      "host_write_bandwidth_gb_s": 1600.0},
      _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_standard.hpp#L11",
-     "Grade-2 interface payload budget: 16 channels * x64 * 16 GT/s / 8 * 75% = 1536 GB/s per direction. Program latency separately limits media writes; no extra 16 GB/s write cap. OCP p16 vs pp32/35 payload-rate discrepancy remains unresolved."),
+     "OCP research composition: 16 channels * 100 GB/s = 1.6 TB/s per stack and direction, matching the paper's per-stack interface budget. Program latency separately limits media writes."),
     ({"queue_scope": "host_channel", "max_outstanding_requests": 256,
       "max_outstanding_write_requests": 64},
      _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_config.hpp",
      "Local research translation: divide upstream 4096 read-page credits/stack over 16 host channels, then use 256 combined read/write credits and a 64-write subset per host channel. Not upstream queue semantics or OCP-mandated values."),
-    ({"internal_bandwidth_gb_s": 96.0, "front_ns": 0.0},
+    ({"internal_bandwidth_gb_s": 100.0, "front_ns": 0.0},
      _HBF_FLASHLAB_ROOT + "/src/physical/hbf/hbf_config.hpp",
-     "Per-core-channel payload rate = upstream raw 101.25 GB/s * 4096 / (4096 + 224 OOB) = 96 GB/s. No separate OOB, ECC or TSV stage is reproduced; zero fixed front delay is a local simplification."),
+     "Per-core-channel payload rate is the approved 100 GB/s research value. No separate OOB, ECC or TSV stage is reproduced; zero fixed front delay is a local simplification."),
 )
 _HBF_REFERENCE_VALUES = {name: value for values, _, _ in _HBF_REFERENCE_GROUPS for name, value in values.items()}
 _PHYSICAL_CONFIG_CATALOG["hbf_ocp_0_7"] = _preset(
@@ -169,7 +169,7 @@ _PHYSICAL_CONFIG_CATALOG["hbf_ocp_0_7"] = _preset(
         "parallelism_mapping": "Independent bank resources derived from geometry; parallel_units override forbidden in OCP mode",
         "timing_basis": "4 us read, 75 us program and 2 ms erase are upstream exploratory assumptions, not OCP mandated latencies",
         "queue_basis": "256 combined requests and 64 writes per host channel are local research assumptions; not a measured MOCS or an exact copy of upstream read/write queues",
-        "internal_transfer_basis": "96 GB/s payload per core channel = upstream 101.25 GB/s raw * 4096/(4096+224 OOB); no separate OOB/ECC/TSV stages",
+        "internal_transfer_basis": "100 GB/s payload per core channel (approved research value); no separate OOB/ECC/TSV stages",
         "source_revision": _HBF_FLASHLAB_REVISION,
         "source_documents": {
             "ocp_hbf_v0_7_0": _HBF_OCP_SOURCE,

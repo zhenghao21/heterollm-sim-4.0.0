@@ -1,22 +1,14 @@
-"""Host placement of NAND-backed KV blocks; OCP HBF 13.3.2 leaves it to the host.
+"""Sequential host placement of NAND-backed KV blocks.
 
-The physical bank is the low address bits and a bank log gives any program the
-bank's next page number, so a whole-request block striped over consecutive banks
-writes and reads on the banks its address names: a tail's bank is its block's
-first bank plus the pages it holds.
-
-Every live tail gains one token per step, so all tails rotate round the banks
-together and their relative positions never change. A block chosen against the
-tails that will be live when a request joins decoding stays clear for the
-request's whole life, with no length known and no program moved. The host starts
-an import as a slot frees and fixes the step it will join, so it knows that
-moment when it picks the block the import writes to.
+OCP HBF v0.7 leaves placement to the host.  The host allocates whole KV blocks
+in cursor order and records arithmetic page-table runs.  The shared NAND
+mapper turns each logical page into its channel, local DLU, plane/bank, page
+and block without a stripe phase or a synthetic block-open rate term.
 """
 from __future__ import annotations
 
 from collections import deque
 from functools import lru_cache
-import math
 import random
 
 import numpy as np
@@ -30,31 +22,50 @@ KV_POOL_SPARE_BLOCKS = 32
 KV_SETTLE_GENERATIONS = 2
 
 
-@lru_cache(maxsize=1024)
-def kv_stripe_layout(prompt, output, per_page, banks, blocks, chunk=0):
-    """Stride, K/V phase and pool blocks of NAND-backed KV, from the block size alone.
+def sequential_page_table_runs(page_count: int, channels: int):
+    """Return one compact arithmetic run for sequential channel placement.
 
-    The stride is the first from a block's pages that is coprime with the banks
-    and spreads the pool's blocks round them, since each layer reads them all
-    and a pick needs free blocks near every position. An import writes K and V
-    of each layer in turn, so V's pool starts the history's pages after K's:
-    the next pool starts where this one ended and the import rolls round the
-    banks, one program at a time on each.
+    The logical page cursor advances by one for every 4 KiB page.  The host
+    channel is ``cursor % channels`` and its local DLU is ``cursor //
+    channels``; storing the arithmetic progression avoids a per-page table.
+    The tuple is ``(logical_start, count, channel_start, dlu_start, stride)``.
     """
-    pool = blocks + max(KV_POOL_SPARE_BLOCKS, blocks // 8)
-    pages = -(-(prompt + output - 1) // per_page)
-    widest = 2 * -(-banks // pool)
+    if type(page_count) is not int or page_count < 0:
+        raise ValueError("page_count must be a non-negative integer")
+    if type(channels) is not int or channels <= 0:
+        raise ValueError("channels must be a positive integer")
+    if not page_count:
+        return ()
+    return ((0, page_count, 0, 0, channels),)
 
-    def spreads(stride):
-        first = np.sort(np.arange(pool, dtype=np.int64) * stride % banks)
-        return max(int(np.diff(first).max(initial=0)), int(first[0] + banks - first[-1])) <= widest
 
-    stride = next((stride for stride in range(pages, pages + banks)
-                   if math.gcd(stride, banks) == 1 and spreads(stride)), None)
-    if stride is None:
-        raise ValueError("no KV stripe stride spreads the pool over the banks")
-    history = -(-min(prompt - 1, chunk or prompt - 1) // per_page) % banks or 1
-    return {"stride_pages": stride, "phase_pages": (history - pool * stride) % banks, "pool_blocks": pool}
+@lru_cache(maxsize=1024)
+def kv_sequential_layout(prompt, output, per_page, channels, planes, blocks,
+                         pages_per_block=256):
+    """Describe the OCP host's sequential KV placement and compact page map.
+
+    No bank stripe, phase or block-open rate term is introduced.  A pool owns
+    whole logical blocks; all pages are allocated in cursor order and decoded
+    by the shared NAND mapping rule.  ``page_table_runs`` is sufficient to
+    reconstruct every page's channel/local-DLU pair during replay.
+    """
+    values = (prompt, output, per_page, channels, planes, blocks, pages_per_block)
+    if any(type(value) is not int for value in values):
+        raise ValueError("sequential KV layout arguments must be integers")
+    if prompt < 0 or output < 0 or per_page <= 0 or channels <= 0 or planes <= 0 or blocks < 0 or pages_per_block <= 0:
+        raise ValueError("invalid sequential KV layout dimensions")
+    pages = (prompt + output + per_page - 1) // per_page
+    pool_pages = blocks * pages_per_block
+    return {
+        "placement_mode": "sequential_channel",
+        "pool_blocks": blocks,
+        "pool_pages": pool_pages,
+        "pages_per_block": pages_per_block,
+        "channels": channels,
+        "planes": planes,
+        "request_pages": pages,
+        "page_table_runs": sequential_page_table_runs(pool_pages, channels),
+    }
 
 
 class KVTailRing:

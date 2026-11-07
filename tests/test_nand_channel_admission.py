@@ -92,6 +92,18 @@ def test_bulk_retains_each_page_observation_and_bounded_trace_details():
         assert sum(len(rows) for rows in result.counters[key].values()) <= 2
 
 
+def test_native_batch_uses_host_channel_credit_clock():
+    runtime = PhysicalRuntimeContext(config=settings(max_outstanding_requests=2),
+                                     physical_owner="hbf", capture_details=False)
+    core = runtime.runtime(settings(max_outstanding_requests=2), "hbf").core
+    requests = tuple(request(f"r{index}", "read", page=index) for index in range(8))
+    results = core.submit_many(requests)
+
+    assert all(row.counters["native_fullpage_pages"] == 1 for row in results)
+    assert results[4].queue_wait_ns > 0
+    assert core._host_acceptance_ns[0] == core._host_acceptance_ns[1]
+
+
 def test_explicit_device_clock_advance_applies_to_each_host():
     core = NandCore(settings(), capture_details=False)
     core.flush_write_buffer(now_ns=1000.)

@@ -5229,10 +5229,12 @@ function validatePhysicalMemoryConfig(value, component) {
     if (value.protocol_mode === "ocp_hbf_0_7" && (
       kind !== "HBF" || Number(value.page_bytes) !== 4096 || Number(value.host_granularity_bytes) !== 64
       || value.host_full_duplex !== true || value.read_cache_pages_per_bank !== 2
-      || Number(value.host_channels) > 16 || Number(value.write_buffer_bytes) !== 0
+      || Number(value.host_channels) !== Number(value.channels)
+      || Number(value.targets_per_channel) !== 1 || Number(value.dies_per_target) !== 1
+      || Number(value.luns_per_die) !== 1 || Number(value.write_buffer_bytes) !== 0
       || value.parallel_units != null || value.planes_independent !== true
     )) {
-      throw new Error("OCP HBF 0.7 模式要求 4 KiB 页、64 B 读粒度、最多 16 个全双工主机通道、每 bank 两页读缓存及独立 bank；parallel_units 必须为 null，并关闭主机早确认缓冲。");
+      throw new Error("OCP HBF 0.7 模式要求每个 modeled die/channel 一个全双工主机通道、4 KiB 页、64 B 读粒度、每 bank 两页读缓存及独立 bank；parallel_units 必须为 null，并关闭主机早确认缓冲。");
     }
   }
   if (!nand && !(

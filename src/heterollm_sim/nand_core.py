@@ -10,7 +10,7 @@ from typing import Dict, Iterable, Optional
 
 from .memory_mapping import map_nand_address, split_nand_request, validate_nand_request
 from .memory_transfer import ResourceTimeline
-from .memory_types import AccessRequest, NandConfig, Operation, StageTiming, TransactionResult
+from .memory_types import AccessRequest, AddressMapping, NandConfig, Operation, StageTiming, TransactionResult
 
 
 class _HostList(list):
@@ -247,6 +247,24 @@ def _copy_nand_read_cache(cache, memo=None):
     return result
 
 
+class _PageAbsent:
+    """A journaled page that had no table entry; one instance across copies."""
+
+    __slots__ = ()
+
+    def __copy__(self):
+        return self
+
+    def __deepcopy__(self, memo):
+        return self
+
+    def __reduce__(self):
+        return "_PAGE_ABSENT"
+
+
+_PAGE_ABSENT = _PageAbsent()
+
+
 class _NandTransaction:
     """Undo only media indexes changed while this transaction is open."""
 
@@ -256,6 +274,16 @@ class _NandTransaction:
         # token; direct/public Core submissions never infer this permission.
         self.native_timeline_qualified = False
         self.bank_log = None
+        self.write_pointer = tuple(core.__dict__.get("_write_pointer", ()))
+        self.seed_history_pages = int(core.__dict__.get("_seed_history_pages", 0))
+        self.write_order_errors = int(core.__dict__.get("_write_order_errors", 0))
+        # The page table is journaled, not copied: its writers record each
+        # page's entry before this transaction's first write of that page.
+        # A public snapshot materializes the begin-time table instead.
+        self.page_table_root = core.__dict__.get("_logical_page_table", {})
+        self.page_table_undo = {}
+        self.page_table = None
+        self.page_table_identity = bool(core.__dict__.get("_logical_page_table_identity", True))
         self.block_wear = {}
         self.cache_banks = {}
         self.cache_slots = {}
@@ -283,6 +311,27 @@ class _NandTransaction:
     def remember_tail(self, core, page):
         if page not in self.tail_pages:
             self.tail_pages[page] = core._tail_pages.get(page)
+
+    def remember_pages(self, table, pages):
+        if self.page_table is not None or table is not self.page_table_root:
+            return
+        undo = self.page_table_undo
+        for page in pages:
+            if page not in undo:
+                undo[page] = table.get(page, _PAGE_ABSENT)
+
+    def _undo_pages(self, table):
+        for page, previous in self.page_table_undo.items():
+            if previous is _PAGE_ABSENT:
+                table.pop(page, None)
+            else:
+                table[page] = previous
+        self.page_table_undo = {}
+        return table
+
+    def materialize_page_table(self):
+        if self.page_table is None:
+            self.page_table = self._undo_pages(dict(self.page_table_root))
 
     def remember_tail_scopes(self, core):
         if self.tail_scopes is None:
@@ -356,6 +405,13 @@ class _NandTransaction:
         if self.bank_log is not None:
             # Tokens can be restored by a public snapshot and used again.
             core._bank_log = list(self.bank_log)
+        if self.write_pointer:
+            core._write_pointer = list(self.write_pointer)
+            core._seed_history_pages = self.seed_history_pages
+            core._write_order_errors = self.write_order_errors
+            core._logical_page_table = (dict(self.page_table) if self.page_table is not None
+                                        else self._undo_pages(self.page_table_root))
+            core._logical_page_table_identity = self.page_table_identity
         for key, previous in self.block_wear.items():
             if previous is None:
                 core._block_wear_state.pop(key, None)
@@ -459,7 +515,19 @@ class NandCore:
         self._block_wear_state: Dict[str, dict] = {}
         self.__dict__["_read_cache"]: Dict[tuple[int, ...], list[_ReadCacheSlot]] = {}
         self._cache_use = 0
-        # Programs so far on each bank, which is the bank's next page number.
+        # OCP 5.4.1 state: one next local DLU for every full-duplex host
+        # channel/die.  The legacy bank counter is retained only for old
+        # snapshot readers; admission and validation use _write_pointer.
+        self._write_pointer: list[int] = (
+            [0] * config.host_channels if config.protocol_mode == "ocp_hbf_0_7" else []
+        )
+        self._seed_history_pages = 0
+        self._write_order_errors = 0
+        # Logical KV pages are remapped to the next physical DLU in paper
+        # OCP serving mode.  Generic and strict protocol cores leave this
+        # table empty and retain direct-address semantics.
+        self._logical_page_table: dict[int, object] = {}
+        self._logical_page_table_identity = True
         self._bank_log: Optional[list[int]] = (
             [0] * (config.channels * config.targets_per_channel * config.dies_per_target
                    * config.luns_per_die * config.planes_per_lun)
@@ -524,6 +592,7 @@ class NandCore:
         self._nand_publish_numeric()
         for token in self._nand_transactions:
             token.materialize_cache(self)
+            token.materialize_page_table()
 
     def _nand_publish_numeric(self, *, exposed=False):
         packed = self.__dict__.get("_nand_numeric_state")
@@ -582,24 +651,251 @@ class NandCore:
             token.remember_frontiers(key)
 
     def _log_programs(self, pages):
-        """Give each program its bank's next page number, in program order.
-
-        OCP 5.4.1 wants consecutive pages within a NAND block and 13.3.2 leaves
-        placement to the host, so the host keeps this log: the bank comes from
-        the page index's low bits, as in map_nand_address, and its count of
-        programs is the next page number. Each program takes the next page by
-        construction, so there is nothing for a run to reject. Without an OCP
-        protocol there is no log.
-        """
-        log = self._bank_log
-        if log is None:
+        """Advance the strict per-channel OCP write pointer after a program."""
+        pages = tuple(int(page) for page in pages)
+        if self.config.protocol_mode != "ocp_hbf_0_7":
             return
-        for token in self._nand_transactions:
-            if token.bank_log is None:
-                token.bank_log = list(log)
-        banks = len(log)
+        next_pointers = self._validate_write_order(pages)
+        log = self._bank_log
+        if log is not None:
+            for token in self._nand_transactions:
+                if token.bank_log is None:
+                    token.bank_log = list(log)
+        base_units = (self.config.channels * self.config.targets_per_channel
+                      * self.config.dies_per_target * self.config.luns_per_die)
+        per_channel = base_units // self.config.channels
+        if next_pointers is not None:
+            self._write_pointer = list(next_pointers)
         for page in pages:
-            log[page % banks] += 1
+            channel = (page % base_units) // per_channel
+            if log is not None:
+                log[page % len(log)] += 1
+
+    def seed_write_history(self, pages: int) -> None:
+        """Seed the OCP write cursors from already resident host history.
+
+        Warmup KV is deliberately preloaded without issuing paid NAND writes,
+        but it still occupies physical pages in the host's sequential stream.
+        Starting every cursor at zero would therefore make the first sampled
+        flush look like a block boundary on every die.  The host keeps the
+        cursors balanced: the first ``pages % host_channels`` channels have
+        one extra historical page, so channel phases differ by at most one.
+        """
+        if self.config.protocol_mode != "ocp_hbf_0_7":
+            return
+        if type(pages) is not int or pages < 0:
+            raise ValueError("seed write history pages must be a non-negative integer")
+        if self._logical_page_table or self._staged_pages or self._tail_flushing:
+            raise ValueError("seed write history must be installed before NAND writes")
+        if self._write_order_errors or any(self._write_pointer):
+            raise ValueError("seed write history may only initialize empty write cursors")
+        channels = int(self.config.host_channels)
+        quotient, remainder = divmod(int(pages), channels)
+        self._write_pointer = [quotient + int(index < remainder) for index in range(channels)]
+        self._seed_history_pages = int(pages)
+
+    def _mapping_for_local_dlu(self, mapping, channel: int, local_dlu: int):
+        base_units = (self.config.channels * self.config.targets_per_channel
+                      * self.config.dies_per_target * self.config.luns_per_die)
+        plane_count = int(self.config.planes_per_lun)
+        plane = int(local_dlu) % plane_count
+        page_in_block = (int(local_dlu) // plane_count) % int(self.config.pages_per_block)
+        block = int(local_dlu) // (plane_count * int(self.config.pages_per_block))
+        unit = channel + plane * base_units if self.config.planes_independent else channel
+        physical_page = int(local_dlu) * base_units + int(channel)
+        return replace(mapping, address=physical_page * self.config.page_bytes,
+                       unit=unit, plane=plane, block=block, page=page_in_block,
+                       page_offset=0)
+
+    def _phase_batch_mappings(self, pages):
+        """Return physical page indices, mappings and next cursors for a write batch."""
+        if not self._sequential_write_mode():
+            return None, (), tuple(self._write_pointer)
+        pages = tuple(int(page) for page in pages)
+        pointers = list(self._write_pointer)
+        physical_pages = []
+        mappings = []
+        base_units = (self.config.channels * self.config.targets_per_channel
+                      * self.config.dies_per_target * self.config.luns_per_die)
+        config = self.config
+        page_bytes, capacity = config.page_bytes, config.effective_capacity_bytes
+        luns, dies, targets = config.luns_per_die, config.dies_per_target, config.targets_per_channel
+        planes, pages_per_block = int(config.planes_per_lun), int(config.pages_per_block)
+        host_channels, independent = int(config.host_channels), config.planes_independent
+        for page in pages:
+            if page < 0:
+                raise ValueError("ocp_hbf_0_7 write page must be non-negative")
+            # map_nand_address's check and die decode, then the mapping of
+            # _mapping_for_local_dlu built directly rather than by replace().
+            address = page * page_bytes
+            if address >= capacity:
+                raise ValueError(f"address {address} is outside modeled capacity {capacity}")
+            base = page % base_units
+            lun = base % luns
+            base //= luns
+            die = base % dies
+            base //= dies
+            target = base % targets
+            die_channel = base // targets
+            channel = die_channel % host_channels
+            local_dlu = pointers[channel]
+            plane = local_dlu % planes
+            physical_page = local_dlu * base_units + channel
+            mappings.append(AddressMapping(
+                address=physical_page * page_bytes, channel=die_channel, target=target, die=die, lun=lun,
+                unit=channel + plane * base_units if independent else channel, plane=plane,
+                block=local_dlu // (planes * pages_per_block), page=(local_dlu // planes) % pages_per_block))
+            physical_pages.append(physical_page)
+            pointers[channel] += 1
+        return tuple(physical_pages), tuple(mappings), tuple(pointers)
+
+    def _commit_phase_batch(self, pages, mappings, next_pointers):
+        """Commit a successful native phase write and its compact page table."""
+        pages = tuple(int(page) for page in pages)
+        mappings = tuple(mappings)
+        if len(pages) != len(mappings):
+            raise ValueError("phase write pages and mappings must have equal length")
+        if self._nand_transactions:
+            for token in self._nand_transactions:
+                if token.bank_log is None and self._bank_log is not None:
+                    token.bank_log = list(self._bank_log)
+        self._write_pointer = list(next_pointers)
+        for token in self._nand_transactions:
+            token.remember_pages(self._logical_page_table, pages)
+        for page, mapping in zip(pages, mappings):
+            self._logical_page_table[int(page)] = mapping
+            if int(mapping.address) // int(self.config.page_bytes) != int(page):
+                self._logical_page_table_identity = False
+            if self._bank_log is not None:
+                self._bank_log[page % len(self._bank_log)] += 1
+
+    def _validate_write_order(self, pages):
+        """Check local-DLU continuity without mutating clocks or pointers.
+
+        Paper serving windows can begin in the middle of a previously written
+        local-DLU stream.  Such configurations declare ``write_pointer_phase``
+        and use the first observed page on each channel as the replay phase;
+        every later page is still required to advance by exactly one DLU.
+        Strict protocol configs omit the metadata and therefore require DLU 0.
+        """
+        if self.config.protocol_mode != "ocp_hbf_0_7":
+            return None
+        pages = tuple(int(page) for page in pages)
+        if not pages:
+            return tuple(self._write_pointer)
+        base_units = (self.config.channels * self.config.targets_per_channel
+                      * self.config.dies_per_target * self.config.luns_per_die)
+        per_channel = base_units // self.config.channels
+        pointers = list(self._write_pointer)
+        phase_replay = self.config.metadata.get("write_pointer_phase") == "first_write"
+        for page in pages:
+            if page < 0:
+                raise ValueError("ocp_hbf_0_7 write page must be non-negative")
+            channel = (page % base_units) // per_channel
+            local_dlu = page // base_units
+            expected = pointers[channel]
+            if phase_replay:
+                # The request address is a logical page-table key.  The
+                # physical DLU is chosen by this channel's write pointer;
+                # every program therefore advances exactly one location even
+                # when a logical tail page is rewritten.
+                pointers[channel] += 1
+                continue
+            if local_dlu != expected:
+                self._write_order_errors += 1
+                raise ValueError(
+                    "ocp_hbf_0_7 write order violation on host channel {}: "
+                    "local DLU {}, expected {}".format(channel, local_dlu, expected)
+                )
+            pointers[channel] += 1
+        return tuple(pointers)
+
+    def _sequential_write_mode(self) -> bool:
+        return (self.config.protocol_mode == "ocp_hbf_0_7"
+                and self.config.metadata.get("write_pointer_phase") == "first_write")
+
+    def _program_mapping(self, page, mapping):
+        """Map a logical page to this channel's next physical DLU."""
+        if not self._sequential_write_mode():
+            return mapping
+        channel = int(mapping.channel) % self.config.host_channels
+        local_dlu = int(self._write_pointer[channel])
+        return self._mapping_for_local_dlu(mapping, channel, local_dlu)
+
+    def _read_mapping(self, page, mapping):
+        if not self._sequential_write_mode():
+            return mapping
+        return self._logical_page_table.get(int(page), mapping)
+
+    def _remember_program(self, page, mapping):
+        if self._sequential_write_mode():
+            for token in self._nand_transactions:
+                token.remember_pages(self._logical_page_table, (int(page),))
+            self._logical_page_table[int(page)] = mapping
+            if int(mapping.address) // int(self.config.page_bytes) != int(page):
+                self._logical_page_table_identity = False
+
+    def _auto_erase_needed(self, mapping) -> bool:
+        if self.config.protocol_mode != "ocp_hbf_0_7":
+            return False
+        # OCP 5.7 maps one NAND block over every plane in the channel.  The
+        # sequential local-DLU stream reaches that block exactly once, at
+        # plane 0/page 0; the following plane/page-zero programs belong to the
+        # same already-open block and must not charge another erase.
+        # ``mapping`` is the physical page selected before the write cursor is
+        # advanced, so this remains correct for phase-replay writes too.
+        return int(mapping.plane) == 0 and int(mapping.page) == 0
+
+    def _reserve_auto_erase(self, mapping, earliest, *, eligible_ns, stages=None) -> float:
+        """Reserve one OCP block erase across every plane in its channel.
+
+        OCP 5.7's R1/R2/R3 address arithmetic makes the block unit span all
+        planes of a channel.  The page-zero command is therefore represented
+        by one observable erase event, while every plane array receives the
+        same busy interval before its page program can start.
+        """
+        if not self._auto_erase_needed(mapping):
+            return float(earliest)
+        base_units = (self.config.channels * self.config.targets_per_channel
+                      * self.config.dies_per_target * self.config.luns_per_die)
+        base_unit = int(mapping.unit) % base_units
+        if self.config.planes_independent:
+            plane_mappings = tuple(replace(mapping, unit=base_unit + plane * base_units, plane=plane)
+                                   for plane in range(int(self.config.planes_per_lun)))
+        else:
+            plane_mappings = (mapping,)
+        common_start = float(earliest)
+        for plane_mapping in plane_mappings:
+            array_id = self._array_id(plane_mapping)
+            resource = self._array_resource_id(plane_mapping)
+            lanes = self.timeline.lane_available.get(resource)
+            common_start = max(common_start, self.__dict__["_array_ready"].get(array_id, 0.0),
+                               self.__dict__["_buffer_ready"].get(array_id, 0.0),
+                               min(lanes) if lanes else self.timeline.available_ns(resource))
+        erase = self._media_stage("BLOCK_ERASE", plane_mappings[0], common_start, self.config.block_erase_ns,
+                                  eligible_ns=eligible_ns)
+        if stages is not None and self.capture_details:
+            stages.append(erase)
+        erase_end = float(erase.end_ns)
+        for plane_mapping in plane_mappings[1:]:
+            array_id = self._array_id(plane_mapping)
+            self._touch_frontiers(array_id)
+            shadow = self._array_stage("BLOCK_ERASE", self._array_resource_id(plane_mapping),
+                                       common_start, self.config.block_erase_ns)
+            erase_end = max(erase_end, float(shadow.end_ns))
+            self.__dict__["_array_ready"][array_id] = float(shadow.end_ns)
+            self.__dict__["_buffer_ready"][array_id] = float(shadow.end_ns)
+            self.timeline._remember_resource(array_id)
+            self.timeline.ready_ns[array_id] = float(shadow.end_ns)
+        # Keep the representative plane's Python frontier aligned as well;
+        # the caller will advance it again when PAGE_PROGRAM is reserved.
+        first_id = self._array_id(plane_mappings[0])
+        self._touch_frontiers(first_id)
+        self.__dict__["_array_ready"][first_id] = erase_end
+        self.__dict__["_buffer_ready"][first_id] = erase_end
+        self.timeline._remember_resource(first_id)
+        self.timeline.ready_ns[first_id] = erase_end
+        return erase_end
 
 
 
@@ -656,6 +952,23 @@ class NandCore:
                 raise ValueError("a transfer direction is required for a full-duplex host interface")
             prefix += ":" + Operation(operation).value
         return self.timeline.canonical_resource_id(prefix)
+
+    def _scratchpad_id(self, mapping, operation) -> str:
+        """Per-channel high-priority logic-die SRAM lane (OCP 5.4.2/11.3)."""
+        prefix = str(self.config.metadata.get("scratchpad_resource_prefix", "nand:scratchpad"))
+        resource = f"{prefix}:{mapping.channel % self.config.host_channels}:{Operation(operation).value}"
+        return self.timeline.canonical_resource_id(resource)
+
+    def _staging_host_id(self, mapping, operation) -> str:
+        """Resource for a logic-die staging transfer.
+
+        OCP HBF+ and CONV+ expose the logic-die SRAM as a per-channel
+        scratchpad.  Generic NAND keeps its historical host link resource so
+        its resident numeric flush and scalar fallback remain bit exact.
+        """
+        if self.config.protocol_mode == "ocp_hbf_0_7":
+            return self._scratchpad_id(mapping, operation)
+        return self._host_id(mapping, operation)
 
     def _host_bandwidth(self, operation) -> float:
         """Configured rates are device aggregates, divided among host channels."""
@@ -1082,7 +1395,12 @@ class NandCore:
         internal_transfer_bytes = 0
         pages_read = 0
         host_bytes = 0
-        for staged in tuple(self._staged_pages.values()):
+        staged_items = tuple(sorted(self._staged_pages.values(),
+                                    key=lambda item: int(item.mapping.address // self.config.page_bytes)))
+        self._validate_write_order(tuple(int(item.mapping.address // self.config.page_bytes)
+                                        for item in staged_items))
+        erases = 0
+        for staged in staged_items:
             m = staged.mapping
             self._invalidate_cache(m)
             array_id = self._array_id(m)
@@ -1104,9 +1422,15 @@ class NandCore:
                 dependency, self.config.internal_bandwidth_gb_s,
                 direction="write",
             )
+            erase_end = self._reserve_auto_erase(m, internal.end_ns,
+                                                 eligible_ns=internal.end_ns)
+            if erase_end > internal.end_ns:
+                erases += 1
             program = self._media_stage(
-                "PAGE_PROGRAM", m, internal.end_ns, self.config.page_program_ns, eligible_ns=internal.end_ns
+                "PAGE_PROGRAM", m, max(internal.end_ns, erase_end),
+                self.config.page_program_ns, eligible_ns=internal.end_ns
             )
+            self._log_programs((int(m.address // self.config.page_bytes),))
             self._touch_frontiers(array_id)
             self.__dict__["_array_ready"][array_id] = program.end_ns
             self._touch_frontiers(array_id)
@@ -1135,6 +1459,7 @@ class NandCore:
             "flushed_pages": flushed_pages,
             "merge_bytes": merge_bytes,
             "physical_programs": physical_programs,
+            "erase_operations": erases,
             "physical_write_bytes": physical_write_bytes,
             "pages_read": pages_read,
             "rmw_read_operations": pages_read,
@@ -1177,17 +1502,54 @@ class NandCore:
         are submitted one request at a time.
         """
         requests = tuple(requests)
-        native_window = (len(requests) >= 2 and self._nand_numeric_enabled
-                         and all(type(request) is AccessRequest and request.operation is Operation.READ
-                                 for request in requests))
+        phase_identity_read = (
+            self._sequential_write_mode()
+            and bool(self.__dict__.get("_logical_page_table_identity", False))
+        )
         if (len(requests) >= 2 and self._nand_numeric_enabled
+                and (not self._sequential_write_mode() or phase_identity_read)
                 and all(type(request) is AccessRequest and request.operation is Operation.READ
                         for request in requests)):
             from ._nand_acceleration import execute_read_batch
-            results = execute_read_batch(self, requests, _resource_sink=_resource_sink)
-            if results is not None:
-                results = list(results)
+            if self.config.queue_scope == "device":
+                results = execute_read_batch(self, requests, _resource_sink=_resource_sink)
+                if results is not None:
+                    return tuple(results)
+            elif self.config.queue_scope == "host_channel":
+                # A host-channel queue has an independent credit clock.  Run
+                # one native batch per channel so the compiled controller's
+                # global credit counter is exactly the channel-local 256
+                # command population; channels use disjoint NAND resources
+                # under the OCP topology.  A one-request group remains on
+                # the scalar path because batching cannot amortize packing.
+                groups = {}
+                for index, request in enumerate(requests):
+                    mapping = map_nand_address(self.config, request.address)
+                    host = mapping.channel % self.config.host_channels
+                    groups.setdefault(host, []).append((index, request))
+                results = [None] * len(requests)
+                for host, group in groups.items():
+                    if len(group) >= 2:
+                        batch = execute_read_batch(
+                            self, tuple(request for _index, request in group),
+                            _resource_sink=_resource_sink, _host_channel=host)
+                    else:
+                        batch = None
+                    if batch is None:
+                        for index, request in group:
+                            results[index] = self.submit(
+                                request, _resource_sink=_resource_sink)
+                    else:
+                        for (index, _request), result in zip(group, batch):
+                            results[index] = result
                 return tuple(results)
+        if len(requests) >= 2 and self._sequential_write_mode():
+            # Page-table reads are submitted one at a time; staged spans
+            # among them run as one exact compiled window.
+            from ._nand_acceleration import execute_sequential_read_group
+            results = execute_sequential_read_group(self, requests, _resource_sink)
+            if results is not None:
+                return results
         if _resource_sink is None:
             results = tuple(self.submit(request) for request in requests)
         else:
@@ -1418,7 +1780,8 @@ class NandCore:
                     ("array_resource_prefix", "nand:array"),
                     ("parallel_resource_prefix", "nand:parallel"),
                     ("channel_resource_prefix", "nand:channel"),
-                    ("host_resource_id", "nand:host"))),
+                    ("host_resource_id", "nand:host"),
+                    ("scratchpad_resource_prefix", "nand:scratchpad"))),
                 tuple(self.timeline.resource_aliases.items()))
 
     def _resident_handoff(self, banks, units):
@@ -1574,7 +1937,7 @@ class NandCore:
     def _tail_evict(self, page, entry, now):
         """Program a staged partial page from the store to make room."""
         mapping = map_nand_address(self.config, page * self.config.page_bytes)
-        end, _internal, _host = self._tail_program(
+        end, _internal, _host, _erase = self._tail_program(
             page, mapping, entry[2], [], start_override=max(float(now), float(entry[2])))
         self._tail_remember(page)
         self._tail_pages[page] = (entry[0], entry[1], entry[2], end, entry[4])
@@ -1591,7 +1954,8 @@ class NandCore:
         """Program full pages for one attention scope after its read wave."""
         if self.config.page_staging != "logic_die":
             return {"programs": 0, "physical_write_bytes": 0,
-                    "internal_transfer_bytes": 0, "host_transfer_bytes": 0}
+                    "internal_transfer_bytes": 0, "host_transfer_bytes": 0,
+                    "erase_operations": 0}
         scope = str(scope)
         self._tail_scope_remember()
         selected = self._tail_full_scopes.get(scope, set())
@@ -1600,10 +1964,11 @@ class NandCore:
             selected = selected.intersection(wanted)
         if not selected:
             return {"programs": 0, "physical_write_bytes": 0,
-                    "internal_transfer_bytes": 0, "host_transfer_bytes": 0}
+                    "internal_transfer_bytes": 0, "host_transfer_bytes": 0,
+                    "erase_operations": 0}
         before = self.timeline._core_metrics_snapshot(
             max_intervals=self.config.max_expanded_segments if self.capture_details else 0)
-        programs = internal_bytes = host_bytes = 0
+        programs = internal_bytes = host_bytes = erases = 0
         active_pages, active_entries, ready_times, start_times = [], [], [], []
         for page in tuple(sorted(selected)):
             entry = self._tail_pages.get(page)
@@ -1618,6 +1983,13 @@ class NandCore:
             self._tail_remember(page)
         batch = None
         if active_pages:
+            # The phase batch maps each logical page from the current host
+            # cursor and advances the cursor exactly once.  Pre-validating
+            # here would advance that cursor before mapping and skip every
+            # page-zero boundary.  The scalar fallback validates inside
+            # _tail_program, after it has selected the physical mapping.
+            if not self._sequential_write_mode():
+                self._validate_write_order(active_pages)
             from ._nand_acceleration import execute_staged_flush_batch
             batch = execute_staged_flush_batch(self, active_pages, ready_times, start_times)
         if batch is not None:
@@ -1629,14 +2001,20 @@ class NandCore:
                 self._tail_pages[page] = (entry[0], entry[1], entry[2], float(end), entry[4])
                 selected.discard(page)
             programs = len(active_pages)
-            self._log_programs(active_pages)
+            phase_mappings = batch.get("_phase_mappings", ())
+            if phase_mappings:
+                self._commit_phase_batch(active_pages, phase_mappings,
+                                         batch.get("_phase_next_pointers", self._write_pointer))
+            else:
+                self._log_programs(active_pages)
+            erases = int(batch.get("erase_operations", 0))
             internal_bytes = int(batch["internal_transfer_bytes"])
             host_bytes = int(batch["host_transfer_bytes"])
             self._tail_flush_started_pages += programs
         else:
             for page, entry, start in zip(active_pages, active_entries, start_times):
                 mapping = map_nand_address(self.config, page * self.config.page_bytes)
-                end, moved_internal, moved_host = self._tail_program(
+                end, moved_internal, moved_host, moved_erases = self._tail_program(
                     page, mapping, entry[2], [], start_override=start)
                 self._tail_pages[page] = (entry[0], entry[1], entry[2], end, entry[4])
                 heappush(self._tail_flushing, (end, page))
@@ -1644,12 +2022,14 @@ class NandCore:
                 programs += 1
                 internal_bytes += moved_internal
                 host_bytes += moved_host
+                erases += moved_erases
         if not selected:
             self._tail_full_scopes.pop(scope, None)
         else:
             self._tail_full_scopes[scope] = selected
         metrics = self.timeline._core_metrics_delta(before)
         return {"programs": programs, "physical_write_bytes": programs * self.config.page_bytes,
+                "erase_operations": erases,
                 "internal_transfer_bytes": internal_bytes, "host_transfer_bytes": host_bytes,
                 **metrics}
 
@@ -1764,7 +2144,8 @@ class NandCore:
             if not readable and not self._tail_flushing:
                 return None
             self._validate_request(request)
-            if self._nand_numeric_enabled:
+            if (self._nand_numeric_enabled and not self._sequential_write_mode()
+                    and self.config.queue_scope == "device"):
                 from ._nand_acceleration import execute_read_batch
                 results = execute_read_batch(self, (request,))
                 if results is not None:
@@ -1828,7 +2209,7 @@ class NandCore:
         end = request.address + request.byte_count
         first, last = request.address // page_bytes, (end - 1) // page_bytes
         completion = arrival
-        host_bytes = flush_host_bytes = internal_bytes = programs = 0
+        host_bytes = flush_host_bytes = internal_bytes = programs = erases = 0
         stages, mappings = [], []
         for page in range(first, last + 1):
             base = page * page_bytes
@@ -1860,7 +2241,7 @@ class NandCore:
             data = arrival + latency
             if logic:
                 moved = -(-hi // burst) * burst - lo // burst * burst
-                host = timeline.transfer(self._host_id(mapping, Operation.WRITE), moved, arrival,
+                host = timeline.transfer(self._staging_host_id(mapping, Operation.WRITE), moved, arrival,
                                          self._host_bandwidth(Operation.WRITE), direction="write")
                 if self.capture_details:
                     stages.append(StageTiming("STAGING_WRITE", host.start_ns, host.end_ns, host.resource_id, host.bytes))
@@ -1875,8 +2256,9 @@ class NandCore:
                     self._tail_scope_remember()
                     self._tail_full_scopes.setdefault(self._tail_defer_scope, set()).add(page)
                 else:
-                    flush, moved_internal, moved_host = self._tail_program(page, mapping, ready, stages)
+                    flush, moved_internal, moved_host, moved_erases = self._tail_program(page, mapping, ready, stages)
                     programs += 1
+                    erases += moved_erases
                     internal_bytes += moved_internal
                     flush_host_bytes += moved_host
             self._tail_remember(page)
@@ -1897,7 +2279,7 @@ class NandCore:
                 "pages_read": 0, "pages_programmed": programs,
                 "merge_bytes": 0, "merged_pages": 0, "staging_write_pages": count,
                 "staging_read_hits": 0, "staging_read_merges": 0,
-                "read_cache_hits": 0, "read_cache_misses": 0, "erase_operations": 0,
+                "read_cache_hits": 0, "read_cache_misses": 0, "erase_operations": erases,
                 "page_count": count, "details_truncated": False,
                 "page_staging_write_bytes": host_bytes, "page_staging_flush_programs": programs,
                 "page_staging_peak_bytes": max(peak),
@@ -1932,6 +2314,8 @@ class NandCore:
         billed by the memory that holds it.
         """
         config, timeline = self.config, self.timeline
+        mapping = self._program_mapping(page, mapping)
+        self._validate_write_order((int(page),))
         write_back = None
         if self._nand_numeric_state is not None:
             base_units = (config.channels * config.targets_per_channel
@@ -1941,16 +2325,17 @@ class NandCore:
                 (bank,), (bank if config.planes_independent else bank % base_units,))
         try:
             self._invalidate_cache(mapping)
+            erase_needed = self._auto_erase_needed(mapping)
             array_id = self._array_id(mapping)
             earliest, host_bytes = self._tail_program_channel_start(ready, start_override), 0
             if config.page_staging == "logic_die":
-                back = timeline.transfer(self._host_id(mapping, Operation.READ), config.page_bytes, earliest,
+                back = timeline.transfer(self._staging_host_id(mapping, Operation.READ), config.page_bytes, earliest,
                                          self._host_bandwidth(Operation.READ), direction="read")
                 if self.capture_details:
                     stages.append(StageTiming("STAGING_FLUSH_READ", back.start_ns, back.end_ns,
                                               back.resource_id, back.bytes))
                 earliest, host_bytes = back.end_ns, config.page_bytes
-            host = timeline.transfer(self._host_id(mapping, Operation.WRITE), config.page_bytes, earliest,
+            host = timeline.transfer(self._staging_host_id(mapping, Operation.WRITE), config.page_bytes, earliest,
                                      self._host_bandwidth(Operation.WRITE), direction="write")
             if self.capture_details:
                 stages.append(StageTiming("STAGING_FLUSH_HOST", host.start_ns, host.end_ns,
@@ -1969,6 +2354,9 @@ class NandCore:
                 self._channel_id(mapping), config.transfer_page_bytes,
                 internal_earliest,
                 config.internal_bandwidth_gb_s, direction="write")
+            if self.capture_details:
+                stages.append(StageTiming("STAGING_FLUSH_INTERNAL", internal.start_ns,
+                                          internal.end_ns, internal.resource_id, internal.bytes))
             # A deferred page may have been ready while the plane was idle.
             # Keep the internal transfer on its normal channel calendar, then
             # reserve the array program at the calculated idle slot whenever
@@ -1977,12 +2365,15 @@ class NandCore:
                                 self.__dict__["_array_ready"].get(array_id, 0.0))
             if start_override is not None:
                 program_start = max(program_start, float(start_override))
-            program = self._media_stage("PAGE_PROGRAM", mapping, program_start,
+            erase_end = self._reserve_auto_erase(mapping, program_start,
+                                                 eligible_ns=internal.end_ns,
+                                                 stages=stages)
+            program = self._media_stage("PAGE_PROGRAM", mapping,
+                                        max(program_start, erase_end),
                                         config.page_program_ns, eligible_ns=internal.end_ns)
             self._log_programs((page,))
+            self._remember_program(page, mapping)
             if self.capture_details:
-                stages.append(StageTiming("STAGING_FLUSH_INTERNAL", internal.start_ns, internal.end_ns,
-                                          internal.resource_id, internal.bytes))
                 stages.append(program)
             self._touch_frontiers(array_id)
             self.__dict__["_array_ready"][array_id] = program.end_ns
@@ -1993,7 +2384,7 @@ class NandCore:
         finally:
             if write_back is not None:
                 write_back()
-        return program.end_ns, internal.bytes, host_bytes
+        return program.end_ns, internal.bytes, host_bytes, int(erase_needed)
 
     @staticmethod
     def _tail_program_channel_start(ready, start_override=None):
@@ -2129,6 +2520,11 @@ class NandCore:
             if segment_count > self.config.max_expanded_segments and not details_truncated:
                 stages.clear(); mappings.clear(); details_truncated = True
             m = segment.mapping
+            page_number = int(segment.address // self.config.page_bytes)
+            if request.operation is Operation.READ:
+                m = self._read_mapping(page_number, m)
+            elif request.operation is Operation.WRITE:
+                m = self._program_mapping(page_number, m)
             if self.capture_details and not details_truncated:
                 mappings.append(m)
             logical_bytes += segment.logical_bytes
@@ -2192,7 +2588,7 @@ class NandCore:
                     hi = min(request.address + request.byte_count,
                              segment.address + self.config.page_bytes) - segment.address
                     host = self.timeline.transfer(
-                        self._host_id(m, Operation.READ), -(-hi // burst) * burst - lo // burst * burst,
+                        self._staging_host_id(m, Operation.READ), -(-hi // burst) * burst - lo // burst * burst,
                         data, self._host_bandwidth(Operation.READ), direction="read")
                     record(StageTiming("STAGING_READ", host.start_ns, host.end_ns, host.resource_id, host.bytes))
                     host_bytes += host.bytes
@@ -2202,6 +2598,9 @@ class NandCore:
                 continue
             if request.operation is Operation.WRITE:
                 self._invalidate_cache(m)
+                # Validate before any host/internal reservation so an OCP
+                # out-of-order page cannot leave a partially billed request.
+                self._validate_write_order((segment.address // self.config.page_bytes,))
             if (
                 request.operation is Operation.WRITE
                 and self._buffered_write_mode
@@ -2355,12 +2754,19 @@ class NandCore:
                     direction="write",
                 )
                 record(StageTiming("INTERNAL_TRANSFER", internal.start_ns, internal.end_ns, internal.resource_id, internal.bytes))
+                program_start = max(internal.end_ns, self.__dict__["_array_ready"].get(array_id, 0.0))
+                erase_end = self._reserve_auto_erase(m, program_start,
+                                                     eligible_ns=internal.end_ns,
+                                                     stages=stages)
+                if erase_end > program_start:
+                    erases += 1
                 program = self._media_stage("PAGE_PROGRAM", m,
-                                            max(internal.end_ns, self.__dict__["_array_ready"].get(array_id, 0.0)),
+                                            max(program_start, erase_end),
                                             self.config.page_program_ns,
                                             eligible_ns=internal.end_ns)
                 record(program)
-                self._log_programs((m.unit,))
+                self._log_programs((segment.address // self.config.page_bytes,))
+                self._remember_program(segment.address // self.config.page_bytes, m)
                 pages_programmed += 1
                 completion = max(completion, program.end_ns)
                 self._touch_frontiers(array_id)
@@ -2434,6 +2840,8 @@ class NandCore:
             cursor += length
         full_pages = (end - cursor) // page
         if full_pages:
+            if request.operation is Operation.WRITE:
+                self._validate_write_order(range(cursor // page, cursor // page + full_pages))
             result = execute_full_pages(self, request, cursor // page, full_pages)
             if result is not None:
                 accelerated_pages = result["accelerated_pages"]
@@ -2447,6 +2855,7 @@ class NandCore:
                         "internal_transfer_bytes": result["internal_transfer_bytes"],
                         "pages_read": count if request.operation is Operation.READ else 0,
                         "pages_programmed": count if request.operation is Operation.WRITE else 0,
+                        "erase_operations": result.get("erase_operations", 0),
                         "media_queue_wait_ns": result.get("media_queue_wait_ns", 0.0),
                     },
                 ))
@@ -2457,6 +2866,7 @@ class NandCore:
         pages_programmed = sum(part.counters["pages_programmed"] for part in parts)
         host_bytes = sum(part.counters["host_transfer_bytes"] for part in parts)
         internal_bytes = sum(part.counters["internal_transfer_bytes"] for part in parts)
+        erases = sum(part.counters.get("erase_operations", 0) for part in parts)
         media_queue_wait_ns = max(
             (float(part.counters.get("media_queue_wait_ns", 0.0)) for part in parts),
             default=0.0,
@@ -2470,7 +2880,7 @@ class NandCore:
                 "host_transfer_bytes": host_bytes, "internal_transfer_bytes": internal_bytes,
                 "physical_read_bytes": pages_read * page, "physical_write_bytes": pages_programmed * page,
                 "pages_read": pages_read, "pages_programmed": pages_programmed,
-                "erase_operations": 0, "page_count": page_count,
+                "erase_operations": erases, "page_count": page_count,
                 "details_truncated": page_count > self.config.max_expanded_segments,
                 "accelerated_pages": accelerated_pages,
                 "bandwidth_ceiling_gb_s": self._bandwidth_ceiling_gb_s(request.operation),
@@ -2535,7 +2945,7 @@ _RESIDENT_SCALAR_METHODS = {name: getattr(NandCore, name) for name in (
     "_resident_scalar_eligible", "_resident_generic_bulk_eligible", "_submit_resident_generic",
     "_admit_host_request", "_record_host_admission", "_submit_scalar_request", "_cache_slot", "_invalidate_cache",
     "_array_id", "_array_resource_id", "_channel_id", "_host_id", "_host_bandwidth",
-    "_staged_key", "_bank_key", "_block_key", "_log_programs", "_touch_cache_bank",
+    "_staged_key", "_bank_key", "_block_key", "_log_programs", "_scratchpad_id", "_staging_host_id", "_touch_cache_bank",
     "_bandwidth_ceiling_gb_s", "_admission_depth_scope", "_resident_resource_contract",
     "_resident_handoff")}
 

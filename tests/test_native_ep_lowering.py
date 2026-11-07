@@ -108,8 +108,8 @@ def test_ep1_toy_lowering_is_byte_identical_to_the_single_group_graph():
     # fields and assumed turnaround timings changed it, then the per-layer KV
     # block pools (buffer ids and offsets) and their 256-token blocks, not the graph.
     # So did the HBM4 24Gb 12H organization and its REFpb fields.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "6e38b36b96ac825c")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "1fccd56ff0ea8d77")
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "fbc8393245299b59")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "bd769cdab1af9346")
 
 
 def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
@@ -124,8 +124,8 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # 24Gb 12H organization and its REFpb fields, and the age-free KV stride,
     # which only moves the NAND KV blocks' addresses. The switch to OCP mode
     # changed only the serialized protocol_mode and its provenance record.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "f9f3a71e6bef1e36")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "fee6158ec4f2b6fc")
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "d36b2cde2ebf3113")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "611335687068ba73")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():

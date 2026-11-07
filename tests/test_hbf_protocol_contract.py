@@ -37,9 +37,8 @@ def test_ocp_preset_declares_256_independent_banks_and_512_gib():
     assert config.queue_scope == "host_channel"
     assert config.max_outstanding_requests == 256
     assert config.max_outstanding_write_requests == 64
-    assert config.host_read_bandwidth_gb_s == config.host_write_bandwidth_gb_s == 1536.
-    # 101.25 GB/s raw includes the 224-byte OOB alongside each 4096-byte page.
-    assert config.internal_bandwidth_gb_s == 101.25 * 4096 / (4096 + 224) == 96.
+    assert config.host_read_bandwidth_gb_s == config.host_write_bandwidth_gb_s == 1600.
+    assert config.internal_bandwidth_gb_s == 100.
     assert (config.page_read_ns, config.page_program_ns, config.block_erase_ns) == (4000., 75000., 2_000_000.)
 
 
@@ -82,11 +81,9 @@ def test_explicit_unlimited_write_subset_survives_serialization_and_inspector():
 
 def test_inspector_round_trip_keeps_ocp_protocol_and_independent_channels():
     raw = asdict(resolve_physical_config("hbf_ocp_0_7"))
-    updated = physical_memory_config_payload({"config": raw, "overrides": {"host_channels": 1}})
-    assert updated["protocol_mode"] == "ocp_hbf_0_7"
-    assert updated["host_channels"] == 1
-    assert updated["host_full_duplex"] is True
-    assert updated["read_cache_pages_per_bank"] == 2
+    with pytest.raises(HttpError) as caught:
+        physical_memory_config_payload({"config": raw, "overrides": {"host_channels": 1}})
+    assert caught.value.status == 422
     assert raw["host_channels"] == resolve_physical_config("hbf_ocp_0_7").host_channels
 
 
@@ -124,13 +121,14 @@ for (const patch of [
 ]) {
   assert.throws(() => validatePhysicalMemoryConfig({...raw, ...patch}, component));
 }
-console.log(JSON.stringify(validatePhysicalMemoryConfig({...raw, host_channels: 1}, component)));
+assert.throws(() => validatePhysicalMemoryConfig({...raw, host_channels: 1}, component));
+console.log(JSON.stringify(validatePhysicalMemoryConfig(raw, component)));
 """
     result = subprocess.run([node], input=script, text=True, encoding="utf-8", capture_output=True)
     assert result.returncode == 0, result.stderr
     actual = parse_execution_physical_config(json.loads(result.stdout))
     assert actual.protocol_mode == "ocp_hbf_0_7"
-    assert actual.host_channels == 1
+    assert actual.host_channels == actual.channels == 16
 
 
 def test_rollback_restores_the_read_cache_on_repeated_retry():

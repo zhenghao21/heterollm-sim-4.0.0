@@ -102,10 +102,16 @@ def test_incremental_admission_matches_original_scalar_at_full_queue(depth, host
         else:
             core._inflight_operations = list(commands)
             core._inflight = [end for end, _ in commands]
+    write_ord = 0
     for index in range(12):
         op = Operation.WRITE if index % 3 else Operation.READ
         # OCP requires complete units; generic exercises partial-page RMW.
-        address = index % 2 * PAGE + (0 if host_scope else 17)
+        if host_scope and op is Operation.WRITE:
+            channel = write_ord % settings.host_channels
+            address = (channel + (write_ord // settings.host_channels) * settings.host_channels) * PAGE
+            write_ord += 1
+        else:
+            address = index % 2 * PAGE + (0 if host_scope else 17)
         check(contexts, AccessRequest(str(index), op, address, PAGE if host_scope else 99,
                                      (0., .125, 1000.)[index % 3]))
 

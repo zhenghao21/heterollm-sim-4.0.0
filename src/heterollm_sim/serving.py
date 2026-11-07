@@ -3502,6 +3502,18 @@ class _KVBlockTables:
     def table(self, request_id: str) -> Mapping[str, Tuple[int, ...]]:
         return {kind: tuple(blocks) for kind, blocks in self.tables.get(request_id, {}).items()}
 
+    def page_table_runs(self, request_id: str, kind: str) -> Tuple[Tuple[int, int], ...]:
+        """Compact contiguous block runs used by the sequential NAND mapper."""
+        blocks = tuple(self.tables.get(request_id, {}).get(kind, ()))
+        runs = []
+        for block in blocks:
+            block = int(block)
+            if runs and block == runs[-1][0] + runs[-1][1]:
+                runs[-1] = (runs[-1][0], runs[-1][1] + 1)
+            else:
+                runs.append((block, 1))
+        return tuple(runs)
+
 
 class _KVLedger:
     def __init__(
@@ -3583,6 +3595,10 @@ class _KVLedger:
 
     def block_table(self, request_id: str) -> Mapping[str, Tuple[int, ...]]:
         return {} if self.blocks is None else self.blocks.table(request_id)
+
+    def block_page_table(self, request_id: str, kind: str = "full") -> Tuple[Tuple[int, int], ...]:
+        """Return compact ``(block_start, run_length)`` page-table runs."""
+        return () if self.blocks is None else self.blocks.page_table_runs(request_id, kind)
 
     @property
     def max_group_used_pages(self) -> int:
@@ -6404,12 +6420,13 @@ class _OnlineRuntime:
         self._external_imported_bytes = 0
         self._external_preloaded_requests = 0
         self._external_preloaded_bytes = 0
+        self._external_preloaded_bytes_by_owner = {}
         self._external_buffer_peak_bytes = 0
         contract = stationary_refill_contract(self)
-        if contract is not None and self.plan.scenario.placement.kv_policy.stripe_stride_pages:
-            self.ledger.blocks.place_seeds(*contract, _kv_tail_geometry(self.plan.scenario, self._kv_block_layout,
-                                                                        contract[1], contract[2]))
-        elif contract is not None:
+        if contract is not None:
+            # Sequential-channel placement replays the compact page-table
+            # cursor through the ordinary FIFO free list; no bank stripe or
+            # synthetic block-open term is injected into the step clock.
             self.ledger.blocks.settle(*contract, self._kv_block_layout["tokens_per_block"])
         self._decode_window = {}
         if self._external_ingress is None:
@@ -6659,7 +6676,15 @@ class _OnlineRuntime:
                         if placed_here:
                             self._release_ep_group(state)
                         continue
-                    size = sum(row["size_bytes"] for row in self._external_destination_ranges(state))
+                    destination_ranges = self._external_destination_ranges(state)
+                    size = sum(row["size_bytes"] for row in destination_ranges)
+                    for row in destination_ranges:
+                        component_id = str(row["component_id"])
+                        service = self._external_executor.services.get(component_id)
+                        owner = getattr(service, "physical_owner", component_id)
+                        self._external_preloaded_bytes_by_owner[owner] = (
+                            self._external_preloaded_bytes_by_owner.get(owner, 0)
+                            + int(row["size_bytes"]))
                 except BaseException:
                     self._execution_resource_kernel.forget_request_physical_buffers(request_id)
                     self.ledger.resize(state, previous)
@@ -6673,6 +6698,26 @@ class _OnlineRuntime:
                 self._external_preloaded_bytes += size
                 self.events.append(ServingEvent(self.now, "external_kv_preloaded", request_id,
                     details={"logical_bytes": size, "history_tokens": state.spec.prompt_tokens-1, "paid": False}))
+            # The preload is unpaid in the transfer ledger, but it is still
+            # the history that determines the next sequential NAND location.
+            # Seed every live OCP NAND owner after all seed ranges are known so
+            # each channel starts at its balanced historical phase.
+            from .nand_core import NandCore
+            physical_runtime = self._execution_resource_kernel.physical_runtime
+            for owner, active in tuple(physical_runtime.runtimes.items()):
+                core = active.core
+                if not isinstance(core, NandCore) or core.config.protocol_mode != "ocp_hbf_0_7":
+                    continue
+                bytes_for_owner = int(self._external_preloaded_bytes_by_owner.get(owner, 0))
+                # A few callers preload after an explicit warmup write has
+                # already entered the resident core.  That core's cursor is
+                # authoritative; resetting it would alias the existing page
+                # table, so only install the historical phase on a pristine
+                # controller.
+                if (core._logical_page_table or core._staged_pages
+                        or core._tail_flushing or any(core._write_pointer)):
+                    continue
+                core.seed_write_history(bytes_for_owner // int(core.config.page_bytes))
 
     def _start_external_imports(self):
         if self._external_executor is None:
@@ -18756,23 +18801,6 @@ def _with_kv_block_pools(plan: ServingPlan):
     plan = replace(plan, kv_policy=replace(policy, capacity_pages=counts["full"],
                                            capacity_bytes=counts["full"] * policy.bytes_per_page))
     return plan, {"tokens_per_block": per_block, "pool_blocks": counts, "ring": ring}
-
-
-def _kv_tail_geometry(scenario, layout, prompt, output):
-    """Each KV group's ``KVTailRing`` arguments on striped NAND KV: every block stride is the policy's
-    stride modulo the banks, and V's pool starts a pool's bytes and the phase after K's."""
-    from .planner import kv_block_pools
-
-    policy = scenario.placement.kv_policy
-    geometry = {}
-    for row in kv_block_pools(scenario, 0, layout["tokens_per_block"]):
-        config, kind = row["memory_config"], row["kind"]
-        chunk = row["attention_chunk_size"] or 0
-        shift = (layout["pool_blocks"][kind] * policy.stripe_stride_pages
-                 + policy.stripe_phase_bytes // config.page_bytes) % config.array_units
-        geometry[kind] = (config.array_units, max(1, config.page_bytes // row["row_bytes"]), policy.stripe_stride_pages,
-                          shift, chunk if prompt + output > chunk else 0)
-    return geometry
 
 
 def _model_max_sequence_length(scenario: ScenarioConfig) -> int:

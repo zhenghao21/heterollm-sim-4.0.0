@@ -809,8 +809,15 @@ class NandConfig:
                 raise ValueError("ocp_hbf_0_7 requires independent bank resources (planes_independent=True)")
             if self.page_bytes != 4096 or self.host_granularity_bytes != 64:
                 raise ValueError("ocp_hbf_0_7 requires 4096-byte pages and 64-byte host granularity")
-            if self.host_channels > 16 or not self.host_full_duplex:
-                raise ValueError("ocp_hbf_0_7 requires at most 16 full-duplex host channels")
+            if self.host_channels != self.channels or not self.host_full_duplex:
+                raise ValueError(
+                    "ocp_hbf_0_7 requires one full-duplex host channel per modeled die/channel"
+                )
+            if (self.targets_per_channel != 1 or self.dies_per_target != 1
+                    or self.luns_per_die != 1):
+                raise ValueError(
+                    "ocp_hbf_0_7 models exactly one NAND die/LUN per host channel"
+                )
             if self.read_cache_pages_per_bank != 2:
                 raise ValueError("ocp_hbf_0_7 requires two read-cache pages per bank")
             if self.write_buffer_bytes != 0:

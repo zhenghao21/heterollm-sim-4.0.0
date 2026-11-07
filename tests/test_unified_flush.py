@@ -230,29 +230,6 @@ def test_a_flush_reads_the_scratchpad_back_and_writes_a_page_over_the_host_link(
     assert 5000.0 <= back[0] < back[1] <= host[0] < host[1] <= channel[0]
 
 
-def test_every_program_path_moves_the_bank_log():
-    from dataclasses import replace
-
-    def run(numeric):
-        config = replace(_logic_config(), protocol_mode="ocp_hbf_0_7", host_granularity_bytes=64)
-        core = NandCore(config, capture_details=False)
-        core._nand_numeric_enabled = numeric
-        core.set_staging_scope("dense0:rank000")
-        for index in range(4):
-            _write(core, str(index), 10 * PAGE + index * 1024, 1024, index * 1000.0)
-        core.submit_many([
-            AccessRequest("read0", Operation.READ, 1000 * PAGE, 2 * PAGE, 0.0),
-            AccessRequest("read1", Operation.READ, 2000 * PAGE, 2 * PAGE, 0.0),
-        ])
-        core.flush_staged_pages("dense0:rank000", 5000.0)
-        core.submit(AccessRequest("bulk", Operation.WRITE, 0, 64 * PAGE, 200000.0))
-        return core._bank_log
-
-    expected = [4] * 16
-    expected[10] += 1
-    assert run(False) == run(True) == expected
-
-
 def test_logic_die_flush_scalar_and_owned_batch_are_bit_exact():
     def run(numeric):
         core = NandCore(_logic_config(), capture_details=False)

@@ -1219,8 +1219,7 @@ def kv_policy_from_dict(data: Mapping[str, Any]) -> KVCachePolicy:
             "relay_components",
             "pool_blocks",
             "chunk_pool_blocks",
-            "stripe_stride_pages",
-            "stripe_phase_bytes",
+            "nand_placement_mode",
         ),
     )
     return KVCachePolicy(
@@ -1249,8 +1248,7 @@ def kv_policy_from_dict(data: Mapping[str, Any]) -> KVCachePolicy:
         ),
         pool_blocks=_integer(data.get("pool_blocks", 0), "kv_policy pool_blocks"),
         chunk_pool_blocks=_integer(data.get("chunk_pool_blocks", 0), "kv_policy chunk_pool_blocks"),
-        stripe_stride_pages=_integer(data.get("stripe_stride_pages", 0), "kv_policy stripe_stride_pages"),
-        stripe_phase_bytes=_integer(data.get("stripe_phase_bytes", 0), "kv_policy stripe_phase_bytes"),
+        nand_placement_mode=str(data.get("nand_placement_mode", "sequential_channel")),
     )
 
 

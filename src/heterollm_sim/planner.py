@@ -16463,8 +16463,8 @@ def kv_block_geometry(scenario, plan, rank, layer, tokens_per_block):
     to the backing store's allocation unit (NAND page, DRAM/SRAM burst), so
     a NAND page never holds rows of two requests. Logical pages of
     ``tokens_per_nand_page`` rows map one to one onto the block's NAND pages.
-    A striped NAND block keeps the policy's stride modulo the banks, however
-    little of the block this layer's kind holds.
+    NAND-backed KV uses the same contiguous block stride for every layer; the
+    host page table supplies the channel/DLU progression.
     """
     from .memory_types import DramConfig, NandConfig, SramConfig
     row = _kv_tensor_bytes(scenario, layer, plan.tp_degree, 1)
@@ -16481,11 +16481,6 @@ def kv_block_geometry(scenario, plan, rank, layer, tokens_per_block):
                     if row and config.page_bytes % row == 0 else 0)
         if per_page and tokens_per_block % per_page:
             raise ValueError("a KV block must hold whole NAND pages of rows")
-        stripe = scenario.placement.kv_policy.stripe_stride_pages
-        if stripe:
-            held = min(tokens_per_block, layer.attention_chunk_size or tokens_per_block)
-            pages = -(-held * row // config.page_bytes)
-            stride = (pages + (stripe - pages) % config.array_units) * config.page_bytes
     return row, stride, per_page
 
 
@@ -16562,9 +16557,19 @@ def _bind_kv_blocks(builder, scenario, plan, rank, layer, result):
                 raise ValueError("physical KV has no block table for request " + owner["request_id"])
             # A request without KV rows yet (empty history) holds no blocks.
             owner["blocks"] = table.get(kind, ())
-    phase = scenario.placement.kv_policy.stripe_phase_bytes
+    # Keep the host page table compact: logical block runs are enough to
+    # reconstruct every page's channel/local-DLU arithmetic progression.
+    for owner in result["owners"]:
+        blocks = tuple(int(block) for block in owner.get("blocks", ()))
+        runs = []
+        for block in blocks:
+            if runs and block == runs[-1][0] + runs[-1][1]:
+                runs[-1] = (runs[-1][0], runs[-1][1] + 1)
+            else:
+                runs.append((block, 1))
+        owner["page_table_runs"] = tuple(runs)
     result.update(tokens_per_block=tokens_per_block, block_bytes=stride,
-                  tokens_per_nand_page=per_page, pool_bytes=pool_blocks * stride + phase,
+                  tokens_per_nand_page=per_page, pool_bytes=pool_blocks * stride,
                   pool_ids={part: kv_pool_buffer_id(layer.layer_id, rank, part) for part in ("k", "v")})
 
 

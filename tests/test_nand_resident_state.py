@@ -14,10 +14,12 @@ from test_token_owned_history import bits
 
 
 def settings(**changes):
-    """The paper configurations' shape: OCP protocol with one device-wide queue."""
-    values = dict(kind="HBF", protocol_mode="ocp_hbf_0_7", host_granularity_bytes=64, channels=16,
-                  targets_per_channel=1, dies_per_target=1, planes_per_lun=16)
-    return config(**{**values, **changes})
+    """Resident-state tests use generic NAND; OCP admission has its own suite."""
+    values = dict(kind="HBF", protocol_mode="generic_nand", host_granularity_bytes=64,
+                  channels=16, host_channels=1, queue_scope="device", targets_per_channel=1,
+                  dies_per_target=1, planes_per_lun=16, metadata={})
+    values.update(changes)
+    return config(**values)
 
 
 def core_of(context):

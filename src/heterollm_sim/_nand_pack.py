@@ -116,8 +116,16 @@ def _double(value: object) -> cython.double:
     return float(np.float64(value))
 
 
+_SLOT_FIELDS = frozenset(("page_key", "ready_ns", "reader_completion_ns", "last_use"))
+_INT_TYPES = frozenset((int,))
+
+
 def validate_buffered_cache(cache, bank_keys, prefixes, slot_type, pages_per_block, finite):
-    """Read the ordinary two-slot cache in the scalar validation order."""
+    """Read the ordinary two-slot cache in the scalar validation order.
+
+    The checks are the original ones, written without a generator frame per
+    slot: a tag is valid when every coordinate is an exact non-negative int.
+    """
     if type(cache) is not dict:
         return None
     rows: list = []
@@ -127,23 +135,30 @@ def validate_buffered_cache(cache, bank_keys, prefixes, slot_type, pages_per_blo
     slots: object
     slot: object
     tag: object
+    use: object
+    ready: object
+    reader: object
+    numbers: tuple = (int, float)
+    limit: object = 2**63 - 1
     for bank, prefix in zip(bank_keys, prefixes):
         slots = cache.get(bank, ())
         if bank in cache and (type(slots) is not list or len(slots) != 2):
             return None
         for slot in slots:
             if (type(slot) is not slot_type or id(slot) in seen
-                    or vars(slot).keys() != {"page_key", "ready_ns", "reader_completion_ns", "last_use"}
-                    or type(slot.last_use) is not int or not 0 <= slot.last_use <= 2**63 - 1
-                    or any(type(value) not in (int, float) or not finite(value) or value < 0
-                           for value in (slot.ready_ns, slot.reader_completion_ns))):
+                    or vars(slot).keys() != _SLOT_FIELDS):
+                return None
+            use, ready, reader = slot.last_use, slot.ready_ns, slot.reader_completion_ns
+            if (type(use) is not int or not 0 <= use <= limit
+                    or type(ready) not in numbers or not finite(ready) or ready < 0
+                    or type(reader) not in numbers or not finite(reader) or reader < 0):
                 return None
             seen.add(id(slot))
             tag = slot.page_key
             if tag is not None and (type(tag) is not tuple or len(tag) != len(prefix) + 2
-                    or tag[:-2] != prefix or any(type(value) is not int or value < 0 for value in tag)
+                    or tag[:-2] != prefix or set(map(type, tag)) != _INT_TYPES or min(tag) < 0
                     or tag[-1] >= pages_per_block
-                    or tag[-2] * pages_per_block + tag[-1] > 2**63 - 1):
+                    or tag[-2] * pages_per_block + tag[-1] > limit):
                 return None
         rows.append(slots)
     return rows
@@ -158,13 +173,32 @@ def pack_buffered_cache(rows, banks, pages_per_block):
     index: cython.Py_ssize_t
     slots: object
     slot: object
+    key: object
+    occupied: list = []
+    positions: list = []
+    tag_positions: list = []
+    tag_values: list = []
+    ready_values: list = []
+    reader_values: list = []
+    use_values: list = []
+    # Collect the slots, then fill the arrays with the same conversions.
     for bank, slots in enumerate(rows):
-        present[bank] = bool(slots)
-        for index, slot in enumerate(slots):
-            if slot.page_key is not None:
-                tags[bank, index] = slot.page_key[-2] * pages_per_block + slot.page_key[-1]
-            ready[bank, index], readers[bank, index], uses[bank, index] = (
-                slot.ready_ns, slot.reader_completion_ns, slot.last_use)
+        if slots:
+            occupied.append(bank)
+            for index, slot in enumerate(slots):
+                key = slot.page_key
+                if key is not None:
+                    tag_positions.append(2 * bank + index)
+                    tag_values.append(key[-2] * pages_per_block + key[-1])
+                positions.append(2 * bank + index)
+                ready_values.append(slot.ready_ns)
+                reader_values.append(slot.reader_completion_ns)
+                use_values.append(slot.last_use)
+    present[occupied] = True
+    tags.reshape(-1)[tag_positions] = tag_values
+    ready.reshape(-1)[positions] = ready_values
+    readers.reshape(-1)[positions] = reader_values
+    uses.reshape(-1)[positions] = use_values
     return tags, ready, readers, uses, present
 
 
@@ -598,11 +632,19 @@ def publish_active_timeline(timeline, names, state, moved, directions,
         name = names[index]
         first, size = firsts[index], sizes[index]
         if single_lane:
-            slots = _item(lane_map, name)
-            if cython.compiled and type(slots) is list:
-                cython.cast(list, slots)[0] = float(lanes[first])
+            # A newly reached array can be absent from lane_available even
+            # though its scalar calendars were admitted and journalled by the
+            # native resource contract.  The scalar publisher creates this
+            # slot lazily; keep the native publisher semantically identical
+            # instead of indexing a missing lane entry.
+            if name in lane_map:
+                slots = _item(lane_map, name)
+                if cython.compiled and type(slots) is list:
+                    cython.cast(list, slots)[0] = float(lanes[first])
+                else:
+                    slots[0] = float(lanes[first])
             else:
-                slots[0] = float(lanes[first])
+                _put(lane_map, name, [float(lanes[first])])
         else:
             values = []
             for lane in range(first, first + size):

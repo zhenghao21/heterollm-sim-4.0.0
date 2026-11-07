@@ -15,29 +15,31 @@ def test_nested_frontier_journals_keep_outer_original_values(finish_inner):
     core = NandCore(resolve_physical_config("hbf_ocp_0_7"))
     core._log_programs((0,))
     outer = core.begin_transaction()
-    core._log_programs((0,))
+    core._log_programs((16,))
     inner = core.begin_transaction()
-    core._log_programs((0, 1))
+    core._log_programs((32, 1))
     with pytest.raises(ValueError, match="reverse begin order"):
         core.commit_transaction(outer)
     getattr(core, finish_inner + "_transaction")(inner)
-    assert core._bank_log[:2] == ([3, 1] if finish_inner == "commit" else [2, 0])
+    assert core._write_pointer[:2] == ([3, 1] if finish_inner == "commit" else [2, 0])
     core.rollback_transaction(outer)
-    assert core._bank_log[:2] == [1, 0]
+    assert core._write_pointer[:2] == [1, 0]
     with pytest.raises(ValueError, match="reverse begin order"):
         core.rollback_transaction(outer)
 
 
 def test_wear_journal_restores_existing_rows_and_removes_new_blocks():
     config = replace(resolve_physical_config("hbf_ocp_0_7"),
+                     planes_per_lun=1, blocks_per_plane=4, pages_per_block=1,
+                     capacity_bytes=16 * 4 * 4096,
                      wear_model=NandWearConfig(assumption="test explicit wear"))
     core = NandCore(config, capture_details=False)
     core.submit(AccessRequest("seed", "write", 0, 4096))
     initial = deepcopy(core._block_wear_state)
     original_rows = dict(core._block_wear_state)
     token = core.begin_transaction()
-    core.submit(AccessRequest("rewrite", "write", 0, 4096))
-    core.submit(AccessRequest("new-block", "write", config.array_units * config.pages_per_block * 4096, 4096))
+    core.submit(AccessRequest("rewrite", "write", config.channels * 4096, 4096))
+    core.submit(AccessRequest("new-block", "write", 2 * config.channels * 4096, 4096))
     assert len(token.block_wear) == 2
     core.rollback_transaction(token)
     assert core._block_wear_state == initial
@@ -52,11 +54,11 @@ def test_public_snapshot_restores_active_nand_token_identity(finish):
     core.submit(AccessRequest("seed", "write", 0, 4096))
     initial = list(core._bank_log)
     token = core.begin_transaction()
-    core.submit(AccessRequest("page-1", "write", config.array_units * 4096, 4096))
+    core.submit(AccessRequest("page-1", "write", config.channels * 4096, 4096))
     saved = runtime.snapshot()
     middle = list(core._bank_log)
-    assert middle[0] == initial[0] + 1
-    core.submit(AccessRequest("page-2", "write", config.array_units * 8192, 4096))
+    assert middle[config.channels] == initial[config.channels] + 1
+    core.submit(AccessRequest("page-2", "write", 2 * config.channels * 4096, 4096))
     getattr(core, finish + "_transaction")(token)
     runtime.restore(saved)
     assert core._nand_transactions[-1] is token

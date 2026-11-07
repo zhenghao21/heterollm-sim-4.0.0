@@ -92,7 +92,7 @@ def _evaluate_fixture(monkeypatch, *, degree, batch=8, output=8, pool=4, warmup=
     runtime = SimpleNamespace(
         plan=SimpleNamespace(scheduler=SimpleNamespace(max_num_seqs=batch),
                              scenario=SimpleNamespace(placement=SimpleNamespace(
-                                 parallel=parallel, kv_policy=SimpleNamespace(stripe_stride_pages=0)))),
+                                 parallel=parallel, kv_policy=SimpleNamespace(nand_placement_mode="sequential_channel")))),
         _external_ingress={"max_inflight_requests": pool, "warmup_decode_cohorts": warmup,
                            "measurement_decode_cohorts": measured},
         _state_values=states)

@@ -170,24 +170,7 @@ def test_real_native_preload_capacity_stops_before_lower_guard_imports_or_sample
     assert result.layer_window_samples == () and result.native_window_forecast is None
 
 
-def test_block_open_stall_is_one_erase_per_block_of_programs_per_bank(monkeypatch):
-    from heterollm_sim.memory_types import NandConfig
-
-    config = NandConfig(kind="HBF", channels=128, planes_per_lun=25, planes_independent=True, page_bytes=4096,
-                        pages_per_block=256, blocks_per_plane=64, block_erase_ns=2e6)
-    rows = [{"memory_config": config, "physical_owner": "hbf0.memory", "row_bytes": 2048, "attention_chunk_size": 0}] * 2
-    monkeypatch.setattr(stationary, "kv_block_pools", lambda *args: rows)
-
-    def stall(stored, stride=4096):
-        physical = NS(_staging_shares={"hbf0.memory": ("sram0", 8)}, _tail_reserved={"sram0": (0, stored)})
-        scenario = NS(placement=NS(kv_policy=NS(stripe_stride_pages=stride)))
-        state = NS(spec=NS(prompt_tokens=101, metadata={}))
-        runtime = NS(plan=NS(scenario=scenario), _kv_block_layout={"tokens_per_block": 512}, _state_values=[state],
-                     _execution_resource_kernel=NS(physical_runtime=physical))
-        return stationary.block_open_stall_ns(runtime, 100, 100)
-
-    # Tails: 100 requests fill half a page per step; one import of 50 pages lands per step; K and V.
-    assert stall(1.) == pytest.approx(2e6 * 200 / (3200 * 256))
-    # Half the tails can't stay in the scratchpad: each of their rows is a program.
-    assert stall(.5) == pytest.approx(2e6 * 250 / (3200 * 256))
-    assert stall(1., stride=0) == 0.
+def test_sequential_layout_has_no_synthetic_block_open_rate():
+    from heterollm_sim.kv_placement import kv_sequential_layout
+    layout = kv_sequential_layout(1660, 373, 2, 16, 25, 64)
+    assert layout["placement_mode"] == "sequential_channel"

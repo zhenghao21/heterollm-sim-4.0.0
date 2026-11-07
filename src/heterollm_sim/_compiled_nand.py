@@ -9,7 +9,7 @@ from numba import njit
 
 
 @njit(cache=True, nogil=True, fastmath=False)
-def run_generic_full_pages(first_page, count, read, base, geometry, timing,
+def run_generic_full_pages(first_page, count, read, page_indices, base, geometry, timing,
                            array_ids, channel_ids, host_ids, array_ready, buffer_ready,
                            tags, cache_ready, readers, uses, present, cache_clock,
                            starts, lane_counts, lanes, lane_directions, state, moved,
@@ -25,7 +25,7 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
     host's read-merge-write of a partial page runs in the scalar machine.
     """
     base_units, planes, independent, per_channel, host_channels = geometry
-    page_read, page_program, internal_ns, page_host_ns, internal_bytes = timing
+    page_read, page_program, block_erase, internal_ns, page_host_ns, internal_bytes, pages_per_block = timing
     touched = np.zeros(len(state), dtype=np.bool_)
     arrays_touched = np.zeros(len(array_ready), dtype=np.bool_)
     banks_touched = np.zeros(len(tags), dtype=np.bool_)
@@ -50,8 +50,9 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
     hits = misses = 0
     max_read_wait = 0.0
     completion = base
+    erase_count = 0
     for offset in range(count):
-        page_index = first_page + offset
+        page_index = page_indices[offset]
         base_unit = page_index % base_units
         plane = (page_index // base_units) % planes
         bank = base_unit + plane * base_units
@@ -119,7 +120,38 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
             internal_end = _reserve(ch, max(host_end, buffer_ready[unit]), internal_ns,
                 int(internal_bytes), 2, starts, lane_counts, lanes, lane_directions,
                 state, moved, directions, touched)
-            end = _reserve(ar, max(internal_end, array_ready[unit]), page_program, -1, 0,
+            program_start = max(internal_end, array_ready[unit])
+            # OCP's block spans all planes in one channel.  Only the first
+            # local-DLU (plane 0/page 0) opens it; reserve the same busy
+            # interval on every plane array while charging one erase event.
+            if (block_erase > 0.0 and plane == 0
+                    and physical_page % int(pages_per_block) == 0):
+                common_start = program_start
+                group_first = channel * per_channel
+                group_last = group_first + per_channel
+                for group_base in range(group_first, group_last):
+                    plane_count = planes if independent else 1
+                    for group_plane in range(plane_count):
+                        group_unit = group_base + group_plane * base_units if independent else group_base
+                        group_front = array_ready[group_unit]
+                        if group_front > common_start:
+                            common_start = group_front
+                common_end = common_start
+                for group_base in range(group_first, group_last):
+                    plane_count = planes if independent else 1
+                    for group_plane in range(plane_count):
+                        group_unit = group_base + group_plane * base_units if independent else group_base
+                        group_rid = array_ids[group_unit]
+                        end = _reserve(group_rid, common_start, block_erase, -1, 0,
+                                       starts, lane_counts, lanes, lane_directions,
+                                       state, moved, directions, touched)
+                        array_ready[group_unit] = end
+                        if end > common_end:
+                            common_end = end
+                        arrays_touched[group_unit] = True
+                program_start = common_end
+                erase_count += 1
+            end = _reserve(ar, program_start, page_program, -1, 0,
                 starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
             array_ready[unit], buffer_ready[unit] = end, end
             arrays_touched[unit] = True
@@ -137,7 +169,8 @@ def run_generic_full_pages(first_page, count, read, base, geometry, timing,
                     order_count += 1
         completion = max(completion, end)
     return (completion, hits, misses, cache_clock, touched,
-            arrays_touched, banks_touched, resource_order[:order_count], max_read_wait)
+            arrays_touched, banks_touched, resource_order[:order_count], max_read_wait,
+            erase_count)
 
 
 @njit(cache=True, nogil=True, fastmath=False)
@@ -169,6 +202,7 @@ def _reserve(rid, earliest, duration, payload, direction, starts, lane_counts,
 
 @njit(cache=True, nogil=True, fastmath=False)
 def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_program_ns,
+                            block_erase_ns, pages_per_block,
                             internal_ns, internal_bytes, host_read_ns, host_write_ns,
                             array_ids, channel_ids, host_read_ids, host_write_ids,
                             array_ready, buffer_ready, tags,
@@ -188,6 +222,64 @@ def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_prog
     ends = np.empty(len(pages), dtype=np.float64)
     banks = len(tags)
     slots = tags.shape[1]
+    erase_count = 0
+
+    # OCP cannot interrupt a plane erase.  A page-zero program therefore
+    # reserves its erase before the program transfer reaches the array.  Do
+    # that reservation in one pre-pass so all banks which cross a block in
+    # this flush share the same release frontier.  Host/scratchpad transfers
+    # still run in the main pass and may overlap this common erase window.
+    erase_ends = np.empty(len(pages), dtype=np.float64)
+    for index in range(len(pages)):
+        erase_ends[index] = -1.0
+    if block_erase_ns > 0.0:
+        common_erase_start = 0.0
+        for index in range(len(pages)):
+            page_index = pages[index]
+            base_unit = page_index % base_units
+            plane = (page_index // base_units) % planes
+            bank = base_unit + plane * base_units
+            if bank < 0 or bank >= banks:
+                raise ValueError("logic-die flush page is outside the resident bank geometry")
+            physical_page = page_index // (base_units * planes)
+            if (plane == 0 and physical_page % int(pages_per_block) == 0):
+                unit = bank if independent else base_unit
+                release = max(ready_times[index], start_times[index], array_ready[unit])
+                if release > common_erase_start:
+                    common_erase_start = release
+        for index in range(len(pages)):
+            page_index = pages[index]
+            base_unit = page_index % base_units
+            plane = (page_index // base_units) % planes
+            bank = base_unit + plane * base_units
+            physical_page = page_index // (base_units * planes)
+            if (plane == 0 and physical_page % int(pages_per_block) == 0):
+                channel = base_unit // per_channel
+                group_first = channel * per_channel
+                group_last = group_first + per_channel
+                common_start = common_erase_start
+                for group_base in range(group_first, group_last):
+                    plane_count = planes if independent else 1
+                    for group_plane in range(plane_count):
+                        group_unit = group_base + group_plane * base_units if independent else group_base
+                        if array_ready[group_unit] > common_start:
+                            common_start = array_ready[group_unit]
+                common_end = common_start
+                for group_base in range(group_first, group_last):
+                    plane_count = planes if independent else 1
+                    for group_plane in range(plane_count):
+                        group_unit = group_base + group_plane * base_units if independent else group_base
+                        ar = array_ids[group_unit]
+                        erase_end = _reserve(ar, common_start, block_erase_ns, -1, 0,
+                                             starts, lane_counts, lanes, lane_directions,
+                                             state, moved, directions, touched)
+                        array_ready[group_unit] = erase_end
+                        if erase_end > common_end:
+                            common_end = erase_end
+                        arrays_touched[group_unit] = True
+                erase_ends[index] = common_end
+                erase_count += 1
+
     for index in range(len(pages)):
         page_index = pages[index]
         base_unit = page_index % base_units
@@ -225,6 +317,8 @@ def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_prog
                                 starts, lane_counts, lanes, lane_directions, state,
                                 moved, directions, touched)
         program_start = max(internal_end, array_ready[unit], start_times[index])
+        if erase_ends[index] >= 0.0 and erase_ends[index] > program_start:
+            program_start = erase_ends[index]
         program_end = _reserve(ar, program_start, page_program_ns, -1, 0,
                                starts, lane_counts, lanes, lane_directions, state,
                                moved, directions, touched)
@@ -232,7 +326,7 @@ def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_prog
         buffer_ready[unit] = program_end
         arrays_touched[unit] = True
         ends[index] = program_end
-    return ends, touched, arrays_touched, banks_touched
+    return ends, touched, arrays_touched, banks_touched, erase_count
 
 
 # Read-batch events. At one timestamp, completions release buffers, lanes
@@ -847,3 +941,315 @@ def read_batch_sink_totals(ids, busy, moved, first, last, task_busy, owner_busy,
         elif last[entry] > last_end[rid] or (last[entry] == last_end[rid] and first[entry] > last_first[rid]):
             last_first[rid], last_end[rid] = first[entry], last[entry]
     return order[:count], byte_totals, last_first, last_end
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def _sequential_admission(effective, ends, low, high, limit):
+    """_HostPopulation.preview for a READ: wait until a combined credit is free.
+
+    ``ends[low:high]`` are the host channel's command completions, ascending.
+    """
+    position = low
+    while True:
+        while position < high and ends[position] <= effective:
+            position += 1
+        if high - position < limit:
+            return effective
+        if ends[position] > effective:
+            effective = ends[position]
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def run_sequential_read_group(request_pages, arrivals, request_host, acceptance, device_acceptance,
+                              host_ends, host_low, host_high, limit, front, latency, logic,
+                              page_bank, page_tag, page_ar, page_ch, page_host, page_scratch,
+                              page_host_ns, page_host_bytes, page_staged, page_covered, page_full,
+                              page_ready, page_end, page_scratch_ns, page_scratch_bytes,
+                              page_read_ns, internal_ns, internal_bytes, unit_array,
+                              array_ready, buffer_ready, tags, cache_ready, readers, uses, cache_clock,
+                              lanes, state, moved):
+    """NandCore submissions of consecutive READs served by the scalar page machine.
+
+    Requests run one after another, exactly as separate submissions: host
+    channel credit admission, then every page in the order of
+    _execute_detailed_accepted with its cache choice, reservations and IEEE
+    float operations on single-lane calendars. A page held in the staging
+    store at the admitted arrival is served from it: over its scratchpad
+    lane on a logic die, without NAND resources otherwise. Each request's
+    bill is the counter difference between its first and last touch of a
+    resource, in first-touch order, as its metric recorder sees it. The run
+    stops before a request whose staged page is not readable (the scalar
+    machine raises); ``processed`` counts the requests run.
+    """
+    requests = len(arrivals)
+    resources = len(lanes)
+    units = len(array_ready)
+    banks = len(tags)
+    capacity = 3 * len(page_bank)
+    effective = np.zeros(requests, dtype=np.float64)
+    completions = np.zeros(requests, dtype=np.float64)
+    waits = np.zeros(requests, dtype=np.float64)
+    hits = np.zeros(requests, dtype=np.int64)
+    misses = np.zeros(requests, dtype=np.int64)
+    staged = np.zeros(requests, dtype=np.int64)
+    staged_host_bytes = np.zeros(requests, dtype=np.int64)
+    scratch_bytes = np.zeros(requests, dtype=np.int64)
+    reserved = np.zeros(requests, dtype=np.bool_)
+    entry_offsets = np.zeros(requests + 1, dtype=np.int64)
+    entry_rid = np.empty(capacity, dtype=np.int64)
+    entry_busy_before = np.empty(capacity, dtype=np.float64)
+    entry_busy_after = np.empty(capacity, dtype=np.float64)
+    entry_moved_before = np.empty(capacity, dtype=np.int64)
+    entry_moved_after = np.empty(capacity, dtype=np.int64)
+    entry_start = np.empty(capacity, dtype=np.float64)
+    entry_end = np.empty(capacity, dtype=np.float64)
+    touch_request = np.full(resources, -1, dtype=np.int64)
+    resource_seen = np.zeros(resources, dtype=np.bool_)
+    resource_order = np.empty(resources, dtype=np.int64)
+    transferred = np.zeros(resources, dtype=np.bool_)
+    bank_seen = np.zeros(banks, dtype=np.bool_)
+    bank_order = np.empty(banks, dtype=np.int64)
+    unit_seen = np.zeros(units, dtype=np.bool_)
+    unit_order = np.empty(units, dtype=np.int64)
+    unit_visit = np.full(units, -1, dtype=np.int64)
+    inherited = np.zeros(units, dtype=np.float64)
+    slot_used = np.zeros((banks, 2), dtype=np.bool_)
+    slot_filled = np.zeros((banks, 2), dtype=np.bool_)
+    slot_read = np.zeros((banks, 2), dtype=np.bool_)
+    resource_count = bank_count = unit_count = entries = 0
+    processed = 0
+    offset = 0
+    read_end = internal_end = end = 0.0
+    for request in range(requests):
+        host = request_host[request]
+        admitted = _sequential_admission(max(arrivals[request], acceptance[host]), host_ends,
+                                         host_low[host], host_high[host], limit)
+        stop = offset + request_pages[request]
+        readable = True
+        for page in range(offset, stop):
+            if (page_staged[page] and (page_end[page] < 0 or page_end[page] > admitted)
+                    and not page_covered[page] and not page_full[page]):
+                readable = False
+                break
+        if not readable:
+            break
+        entry_offsets[request] = entries
+        effective[request] = admitted
+        base = admitted + front
+        completion = base
+        wait = 0.0
+        for page in range(offset, stop):
+            if page_staged[page] and page_covered[page] and (page_end[page] < 0 or page_end[page] > admitted):
+                data = max(base + latency, page_ready[page])
+                staged[request] += 1
+                staged_host_bytes[request] += page_host_bytes[page]
+                if logic:
+                    rid = page_scratch[page]
+                    if touch_request[rid] != request:
+                        touch_request[rid] = request
+                        entry_rid[entries] = rid
+                        entry_busy_before[entries] = state[rid, 1]
+                        entry_moved_before[entries] = moved[rid]
+                        entries += 1
+                        if not resource_seen[rid]:
+                            resource_seen[rid] = True
+                            resource_order[resource_count] = rid
+                            resource_count += 1
+                    start = max(data, lanes[rid])
+                    data = start + page_scratch_ns[page]
+                    lanes[rid] = data
+                    state[rid, 0] = data
+                    state[rid, 1] += page_scratch_ns[page]
+                    state[rid, 2] = start
+                    state[rid, 3] = data
+                    moved[rid] += page_scratch_bytes[page]
+                    transferred[rid] = True
+                    reserved[request] = True
+                    scratch_bytes[request] += page_scratch_bytes[page]
+                if data > completion:
+                    completion = data
+                continue
+            bank, tag = page_bank[page], page_tag[page]
+            unit = bank
+            if not bank_seen[bank]:
+                bank_seen[bank] = True
+                bank_order[bank_count] = bank
+                bank_count += 1
+            cache_clock += 1
+            slot = -1
+            for candidate in range(2):
+                if tags[bank, candidate] == tag:
+                    slot = candidate
+                    break
+            hit = slot >= 0
+            if not hit:
+                slot = 0
+                if ((tags[bank, 1] < 0 and tags[bank, 0] >= 0)
+                        or ((tags[bank, 1] < 0) == (tags[bank, 0] < 0)
+                            and uses[bank, 1] < uses[bank, 0])):
+                    slot = 1
+            uses[bank, slot] = cache_clock
+            slot_used[bank, slot] = True
+            reserved[request] = True
+            if hit:
+                rid = page_host[page]
+                if touch_request[rid] != request:
+                    touch_request[rid] = request
+                    entry_rid[entries] = rid
+                    entry_busy_before[entries] = state[rid, 1]
+                    entry_moved_before[entries] = moved[rid]
+                    entries += 1
+                    if not resource_seen[rid]:
+                        resource_seen[rid] = True
+                        resource_order[resource_count] = rid
+                        resource_count += 1
+                start = max(max(base, cache_ready[bank, slot]), lanes[rid])
+                end = start + page_host_ns[page]
+                lanes[rid] = end
+                state[rid, 0] = end
+                state[rid, 1] += page_host_ns[page]
+                state[rid, 2] = start
+                state[rid, 3] = end
+                moved[rid] += page_host_bytes[page]
+                transferred[rid] = True
+                if end > readers[bank, slot]:
+                    readers[bank, slot] = end
+                slot_read[bank, slot] = True
+                hits[request] += 1
+                if end > completion:
+                    completion = end
+                continue
+            if unit_visit[unit] != request:
+                # The front this request inherits, at its first visit.
+                unit_visit[unit] = request
+                frontier = max(array_ready[unit], buffer_ready[unit])
+                lane = lanes[unit_array[unit]]
+                inherited[unit] = lane if lane > frontier else frontier
+            for step in range(3):
+                if step == 0:
+                    rid = page_ar[page]
+                elif step == 1:
+                    rid = page_ch[page]
+                else:
+                    rid = page_host[page]
+                if touch_request[rid] != request:
+                    touch_request[rid] = request
+                    entry_rid[entries] = rid
+                    entry_busy_before[entries] = state[rid, 1]
+                    entry_moved_before[entries] = moved[rid]
+                    entries += 1
+                    if not resource_seen[rid]:
+                        resource_seen[rid] = True
+                        resource_order[resource_count] = rid
+                        resource_count += 1
+                if step == 0:
+                    start = max(max(max(base, array_ready[unit]), buffer_ready[unit]), lanes[rid])
+                    read_end = start + page_read_ns
+                    lanes[rid] = read_end
+                    state[rid, 0] = read_end
+                    state[rid, 1] += page_read_ns
+                    state[rid, 2] = start
+                    state[rid, 3] = read_end
+                elif step == 1:
+                    start = max(max(read_end, readers[bank, slot]), lanes[rid])
+                    internal_end = start + internal_ns
+                    lanes[rid] = internal_end
+                    state[rid, 0] = internal_end
+                    state[rid, 1] += internal_ns
+                    state[rid, 2] = start
+                    state[rid, 3] = internal_end
+                    moved[rid] += internal_bytes
+                    transferred[rid] = True
+                else:
+                    start = max(internal_end, lanes[rid])
+                    end = start + page_host_ns[page]
+                    lanes[rid] = end
+                    state[rid, 0] = end
+                    state[rid, 1] += page_host_ns[page]
+                    state[rid, 2] = start
+                    state[rid, 3] = end
+                    moved[rid] += page_host_bytes[page]
+                    transferred[rid] = True
+            frontier_wait = inherited[unit] - base
+            if frontier_wait > wait:
+                wait = frontier_wait
+            tags[bank, slot] = tag
+            cache_ready[bank, slot] = internal_end
+            readers[bank, slot] = end
+            slot_filled[bank, slot] = True
+            if read_end > array_ready[unit]:
+                array_ready[unit] = read_end
+            if internal_end > buffer_ready[unit]:
+                buffer_ready[unit] = internal_end
+            if not unit_seen[unit]:
+                unit_seen[unit] = True
+                unit_order[unit_count] = unit
+                unit_count += 1
+            misses[request] += 1
+            if end > completion:
+                completion = end
+        for entry in range(entry_offsets[request], entries):
+            rid = entry_rid[entry]
+            entry_busy_after[entry] = state[rid, 1]
+            entry_moved_after[entry] = moved[rid]
+            entry_start[entry] = state[rid, 2]
+            entry_end[entry] = state[rid, 3]
+        completions[request] = completion
+        waits[request] = wait
+        # _HostPopulation.record: retire completions up to the admission.
+        low, high = host_low[host], host_high[host]
+        while low < high and host_ends[low] <= admitted:
+            low += 1
+        position = high
+        while position > low and host_ends[position - 1] > completion:
+            host_ends[position] = host_ends[position - 1]
+            position -= 1
+        host_ends[position] = completion
+        host_low[host], host_high[host] = low, high + 1
+        acceptance[host] = max(admitted, device_acceptance)
+        processed += 1
+        offset = stop
+    entry_offsets[processed] = entries
+    return (processed, effective, completions, waits, hits, misses, staged, staged_host_bytes,
+            scratch_bytes, reserved, cache_clock, entry_offsets[:processed + 1], entry_rid[:entries],
+            entry_busy_before[:entries], entry_busy_after[:entries], entry_moved_before[:entries],
+            entry_moved_after[:entries], entry_start[:entries], entry_end[:entries],
+            resource_order[:resource_count], transferred, bank_order[:bank_count],
+            unit_order[:unit_count], slot_used, slot_filled, slot_read)
+
+
+@njit(cache=True, nogil=True, fastmath=False)
+def fold_sequential_read_bill(entry_offsets, entry_rid, busy_before, busy_after, moved_before,
+                              moved_after, starts, ends, busy, has_busy, byte_counts, has_bytes,
+                              last_start, last_end, has_last):
+    """Consume each request's bill into one sink, request after request.
+
+    The additions of consume_task_resource_sink: a busy or byte entry exists
+    only when its counter changed, and a later interval (end, then start)
+    replaces the held one. Returns the request in which each resource first
+    enters the sink's busy, byte and interval maps (-1 when it was there).
+    """
+    resources = len(busy)
+    first_busy = np.full(resources, -1, dtype=np.int64)
+    first_bytes = np.full(resources, -1, dtype=np.int64)
+    first_last = np.full(resources, -1, dtype=np.int64)
+    for request in range(len(entry_offsets) - 1):
+        for entry in range(entry_offsets[request], entry_offsets[request + 1]):
+            rid = entry_rid[entry]
+            if busy_after[entry] != busy_before[entry]:
+                busy[rid] = busy[rid] + (busy_after[entry] - busy_before[entry])
+                if not has_busy[rid]:
+                    has_busy[rid] = True
+                    first_busy[rid] = request
+            if moved_after[entry] != moved_before[entry]:
+                byte_counts[rid] = byte_counts[rid] + (moved_after[entry] - moved_before[entry])
+                if not has_bytes[rid]:
+                    has_bytes[rid] = True
+                    first_bytes[rid] = request
+            if not has_last[rid]:
+                has_last[rid] = True
+                first_last[rid] = request
+                last_start[rid], last_end[rid] = starts[entry], ends[entry]
+            elif ends[entry] > last_end[rid] or (ends[entry] == last_end[rid] and starts[entry] > last_start[rid]):
+                last_start[rid], last_end[rid] = starts[entry], ends[entry]
+    return first_busy, first_bytes, first_last

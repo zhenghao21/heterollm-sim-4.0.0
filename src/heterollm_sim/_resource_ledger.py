@@ -418,6 +418,12 @@ def reduce_physical_results(physical_results: list, arrival_ns, optional_fields,
                             additive_fields: frozenset, peak_fields: frozenset,
                             read_operation):
     """Reduce every operation in its original order, retaining all counters."""
+    # The native fast path relies on immutable, exact field sets.  Accepting a
+    # mutable container or a subclass here lets user code change the reducer's
+    # dispatch while it is iterating, which is both semantically ambiguous and
+    # different from the authored public contract.
+    if type(additive_fields) is not frozenset or type(peak_fields) is not frozenset:
+        raise TypeError("additive_fields and peak_fields must be exact frozenset instances")
     row: dict
     optional_counts: dict
     operations: set

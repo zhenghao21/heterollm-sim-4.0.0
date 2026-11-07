@@ -2418,22 +2418,19 @@ class KVCachePolicy:
     # pools from the scheduler's demand bound and the KV capacity.
     pool_blocks: int = 0
     chunk_pool_blocks: int = 0
-    # Host placement of NAND-backed KV (OCP HBF 13.3.2): a request's block is
-    # a stripe over consecutive banks, and a bank log gives each program its
-    # next page number. The stride (NAND pages, block to block) fixes the
-    # banks of a layer's tail programs; zero leaves the block's rounded size.
-    # Every pool ends this many bytes past whole blocks, which is what places
-    # the next pool, allocated right after it, on other banks.
-    stripe_stride_pages: int = 0
-    stripe_phase_bytes: int = 0
+    # Host placement of NAND-backed KV (OCP HBF 13.3.2).  Pages are allocated
+    # sequentially in a compact host page table; map_nand_address performs the
+    # deterministic channel/DLU/bank/page/block decode for every run.
+    nand_placement_mode: str = "sequential_channel"
 
     def __post_init__(self) -> None:
         _require_optional_name(self.cache_component, "cache_component")
         _require_optional_name(self.offload_component, "offload_component")
         _require_int(self.pool_blocks, "pool_blocks")
         _require_int(self.chunk_pool_blocks, "chunk_pool_blocks")
-        _require_int(self.stripe_stride_pages, "stripe_stride_pages")
-        _require_int(self.stripe_phase_bytes, "stripe_phase_bytes")
+        _require_name(self.nand_placement_mode, "nand_placement_mode")
+        if self.nand_placement_mode != "sequential_channel":
+            raise ValueError("nand_placement_mode must be sequential_channel")
         _require_optional_name(self.dtype, "dtype")
         _require_int(self.tokens_per_page, "tokens_per_page", minimum=1)
         _require_number(self.offload_ratio, "offload_ratio")

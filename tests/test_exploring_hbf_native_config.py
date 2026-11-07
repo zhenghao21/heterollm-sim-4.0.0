@@ -38,7 +38,11 @@ def test_all_paper_hardware_has_private_native_endpoints_and_valid_8gpu_topology
         active = scenario.hardware.get_component(rank.memory_component_id)
         if hardware.endswith("+"):
             assert active.kind == "sram"
-            assert require_physical_memory_config(active).capacity_bytes == 320_000_000
+            sram = require_physical_memory_config(active)
+            nand = require_physical_memory_config(scenario.hardware.get_component("hbf0"))
+            assert sram.capacity_bytes == 320_000_000
+            assert sram.ports == nand.host_channels == 128
+            assert sram.capacity_bytes // sram.ports == 2_500_000
             assert not any(component.kind == "hbm" for component in scenario.hardware.components)
         else:
             assert active.kind == "hbm"

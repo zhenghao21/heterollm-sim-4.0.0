@@ -326,6 +326,11 @@ class PhysicalRuntimeContext:
             metadata.setdefault("parallel_resource_prefix", f"{owner}:nand:parallel")
             metadata.setdefault("channel_resource_prefix", f"{owner}:nand:channel")
             metadata.setdefault("host_resource_id", f"{owner}:nand:host")
+            # The authored paper config uses a portable scratchpad prefix;
+            # bind it per physical owner just like the NAND calendars so TP
+            # rank copies never alias one another's staging lane.
+            if metadata.get("scratchpad_resource_prefix") in (None, "nand:scratchpad"):
+                metadata["scratchpad_resource_prefix"] = f"{owner}:nand:scratchpad"
         bound_config = replace(config, metadata=metadata)
         self._owner_config_cache[owner] = (authored_config, bound_config)
         return bound_config
@@ -468,7 +473,7 @@ class PhysicalRuntimeContext:
                 }:
                     continue
                 if nand_transaction is not None and key in {
-                    "_bank_log", "_block_wear_state", "_nand_transactions", "_read_cache",
+                    "_bank_log", "_write_pointer", "_seed_history_pages", "_write_order_errors", "_logical_page_table", "_block_wear_state", "_nand_transactions", "_read_cache",
                     "_array_ready", "_buffer_ready", "_nand_numeric_state", "_tail_pages",
                     "_tail_full_scopes", "_tail_spilled"
                 }:
@@ -501,8 +506,10 @@ class PhysicalRuntimeContext:
                     # saved retry point through a nested alias.
                     core_state[key] = copy.deepcopy(value)
                 elif key in {"_inflight", "_inflight_operations", "_write_buffer_pending", "_hbm_transactions",
-                             "_nand_transactions", "_tail_flushing", "_bank_log"} and isinstance(value, list):
+                             "_nand_transactions", "_tail_flushing", "_bank_log", "_write_pointer"} and isinstance(value, list):
                     core_state[key] = list(value)
+                elif key == "_logical_page_table":
+                    core_state[key] = dict(value)
                 elif key == "_tail_pages":
                     # Staged pages map to immutable tuples.
                     core_state[key] = dict(value)
@@ -761,7 +768,7 @@ class PhysicalRuntimeContext:
             if nand_token is not None:
                 active.core.rollback_transaction(nand_token)
                 journal_state.update({key: active.core.__dict__[key] for key in (
-                    "_bank_log", "_block_wear_state", "_nand_transactions", "_read_cache",
+                    "_bank_log", "_write_pointer", "_seed_history_pages", "_write_order_errors", "_logical_page_table", "_block_wear_state", "_nand_transactions", "_read_cache",
                     "_array_ready", "_buffer_ready", "_nand_numeric_state", "_tail_pages",
                     "_tail_full_scopes", "_tail_spilled")})
             active.core.__dict__.clear()
@@ -1353,6 +1360,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
                 "physical_write_bytes": int(account.get("physical_write_bytes", 0)),
                 "pages_read": 0,
                 "pages_programmed": int(account.get("programs", 0)),
+                "erase_operations": int(account.get("erase_operations", 0)),
                 "page_staging_flush_programs": int(account.get("programs", 0)),
                 "program_operations": int(account.get("programs", 0)),
                 "page_count": 0,

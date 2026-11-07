@@ -73,6 +73,16 @@ def _prepared(classes, guard=0.):
             "query_decode_guard_ns": guard}
 
 
+def test_sampled_erase_accounting_is_reported_once_without_double_charge():
+    physical = {"storage_traffic": {"erase_operations": 2}}
+    samples = {"runs": {"calibration": {"sample_id": "cal", "physical_observations": physical},
+                         "holdout": {"sample_id": "hold", "physical_observations": physical}}}
+    accounting = stationary._sampled_erase_accounting(samples)
+    assert accounting["sampled_erase_operations"] == 2
+    assert accounting["sampled_windows"] == 1
+    assert "no second block_erase charge" in accounting["time_accounting"]
+
+
 def test_step_composes_measured_class_steps_and_widens_by_their_drift():
     prepared = _prepared(["a"] * 6)
     samples = {"runs": {

@@ -65,7 +65,7 @@ from .native_layer_sampling import (NativeLayerSamplingGuardError, _execute_wind
                                     drop_unsampled_request_records, layer_inventory,
                                     remaining_import_bytes)
 from .memory_types import NandConfig
-from .planner import _compilation_scope, kv_block_pools
+from .planner import _compilation_scope
 from .serving import RequestStatus, _OnlineRuntime, compile_serving_plan, stationary_refill_contract
 
 HOLDOUT_SHIFT_NS = 10e6
@@ -1113,6 +1113,60 @@ def _edge_interval(runs, name):
     return max(0., lower), upper
 
 
+def _sampled_erase_accounting(samples):
+    """Return the erase events present in native windows without recharging them.
+
+    OCP page-zero erases are emitted by the NAND transaction ledger and their
+    time is already part of the sampled layer/stage completion timestamps.
+    Stationary composition must carry the observed count for auditability,
+    but adding ``block_erase_ns`` a second time would double charge the same
+    event.  The recursive walk handles both serial and PP sample schemas and
+    de-duplicates shared dictionaries from sharded windows.
+    """
+    seen = set()
+    windows = []
+
+    def visit(value):
+        if isinstance(value, dict):
+            marker = id(value)
+            if marker in seen:
+                return
+            seen.add(marker)
+            observations = value.get("physical_observations")
+            if isinstance(observations, dict):
+                observation_marker = id(observations)
+                if observation_marker not in seen:
+                    seen.add(observation_marker)
+                    traffic = observations.get("storage_traffic")
+                    count = None
+                    if isinstance(traffic, dict):
+                        raw = traffic.get("erase_operations")
+                        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                            count = int(raw)
+                    # Page-level observation is a fallback for a sample that
+                    # did not publish the aggregate traffic row.
+                    if count is None and isinstance(traffic, dict):
+                        observed = traffic.get("nand_observations")
+                        if isinstance(observed, dict):
+                            raw = observed.get("actual_erase_operations")
+                            if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                                count = int(raw)
+                    if count is not None:
+                        windows.append({"sample_id": value.get("sample_id"),
+                                        "erase_operations": max(0, count)})
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                visit(child)
+
+    visit(samples)
+    return {"sampled_windows": len(windows),
+            "sampled_erase_operations": sum(row["erase_operations"] for row in windows),
+            "windows": windows,
+            "time_accounting": "included_in_sampled_layer_or_stage_completion; no second block_erase charge"}
+
+
 def _pipeline_finish(service, transfer, commit, depth, count, bound):
     """Each microbatch's end in one PP cohort flush: stage FIFO, link FIFO and
     the CPU commit FIFO (max-plus), from ``bound`` 0 (lower) or 1 (upper) of
@@ -1445,38 +1499,6 @@ def kv_block_peak(ages_by_group, prompt, output, group_pool, tokens_per_block, r
     return peaks
 
 
-def block_open_stall_ns(runtime, requests, output):
-    """Step time the host gives to opening NAND blocks for a group's KV; 0 without striped NAND KV.
-
-    Writing page 0 of a block erases it (OCP 5.4.1). A bank log uses pages as
-    KV programs them: one per page a tail fills, or one per row appended where
-    the scratchpad can't hold the tail, and each landing import's history. The
-    host opens one block on every bank at once, between layers, so every
-    pages_per_block programs per bank stall the device's reads for one erase.
-    Ranks stall together, so the busiest rank sets the step's loss.
-    """
-    scenario = runtime.plan.scenario
-    if not scenario.placement.kv_policy.stripe_stride_pages:
-        return 0.
-    prompt = next(state.spec.prompt_tokens for state in runtime._state_values
-                  if not state.spec.metadata.get("warmup_seed", False))
-    physical = runtime._execution_resource_kernel.physical_runtime
-    programs, configs = defaultdict(float), {}
-    for row in kv_block_pools(scenario, 0, runtime._kv_block_layout["tokens_per_block"]):
-        config = row["memory_config"]
-        if not isinstance(config, NandConfig):
-            continue
-        owner, bytes_per_row = row["physical_owner"], row["row_bytes"]
-        share = physical._staging_shares.get(owner)
-        stored = physical._tail_reserved.get(share[0], (0, 1.))[1] if share is not None else 1.
-        history = min(prompt - 1, row["attention_chunk_size"] or prompt - 1)
-        programs[owner] += requests * (stored * bytes_per_row / config.page_bytes + 1. - stored)
-        programs[owner] += requests / output * -(-history * bytes_per_row // config.page_bytes)
-        configs[owner] = config
-    return max((config.block_erase_ns * programs[owner] / (config.array_units * config.pages_per_block)
-                for owner, config in configs.items()), default=0.)
-
-
 def kv_block_admission(runtime):
     """The refill cycle's KV block peak of every EP group against its pools.
 
@@ -1603,6 +1625,7 @@ def evaluate_stationary(runtime, prepared, samples, options):
         return result
     schedule = _group_refill_schedule(ages_by_group, output, group_pool, warmup, measured,
                                       step.get("pipeline_microbatches", 1))
+    erase_accounting = _sampled_erase_accounting(samples)
     waits, most, lag, rho = schedule["waits"], schedule["most"], schedule["lag"], schedule["rho"]
     busiest, total = schedule["busiest_landings"], schedule["total_landings"]
     enveloped = []
@@ -1625,10 +1648,9 @@ def evaluate_stationary(runtime, prepared, samples, options):
     # landings, every step grows by B/output * sum_k E(k) n_k/total; with
     # single imports only that is B*e*rho/output.
     shares = {count: steps / total for count, steps in busiest.items()} if total else {1: 1.}
-    block_open = block_open_stall_ns(runtime, batch // degree, output)
-    tpot_lo = step_lo + block_open + sum(batch * terms[count]["extra_ns"][0] * share / output
+    tpot_lo = step_lo + sum(batch * terms[count]["extra_ns"][0] * share / output
                                          for count, share in shares.items())
-    tpot_hi = step_hi + block_open + sum(batch * terms[count]["extra_ns"][1] * share / output
+    tpot_hi = step_hi + sum(batch * terms[count]["extra_ns"][1] * share / output
                                          for count, share in shares.items())
     span_lo = min(terms[count]["span_ns"][0] for count in shares)
     span_hi = max(terms[count]["span_ns"][1] for count in shares)
@@ -1681,7 +1703,8 @@ def evaluate_stationary(runtime, prepared, samples, options):
                 "measurement_visible_output_tokens": tokens, "complete_fresh_requests": complete,
                 "forecast_only": True},
         error_budget={**result["error_budget"], "step_service_ns": {"lower": step_lo, "upper": step_hi},
-            "step": step, "block_open_stall_ns": block_open,
+            "step": step,
+            "erase_accounting": erase_accounting,
             "pd_import_extra_ns": {"lower": terms[1]["extra_ns"][0], "upper": terms[1]["extra_ns"][1]},
             "pd_import_span_ns": {"lower": span_lo, "upper": span_hi}, "pd_imports": imports,
             "pd_import_terms": [{"concurrent_imports": count, "measured_steps": busiest.get(count, 0),
