@@ -70,6 +70,12 @@ from .planner import _compilation_scope
 from .serving import RequestStatus, _OnlineRuntime, compile_serving_plan, stationary_refill_contract
 
 HOLDOUT_SHIFT_NS = 10e6
+# B323 was measured with every host-channel cursor in every HBF component at
+# the same page-zero boundary.  The 168 page-zero commands (84 per component)
+# overlap and extend the decode window by one visible erase, 1,999,877.12 ns.
+# This is the cost of one host-batched erase; the per-point channel rate below
+# supplies the number of such batches per step.
+OCP_BATCH_ERASE_VISIBLE_NS = 1_999_877.12
 SAME_CLASS_ADDRESS_ASSUMPTION = (
     "Unsampled layers take their class's sampled step: the DRAM row openings that differ between "
     "same-class layers because their buffer addresses straddle row boundaries differently are "
@@ -1194,6 +1200,395 @@ def _sampled_erase_accounting(samples):
             "time_accounting": "included_in_sampled_layer_or_stage_completion; no second block_erase charge"}
 
 
+def _per_channel_erase_pause(channel_rates, flush_slots, base_step_ns, pause_ns):
+    """Charge one visible erase per KV flush slot that holds any page-zero erase.
+
+    Page-zero erases fire only inside the per-layer, per-rank KV flush
+    (``planner._add_logic_die_kv_flush_task`` -> ``NandCore.flush_staged_pages``),
+    and the layers of one step run in lockstep across ranks.  Measured on B323:
+    erases in different layers each add one full ``d``; erases in the same
+    flush overlap and add one ``d`` together.  Channel ``c`` erases with
+    probability ``r_c`` per step at a uniformly placed layer, so a slot stays
+    erase-free with probability ``prod_c(1 - r_c/L)`` and the step grows by
+    ``d * L * (1 - prod_c(1 - r_c/L))``.
+    """
+    rates = [min(1.0, max(0.0, float(rate))) for rate in channel_rates]
+    events = sum(rates)
+    slots = int(flush_slots)
+    base = max(0.0, float(base_step_ns))
+    empty = {"base_step_ns": base, "elapsed_step_ns": base, "expected_pause_ns": 0.0,
+             "phase_model": "flush_slot_union", "flush_slots_per_step": slots,
+             "event_count_per_step": events, "expected_erase_slots_per_step": 0.0,
+             "pause_ns": float(pause_ns)}
+    if events <= 0.0 or slots <= 0 or base <= 0.0 or pause_ns <= 0.0:
+        return empty
+    free_log = math.fsum(math.log1p(-rate / slots) for rate in rates if rate > 0.0)
+    erase_slots = slots * -math.expm1(free_log)
+    pause = erase_slots * float(pause_ns)
+    return {**empty, "elapsed_step_ns": base + pause, "expected_pause_ns": pause,
+            "expected_erase_slots_per_step": erase_slots}
+
+
+def _ocp_erase_forecast(runtime, prepared, samples, step_bounds=None):
+    """Forecast one-step erases under both configured OCP policies.
+
+    The host places logical pages sequentially (``page % host_channels``), but
+    block tables and free-list choices give different layers different channel
+    phases.  We therefore retain the measured per-channel program counts from
+    the calibration and holdout windows, scale each channel to the full model,
+    and use the fastest channel as the batch clock.  One batch is one visible
+    erase event even when all HBF components and their active channels issue
+    page-zero erases together.  Any erase observed in a sampled window already
+    contributes to that window's timestamp and suppresses the forecast.
+    """
+    empty = {
+        "enabled": False,
+        "strategy": "host_batched_erase",
+        "erase_policy": "batched",
+        "basis": "no OCP layer program sample",
+        "sampled_layer_windows": [],
+        "layers_per_step": None,
+        "sampled_pages_per_layer": None,
+        "step_program_pages": None,
+        "host_channel_count": None,
+        "batch_capacity_pages": None,
+        "fastest_channel": None,
+        "fastest_channel_pages_per_step": 0.0,
+        "average_channel_pages_per_step": None,
+        "per_channel_min_pages_per_step": None,
+        "per_channel_max_pages_per_step": None,
+        "batch_count_per_step": 0.0,
+        "batch_visible_cost_ns": OCP_BATCH_ERASE_VISIBLE_NS,
+        "sampled_erase_operations": 0,
+        "already_included": False,
+        "erase_item": {"name": "ocp_host_batched_erase", "ns": 0.0},
+        "erase_forecast_ns": 0.0,
+        "strategy_options": {},
+    }
+    if not isinstance(samples, dict) or "pipeline" in samples:
+        return empty
+    # Program counts come only from the sampled runs.
+    runs = samples.get("runs")
+    if not isinstance(runs, dict) or not runs:
+        return empty
+
+    from .physical_contract import require_physical_memory_config
+
+    configs = {}
+    for component in runtime.plan.scenario.hardware.components:
+        try:
+            config = require_physical_memory_config(component)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(config, NandConfig) and config.protocol_mode == "ocp_hbf_0_7":
+            # Resource totals use the physical owner spelling ``hbfN.memory``.
+            configs[str(component.component_id) + ".memory"] = config
+    if not configs:
+        return {**empty, "basis": "scenario has no OCP HBF physical memory component"}
+    policies = {str(config.erase_policy) for config in configs.values()}
+    if len(policies) != 1:
+        return {**empty, "basis": "OCP HBF components use mixed erase_policy values",
+                "erase_policy": "mixed"}
+    erase_policy = next(iter(policies))
+
+    rows = []
+    seen = set()
+
+    def add_row(role, row):
+        if not isinstance(row, dict) or id(row) in seen:
+            return
+        seen.add(id(row))
+        observations = row.get("physical_observations")
+        traffic = observations.get("storage_traffic") if isinstance(observations, dict) else None
+        if not isinstance(traffic, dict):
+            return
+        layer_ids = row.get("layer_ids")
+        if not isinstance(layer_ids, (list, tuple)) or not layer_ids:
+            return
+        pages = traffic.get("pages_programmed")
+        if not isinstance(pages, (int, float)) or isinstance(pages, bool):
+            return
+        erases = traffic.get("erase_operations", 0)
+        if not isinstance(erases, (int, float)) or isinstance(erases, bool):
+            observed = traffic.get("nand_observations")
+            erases = observed.get("actual_erase_operations", 0) if isinstance(observed, dict) else 0
+        if not isinstance(erases, (int, float)) or isinstance(erases, bool):
+            erases = 0
+
+        # HBF+ reports completed page programs on nand:host:<n>:write.  The
+        # non-plus HBF profile exposes the same programs through its
+        # nand:scratchpad:<n>:write resource.  Prefer host writes when both
+        # resources are present because scratchpad bytes can be partial staging.
+        by_kind = defaultdict(lambda: defaultdict(float))
+        totals = traffic.get("resource_totals")
+        if isinstance(totals, dict):
+            for key, value in totals.items():
+                if not isinstance(key, str) or not isinstance(value, dict):
+                    continue
+                match = re.fullmatch(r"([^:]+):nand:(host|scratchpad):(\d+):write", key)
+                if not match:
+                    continue
+                owner, kind, channel = match.group(1), match.group(2), int(match.group(3))
+                config = configs.get(owner)
+                if config is None or channel >= int(config.host_channels):
+                    continue
+                moved = value.get("bytes_moved", 0)
+                if isinstance(moved, (int, float)) and not isinstance(moved, bool):
+                    by_kind[owner, kind][channel] += max(0.0, float(moved)) / float(config.page_bytes)
+
+        channel_pages = {}
+        resource_kind = {}
+        for owner, config in sorted(configs.items()):
+            host = by_kind.get((owner, "host"), {})
+            scratchpad = by_kind.get((owner, "scratchpad"), {})
+            if sum(host.values()) > 0.0:
+                selected, kind = host, "host"
+            elif sum(scratchpad.values()) > 0.0:
+                selected, kind = scratchpad, "scratchpad"
+            else:
+                selected, kind = {}, None
+            channel_pages[owner] = [float(selected.get(channel, 0.0))
+                                    for channel in range(int(config.host_channels))]
+            if kind is not None:
+                resource_kind[owner] = kind
+        if not any(sum(values) > 0.0 for values in channel_pages.values()):
+            return
+        rows.append({
+            "role": str(role),
+            "sample_id": row.get("sample_id"),
+            "layer_count": len(layer_ids),
+            "pages_programmed": max(0.0, float(pages)),
+            "erase_operations": max(0, int(erases)),
+            "channel_pages": channel_pages,
+            "resource_kind": resource_kind,
+        })
+
+    for role, row in runs.items():
+        add_row(role, row)
+    layer_rows =[row for row in rows if row["role"] in {"calibration", "holdout"}]
+    if not layer_rows:
+        return {**empty, "basis": "serial OCP sample lacks calibration/holdout channel traffic"}
+
+    layer_count = int(samples.get("layer_count") or len(prepared.get("inventory", ())))
+    if layer_count <= 0:
+        return {**empty, "basis": "sampled OCP program count has no model layer count"}
+
+    # Scale each observed channel independently to all layers, then average
+    # calibration and holdout.  This preserves the phase imbalance needed to
+    # identify the fastest channel while keeping the total-page estimate equal
+    # to the established full-step traffic estimate.
+    accumulators = {owner: [[] for _ in range(int(config.host_channels))]
+                    for owner, config in configs.items()}
+    for row in layer_rows:
+        scale = layer_count / row["layer_count"]
+        for owner, values in row["channel_pages"].items():
+            for channel, value in enumerate(values):
+                accumulators[owner][channel].append(value * scale)
+    rates = {
+        owner: [fmean(values) if values else 0.0 for values in channels]
+        for owner, channels in accumulators.items()
+    }
+    flattened = [(value, owner, channel)
+                 for owner in sorted(rates)
+                 for channel, value in enumerate(rates[owner])]
+    if not flattened:
+        return {**empty, "basis": "sampled OCP channel traffic is empty"}
+
+    fastest_pages, fastest_owner, fastest_channel = max(
+        flattened, key=lambda item: (item[0], item[1], -item[2]))
+    capacities = {owner: int(config.planes_per_lun) * int(config.pages_per_block)
+                  for owner, config in configs.items()}
+    # All OCP HBF points use one geometry.  Keep the owner-specific map in the
+    # evidence so a mixed-geometry scenario still selects by batches, not by
+    # the sum of replicated devices.
+    fastest_capacity = capacities[fastest_owner]
+    batch_count = fastest_pages / fastest_capacity
+    total_pages = sum(value for value, _owner, _channel in flattened)
+    channel_count = len(flattened)
+    average_pages = total_pages / channel_count
+    min_pages = min(value for value, _owner, _channel in flattened)
+    sampled_pages_per_layer = fmean(row["pages_programmed"] / row["layer_count"]
+                                    for row in layer_rows)
+    observed_erases = sum(row["erase_operations"] for row in rows)
+    already_included = observed_erases > 0
+    batched_forecast = 0.0 if already_included else batch_count * OCP_BATCH_ERASE_VISIBLE_NS
+    # Per-channel policy: every channel contributes an independent erase
+    # event stream.  Capacity is per die, so rates are divided by the owning
+    # component's block capacity before they are combined.
+    event_rates = {owner: sum(values) / capacities[owner]
+                   for owner, values in rates.items()}
+    event_count = sum(event_rates.values())
+    base_step = None
+    step_interval = None
+    if isinstance(step_bounds, (list, tuple)) and len(step_bounds) == 2:
+        step_interval = {"lower": float(step_bounds[0]), "upper": float(step_bounds[1])}
+        base_step = fmean(step_interval.values())
+    per_channel_pause = _per_channel_erase_pause(
+        [value / capacities[owner] for owner in sorted(rates) for value in rates[owner]],
+        layer_count, base_step or 0.0, OCP_BATCH_ERASE_VISIBLE_NS)
+    per_channel_forecast = (0.0 if already_included
+                            else per_channel_pause["expected_pause_ns"])
+    per_owner = []
+    for owner in sorted(rates):
+        values = rates[owner]
+        per_owner.append({
+            "owner": owner,
+            "host_channels": len(values),
+            "pages_per_step_min": min(values),
+            "pages_per_step_max": max(values),
+            "pages_per_step_average": sum(values) / len(values),
+            "pages_per_step_sum": sum(values),
+            "active_channels": sum(value > 0.0 for value in values),
+            "batch_capacity_pages": capacities[owner],
+        })
+    erase_item = {
+        "name": "ocp_host_batched_erase",
+        "strategy": "host_batched_erase",
+        "fastest_channel_pages_per_step": fastest_pages,
+        "average_channel_pages_per_step": average_pages,
+        "batch_count_per_step": batch_count,
+        "batch_visible_cost_ns": OCP_BATCH_ERASE_VISIBLE_NS,
+        "already_included": already_included,
+        "ns": batched_forecast,
+    }
+    batched = {
+        "enabled": True,
+        "strategy": "host_batched_erase",
+        "erase_policy": "batched",
+        "basis":
+            "calibration+holdout per-channel host/scratchpad writes scaled to all model layers; "
+            "the fastest channel clocks batches; each batch erases one unified block per due die "
+            "and all HBF components are charged as one visible erase",
+        "sampled_layer_windows": [
+            {key: value for key, value in row.items() if key not in {"channel_pages"}}
+            for row in rows
+        ],
+        "layers_per_step": layer_count,
+        "sampled_pages_per_layer": sampled_pages_per_layer,
+        "step_program_pages": total_pages,
+        "host_channel_count": {owner: len(values) for owner, values in rates.items()},
+        "batch_capacity_pages": fastest_capacity,
+        "capacity_by_component": [{"component": owner, "pages": capacities[owner]}
+                                   for owner in sorted(capacities)],
+        "fastest_channel": {"owner": fastest_owner, "channel": fastest_channel,
+                            "pages_per_step": fastest_pages,
+                            "batch_capacity_pages": fastest_capacity},
+        "fastest_channel_pages_per_step": fastest_pages,
+        "average_channel_pages_per_step": average_pages,
+        "per_channel_min_pages_per_step": min_pages,
+        "per_channel_max_pages_per_step": fastest_pages,
+        "batch_count_per_step": batch_count,
+        "expected_erase_operations_per_step": batch_count,
+        "batch_visible_cost_ns": OCP_BATCH_ERASE_VISIBLE_NS,
+        "sampled_erase_operations": observed_erases,
+        "already_included": already_included,
+        "owner_rates": per_owner,
+        "erase_item": erase_item,
+        "erase_forecast_ns": batched_forecast,
+    }
+    per_channel_item = {
+        "name": "ocp_per_channel_erase",
+        "strategy": "per_channel_erase",
+        "event_count_per_step": event_count,
+        "base_step_service_ns": base_step,
+        "batch_visible_cost_ns": OCP_BATCH_ERASE_VISIBLE_NS,
+        "already_included": already_included,
+        "ns": per_channel_forecast,
+    }
+    per_channel = {
+        "enabled": True,
+        "strategy": "per_channel_erase",
+        "erase_policy": "per_channel",
+        "basis":
+            "calibration+holdout per-channel host/scratchpad writes scaled to all model layers; "
+            "each channel erases once per filled unified block at a uniformly placed layer; erases in "
+            "one layer's KV flush overlap, so the step grows by d per layer flush holding any erase",
+        "sampled_layer_windows": [
+            {key: value for key, value in row.items() if key not in {"channel_pages"}}
+            for row in rows
+        ],
+        "layers_per_step": layer_count,
+        "sampled_pages_per_layer": sampled_pages_per_layer,
+        "step_program_pages": total_pages,
+        "host_channel_count": {owner: len(values) for owner, values in rates.items()},
+        "batch_capacity_pages": fastest_capacity,
+        "capacity_by_component": [{"component": owner, "pages": capacities[owner]}
+                                   for owner in sorted(capacities)],
+        "fastest_channel": {"owner": fastest_owner, "channel": fastest_channel,
+                            "pages_per_step": fastest_pages,
+                            "batch_capacity_pages": fastest_capacity},
+        "fastest_channel_pages_per_step": fastest_pages,
+        "average_channel_pages_per_step": average_pages,
+        "per_channel_min_pages_per_step": min_pages,
+        "per_channel_max_pages_per_step": fastest_pages,
+        "batch_count_per_step": batch_count,
+        "expected_erase_operations_per_step": event_count,
+        "event_count_per_step": event_count,
+        "event_rates_by_component": event_rates,
+        "step_service_ns": step_interval,
+        "per_channel_union": per_channel_pause,
+        "batch_visible_cost_ns": OCP_BATCH_ERASE_VISIBLE_NS,
+        "sampled_erase_operations": observed_erases,
+        "already_included": already_included,
+        "owner_rates": per_owner,
+        "erase_item": per_channel_item,
+        "erase_forecast_ns": per_channel_forecast,
+    }
+    options = {
+        "batched": {"strategy": "host_batched_erase",
+                    "fastest_channel_pages_per_step": fastest_pages,
+                    "average_channel_pages_per_step": average_pages,
+                    "batch_count_per_step": batch_count,
+                    "batch_visible_cost_ns": OCP_BATCH_ERASE_VISIBLE_NS,
+                    "erase_forecast_ns": batched_forecast,
+                    "sampled_erase_operations": observed_erases,
+                    "already_included": already_included},
+        "per_channel": {"strategy": "per_channel_erase",
+                         "fastest_channel_pages_per_step": fastest_pages,
+                         "average_channel_pages_per_step": average_pages,
+                         "event_count_per_step": event_count,
+                         "batch_visible_cost_ns": OCP_BATCH_ERASE_VISIBLE_NS,
+                         "base_step_service_ns": base_step,
+                         "expected_pause_ns": per_channel_pause["expected_pause_ns"],
+                         "elapsed_step_ns": per_channel_pause["elapsed_step_ns"],
+                         "erase_forecast_ns": per_channel_forecast,
+                         "sampled_erase_operations": observed_erases,
+                         "already_included": already_included},
+    }
+    selected = batched if erase_policy == "batched" else per_channel
+    selected = {**selected, "strategy_options": options}
+    return selected
+
+
+def _shift_forecast_bounds(bounds, forecast_ns, *, batch, measured, wait):
+    """Add an erase forecast additively while keeping all derived estimates exact."""
+    if not forecast_ns:
+        return bounds
+
+    def shift(row, delta):
+        lower, upper = row["lower"] + delta, row["upper"] + delta
+        estimate = row["estimate"] + delta
+        return {"estimate": estimate, "lower": lower, "upper": upper,
+                "relative_error_budget": (upper - lower) / (upper + lower)}
+
+    tpot = shift(bounds["mean_complete_request_tpot_ns"], forecast_ns)
+    duration = shift(bounds["measurement_duration_ns"], measured * forecast_ns)
+    ingress = shift(bounds["mean_complete_request_ingress_ttft_ns"], wait * forecast_ns)
+    bounds["mean_complete_request_tpot_ns"] = tpot
+    bounds["measurement_duration_ns"] = duration
+    bounds["mean_complete_request_ingress_ttft_ns"] = ingress
+    lower = batch * 1e9 / tpot["upper"]
+    upper = batch * 1e9 / tpot["lower"]
+    # Preserve the established interval convention: throughput's estimate is
+    # the harmonic mean of its reciprocal interval, rather than the reciprocal
+    # of the TPOT interval's harmonic estimate.
+    estimate = 2. * lower * upper / (lower + upper)
+    bounds["cluster_tokens_per_second"] = {
+        "estimate": estimate, "lower": lower, "upper": upper,
+        "relative_error_budget": (upper - lower) / (upper + lower)}
+    return bounds
+
+
 def _pipeline_finish(service, transfer, commit, depth, count, bound):
     """Each microbatch's end in one PP cohort flush: stage FIFO, link FIFO and
     the CPU commit FIFO (max-plus), from ``bound`` 0 (lower) or 1 (upper) of
@@ -1653,6 +2048,9 @@ def evaluate_stationary(runtime, prepared, samples, options):
     schedule = _group_refill_schedule(ages_by_group, output, group_pool, warmup, measured,
                                       step.get("pipeline_microbatches", 1))
     erase_accounting = _sampled_erase_accounting(samples)
+    erase_forecast = _ocp_erase_forecast(runtime, prepared, samples,
+                                         step_bounds=(step_lo, step_hi))
+    erase_forecast_ns = float(erase_forecast["erase_forecast_ns"])
     waits, most, lag, rho = schedule["waits"], schedule["most"], schedule["lag"], schedule["rho"]
     busiest, total = schedule["busiest_landings"], schedule["total_landings"]
     enveloped = []
@@ -1675,10 +2073,15 @@ def evaluate_stationary(runtime, prepared, samples, options):
     # landings, every step grows by B/output * sum_k E(k) n_k/total; with
     # single imports only that is B*e*rho/output.
     shares = {count: steps / total for count, steps in busiest.items()} if total else {1: 1.}
-    tpot_lo = step_lo + sum(batch * terms[count]["extra_ns"][0] * share / output
-                                         for count, share in shares.items())
-    tpot_hi = step_hi + sum(batch * terms[count]["extra_ns"][1] * share / output
-                                         for count, share in shares.items())
+    tpot_lo_base = step_lo + sum(batch * terms[count]["extra_ns"][0] * share / output
+                                               for count, share in shares.items())
+    tpot_hi_base = step_hi + sum(batch * terms[count]["extra_ns"][1] * share / output
+                                               for count, share in shares.items())
+    # The forecast participates in refill-overlap guards as a real step cost.
+    # Metric estimates receive it through _shift_forecast_bounds below so the
+    # reported TPOT delta is exactly the separately reported erase item.
+    tpot_lo = tpot_lo_base + erase_forecast_ns
+    tpot_hi = tpot_hi_base + erase_forecast_ns
     span_lo = min(terms[count]["span_ns"][0] for count in shares)
     span_hi = max(terms[count]["span_ns"][1] for count in shares)
     gap = schedule["fewest_landing_steps"]
@@ -1700,10 +2103,10 @@ def evaluate_stationary(runtime, prepared, samples, options):
     parallel = plan.scenario.placement.parallel
     world = parallel.tp_degree * parallel.pp_degree * parallel.ep_degree
     wait = fmean(waits)
-    bounds = {"mean_complete_request_tpot_ns": _interval(tpot_lo, tpot_hi),
-              "measurement_duration_ns": _interval(measured * tpot_lo, measured * tpot_hi),
-              "cluster_tokens_per_second": _interval(batch * 1e9 / tpot_hi, batch * 1e9 / tpot_lo),
-              "mean_complete_request_ingress_ttft_ns": _interval(tpot_lo * wait, tpot_hi * wait)}
+    bounds = {"mean_complete_request_tpot_ns": _interval(tpot_lo_base, tpot_hi_base),
+              "measurement_duration_ns": _interval(measured * tpot_lo_base, measured * tpot_hi_base),
+              "cluster_tokens_per_second": _interval(batch * 1e9 / tpot_hi_base, batch * 1e9 / tpot_lo_base),
+              "mean_complete_request_ingress_ttft_ns": _interval(tpot_lo_base * wait, tpot_hi_base * wait)}
     if "microbatches" in schedule:
         # A token commits with its request's microbatch m, off[m] before the
         # step ends (imports start at step ends): off[m] is the last commit
@@ -1716,12 +2119,15 @@ def evaluate_stationary(runtime, prepared, samples, options):
                    for row in commits[:-1]] + [(0., 0.)]
         heads = [fmean(offsets[pair[0]][bound] for pair in schedule["microbatches"]) for bound in (0, 1)]
         tails = [fmean(offsets[pair[1]][bound] for pair in schedule["microbatches"]) for bound in (0, 1)]
-        bounds["mean_complete_request_tpot_ns"] = _interval(tpot_lo + (heads[0] - tails[1]) / (output - 1),
-                                                            tpot_hi + (heads[1] - tails[0]) / (output - 1))
-        bounds["mean_complete_request_ingress_ttft_ns"] = _interval(tpot_lo * wait - heads[1],
-                                                                    tpot_hi * wait - heads[0])
+        bounds["mean_complete_request_tpot_ns"] = _interval(
+            tpot_lo_base + (heads[0] - tails[1]) / (output - 1),
+            tpot_hi_base + (heads[1] - tails[0]) / (output - 1))
+        bounds["mean_complete_request_ingress_ttft_ns"] = _interval(
+            tpot_lo_base * wait - heads[1], tpot_hi_base * wait - heads[0])
         step = {**step, "token_commit_offsets_ns": offsets,
                 "mean_first_token_offset_ns": heads, "mean_last_token_offset_ns": tails}
+    bounds = _shift_forecast_bounds(bounds, erase_forecast_ns, batch=batch,
+                                    measured=measured, wait=wait)
     if any(not _within(row, limit) for row in bounds.values()):
         reasons.append("native_stationary_independent_budget_exceeded")
     tokens = measured * batch
@@ -1732,6 +2138,8 @@ def evaluate_stationary(runtime, prepared, samples, options):
         error_budget={**result["error_budget"], "step_service_ns": {"lower": step_lo, "upper": step_hi},
             "step": step,
             "erase_accounting": erase_accounting,
+            "erase_forecast": erase_forecast,
+            "erase_forecast_ns": erase_forecast_ns,
             "pd_import_extra_ns": {"lower": terms[1]["extra_ns"][0], "upper": terms[1]["extra_ns"][1]},
             "pd_import_span_ns": {"lower": span_lo, "upper": span_hi}, "pd_imports": imports,
             "pd_import_terms": [{"concurrent_imports": count, "measured_steps": busiest.get(count, 0),

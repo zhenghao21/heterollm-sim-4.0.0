@@ -265,3 +265,19 @@ def test_short_stack_and_slow_refill_are_rejected_not_extrapolated():
     assert slow.native_window_forecast is None
     assert "native_stationary_refill_not_always_ready" in slow.approximation["rejection_reasons"]
     assert len(slow.approximation["error_budget"]["step"]["classes"]) == 3
+
+
+def test_per_channel_erases_in_one_flush_share_one_visible_erase():
+    d = 2_000_000.0
+    # One channel erasing every other step costs half an erase per step.
+    alone = stationary._per_channel_erase_pause([0.5], 4, 10e6, d)
+    assert alone["expected_pause_ns"] == pytest.approx(0.5 * d)
+    # Two such channels collide in the same flush slot with probability
+    # 1/4 * 1/4 per slot: 4 * (1 - (7/8)^2) = 0.9375 slots, below the 1.0 of
+    # two separate erases.
+    pair = stationary._per_channel_erase_pause([0.5, 0.5], 4, 10e6, d)
+    assert pair["expected_erase_slots_per_step"] == pytest.approx(0.9375)
+    assert pair["elapsed_step_ns"] == pytest.approx(10e6 + 0.9375 * d)
+    # No writes, no flush slot or no step: no pause.
+    assert stationary._per_channel_erase_pause([0.0, 0.0], 4, 10e6, d)["expected_pause_ns"] == 0.0
+    assert stationary._per_channel_erase_pause([0.5], 0, 10e6, d)["expected_pause_ns"] == 0.0

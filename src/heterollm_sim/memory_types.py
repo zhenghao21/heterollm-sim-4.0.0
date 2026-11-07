@@ -708,6 +708,10 @@ class NandConfig:
     kind: MemoryKind | str = MemoryKind.SSD
     # Explicit execution contracts, not automatic device-name dispatch.
     protocol_mode: str = field(default="generic_nand", kw_only=True)
+    # OCP host erase scheduling is part of the NAND configuration.  The
+    # stationary native forecast accepts both the coordinated batched policy
+    # and the independent per-channel policy, with batched as the default.
+    erase_policy: str = field(default="batched", kw_only=True)
     host_channels: int = field(default=1, kw_only=True)
     host_full_duplex: bool = field(default=False, kw_only=True)
     read_cache_pages_per_bank: int = field(default=0, kw_only=True)
@@ -787,6 +791,8 @@ class NandConfig:
             raise ValueError("planes_independent must be a boolean")
         if self.protocol_mode not in {"generic_nand", "ocp_hbf_0_7"}:
             raise ValueError("protocol_mode must be generic_nand or ocp_hbf_0_7")
+        if self.erase_policy not in {"batched", "per_channel"}:
+            raise ValueError("erase_policy must be batched or per_channel")
         if self.queue_scope not in {"device", "host_channel"}:
             raise ValueError("NAND queue_scope must be device or host_channel")
         if self.protocol_mode == "generic_nand" and self.queue_scope != "device":

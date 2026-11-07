@@ -60,7 +60,7 @@ _DRAM_RESEARCH_BASE = {
 }
 _NAND_RESEARCH_BASE = {
     "kind": "HBF", "generation": "", "channels": 1,
-    "protocol_mode": "generic_nand", "host_channels": 1,
+    "protocol_mode": "generic_nand", "erase_policy": "batched", "host_channels": 1,
     "host_full_duplex": False, "read_cache_pages_per_bank": 0,
     "targets_per_channel": 1, "dies_per_target": 1, "luns_per_die": 1,
     "planes_per_lun": 1, "planes_independent": False, "parallel_units": None,
