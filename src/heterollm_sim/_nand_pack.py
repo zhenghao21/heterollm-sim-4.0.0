@@ -90,23 +90,6 @@ def _get(mapping: object, key: object, default: object = None) -> object:
 
 @cython.cfunc
 @cython.inline
-def _put(mapping: object, key: object, value: object) -> object:
-    if cython.compiled and type(mapping) is dict:
-        cython.cast(dict, mapping)[key] = value
-    else:
-        mapping[key] = value
-
-
-@cython.cfunc
-@cython.inline
-def _item(mapping: object, key: object) -> object:
-    if cython.compiled and type(mapping) is dict:
-        return cython.cast(dict, mapping)[key]
-    return mapping[key]
-
-
-@cython.cfunc
-@cython.inline
 def _double(value: object) -> cython.double:
     if type(value) is float or type(value) is int:
         return value
@@ -388,31 +371,27 @@ def publish_timeline(timeline, names, state_values: list, moved_values: list,
             continue
         first, lane_count = start_values[index], lane_count_values[index]
         if single_lane:
-            slots = _item(lane_map, name)
-            if cython.compiled and type(slots) is list:
-                cython.cast(list, slots)[0] = lane_values[first]
+            if name in lane_map:
+                lane_map[name][0] = lane_values[first]
             else:
-                slots[0] = lane_values[first]
+                lane_map[name] = [lane_values[first]]
         else:
             values = lane_values[first:first + lane_count]
             if name in lane_map:
-                slots = _item(lane_map, name)
-                slots[:] = values
+                lane_map[name][:] = values
             else:
-                _put(lane_map, name, values)
+                lane_map[name] = values
         row = state_values[index]
-        _put(ready_map, name, row[0])
-        _put(busy_map, name, row[1])
-        _put(interval_map, name, (row[2], row[3]))
+        ready_map[name] = row[0]
+        busy_map[name] = row[1]
+        interval_map[name] = (row[2], row[3])
         if name in link_names or byte_values[index] or name in moved_map:
-            _put(moved_map, name, moved_values[index])
+            moved_map[name] = moved_values[index]
         if direction_values[index]:
-            _put(direction_map, name, direction_names[direction_values[index]])
+            direction_map[name] = direction_names[direction_values[index]]
         if lane_count > 1:
-            _put(lane_direction_map, name,
-                 [direction_names[value] for value in lane_direction_values[first:first + lane_count]])
-        elif cython.compiled and type(lane_direction_map) is dict:
-            cython.cast(dict, lane_direction_map).pop(name, None)
+            lane_direction_map[name] = [
+                direction_names[value] for value in lane_direction_values[first:first + lane_count]]
         else:
             lane_direction_map.pop(name, None)
 
@@ -625,52 +604,35 @@ def publish_active_timeline(timeline, names, state, moved, directions,
     size: cython.Py_ssize_t
     lane: cython.Py_ssize_t
     name: object
-    slots: object
     values: list
     for offset in range(len(indexes)):
         index = positions[offset]
         name = names[index]
         first, size = firsts[index], sizes[index]
         if single_lane:
-            # A newly reached array can be absent from lane_available even
-            # though its scalar calendars were admitted and journalled by the
-            # native resource contract.  The scalar publisher creates this
-            # slot lazily; keep the native publisher semantically identical
-            # instead of indexing a missing lane entry.
             if name in lane_map:
-                slots = _item(lane_map, name)
-                if cython.compiled and type(slots) is list:
-                    cython.cast(list, slots)[0] = float(lanes[first])
-                else:
-                    slots[0] = float(lanes[first])
+                lane_map[name][0] = float(lanes[first])
             else:
-                _put(lane_map, name, [float(lanes[first])])
+                lane_map[name] = [float(lanes[first])]
         else:
-            values = []
-            for lane in range(first, first + size):
-                values.append(float(lanes[lane]))
+            values = [float(lanes[lane]) for lane in range(first, first + size)]
             if name in lane_map:
-                slots = _item(lane_map, name)
-                slots[:] = values
+                lane_map[name][:] = values
             else:
-                _put(lane_map, name, values)
-        _put(ready_map, name, float(rows[index, 0]))
-        _put(busy_map, name, float(rows[index, 1]))
-        _put(interval_map, name, (float(rows[index, 2]), float(rows[index, 3])))
+                lane_map[name] = values
+        ready_map[name] = float(rows[index, 0])
+        busy_map[name] = float(rows[index, 1])
+        interval_map[name] = (float(rows[index, 2]), float(rows[index, 3]))
         if bus_mask[index] or name in moved_map:
-            _put(moved_map, name, int(byte_counts[index]))
+            moved_map[name] = int(byte_counts[index])
         if direction_values[index]:
-            _put(direction_map, name, direction_names[direction_values[index]])
+            direction_map[name] = direction_names[direction_values[index]]
         if size > 1:
-            values = []
-            for lane in range(first, first + size):
-                values.append(direction_names[lane_directions[lane]])
-            _put(lane_direction_map, name, values)
+            lane_direction_map[name] = [
+                direction_names[lane_directions[lane]]
+                for lane in range(first, first + size)]
         else:
-            if cython.compiled and type(lane_direction_map) is dict:
-                cython.cast(dict, lane_direction_map).pop(name, None)
-            else:
-                lane_direction_map.pop(name, None)
+            lane_direction_map.pop(name, None)
 
 
 def remember_generic_resources(timeline, resources):
@@ -726,15 +688,15 @@ def publish_generic_controller(core, names, indexes, array_values, buffer_values
         name = names[unit]
         if not resident:
             core._touch_frontiers(name)
-            _put(array_map, name, float(arrays[unit]))
-            _put(buffer_map, name, float(buffers[unit]))
+            array_map[name] = float(arrays[unit])
+            buffer_map[name] = float(buffers[unit])
         elif name not in array_map:
             core._touch_frontiers(name)
-            _put(array_map, name, 0.)
+            array_map[name] = 0.
             buffer_map.setdefault(name, 0.)
         if not native_accounting or name not in resources:
             core.timeline._remember_resource(name)
-        _put(ready_map, name, float(arrays[unit]))
+        ready_map[name] = float(arrays[unit])
 
 
 def generic_metrics_delta(timeline, names, indexes, previous_busy, previous_moved):

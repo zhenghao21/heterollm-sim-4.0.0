@@ -167,14 +167,15 @@ def test_unknown_calendar_callback_uses_full_timeline_and_owner_undo(kind):
 def test_replaced_numeric_publisher_has_full_rollback_for_foreign_owner(monkeypatch):
     context = pair("nand")[0]
     pack = _nand_acceleration._owned_pack_module
-    original = pack.publish_timeline
+    # Every native NAND executor publishes through publish_active_timeline.
+    original = pack.publish_active_timeline
     def unknown(*args, **kwargs):
         original(*args, **kwargs)
         context.timeline.ready_ns["unrelated:0"] += 99.
         context.runtimes["other"].clock_ns += 1234.
         raise RuntimeError("unknown publication")
     with monkeypatch.context() as patch:
-        patch.setattr(pack, "publish_timeline", unknown)
+        patch.setattr(pack, "publish_active_timeline", unknown)
         token = context.begin_transaction(owners=("dev",), _owned_timeline=True)
         assert "_owned_transaction" not in token["timeline"]
         assert set(token["runtime_state"]) == {"dev", "other"}

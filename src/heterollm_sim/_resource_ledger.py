@@ -90,15 +90,6 @@ def _get(mapping: object, key: object, default: object = None) -> object:
 
 @cython.cfunc
 @cython.inline
-def _put(mapping: object, key: object, value: object) -> object:
-    if cython.compiled and type(mapping) is dict:
-        cython.cast(dict, mapping)[key] = value
-    else:
-        mapping[key] = value
-
-
-@cython.cfunc
-@cython.inline
 def _setdefault(mapping: object, key: object, value: object) -> object:
     if cython.compiled and type(mapping) is dict:
         return cython.cast(dict, mapping).setdefault(key, value)
@@ -124,7 +115,7 @@ def _remember_owned_resource(token: object, resource_id: object, missing: object
         if getattr(timeline, name) is not root or resource_id in saved:
             continue
         previous = _get(root, resource_id, missing)
-        _put(saved, resource_id, previous)
+        saved[resource_id] = previous
         if type(previous) is list:
             identity = id(previous)
             if identity not in objects:
@@ -227,7 +218,7 @@ def publish_timeline_frontiers(lane_available, resource_available):
     lanes: object
     for resource_id, lanes in lane_available.items():
         if lanes:
-            _put(resource_available, resource_id, lanes[0] if len(lanes) == 1 else min(lanes))
+            resource_available[resource_id] = lanes[0] if len(lanes) == 1 else min(lanes)
 
 
 def publish_owner_frontiers(resource_owners, resource_available: dict):
@@ -236,7 +227,7 @@ def publish_owner_frontiers(resource_owners, resource_available: dict):
     owner: object
     for resource_id, owner in resource_owners.items():
         if owner in resource_available:
-            _put(resource_available, resource_id, resource_available[owner])
+            resource_available[resource_id] = resource_available[owner]
 
 
 @cython.cfunc
@@ -341,7 +332,7 @@ def publish_physical_summary(task_id, physical_ids, lane_available,
             if len(lanes) == 1 and previous is not None and previous["end_ns"] == start:
                 _setdefault(predecessors, resource_id, dict(previous))
             if previous is None or end >= previous["end_ns"]:
-                _put(resource_last_interval, resource_id, interval)
+                resource_last_interval[resource_id] = interval
         # enumerate, rather than indexing, retains arbitrary lane sequences'
         # iteration behavior.  The index is C-sized; published indices remain
         # ordinary Python ints.
@@ -355,9 +346,9 @@ def publish_physical_summary(task_id, physical_ids, lane_available,
             else:
                 last = {"task_id": task_id, "resource_id": resource_id,
                         "end_ns": end, "lane": lane_index}
-            _put(lane_last_interval, (resource_id, lane_index), last)
+            lane_last_interval[(resource_id, lane_index)] = last
         if lanes:
-            _put(resource_available, resource_id, lanes[0] if len(lanes) == 1 else min(lanes))
+            resource_available[resource_id] = lanes[0] if len(lanes) == 1 else min(lanes)
     return tuple(completions)
 
 
@@ -773,16 +764,16 @@ def record_resource_paths(paths, task, demands, start_ns, resource_lanes,
     for resource_id, lane, end_ns in task.metadata.get("physical_resource_lane_completions", ()):
         resource_id, lane, end_ns = str(resource_id), int(lane), float(end_ns)
         duration = end_ns - start_ns
-        _put(paths, (resource_id, lane), (task.task_id, start_path, duration,
-                                        start_distance + duration, task.category))
+        paths[(resource_id, lane)] = (task.task_id, start_path, duration,
+                                      start_distance + duration, task.category)
     for demand in demands:
         if demand.resource_id not in physical_ids:
             resource_id = demand.resource_id
             lane = int(_get(resource_lanes, demand.resource_id, 0))
             end_ns = start_ns + demand.service_ns
             duration = end_ns - start_ns
-            _put(paths, (resource_id, lane), (task.task_id, start_path, duration,
-                                            start_distance + duration, task.category))
+            paths[(resource_id, lane)] = (task.task_id, start_path, duration,
+                                          start_distance + duration, task.category)
 
 
 def can_sink_resource_columns(timeline, column_names):

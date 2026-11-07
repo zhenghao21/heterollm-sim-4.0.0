@@ -75,7 +75,7 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
     import numpy as np
     from .nand_core import NandCore
     from ._nand_execution import _geometry_plan
-    from ._nand_pack import pack_single_lane, pack_multi_lane, publish_timeline
+    from ._nand_pack import pack_single_lane, pack_multi_lane, publish_active_timeline
     from ._compiled_nand import run_generic_flush_batch
 
     config, timeline = core.config, core.timeline
@@ -170,10 +170,10 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
     packed.dirty_banks |= active_banks
     resource_indexes = np.flatnonzero(touched)
     resources = {names[index] for index in resource_indexes.tolist()}
-    publish_timeline(
-        timeline, names, state.tolist(), moved.tolist(), direction_values.tolist(),
-        lanes.tolist(), lane_directions.tolist(), starts.tolist(), lane_counts.tolist(),
-        resources, (), [int(name in resources and (name in channels or name in links)) for name in names],
+    publish_active_timeline(
+        timeline, names, state, moved, direction_values, lanes, lane_directions,
+        starts, lane_counts, resource_indexes, resources,
+        tuple(int(name in channels or name in links) for name in names),
         direction_names, single_lane)
     timeline._touched.update(resources)
     timeline._intervals_truncated = bool(resources) or timeline._intervals_truncated
@@ -202,7 +202,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
     from .nand_core import NandCore, _ReadCacheSlot, _bulk_min_pages
     from .memory_types import TransactionResult
     from ._nand_execution import _geometry_plan, _NandNumericState
-    from ._nand_pack import (pack_single_lane, pack_multi_lane, publish_timeline,
+    from ._nand_pack import (pack_single_lane, pack_multi_lane,
                             validate_buffered_cache, pack_buffered_cache, publish_buffered_cache,
                             publish_active_timeline, generic_request_resource_indexes,
                             pack_selected_single_lane, generic_metrics_delta,
@@ -366,15 +366,11 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
         # newly introduced directional host or an as-yet untouched bank.
         resource_indexes = resource_order
     resources = {names[index] for index in resource_indexes.tolist()}
-    if bus_mask is not None:
-        publish_active_timeline(timeline, names, state, moved, direction_values,
-            lanes, lane_directions, start_values, lane_counts, resource_indexes,
-            resources, bus_mask, directions, single_lane, _metrics is not None)
-    else:
-        publish_timeline(timeline, names, state.tolist(), moved.tolist(), direction_values.tolist(),
-                         lanes.tolist(), lane_directions.tolist(), start_values.tolist(), lane_counts.tolist(),
-                         resources, (), [int(name in resources and name in channels + hosts) for name in names],
-                         directions, single_lane)
+    if bus_mask is None:
+        bus_mask = tuple(int(name in channels or name in hosts) for name in names)
+    publish_active_timeline(timeline, names, state, moved, direction_values,
+        lanes, lane_directions, start_values, lane_counts, resource_indexes,
+        resources, bus_mask, directions, single_lane, _metrics is not None)
     unit_indexes = np.flatnonzero(active_units)
     publish_generic_controller(core, array_names, unit_indexes, arrays, buffers,
                                packed is not None, resources, _metrics is not None)
