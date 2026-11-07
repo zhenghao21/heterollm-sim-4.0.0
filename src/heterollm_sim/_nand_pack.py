@@ -749,34 +749,28 @@ def generic_metrics_delta(timeline, names, indexes, previous_busy, previous_move
 
 
 
-def generic_request_resource_indexes(first_page, count, base_units, planes, independent,
-                                     per_channel, host_channels, array_ids, channel_ids, host_ids):
-    """Exact potential resource footprint of the unchanged sequential page loop."""
-    first: cython.longlong = first_page
-    base_count: cython.longlong = base_units
-    bank_count: cython.longlong = base_units * planes
-    plane: cython.longlong
-    base: cython.longlong
-    bank: cython.longlong
-    unit: cython.longlong
-    channel: cython.longlong
-    page: cython.longlong
-    offset: cython.Py_ssize_t
-    arrays: cython.const[cython.longlong][::1] = array_ids
-    channels: cython.const[cython.longlong][::1] = channel_ids
-    hosts: cython.const[cython.longlong][::1] = host_ids
-    selected: set = set()
-    for offset in range(min(count, bank_count)):
-        page = first + offset
-        base = page % base_count
-        plane = (page // base_count) % planes
-        bank = base + plane * base_count
-        unit = bank if independent else base
-        channel = base // per_channel
-        selected.add(int(arrays[unit]))
-        selected.add(int(channels[channel]))
-        selected.add(int(hosts[channel % host_channels]))
-    return np.asarray(sorted(selected), dtype=np.int64)
+def generic_page_resource_indexes(page_indices, base_units, planes, independent,
+                                  per_channel, host_channels, array_ids, channel_ids, host_ids):
+    """Exact potential resource footprint of the page loop over ``page_indices``.
+
+    The indices are physical pages, so a span read through the host page
+    table selects the banks its pages actually occupy.
+    """
+    pages = np.asarray(page_indices, dtype=np.int64)
+    base = pages % base_units
+    bank_count = base_units * planes
+    used = np.zeros(bank_count if independent else base_units, dtype=np.bool_)
+    used[base + (pages // base_units) % planes * base_units if independent else base] = True
+    units = np.flatnonzero(used)
+    channel_used = np.zeros(base_units // per_channel, dtype=np.bool_)
+    channel_used[(units % base_units) // per_channel] = True
+    channels = np.flatnonzero(channel_used)
+    selected = np.zeros(int(max(np.max(array_ids), np.max(channel_ids), np.max(host_ids))) + 1,
+                        dtype=np.bool_)
+    selected[np.asarray(array_ids, dtype=np.int64)[units]] = True
+    selected[np.asarray(channel_ids, dtype=np.int64)[channels]] = True
+    selected[np.asarray(host_ids, dtype=np.int64)[channels % host_channels]] = True
+    return np.flatnonzero(selected).astype(np.int64)
 
 
 def pack_selected_single_lane(timeline, names, indexes, count, transfer_page_bytes):

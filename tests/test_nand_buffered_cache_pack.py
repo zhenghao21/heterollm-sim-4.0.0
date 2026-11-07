@@ -210,10 +210,21 @@ def test_actual_pd_resource_indexes_cover_256_arrays_112_channels_and_host(pack)
     hosts = np.array([2912], dtype=np.int64)
     for values in (arrays, channels, hosts):
         values.flags.writeable = False
-    indexes = pack.generic_request_resource_indexes(2700, 256, 112, 25, True, 1, 1,
+    indexes = pack.generic_page_resource_indexes(np.arange(2700, 2956, dtype=np.int64), 112, 25, True, 1, 1,
         arrays, channels, hosts)
     assert indexes.dtype == np.int64
     assert len(indexes) == 369
     assert len(set(indexes)) == len(indexes)
     assert set(indexes[indexes < 2800]) == set(range(2700, 2800)) | set(range(156))
     assert set(indexes[indexes >= 2800]) == set(range(2800, 2913))
+
+
+def test_page_table_resource_indexes_follow_physical_pages(pack):
+    # Two pages a host page table put on channel 3, planes 0 and 7, select
+    # exactly those two arrays, that channel and the host.
+    arrays = np.arange(2800, dtype=np.int64)
+    channels = np.arange(2800, 2912, dtype=np.int64)
+    hosts = np.array([2912], dtype=np.int64)
+    pages = np.array([3, 7 * 112 + 3 + 25 * 112], dtype=np.int64)
+    indexes = pack.generic_page_resource_indexes(pages, 112, 25, True, 1, 1, arrays, channels, hosts)
+    assert indexes.tolist() == [3, 7 * 112 + 3, 2803, 2912]

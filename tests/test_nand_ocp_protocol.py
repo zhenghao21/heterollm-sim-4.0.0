@@ -256,3 +256,46 @@ def test_logic_die_scratchpad_is_per_channel_and_high_priority_lane():
     stage_write = stage(result, "STAGING_WRITE")
     assert stage_write.resource_id == "nand:scratchpad:0:write"
     assert core.page_staging_state()["capacity_bytes"] == 2_500_000
+
+
+def _ocp_runtime(**updates):
+    from heterollm_sim.data_motion import PhysicalRuntimeContext
+    values = dict(protocol_mode="ocp_hbf_0_7", channels=1, host_channels=1,
+                  metadata={"write_pointer_phase": "first_write"})
+    values.update(updates)
+    context = PhysicalRuntimeContext(config(**values), "flash", capture_details=False)
+    return context.runtimes["flash"].core
+
+
+def _billed(result):
+    # The runtime context prefixes its owner to every resource.
+    return {name.removeprefix("flash:") for name in result.counters["resource_busy_ns"]}
+
+
+def _arrays(result):
+    return sorted(name for name in _billed(result) if name.startswith("nand:array"))
+
+
+def test_read_window_reads_pages_where_the_page_table_put_them():
+    core = _ocp_runtime(planes_per_lun=4)
+    for name, address in (("first", 0), ("rewrite", 0), ("one", PAGE), ("two", 2 * PAGE)):
+        core.submit(request(name, "write", address=address, count=PAGE))
+    # Logical pages 0..2 sit one DLU (one plane) later; page 3 was never written.
+    assert core._read_pages(0, 4).tolist() == [1, 2, 3, 3]
+    results = core.submit_many([request(str(page), address=page * PAGE, count=PAGE, arrival=1e6)
+                                for page in range(3)])
+    assert all("native_fullpage_pages" in result.counters for result in results)
+    assert [_arrays(result) for result in results] == [["nand:array:1"], ["nand:array:2"], ["nand:array:3"]]
+
+
+def test_read_window_moves_staged_pages_over_the_scratchpad_lane():
+    core = _ocp_runtime(planes_per_lun=1, page_staging="logic_die",
+                        page_staging_bytes_per_host_channel=2_500_000)
+    core.submit(request("partial", "write", address=0, count=64))
+    staged, media = core.submit_many([request("staged", address=0, count=64, arrival=1e6),
+                                      request("media", address=5 * PAGE, count=PAGE, arrival=1e6)])
+    assert "native_fullpage_pages" in staged.counters
+    assert staged.counters["staging_read_hits"] == 1
+    assert _billed(staged) == {"nand:scratchpad:0:read"}
+    assert "nand:host:read" in _billed(media)
+    assert "nand:scratchpad:0:read" not in _billed(media)

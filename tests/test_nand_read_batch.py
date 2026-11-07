@@ -207,13 +207,15 @@ def test_kernel_matches_brute_force_schedule(seed):
     arrays, buffers, tags, ready, readers, uses = case["controller"]
     starts, lane_counts, lanes, state, moved = case["calendar"]
     banks = len(tags)
+    page_indices = np.concatenate([np.arange(first, first + count, dtype=np.int64)
+                                   for first, count in zip(first_pages.tolist(), counts.tolist())])
     output = run_generic_read_batch(
-        first_pages, counts, arrivals,
+        page_indices, counts, arrivals,
         np.array([row[1] for row in head], dtype=np.int64), np.array([row[0] for row in head]),
         np.array([row[1] for row in tail], dtype=np.int64), np.array([row[0] for row in tail]),
         np.full(int(counts.sum()), -1.), 0., False,
         0., np.empty(0), 1 << 30, case["front"], case["geometry"],
-        np.array((READ_NS, CHANNEL_NS, HOST_NS, 4096.)), array_ids, channel_ids, host_ids,
+        np.array((READ_NS, CHANNEL_NS, HOST_NS, 4096.)), array_ids, channel_ids, host_ids, host_ids,
         arrays, buffers, tags, ready, readers, uses, np.zeros(banks, dtype=np.bool_), 0,
         starts, lane_counts, lanes, np.zeros(len(lanes), dtype=np.int64), state, moved,
         np.zeros(len(starts), dtype=np.int64))

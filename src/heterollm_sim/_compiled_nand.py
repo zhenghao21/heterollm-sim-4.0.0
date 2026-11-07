@@ -437,9 +437,9 @@ def _arrive(page, rid, time, now, queue_times, queue_pages, queue_first, queue_s
 
 
 @njit(cache=True, nogil=True, fastmath=False)
-def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_ns, tail_bytes, tail_ns,
+def run_generic_read_batch(page_indices, page_counts, arrivals, head_bytes, head_ns, tail_bytes, tail_ns,
                            staged_ready, staging_ns, staging_host, acceptance, prior_ends, limit, front, geometry, timing,
-                           array_ids, channel_ids, host_ids, array_ready, buffer_ready,
+                           array_ids, channel_ids, host_ids, stage_ids, array_ready, buffer_ready,
                            tags, cache_ready, readers, uses, present, cache_clock,
                            starts, lane_counts, lanes, lane_directions, state, moved, directions):
     """Out-of-order generic-NAND controller for one batch of READ requests.
@@ -461,14 +461,19 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
     A staged page (``staged_ready`` >= 0, the time its staged bytes are in
     the store) has no array read, die transfer or buffer slot. Its data is
     ready ``staging_ns`` after admission, but not before those bytes; with
-    ``staging_host`` it then crosses the host link like any other page,
+    ``staging_host`` it then crosses its host channel's staging link
+    (``stage_ids``: the OCP scratchpad lane, or the host link itself),
     otherwise no NAND resource serves it.
+
+    ``page_indices`` holds every page's physical index, request after
+    request: the bank, plane and cache tag follow where the host page
+    table put the page.
     """
     base_units, planes, per_channel, host_channels = geometry[0], geometry[1], geometry[3], geometry[4]
     independent = geometry[2] != 0
     page_read, internal_ns, page_host_ns = timing[0], timing[1], timing[2]
     internal_bytes = np.int64(timing[3])
-    requests = len(first_pages)
+    requests = len(page_counts)
     offsets = np.empty(requests + 1, dtype=np.int64)
     offsets[0] = 0
     for request in range(requests):
@@ -479,6 +484,7 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
     page_request = np.empty(pages, dtype=np.int64)
     page_unit = np.empty(pages, dtype=np.int64)
     page_channel = np.empty(pages, dtype=np.int64)
+    page_host = np.empty(pages, dtype=np.int64)
     page_generation = np.empty(pages, dtype=np.int64)
     page_hit = np.zeros(pages, dtype=np.bool_)
     page_stage = np.empty(pages, dtype=np.int8)
@@ -512,19 +518,21 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
     for request in range(requests):
         for offset in range(page_counts[request]):
             page = offsets[request] + offset
-            page_index = first_pages[request] + offset
+            page_index = page_indices[page]
             base_unit = page_index % base_units
             bank = base_unit + ((page_index // base_units) % planes) * base_units
             physical_page = page_index // (base_units * planes)
             unit = bank if independent else base_unit
             channel = base_unit // per_channel
             page_request[page], page_unit[page], page_channel[page] = request, unit, channel
+            page_host[page] = host_ids[channel % host_channels]
             if staged_ready[page] >= 0:
                 page_unit[page] = -1
                 page_stage[page] = 2
                 page_generation[page] = -1
+                page_host[page] = stage_ids[channel % host_channels]
                 if staging_host:
-                    queue_capacity[host_ids[channel % host_channels]] += 1
+                    queue_capacity[page_host[page]] += 1
                 continue
             cache_clock += 1
             slot = -1
@@ -556,7 +564,7 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
                 generation_hits[generation] = -1
                 generation_previous[generation] = -1
                 current[bank, slot] = generation
-            queue_capacity[host_ids[channel % host_channels]] += 1
+            queue_capacity[page_host[page]] += 1
             if hit:
                 page_hit[page] = True
                 page_stage[page] = 2
@@ -648,7 +656,7 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
                 outstanding -= 1
                 if blocked:
                     size = _event_push(event_times, event_keys, size, now, (_ADMIT << _KIND_SHIFT) | next_request)
-            rid = host_ids[page_channel[item] % host_channels]
+            rid = page_host[item]
             if queue_size[rid] and dispatch_now[rid] != now:
                 dispatch_now[rid] = now
                 size = _event_push(event_times, event_keys, size, now, (_DISPATCH << _KIND_SHIFT) | rid)
@@ -662,7 +670,7 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
             generation_done[generation] = True
             generation_fill_end[generation] = now
             page_stage[item] = 2
-            host = host_ids[page_channel[item] % host_channels]
+            host = page_host[item]
             size = _arrive(item, host, now, now, queue_times, queue_pages, queue_first, queue_size,
                            dispatch_now, event_times, event_keys, size)
             waiting = generation_hits[generation]
@@ -726,7 +734,7 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
             for page in range(offsets[request], offsets[request + 1]):
                 if staged_ready[page] >= 0:
                     if staging_host:
-                        size = _arrive(page, host_ids[page_channel[page] % host_channels],
+                        size = _arrive(page, page_host[page],
                                        max(base + staging_ns, staged_ready[page]),
                                        now, queue_times, queue_pages, queue_first, queue_size, dispatch_now,
                                        event_times, event_keys, size)
@@ -739,7 +747,7 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
                 if page_hit[page]:
                     generation = page_generation[page]
                     if generation_done[generation]:
-                        size = _arrive(page, host_ids[page_channel[page] % host_channels],
+                        size = _arrive(page, page_host[page],
                                        max(base, generation_fill_end[generation]), now, queue_times,
                                        queue_pages, queue_first, queue_size, dispatch_now,
                                        event_times, event_keys, size)
@@ -767,7 +775,7 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
             elif stage == 1:
                 rid = channel_ids[page_channel[item]]
             else:
-                rid = host_ids[page_channel[item] % host_channels]
+                rid = page_host[item]
             size = _arrive(item, rid, now, now, queue_times, queue_pages, queue_first, queue_size,
                            dispatch_now, event_times, event_keys, size)
         else:
@@ -837,17 +845,17 @@ def run_generic_read_batch(first_pages, page_counts, arrivals, head_bytes, head_
                     if generation_fill[generation] >= 0:
                         cache_ready[bank, slot] = generation_fill_end[generation]
     return (admissions, completions, hits, misses, cache_clock, touched, arrays_touched, banks_touched,
-            offsets, page_hit, page_unit, page_channel, read_start, channel_start, host_start,
+            offsets, page_hit, page_unit, page_channel, page_host, read_start, channel_start, host_start,
             read_eligible,
             )
 
 
 @njit(cache=True, nogil=True, fastmath=False)
-def read_batch_request_metrics(offsets, page_counts, page_hit, page_unit, page_channel,
+def read_batch_request_metrics(offsets, page_counts, page_hit, page_unit, page_channel, page_host,
                                read_start, read_eligible, channel_start, host_start,
                                head_bytes, head_ns,
-                               tail_bytes, tail_ns, timing, host_channels,
-                               array_ids, channel_ids, host_ids, initial_frontier,
+                               tail_bytes, tail_ns, timing,
+                               array_ids, channel_ids, initial_frontier,
                                resources):
     """Each request's own bills plus inherited-frontier read wait.
 
@@ -876,7 +884,7 @@ def read_batch_request_metrics(offsets, page_counts, page_hit, page_unit, page_c
                     total += 1
             if host_start[page] < 0:
                 continue
-            rid = host_ids[page_channel[page] % host_channels]
+            rid = page_host[page]
             if stamp[rid] != request:
                 stamp[rid] = request
                 total += 1
@@ -908,7 +916,7 @@ def read_batch_request_metrics(offsets, page_counts, page_hit, page_unit, page_c
                 elif stage == 1:
                     rid, duration, payload, start = channel_ids[page_channel[page]], internal_ns, internal_bytes, channel_start[page]
                 else:
-                    rid, start = host_ids[page_channel[page] % host_channels], host_start[page]
+                    rid, start = page_host[page], host_start[page]
                     offset = page - offsets[request]
                     if offset == 0:
                         duration, payload = head_ns[request], head_bytes[request]
@@ -958,315 +966,3 @@ def read_batch_sink_totals(ids, busy, moved, first, last, task_busy, owner_busy,
         elif last[entry] > last_end[rid] or (last[entry] == last_end[rid] and first[entry] > last_first[rid]):
             last_first[rid], last_end[rid] = first[entry], last[entry]
     return order[:count], byte_totals, last_first, last_end
-
-
-@njit(cache=True, nogil=True, fastmath=False)
-def _sequential_admission(effective, ends, low, high, limit):
-    """_HostPopulation.preview for a READ: wait until a combined credit is free.
-
-    ``ends[low:high]`` are the host channel's command completions, ascending.
-    """
-    position = low
-    while True:
-        while position < high and ends[position] <= effective:
-            position += 1
-        if high - position < limit:
-            return effective
-        if ends[position] > effective:
-            effective = ends[position]
-
-
-@njit(cache=True, nogil=True, fastmath=False)
-def run_sequential_read_group(request_pages, arrivals, request_host, acceptance, device_acceptance,
-                              host_ends, host_low, host_high, limit, front, latency, logic,
-                              page_bank, page_tag, page_ar, page_ch, page_host, page_scratch,
-                              page_host_ns, page_host_bytes, page_staged, page_covered, page_full,
-                              page_ready, page_end, page_scratch_ns, page_scratch_bytes,
-                              page_read_ns, internal_ns, internal_bytes, unit_array,
-                              array_ready, buffer_ready, tags, cache_ready, readers, uses, cache_clock,
-                              lanes, state, moved):
-    """NandCore submissions of consecutive READs served by the scalar page machine.
-
-    Requests run one after another, exactly as separate submissions: host
-    channel credit admission, then every page in the order of
-    _execute_detailed_accepted with its cache choice, reservations and IEEE
-    float operations on single-lane calendars. A page held in the staging
-    store at the admitted arrival is served from it: over its scratchpad
-    lane on a logic die, without NAND resources otherwise. Each request's
-    bill is the counter difference between its first and last touch of a
-    resource, in first-touch order, as its metric recorder sees it. The run
-    stops before a request whose staged page is not readable (the scalar
-    machine raises); ``processed`` counts the requests run.
-    """
-    requests = len(arrivals)
-    resources = len(lanes)
-    units = len(array_ready)
-    banks = len(tags)
-    capacity = 3 * len(page_bank)
-    effective = np.zeros(requests, dtype=np.float64)
-    completions = np.zeros(requests, dtype=np.float64)
-    waits = np.zeros(requests, dtype=np.float64)
-    hits = np.zeros(requests, dtype=np.int64)
-    misses = np.zeros(requests, dtype=np.int64)
-    staged = np.zeros(requests, dtype=np.int64)
-    staged_host_bytes = np.zeros(requests, dtype=np.int64)
-    scratch_bytes = np.zeros(requests, dtype=np.int64)
-    reserved = np.zeros(requests, dtype=np.bool_)
-    entry_offsets = np.zeros(requests + 1, dtype=np.int64)
-    entry_rid = np.empty(capacity, dtype=np.int64)
-    entry_busy_before = np.empty(capacity, dtype=np.float64)
-    entry_busy_after = np.empty(capacity, dtype=np.float64)
-    entry_moved_before = np.empty(capacity, dtype=np.int64)
-    entry_moved_after = np.empty(capacity, dtype=np.int64)
-    entry_start = np.empty(capacity, dtype=np.float64)
-    entry_end = np.empty(capacity, dtype=np.float64)
-    touch_request = np.full(resources, -1, dtype=np.int64)
-    resource_seen = np.zeros(resources, dtype=np.bool_)
-    resource_order = np.empty(resources, dtype=np.int64)
-    transferred = np.zeros(resources, dtype=np.bool_)
-    bank_seen = np.zeros(banks, dtype=np.bool_)
-    bank_order = np.empty(banks, dtype=np.int64)
-    unit_seen = np.zeros(units, dtype=np.bool_)
-    unit_order = np.empty(units, dtype=np.int64)
-    unit_visit = np.full(units, -1, dtype=np.int64)
-    inherited = np.zeros(units, dtype=np.float64)
-    slot_used = np.zeros((banks, 2), dtype=np.bool_)
-    slot_filled = np.zeros((banks, 2), dtype=np.bool_)
-    slot_read = np.zeros((banks, 2), dtype=np.bool_)
-    resource_count = bank_count = unit_count = entries = 0
-    processed = 0
-    offset = 0
-    read_end = internal_end = end = 0.0
-    for request in range(requests):
-        host = request_host[request]
-        admitted = _sequential_admission(max(arrivals[request], acceptance[host]), host_ends,
-                                         host_low[host], host_high[host], limit)
-        stop = offset + request_pages[request]
-        readable = True
-        for page in range(offset, stop):
-            if (page_staged[page] and (page_end[page] < 0 or page_end[page] > admitted)
-                    and not page_covered[page] and not page_full[page]):
-                readable = False
-                break
-        if not readable:
-            break
-        entry_offsets[request] = entries
-        effective[request] = admitted
-        base = admitted + front
-        completion = base
-        wait = 0.0
-        for page in range(offset, stop):
-            if page_staged[page] and page_covered[page] and (page_end[page] < 0 or page_end[page] > admitted):
-                data = max(base + latency, page_ready[page])
-                staged[request] += 1
-                staged_host_bytes[request] += page_host_bytes[page]
-                if logic:
-                    rid = page_scratch[page]
-                    if touch_request[rid] != request:
-                        touch_request[rid] = request
-                        entry_rid[entries] = rid
-                        entry_busy_before[entries] = state[rid, 1]
-                        entry_moved_before[entries] = moved[rid]
-                        entries += 1
-                        if not resource_seen[rid]:
-                            resource_seen[rid] = True
-                            resource_order[resource_count] = rid
-                            resource_count += 1
-                    start = max(data, lanes[rid])
-                    data = start + page_scratch_ns[page]
-                    lanes[rid] = data
-                    state[rid, 0] = data
-                    state[rid, 1] += page_scratch_ns[page]
-                    state[rid, 2] = start
-                    state[rid, 3] = data
-                    moved[rid] += page_scratch_bytes[page]
-                    transferred[rid] = True
-                    reserved[request] = True
-                    scratch_bytes[request] += page_scratch_bytes[page]
-                if data > completion:
-                    completion = data
-                continue
-            bank, tag = page_bank[page], page_tag[page]
-            unit = bank
-            if not bank_seen[bank]:
-                bank_seen[bank] = True
-                bank_order[bank_count] = bank
-                bank_count += 1
-            cache_clock += 1
-            slot = -1
-            for candidate in range(2):
-                if tags[bank, candidate] == tag:
-                    slot = candidate
-                    break
-            hit = slot >= 0
-            if not hit:
-                slot = 0
-                if ((tags[bank, 1] < 0 and tags[bank, 0] >= 0)
-                        or ((tags[bank, 1] < 0) == (tags[bank, 0] < 0)
-                            and uses[bank, 1] < uses[bank, 0])):
-                    slot = 1
-            uses[bank, slot] = cache_clock
-            slot_used[bank, slot] = True
-            reserved[request] = True
-            if hit:
-                rid = page_host[page]
-                if touch_request[rid] != request:
-                    touch_request[rid] = request
-                    entry_rid[entries] = rid
-                    entry_busy_before[entries] = state[rid, 1]
-                    entry_moved_before[entries] = moved[rid]
-                    entries += 1
-                    if not resource_seen[rid]:
-                        resource_seen[rid] = True
-                        resource_order[resource_count] = rid
-                        resource_count += 1
-                start = max(max(base, cache_ready[bank, slot]), lanes[rid])
-                end = start + page_host_ns[page]
-                lanes[rid] = end
-                state[rid, 0] = end
-                state[rid, 1] += page_host_ns[page]
-                state[rid, 2] = start
-                state[rid, 3] = end
-                moved[rid] += page_host_bytes[page]
-                transferred[rid] = True
-                if end > readers[bank, slot]:
-                    readers[bank, slot] = end
-                slot_read[bank, slot] = True
-                hits[request] += 1
-                if end > completion:
-                    completion = end
-                continue
-            if unit_visit[unit] != request:
-                # The front this request inherits, at its first visit.
-                unit_visit[unit] = request
-                frontier = max(array_ready[unit], buffer_ready[unit])
-                lane = lanes[unit_array[unit]]
-                inherited[unit] = lane if lane > frontier else frontier
-            for step in range(3):
-                if step == 0:
-                    rid = page_ar[page]
-                elif step == 1:
-                    rid = page_ch[page]
-                else:
-                    rid = page_host[page]
-                if touch_request[rid] != request:
-                    touch_request[rid] = request
-                    entry_rid[entries] = rid
-                    entry_busy_before[entries] = state[rid, 1]
-                    entry_moved_before[entries] = moved[rid]
-                    entries += 1
-                    if not resource_seen[rid]:
-                        resource_seen[rid] = True
-                        resource_order[resource_count] = rid
-                        resource_count += 1
-                if step == 0:
-                    start = max(max(max(base, array_ready[unit]), buffer_ready[unit]), lanes[rid])
-                    read_end = start + page_read_ns
-                    lanes[rid] = read_end
-                    state[rid, 0] = read_end
-                    state[rid, 1] += page_read_ns
-                    state[rid, 2] = start
-                    state[rid, 3] = read_end
-                elif step == 1:
-                    start = max(max(read_end, readers[bank, slot]), lanes[rid])
-                    internal_end = start + internal_ns
-                    lanes[rid] = internal_end
-                    state[rid, 0] = internal_end
-                    state[rid, 1] += internal_ns
-                    state[rid, 2] = start
-                    state[rid, 3] = internal_end
-                    moved[rid] += internal_bytes
-                    transferred[rid] = True
-                else:
-                    start = max(internal_end, lanes[rid])
-                    end = start + page_host_ns[page]
-                    lanes[rid] = end
-                    state[rid, 0] = end
-                    state[rid, 1] += page_host_ns[page]
-                    state[rid, 2] = start
-                    state[rid, 3] = end
-                    moved[rid] += page_host_bytes[page]
-                    transferred[rid] = True
-            frontier_wait = inherited[unit] - base
-            if frontier_wait > wait:
-                wait = frontier_wait
-            tags[bank, slot] = tag
-            cache_ready[bank, slot] = internal_end
-            readers[bank, slot] = end
-            slot_filled[bank, slot] = True
-            if read_end > array_ready[unit]:
-                array_ready[unit] = read_end
-            if internal_end > buffer_ready[unit]:
-                buffer_ready[unit] = internal_end
-            if not unit_seen[unit]:
-                unit_seen[unit] = True
-                unit_order[unit_count] = unit
-                unit_count += 1
-            misses[request] += 1
-            if end > completion:
-                completion = end
-        for entry in range(entry_offsets[request], entries):
-            rid = entry_rid[entry]
-            entry_busy_after[entry] = state[rid, 1]
-            entry_moved_after[entry] = moved[rid]
-            entry_start[entry] = state[rid, 2]
-            entry_end[entry] = state[rid, 3]
-        completions[request] = completion
-        waits[request] = wait
-        # _HostPopulation.record: retire completions up to the admission.
-        low, high = host_low[host], host_high[host]
-        while low < high and host_ends[low] <= admitted:
-            low += 1
-        position = high
-        while position > low and host_ends[position - 1] > completion:
-            host_ends[position] = host_ends[position - 1]
-            position -= 1
-        host_ends[position] = completion
-        host_low[host], host_high[host] = low, high + 1
-        acceptance[host] = max(admitted, device_acceptance)
-        processed += 1
-        offset = stop
-    entry_offsets[processed] = entries
-    return (processed, effective, completions, waits, hits, misses, staged, staged_host_bytes,
-            scratch_bytes, reserved, cache_clock, entry_offsets[:processed + 1], entry_rid[:entries],
-            entry_busy_before[:entries], entry_busy_after[:entries], entry_moved_before[:entries],
-            entry_moved_after[:entries], entry_start[:entries], entry_end[:entries],
-            resource_order[:resource_count], transferred, bank_order[:bank_count],
-            unit_order[:unit_count], slot_used, slot_filled, slot_read)
-
-
-@njit(cache=True, nogil=True, fastmath=False)
-def fold_sequential_read_bill(entry_offsets, entry_rid, busy_before, busy_after, moved_before,
-                              moved_after, starts, ends, busy, has_busy, byte_counts, has_bytes,
-                              last_start, last_end, has_last):
-    """Consume each request's bill into one sink, request after request.
-
-    The additions of consume_task_resource_sink: a busy or byte entry exists
-    only when its counter changed, and a later interval (end, then start)
-    replaces the held one. Returns the request in which each resource first
-    enters the sink's busy, byte and interval maps (-1 when it was there).
-    """
-    resources = len(busy)
-    first_busy = np.full(resources, -1, dtype=np.int64)
-    first_bytes = np.full(resources, -1, dtype=np.int64)
-    first_last = np.full(resources, -1, dtype=np.int64)
-    for request in range(len(entry_offsets) - 1):
-        for entry in range(entry_offsets[request], entry_offsets[request + 1]):
-            rid = entry_rid[entry]
-            if busy_after[entry] != busy_before[entry]:
-                busy[rid] = busy[rid] + (busy_after[entry] - busy_before[entry])
-                if not has_busy[rid]:
-                    has_busy[rid] = True
-                    first_busy[rid] = request
-            if moved_after[entry] != moved_before[entry]:
-                byte_counts[rid] = byte_counts[rid] + (moved_after[entry] - moved_before[entry])
-                if not has_bytes[rid]:
-                    has_bytes[rid] = True
-                    first_bytes[rid] = request
-            if not has_last[rid]:
-                has_last[rid] = True
-                first_last[rid] = request
-                last_start[rid], last_end[rid] = starts[entry], ends[entry]
-            elif ends[entry] > last_end[rid] or (ends[entry] == last_end[rid] and starts[entry] > last_start[rid]):
-                last_start[rid], last_end[rid] = starts[entry], ends[entry]
-    return first_busy, first_bytes, first_last

@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from math import gcd, isfinite, lcm
 from functools import lru_cache
-from operator import attrgetter
 
 from .memory_mapping import map_nand_address
 from .memory_transfer import ResourceTimeline
@@ -228,7 +227,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
     from ._nand_execution import _geometry_plan, _NandNumericState
     from ._nand_pack import (pack_single_lane, pack_multi_lane,
                             validate_buffered_cache, pack_buffered_cache, publish_buffered_cache,
-                            publish_active_timeline, generic_request_resource_indexes,
+                            publish_active_timeline, generic_page_resource_indexes,
                             pack_selected_single_lane, generic_metrics_delta,
                             publish_generic_controller)
     from ._compiled_nand import run_generic_full_pages
@@ -252,15 +251,15 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
         # calendars; the scalar path exposes the same check.
         core._validate_write_order(range(request.address // 4096,
                                          request.address // 4096 + page_count))
-    logical_pages = tuple(range(request.address // 4096,
-                                request.address // 4096 + page_count))
+    # Programs log their logical pages; a READ never needs the tuple.
+    logical_pages = (tuple(range(request.address // 4096, request.address // 4096 + page_count))
+                     if request.operation is Operation.WRITE else ())
     if phase_write:
         physical_list, phase_mappings, phase_next_pointers = core._phase_batch_mappings(logical_pages)
         page_indices = np.asarray(physical_list, dtype=np.int64)
     else:
         phase_mappings, phase_next_pointers = (), tuple(core._write_pointer)
-        page_indices = np.arange(request.address // 4096,
-                                 request.address // 4096 + page_count, dtype=np.int64)
+        page_indices = None
     if any(name in core.__dict__ for name in (
             "_array_id", "_array_resource_id", "_channel_id", "_host_id", "_host_bandwidth",
             "_cache_slot", "_invalidate_cache", "_media_stage", "_staged_key", "_bank_key")):
@@ -282,6 +281,12 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
     if (banks > 65536 or config.effective_capacity_bytes < banks * 4096
             or page_count < _bulk_min_pages(core, request.operation)):
         return None
+    if page_indices is None:
+        # A READ follows the host page table; other writes are in place.
+        page_indices = (core._read_pages(request.address // 4096, page_count)
+                        if request.operation is Operation.READ else
+                        np.arange(request.address // 4096, request.address // 4096 + page_count,
+                                  dtype=np.int64))
     per_channel = base_units // config.channels
     (bank_keys, prefixes, array_names, array_resources, channels, hosts, names,
      array_ids, channel_ids, host_ids) = _geometry_plan(
@@ -306,7 +311,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
     packed = None
     if (bus_mask is not None and core._nand_transactions
             and core._nand_transactions[-1].native_timeline_qualified):
-        selected = generic_request_resource_indexes(int(page_indices[0]), page_count,
+        selected = generic_page_resource_indexes(page_indices,
             base_units, config.planes_per_lun, config.planes_independent, per_channel,
             config.host_channels, array_ids, channel_ids, host_ids)
         packed = pack_selected_single_lane(timeline, names, selected, page_count, config.transfer_page_bytes)
@@ -532,46 +537,6 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
         names, tuple(timeline.resource_aliases.items()))
     if not valid:
         return None
-    directions = [None, "read", "write"]
-    calendar = pack_single_lane(timeline, names, pages, config.transfer_page_bytes)
-    single_lane = calendar is not None
-    if calendar is None:
-        calendar = pack_multi_lane(timeline, names, pages, config.transfer_page_bytes,
-                                   directions, {name: index for index, name in enumerate(directions)})
-    if calendar is None:
-        return None
-    starts, lane_counts, lanes, lane_directions, state, moved, direction_values = calendar
-    cache = core.__dict__["_read_cache"]
-    layout = (bank_keys, prefixes, array_names, config.pages_per_block)
-    packed = core._nand_numeric_state
-    if packed is not None and packed.layout != layout:
-        core._nand_publish_numeric()
-        packed = None
-    resident = packed is not None
-    if not resident:
-        rows = validate_buffered_cache(cache, bank_keys, prefixes, _ReadCacheSlot, config.pages_per_block, isfinite)
-        if rows is None:
-            return None
-        packed = _NandNumericState(layout, (
-            np.array([core.__dict__["_array_ready"].get(name, 0.) for name in array_names], dtype=np.float64),
-            np.array([core.__dict__["_buffer_ready"].get(name, 0.) for name in array_names], dtype=np.float64),
-            *pack_buffered_cache(rows, banks, config.pages_per_block)))
-        packed.scalar_resource_contract = core._resident_resource_contract()
-    arrays, buffers, tags, ready, readers, uses, present = packed.arrays
-    if not all(np.all(np.isfinite(values)) and np.all(values >= 0) for values in (arrays, buffers, state)):
-        return None
-    # Preserve only frontiers inherited from work before this batch.  The
-    # numeric kernel mutates ``arrays``/``buffers`` as pages are dispatched;
-    # using this snapshot keeps same-batch queueing out of the wait metric.
-    initial_frontier = np.maximum(arrays.copy(), buffers.copy())
-    start_values, lane_counts = np.asarray(starts, dtype=np.int64), np.asarray(lane_counts, dtype=np.int64)
-    lanes, lane_directions = np.asarray(lanes, dtype=np.float64), np.asarray(lane_directions, dtype=np.int64)
-    for unit, resource in enumerate(array_ids):
-        first = int(start_values[resource])
-        stop = first + int(lane_counts[resource])
-        lane_frontier = float(np.min(lanes[first:stop]))
-        if lane_frontier > initial_frontier[unit]:
-            initial_frontier[unit] = lane_frontier
     host_bandwidth = core._host_bandwidth(Operation.READ)
     granularity = config.host_granularity_bytes
     # Pages a staging store holds at each request's arrival. A staged
@@ -612,6 +577,67 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
     head_bytes = np.array(head_bytes, dtype=np.int64)
     tail_bytes = np.array(tail_bytes, dtype=np.int64)
     page_counts = np.array(counts, dtype=np.int64)
+    # Every page's physical index: the host page table's placement.
+    page_indices = np.concatenate([core._read_pages(request.address // 4096, count)
+                                   for request, count in zip(requests, counts)])
+    stage_ids = host_ids
+    if staging_host and any(staged_counts):
+        # A staged page crosses its host channel's staging link: the OCP
+        # scratchpad lane (5.4.2), which is not a NAND resource of the plan.
+        stage_ids = np.array(host_ids, dtype=np.int64)
+        extra = []
+        staged_pages = page_indices[staged_ready >= 0]
+        for host in np.unique((staged_pages % base_units) // per_channel % config.host_channels).tolist():
+            name = core._staging_host_id(map_nand_address(config, host * per_channel * 4096), Operation.READ)
+            if name == hosts[host]:
+                continue
+            if name in names or name in extra:
+                return None
+            stage_ids[host] = len(names) + len(extra)
+            extra.append(name)
+        if extra:
+            names = (*names, *extra)
+            bus_mask = (*bus_mask, *(1,) * len(extra))
+    directions = [None, "read", "write"]
+    calendar = pack_single_lane(timeline, names, pages, config.transfer_page_bytes)
+    single_lane = calendar is not None
+    if calendar is None:
+        calendar = pack_multi_lane(timeline, names, pages, config.transfer_page_bytes,
+                                   directions, {name: index for index, name in enumerate(directions)})
+    if calendar is None:
+        return None
+    starts, lane_counts, lanes, lane_directions, state, moved, direction_values = calendar
+    cache = core.__dict__["_read_cache"]
+    layout = (bank_keys, prefixes, array_names, config.pages_per_block)
+    packed = core._nand_numeric_state
+    if packed is not None and packed.layout != layout:
+        core._nand_publish_numeric()
+        packed = None
+    resident = packed is not None
+    if not resident:
+        rows = validate_buffered_cache(cache, bank_keys, prefixes, _ReadCacheSlot, config.pages_per_block, isfinite)
+        if rows is None:
+            return None
+        packed = _NandNumericState(layout, (
+            np.array([core.__dict__["_array_ready"].get(name, 0.) for name in array_names], dtype=np.float64),
+            np.array([core.__dict__["_buffer_ready"].get(name, 0.) for name in array_names], dtype=np.float64),
+            *pack_buffered_cache(rows, banks, config.pages_per_block)))
+        packed.scalar_resource_contract = core._resident_resource_contract()
+    arrays, buffers, tags, ready, readers, uses, present = packed.arrays
+    if not all(np.all(np.isfinite(values)) and np.all(values >= 0) for values in (arrays, buffers, state)):
+        return None
+    # Preserve only frontiers inherited from work before this batch.  The
+    # numeric kernel mutates ``arrays``/``buffers`` as pages are dispatched;
+    # using this snapshot keeps same-batch queueing out of the wait metric.
+    initial_frontier = np.maximum(arrays.copy(), buffers.copy())
+    start_values, lane_counts = np.asarray(starts, dtype=np.int64), np.asarray(lane_counts, dtype=np.int64)
+    lanes, lane_directions = np.asarray(lanes, dtype=np.float64), np.asarray(lane_directions, dtype=np.int64)
+    for unit, resource in enumerate(array_ids):
+        first = int(start_values[resource])
+        stop = first + int(lane_counts[resource])
+        lane_frontier = float(np.min(lanes[first:stop]))
+        if lane_frontier > initial_frontier[unit]:
+            initial_frontier[unit] = lane_frontier
     if config.queue_scope == "host_channel":
         if _host_channel is None:
             return None
@@ -638,14 +664,14 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
             token.capture_numeric(packed)
     try:
         (admissions, completions, hits, misses, clock, touched, active_units, active_banks,
-         offsets, page_hit, page_unit, page_channel, read_start, channel_start, host_start,
+         offsets, page_hit, page_unit, page_channel, page_host, read_start, channel_start, host_start,
          read_eligible) = run_generic_read_batch(
-            np.array([request.address // 4096 for request in requests], dtype=np.int64), page_counts,
+            page_indices, page_counts,
             np.array([request.arrival_ns for request in requests], dtype=np.float64),
             head_bytes, head_bytes / host_bandwidth, tail_bytes, tail_bytes / host_bandwidth,
             staged_ready, config.page_staging_latency_ns, staging_host,
             acceptance, prior_ends, config.max_outstanding_requests, config.front_ns,
-            geometry, timing, array_ids, channel_ids, host_ids,
+            geometry, timing, array_ids, channel_ids, host_ids, stage_ids,
             arrays, buffers, tags, ready, readers, uses, present, core._cache_use,
             start_values, lane_counts, lanes, lane_directions, state, moved, direction_values)
         if not np.all(np.isfinite(state)) or not np.all(np.isfinite(completions)):
@@ -678,9 +704,9 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
     truncated = timeline._intervals_truncated
 
     request_offsets, ids, busy, byte_counts, first, last, read_wait = read_batch_request_metrics(
-        offsets, page_counts, page_hit, page_unit, page_channel, read_start, read_eligible, channel_start,
-        host_start, head_bytes, head_bytes / host_bandwidth, tail_bytes, tail_bytes / host_bandwidth,
-        timing, config.host_channels, array_ids, channel_ids, host_ids, initial_frontier, len(names))
+        offsets, page_counts, page_hit, page_unit, page_channel, page_host, read_start, read_eligible,
+        channel_start, host_start, head_bytes, head_bytes / host_bandwidth, tail_bytes,
+        tail_bytes / host_bandwidth, timing, array_ids, channel_ids, initial_frontier, len(names))
     if _resource_sink is not None:
         # Fold the per-request bills into the task and owner bills with the
         # same request-ordered additions as consuming each request's maps,
@@ -780,589 +806,6 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
             }))
         core._record_host_admission(host_channel, effective, admitted, completion, Operation.READ)
     return tuple(results)
-
-
-def execute_sequential_read_group(core, requests, resource_sink=None):
-    """One submit_many READ window, every request as if submitted alone.
-
-    Under the OCP sequential write mode reads follow the host page table, so
-    the out-of-order window (execute_read_batch) does not apply and each
-    request is submitted on its own. NandCore then serves a span by the
-    scalar page machine (_execute_detailed_accepted) when it touches a
-    staged tail page, or when it is shorter than BULK_MIN_PAGES with no
-    resident controller. Consecutive such requests run here in one compiled
-    pass with the same host admissions, page order, cache and frontier
-    updates, float operations and per-request bills; the touched state is
-    published once. Every other request is submitted normally, in order.
-    Returns None before any mutation when the core, timeline or sink is not
-    the native one.
-    """
-    from .nand_core import NandCore, BULK_MIN_PAGES, RESIDENT_MIN_PAGES, _generic_bulk_span
-    from .memory_types import AccessRequest
-    from .memory_mapping import validate_nand_request
-    from .memory_transfer import _OWNED_TIMELINE_TOKEN_TYPE, _OWNED_TIMELINE_REMEMBER
-
-    config, timeline = core.config, core.timeline
-    if (type(core) is not NandCore or type(timeline) is not ResourceTimeline
-            or resource_sink is not None and (
-                type(resource_sink) is not tuple or len(resource_sink) != 6
-                or any(type(value) is not dict for value in resource_sink)
-                or len({id(value) for value in resource_sink}) != 6)
-            or config.protocol_mode != "ocp_hbf_0_7" or not core._sequential_write_mode()
-            or config.queue_scope != "host_channel" or config.page_staging == "none"
-            or config.parallel_units is not None or not config.planes_independent
-            or config.host_channels != config.channels
-            or (config.targets_per_channel, config.dies_per_target, config.luns_per_die) != (1, 1, 1)
-            or 4096 % config.host_granularity_bytes or config.page_staging_burst_bytes <= 0
-            or core._write_buffer_pending or type(core._cache_use) is not int
-            or timeline._discarded or not _generic_resident_writers(core)
-            or any(type(token) is not _OWNED_TIMELINE_TOKEN_TYPE or token.accounting
-                   or getattr(token.remember, "__func__", token.remember) is not _OWNED_TIMELINE_REMEMBER
-                   for token in timeline._owned_transactions)):
-        return None
-    spans = []
-    for request in requests:
-        span = None
-        if (type(request) is AccessRequest and request.operation is Operation.READ
-                and request.byte_count > 0):
-            try:
-                validate_nand_request(request, config)
-            except Exception:
-                pass
-            else:
-                first, last = request.address // 4096, (request.address + request.byte_count - 1) // 4096
-                span = (last - first + 1, bool(core._tail_staged(first, last)))
-        spans.append(span)
-
-    def scalar(span, resident):
-        # NandCore._submit_live's route to the scalar page machine.
-        if span is None:
-            return False
-        pages, staged = span
-        if resident:
-            return staged and pages >= RESIDENT_MIN_PAGES
-        return staged or pages < BULK_MIN_PAGES
-
-    def resident_bulk(request, span):
-        # A plain bulk READ: NandCore._submit_live sends it to
-        # _submit_generic_summary whether or not the controller is resident,
-        # and that executor packs a published controller unchanged.
-        return (span is not None and not span[1] and span[0] >= BULK_MIN_PAGES
-                and _generic_bulk_span(request, config)
-                and core._nand_numeric_enabled and not core._nand_state_exposed
-                and not core._write_buffer_pending and not core._write_buffer_occupancy
-                and _generic_resident_writers(core)
-                and core._nand_numeric_state.scalar_resource_contract == core._resident_resource_contract())
-
-    results = [None] * len(requests)
-    # A run on a resident controller updates its arrays instead of publishing
-    # them as the scalar machine does. Until the next request is a bulk READ
-    # (which repacks that published state), the controller is then
-    # published at the latest before anything else sees it.
-    index, batching, published = 0, True, False
-    try:
-        while index < len(requests):
-            if batching and scalar(spans[index], core._nand_numeric_state is not None and not published):
-                stop = index + 1
-                while stop < len(requests) and scalar(spans[stop], False):
-                    stop += 1
-                done = _sequential_read_run(core, requests[index:stop], resource_sink, results, index)
-                if done is None:
-                    batching = False
-                    continue
-                if done:
-                    published = core._nand_numeric_state is not None
-                    index += done
-                    continue
-            if published and not resident_bulk(requests[index], spans[index]):
-                core._nand_publish_numeric()
-            published = False
-            results[index] = (core.submit(requests[index]) if resource_sink is None
-                              else core.submit(requests[index], _resource_sink=resource_sink))
-            index += 1
-    finally:
-        if published:
-            core._nand_publish_numeric()
-    return tuple(results)
-
-
-_PAGE_ADDRESS = attrgetter("address")
-
-
-def _sequential_read_run(core, run, resource_sink, results, at):
-    """Run a prefix of ``run`` (scalar-routed READs) and return its length.
-
-    None declines the window's structure (lanes, cache objects or layout);
-    0 leaves the first request to NandCore.submit, whose scalar page machine
-    raises on a staged page it cannot read.
-    """
-    import numpy as np
-    from .nand_core import _ReadCacheSlot
-    from .memory_types import TransactionResult
-    from ._nand_execution import _geometry_plan
-    from ._compiled_nand import run_sequential_read_group, fold_sequential_read_bill
-
-    config, timeline = core.config, core.timeline
-    base_units = config.channels
-    banks = base_units * config.planes_per_lun
-    pages_per_block = config.pages_per_block
-    if banks > 65536 or config.effective_capacity_bytes < banks * 4096:
-        return None
-    (bank_keys, prefixes, array_names, array_resources, channel_names, host_names, names,
-     array_ids, channel_ids, host_ids) = _geometry_plan(core, Operation.READ, banks, banks, 1)
-    if array_names != array_resources:
-        return None
-    valid, _bus_mask = _buffered_layout_contract(array_names, array_resources, channel_names, host_names,
-                                                 names, tuple(timeline.resource_aliases.items()))
-    if not valid:
-        return None
-
-    # Host channels: acceptance clocks and live command completions, ascending.
-    hosts, request_host, arrivals = {}, [], []
-    for request in run:
-        host = map_nand_address(config, request.address).channel % config.host_channels
-        request_host.append(hosts.setdefault(host, len(hosts)))
-        arrivals.append(request.arrival_ns)
-    inflight = core.__dict__["_host_inflight"]
-    waiting = np.bincount(np.array(request_host, dtype=np.int64), minlength=len(hosts))
-    host_low = np.zeros(len(hosts), dtype=np.int64)
-    host_high = np.zeros(len(hosts), dtype=np.int64)
-    ends_rows, offset = [], 0
-    for host, local in hosts.items():
-        ends = sorted(end for end, _operation in inflight.get(host, ()))
-        host_low[local], host_high[local] = offset, offset + len(ends)
-        ends_rows.append(ends + [0.0] * int(waiting[local]))
-        offset += len(ends) + int(waiting[local])
-    host_ends = np.array([end for row in ends_rows for end in row], dtype=np.float64)
-    acceptance = np.array([max(core._host_acceptance_ns.get(host, 0.), core._acceptance_ns) for host in hosts],
-                          dtype=np.float64)
-    limit = config.max_outstanding_requests
-    limit = 2**62 if limit is None else int(limit)
-
-    # Pages: the page-table mapping, host spans and staged tail pages.
-    granularity, burst = config.host_granularity_bytes, config.page_staging_burst_bytes
-    logic = config.page_staging == "logic_die"
-    host_bandwidth = float(core._host_bandwidth(Operation.READ))
-    table = core._logical_page_table
-    tails = core._tail_pages
-    counts, physical, head_tail, staged_rows = [], [], [], []
-    for request in run:
-        end = request.address + request.byte_count
-        first, last = request.address // 4096, (end - 1) // 4096
-        counts.append(last - first + 1)
-        mapped = list(map(table.get, range(first, last + 1)))
-        try:
-            physical.append(np.fromiter(map(_PAGE_ADDRESS, mapped), dtype=np.int64, count=len(mapped)) // 4096)
-        except AttributeError:  # an unmapped page reads its own address
-            physical.append(np.array([page if mapping is None else mapping.address // 4096
-                                      for page, mapping in zip(range(first, last + 1), mapped)],
-                                     dtype=np.int64))
-        head_end = min(end, (first + 1) * 4096)
-        head_tail.append((-(-head_end // granularity) * granularity - request.address // granularity * granularity,
-                          -(-end // granularity) * granularity - last * 4096 if last > first else 0))
-        rows = []
-        for page in core._tail_staged(first, last):
-            tail = tails[page]
-            base = page * 4096
-            lo, hi = max(request.address, base) - base, min(end, base + 4096) - base
-            rows.append((page - first, any(left <= lo and hi <= right for left, right in tail[0]),
-                         lo == 0 and hi == 4096, tail[2], tail[3],
-                         -(-hi // burst) * burst - lo // burst * burst))
-        staged_rows.append(rows)
-    request_pages = np.array(counts, dtype=np.int64)
-    total = int(request_pages.sum())
-    starts = np.zeros(len(counts) + 1, dtype=np.int64)
-    np.cumsum(request_pages, out=starts[1:])
-    pages = np.concatenate(physical)
-    host_bytes = np.full(total, 4096, dtype=np.int64)
-    host_bytes[starts[:-1]] = [row[0] for row in head_tail]
-    multi = request_pages > 1
-    host_bytes[(starts[1:] - 1)[multi]] = np.array([row[1] for row in head_tail], dtype=np.int64)[multi]
-    page_staged = np.zeros(total, dtype=np.bool_)
-    page_covered = np.zeros(total, dtype=np.bool_)
-    page_full = np.zeros(total, dtype=np.bool_)
-    page_ready = np.zeros(total, dtype=np.float64)
-    page_end = np.zeros(total, dtype=np.float64)
-    scratch_bytes = np.zeros(total, dtype=np.int64)
-    for request, rows in enumerate(staged_rows):
-        for offset, covered, full, ready, program_end, moved in rows:
-            position = starts[request] + offset
-            page_staged[position], page_covered[position], page_full[position] = True, covered, full
-            page_ready[position], page_end[position], scratch_bytes[position] = ready, program_end, moved
-    bank = pages % banks
-    channel = bank % base_units
-    tag = pages // banks
-    # Compact the window's banks and resources; scratchpad lanes follow.
-    used_banks, page_bank = np.unique(bank, return_inverse=True)
-    page_bank = page_bank.astype(np.int64)
-    used_banks = used_banks.tolist()
-    used_resources, inverse = np.unique(np.concatenate((array_ids[bank], channel_ids[channel],
-                                                         host_ids[channel % config.host_channels])),
-                                        return_inverse=True)
-    resource_names = [names[index] for index in used_resources.tolist()]
-    page_ar = inverse[:total].astype(np.int64)
-    page_ch = inverse[total:2 * total].astype(np.int64)
-    page_host = inverse[2 * total:].astype(np.int64)
-    page_scratch = np.zeros(total, dtype=np.int64)
-    scratch_ns = np.zeros(total, dtype=np.float64)
-    if logic and np.any(page_staged):
-        plan_names = set(names)
-        scratch_ids = {}
-        for position in np.flatnonzero(page_staged).tolist():
-            lane_channel = int(channel[position])
-            rid = scratch_ids.get(lane_channel)
-            if rid is None:
-                name = core._staging_host_id(map_nand_address(config, lane_channel * 4096), Operation.READ)
-                if name in plan_names or name in resource_names:
-                    return None
-                rid = scratch_ids[lane_channel] = len(resource_names)
-                resource_names.append(name)
-            page_scratch[position] = rid
-            scratch_ns[position] = int(scratch_bytes[position]) / host_bandwidth
-    host_ns = host_bytes / host_bandwidth
-    array_local = {name: index for index, name in enumerate(resource_names)}
-    unit_array = np.array([array_local[array_resources[unit]] for unit in used_banks], dtype=np.int64)
-
-    # Pack the touched banks, units and calendars as the scalar machine reads them.
-    cache = core.__dict__["_read_cache"]
-    array_frontiers, buffer_frontiers = core.__dict__["_array_ready"], core.__dict__["_buffer_ready"]
-    size = len(used_banks)
-    tags = np.full((size, 2), -1, dtype=np.int64)
-    cache_ready = np.zeros((size, 2), dtype=np.float64)
-    readers = np.zeros((size, 2), dtype=np.float64)
-    uses = np.zeros((size, 2), dtype=np.int64)
-    array_ready = np.zeros(size, dtype=np.float64)
-    buffer_ready = np.zeros(size, dtype=np.float64)
-    packed = core._nand_numeric_state
-    resident = packed is not None and packed.layout == (bank_keys, prefixes, array_names, pages_per_block)
-    if packed is not None and not resident:
-        # The first request publishes the resident controller before its
-        # scalar page machine; the window runs on the published state.
-        core._nand_publish_numeric()
-    rows = np.array(used_banks, dtype=np.int64)
-    if resident:
-        # The scalar machine reads exactly these values once the controller
-        # is published; the window reads them in place instead.
-        frontier_array, held_array, tag_array, ready_array, reader_array, use_array, present = packed.arrays
-        tags, cache_ready, readers, uses = tag_array[rows], ready_array[rows], reader_array[rows], use_array[rows]
-        array_ready, buffer_ready = frontier_array[rows], held_array[rows]
-        if not all(np.all(np.isfinite(values)) and np.all(values >= 0)
-                   for values in (cache_ready, readers, array_ready, buffer_ready)):
-            return None
-    for local, unit in enumerate(() if resident else used_banks):
-        slots = cache.get(bank_keys[unit])
-        if slots is not None:
-            if type(slots) is not list or len(slots) != 2:
-                return None
-            prefix = prefixes[unit]
-            for index, slot in enumerate(slots):
-                if type(slot) is not _ReadCacheSlot:
-                    return None
-                key, ready, reader, use = slot.page_key, slot.ready_ns, slot.reader_completion_ns, slot.last_use
-                if (type(ready) not in (int, float) or type(reader) not in (int, float) or type(use) is not int
-                        or not (isfinite(ready) and isfinite(reader)) or ready < 0 or reader < 0 or use < 0):
-                    return None
-                if key is not None:
-                    if (type(key) is not tuple or len(key) != len(prefix) + 2 or key[:-2] != prefix
-                            or type(key[-2]) is not int or type(key[-1]) is not int
-                            or key[-2] < 0 or not 0 <= key[-1] < pages_per_block):
-                        return None
-                    tags[local, index] = key[-2] * pages_per_block + key[-1]
-                cache_ready[local, index], readers[local, index], uses[local, index] = ready, reader, use
-        name = array_names[unit]
-        frontier, held = array_frontiers.get(name, 0.0), buffer_frontiers.get(name, 0.0)
-        if (type(frontier) not in (int, float) or type(held) not in (int, float)
-                or not (isfinite(frontier) and isfinite(held)) or frontier < 0 or held < 0):
-            return None
-        array_ready[local], buffer_ready[local] = frontier, held
-    lane_map, ready_map, busy_map = timeline.lane_available, timeline.ready_ns, timeline.busy_ns
-    moved_map, interval_map = timeline.bytes_moved, timeline.last_intervals
-    lanes = np.zeros(len(resource_names), dtype=np.float64)
-    state = np.zeros((len(resource_names), 4), dtype=np.float64)
-    moved = np.zeros(len(resource_names), dtype=np.int64)
-    lane_lists = set()
-    for local, name in enumerate(resource_names):
-        slots = lane_map.get(name)
-        if slots is not None:
-            # A lane list shared by two calendars would couple them.
-            if id(slots) in lane_lists:
-                return None
-            lane_lists.add(id(slots))
-        lane = ready_map.get(name, 0.0) if slots is None else (
-            slots[0] if type(slots) is list and len(slots) == 1 else None)
-        busy, byte_count = busy_map.get(name, 0.0), moved_map.get(name, 0)
-        if (type(lane) not in (int, float) or not isfinite(lane) or lane < 0
-                or type(busy) not in (int, float) or not isfinite(busy)
-                or type(byte_count) is not int or not 0 <= byte_count <= 2**62):
-            return None
-        lanes[local], state[local, 1], moved[local] = lane, busy, byte_count
-
-    (processed, effective, completions, waits, hits, misses, staged, staged_host, staged_bytes, reserved,
-     clock, entry_offsets, entry_rid, busy_before, busy_after, moved_before, moved_after, entry_start,
-     entry_end, resource_order, transferred, bank_order, unit_order, slot_used, slot_filled,
-     slot_read) = run_sequential_read_group(
-        request_pages, np.array(arrivals, dtype=np.float64), np.array(request_host, dtype=np.int64),
-        acceptance, float(core._acceptance_ns), host_ends, host_low, host_high, limit,
-        float(config.front_ns), float(config.page_staging_latency_ns), logic,
-        page_bank, tag, page_ar, page_ch, page_host, page_scratch, host_ns, host_bytes,
-        page_staged, page_covered, page_full, page_ready, page_end, scratch_ns, scratch_bytes,
-        float(config.page_read_ns), config.transfer_page_bytes / float(config.internal_bandwidth_gb_s),
-        int(config.transfer_page_bytes), unit_array, array_ready, buffer_ready,
-        tags, cache_ready, readers, uses, core._cache_use, lanes, state, moved)
-    if not processed:
-        return 0
-    if not (np.all(np.isfinite(state)) and np.all(np.isfinite(completions[:processed]))):
-        raise ValueError("resource reservation exceeds finite timing range")
-    run = run[:processed]
-
-    # Publish each touched calendar once, in first-touch order, after its
-    # undo journals have their preimage (the scalar recorder resets first).
-    timeline._reset_metric_recorder(0)
-    order = resource_order.tolist()
-    touched_names = [resource_names[rid] for rid in order]
-    timeline._remember_resources(touched_names)
-    lane_values, state_values = lanes.tolist(), state.tolist()
-    moved_values, transfer_flags = moved.tolist(), transferred.tolist()
-    direction_map, lane_direction_map = timeline.directions, timeline.lane_directions
-    for rid, name in zip(order, touched_names):
-        slots = lane_map.get(name)
-        if slots is None:
-            lane_map[name] = [lane_values[rid]]
-        else:
-            slots[0] = lane_values[rid]
-        row = state_values[rid]
-        ready_map[name] = row[0]
-        busy_map[name] = row[1]
-        interval_map[name] = (row[2], row[3])
-        if transfer_flags[rid]:
-            direction_map[name] = "read"
-        lane_direction_map.pop(name, None)
-        if transfer_flags[rid]:
-            moved_map[name] = moved_values[rid]
-    last_request = processed - 1
-    timeline._touched = set(resource_names[rid] for rid in
-                            entry_rid[entry_offsets[last_request]:entry_offsets[last_request + 1]].tolist())
-    timeline._intervals_truncated = bool(reserved[last_request])
-    if resident:
-        for token in core._nand_transactions:
-            token.capture_numeric(packed)
-        tag_array[rows], ready_array[rows], reader_array[rows], use_array[rows] = tags, cache_ready, readers, uses
-        frontier_array[rows], held_array[rows] = array_ready, buffer_ready
-        accessed = rows[bank_order]
-        packed.dirty_banks[accessed] = True
-        present[accessed] = True
-        packed.dirty_units[rows[unit_order]] = True
-    else:
-        frontier_values, held_values = array_ready.tolist(), buffer_ready.tolist()
-        for local in unit_order.tolist():
-            name = array_names[used_banks[local]]
-            core._touch_frontiers(name)
-            array_frontiers[name] = frontier_values[local]
-            buffer_frontiers[name] = held_values[local]
-        tag_values, ready_values, reader_values, use_values = (
-            tags.tolist(), cache_ready.tolist(), readers.tolist(), uses.tolist())
-        used, filled, read = slot_used.tolist(), slot_filled.tolist(), slot_read.tolist()
-        for local in bank_order.tolist():
-            unit = used_banks[local]
-            key = bank_keys[unit]
-            if core._nand_transactions:
-                core._touch_cache_bank(key)
-            slots = cache.get(key)
-            if slots is None:
-                slots = [_ReadCacheSlot(), _ReadCacheSlot()]
-                cache[key] = slots
-            for index in (0, 1):
-                if not used[local][index]:
-                    continue
-                slot = slots[index]
-                if filled[local][index]:
-                    slot.page_key = (*prefixes[unit], *divmod(tag_values[local][index], pages_per_block))
-                    slot.ready_ns = ready_values[local][index]
-                    slot.reader_completion_ns = reader_values[local][index]
-                elif read[local][index]:
-                    slot.reader_completion_ns = reader_values[local][index]
-                slot.last_use = use_values[local][index]
-    core._cache_use = int(clock)
-    core._observation_events = []
-    core._last_media_queue_wait_ns = float(waits[last_request])
-
-    if resource_sink is None:
-        bills = _sequential_read_bills(timeline, resource_names, entry_offsets, entry_rid, busy_before,
-                                       busy_after, moved_before, moved_after, entry_start, entry_end)
-    else:
-        bills = None
-        _fold_sequential_read_sink(timeline, resource_sink, resource_names, entry_offsets, entry_rid,
-                                   busy_before, busy_after, moved_before, moved_after, entry_start, entry_end,
-                                   fold_sequential_read_bill)
-
-    page_bytes, transfer_bytes = config.page_bytes, config.transfer_page_bytes
-    hit_ceiling = config.host_bandwidth_for(Operation.READ)
-    miss_ceiling = core._bandwidth_ceiling_gb_s(Operation.READ)
-    hit_scope = ("directional host upper bound for transactions using cached/staged data; "
-                 "host acknowledgement is not media drain")
-    miss_scope = ("device transfer upper bound: min(directional host, summed independent channels); "
-                  "excludes array latency")
-    array_units, depth_scope = config.array_units, core._admission_depth_scope()
-    held_bytes, draining = core._held_write_buffer_bytes(), core.inflight_write_buffer_bytes
-    buffered = core._buffered_write_mode
-    for position, request in enumerate(run):
-        arrival, admitted, host_channel = core._admit_host_request(request)
-        if arrival != effective[position]:
-            raise RuntimeError("sequential NAND read admission diverged from the host queue")
-        count, hit, miss = counts[position], int(hits[position]), int(misses[position])
-        staged_count = int(staged[position])
-        head, tail = head_tail[position]
-        host_total = head + (tail + (count - 2) * 4096 if count > 1 else 0) - int(staged_host[position]) + (
-            int(staged_bytes[position]) if logic else 0)
-        internal = miss * transfer_bytes
-        completion = float(completions[position])
-        cached = bool(staged_count or hit)
-        counters = {
-            "host_transfer_bytes": host_total, "internal_transfer_bytes": internal,
-            "physical_read_bytes": miss * page_bytes, "physical_write_bytes": 0,
-            "pages_read": miss, "pages_programmed": 0,
-            "merge_bytes": 0, "merged_pages": 0, "staging_write_pages": 0,
-            "staging_read_hits": staged_count, "staging_read_merges": 0,
-            "read_cache_hits": hit, "read_cache_misses": miss,
-            "erase_operations": 0, "page_count": count,
-            "details_truncated": count > config.max_expanded_segments,
-            "bandwidth_ceiling_gb_s": hit_ceiling if cached else miss_ceiling,
-            "bandwidth_ceiling_scope": hit_scope if cached else miss_scope,
-            "array_units": array_units, "write_completion": "n/a",
-            "host_ack_completion_ns": None, "media_drain_completion_ns": None,
-            "media_queue_wait_ns": float(waits[position]),
-            "pages_touched": count, "read_operations": miss, "program_operations": 0,
-            "rmw_read_operations": 0, "page_access_payload_bytes": request.byte_count,
-            "page_access_capacity_bytes": count * page_bytes, "host_admission_samples": 1,
-            "host_outstanding_at_admission_peak": len(admitted) + 1,
-            "host_read_outstanding_at_admission_peak": admitted.reads + 1,
-            "host_write_outstanding_at_admission_peak": admitted.writes,
-            "host_admission_depth_scope": depth_scope,
-            "queue_wait_ns": arrival - request.arrival_ns,
-            "write_buffer_wait_ns": 0.0, "write_buffer_bytes": 0,
-            "write_buffer_occupancy_bytes": held_bytes, "write_buffer_peak_bytes": held_bytes,
-            "write_buffer_draining_bytes": draining, "buffered_write_mode": buffered}
-        if bills is not None:
-            (counters["resource_busy_ns"], counters["resource_bytes"],
-             counters["resource_last_intervals"]) = bills[position]
-        counters["resource_intervals"], counters["resource_interval_payloads"] = {}, {}
-        counters["intervals_truncated"] = bool(reserved[position])
-        results[at + position] = TransactionResult(
-            request.request_id, Operation.READ, request.arrival_ns, completion, request.byte_count, internal,
-            counters=counters)
-        core._record_host_admission(host_channel, arrival, admitted, completion, Operation.READ)
-    return processed
-
-
-def _sequential_read_bills(timeline, resource_names, entry_offsets, entry_rid, busy_before, busy_after,
-                           moved_before, moved_after, starts, ends):
-    """Each request's metric recorder maps, as ResourceTimeline._core_metrics_delta returns them.
-
-    Busy and byte entries exist where the counter changed, in the timeline
-    column's order; intervals follow the request's touched set.
-    """
-    import numpy as np
-
-    busy_order = {rid: index for index, rid in enumerate(timeline.busy_ns)}
-    byte_order = {rid: index for index, rid in enumerate(timeline.bytes_moved)}
-    busy_position = np.array([busy_order.get(name, -1) for name in resource_names], dtype=np.int64)
-    byte_position = np.array([byte_order.get(name, -1) for name in resource_names], dtype=np.int64)
-    busy_delta = busy_after - busy_before
-    byte_delta = moved_after - moved_before
-    busy_changed = busy_after != busy_before
-    byte_changed = moved_after != moved_before
-    bills = []
-    for request in range(len(entry_offsets) - 1):
-        lo, hi = int(entry_offsets[request]), int(entry_offsets[request + 1])
-        rids = entry_rid[lo:hi]
-        mask = busy_changed[lo:hi]
-        selected = rids[mask]
-        order = np.argsort(busy_position[selected], kind="stable")
-        busy = dict(zip([resource_names[rid] for rid in selected[order].tolist()],
-                        busy_delta[lo:hi][mask][order].tolist()))
-        mask = byte_changed[lo:hi]
-        selected = rids[mask]
-        order = np.argsort(byte_position[selected], kind="stable")
-        moved = dict(zip([resource_names[rid] for rid in selected[order].tolist()],
-                         byte_delta[lo:hi][mask][order].tolist()))
-        touched = [resource_names[rid] for rid in rids.tolist()]
-        intervals = dict(zip(touched, zip(starts[lo:hi].tolist(), ends[lo:hi].tolist())))
-        bills.append((busy, moved, {rid: intervals[rid] for rid in set(touched)}))
-    return bills
-
-
-def _fold_sequential_read_sink(timeline, resource_sink, resource_names, entry_offsets, entry_rid,
-                               busy_before, busy_after, moved_before, moved_after, starts, ends, fold):
-    """Bill each request into the task and owner sinks, as consume_task_resource_sink.
-
-    New sink keys keep the order consuming the per-request maps would give:
-    the first request that carries them, then that map's order (busy and
-    bytes follow the timeline's columns, intervals the request's touched set).
-    """
-    import numpy as np
-
-    size = len(resource_names)
-    columns = {}
-
-    def column_order(name):
-        if name not in columns:
-            values = getattr(timeline, name)
-            columns[name] = {rid: index for index, rid in enumerate(values)}
-        return columns[name]
-
-    touched_orders = {}
-
-    def touched_order(request):
-        if request not in touched_orders:
-            touched = set()
-            for rid in entry_rid[entry_offsets[request]:entry_offsets[request + 1]].tolist():
-                touched.add(resource_names[rid])
-            touched_orders[request] = {rid: index for index, rid in enumerate(touched)}
-        return touched_orders[request]
-
-    for busy_map, byte_map, last_map in (resource_sink[:3], resource_sink[3:]):
-        busy = np.array([float(busy_map.get(name, 0.0)) for name in resource_names], dtype=np.float64)
-        has_busy = np.array([name in busy_map for name in resource_names], dtype=np.bool_)
-        byte_counts = np.array([byte_map.get(name, 0) for name in resource_names], dtype=np.int64)
-        has_bytes = np.array([name in byte_map for name in resource_names], dtype=np.bool_)
-        previous = [last_map.get(name) for name in resource_names]
-        has_last = np.array([value is not None for value in previous], dtype=np.bool_)
-        last_start = np.array([0.0 if value is None else value[0] for value in previous], dtype=np.float64)
-        last_end = np.array([0.0 if value is None else value[1] for value in previous], dtype=np.float64)
-        initial_start, initial_end = last_start.copy(), last_end.copy()
-        initial_busy = has_busy.copy()
-        first_busy, first_bytes, first_last = fold(
-            entry_offsets, entry_rid, busy_before, busy_after, moved_before, moved_after, starts, ends,
-            busy, has_busy, byte_counts, has_bytes, last_start, last_end, has_last)
-        changed = np.zeros(size, dtype=np.bool_)
-        changed[entry_rid[busy_after != busy_before]] = True
-        busy_values = busy.tolist()
-        for rid in np.flatnonzero(changed & initial_busy).tolist():
-            busy_map[resource_names[rid]] = busy_values[rid]
-        fresh = np.flatnonzero(first_busy >= 0).tolist()
-        if fresh:
-            order = column_order("busy_ns")
-            for rid in sorted(fresh, key=lambda rid: (first_busy[rid], order[resource_names[rid]])):
-                busy_map[resource_names[rid]] = busy_values[rid]
-        changed[:] = False
-        changed[entry_rid[moved_after != moved_before]] = True
-        byte_values = byte_counts.tolist()
-        for rid in np.flatnonzero(changed & ~(first_bytes >= 0)).tolist():
-            byte_map[resource_names[rid]] = byte_values[rid]
-        fresh = np.flatnonzero(first_bytes >= 0).tolist()
-        if fresh:
-            order = column_order("bytes_moved")
-            for rid in sorted(fresh, key=lambda rid: (first_bytes[rid], order[resource_names[rid]])):
-                byte_map[resource_names[rid]] = byte_values[rid]
-        start_values, end_values = last_start.tolist(), last_end.tolist()
-        replaced = (last_start != initial_start) | (last_end != initial_end)
-        for rid in np.flatnonzero(replaced & (first_last < 0)).tolist():
-            last_map[resource_names[rid]] = (start_values[rid], end_values[rid])
-        fresh = np.flatnonzero(first_last >= 0).tolist()
-        if fresh:
-            for rid in sorted(fresh, key=lambda rid: (first_last[rid],
-                                                      touched_order(int(first_last[rid]))[resource_names[rid]])):
-                last_map[resource_names[rid]] = (start_values[rid], end_values[rid])
 
 
 def _native_numeric_qualified(core):
@@ -1533,12 +976,12 @@ def full_page_period(config):
 def execute_full_pages(core, request, first_page, page_count):
     """Return a scalar result, or None when ordinary page execution is needed."""
     config, timeline = core.config, core.timeline
-    # This affine program has no page-tag, cache-reader, or OCP page-order
-    # state. Those configurations execute the same detailed NAND state
-    # machine; never skip their protocol/cache transitions.
+    # This affine program has no page-tag, cache-reader, page-table or OCP
+    # page-order state. Those configurations execute the same detailed NAND
+    # state machine; never skip their protocol/cache transitions.
     if (config.host_channels != 1
             or config.host_full_duplex or config.read_cache_pages_per_bank
-            or config.page_staging != "none"):
+            or config.page_staging != "none" or core._sequential_write_mode()):
         return None
     period = full_page_period(config)
     # Bound compilation independently of unusual user-defined geometry.
@@ -1798,7 +1241,7 @@ _OWNED_NAND_FUNCTIONS = tuple((name, globals()[name]) for name in (
 _OWNED_NAND_PACK_FUNCTIONS = tuple((name, getattr(_owned_pack_module, name)) for name in (
     "pack_single_lane", "pack_multi_lane", "publish_timeline", "validate_buffered_cache",
     "pack_buffered_cache", "publish_buffered_cache", "can_own_resource_aliases", "publish_active_timeline",
-    "generic_request_resource_indexes", "pack_selected_single_lane", "generic_metrics_delta",
+    "generic_page_resource_indexes", "pack_selected_single_lane", "generic_metrics_delta",
     "publish_generic_controller", "remember_generic_resources"))
 _OWNED_NAND_NUMERIC_ENTRIES = tuple((name, getattr(_owned_numeric_module, name)) for name in (
     "run_generic_full_pages", "run_generic_read_batch", "run_generic_flush_batch",

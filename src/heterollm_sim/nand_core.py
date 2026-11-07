@@ -874,6 +874,30 @@ class NandCore:
             return mapping
         return self._logical_page_table.get(int(page), mapping)
 
+    def _read_pages(self, first, count):
+        """Physical page indices of the ``count`` logical pages from ``first``.
+
+        The compiled page machines decode a bank and tag from these indices.
+        Under the OCP sequential write mode a programmed page lives where its
+        channel's write pointer put it (the host page table); a page the run
+        never programmed reads its own address, as in ``_read_mapping``.
+        """
+        import numpy as np
+        if (not self._sequential_write_mode()
+                or self.__dict__.get("_logical_page_table_identity", False)):
+            return np.arange(first, first + count, dtype=np.int64)
+        pages = range(first, first + count)
+        table = self._logical_page_table
+        try:
+            # An unmapped page's default is its own index, so a span the
+            # table does not touch converts without building mappings.
+            return np.fromiter(map(table.get, pages, pages), dtype=np.int64, count=count)
+        except TypeError:
+            page_bytes = self.config.page_bytes
+            return np.fromiter((page if mapping is None else mapping.address // page_bytes
+                                for page, mapping in zip(pages, map(table.get, pages))),
+                               dtype=np.int64, count=count)
+
     def _remember_program(self, page, mapping):
         if self._sequential_write_mode():
             for token in self._nand_transactions:
@@ -1550,16 +1574,15 @@ class NandCore:
         A native generic READ batch is scheduled by the out-of-order
         controller: host credits are still taken in request order, but
         channels and the host link serve pages as they become ready, so one
-        request's busy plane no longer holds back the others. Other batches
-        are submitted one request at a time.
+        request's busy plane no longer holds back the others. Every page is
+        read where the host page table put it (``_read_pages``). OCP HBF
+        v0.7 5.3.1 lets reads of different AXI IDs complete out of order and
+        keeps only the reads of one bank in order, which the controller's
+        per-plane FIFO does. Other batches are submitted one request at a
+        time.
         """
         requests = tuple(requests)
-        phase_identity_read = (
-            self._sequential_write_mode()
-            and bool(self.__dict__.get("_logical_page_table_identity", False))
-        )
         if (len(requests) >= 2 and self._nand_numeric_enabled
-                and (not self._sequential_write_mode() or phase_identity_read)
                 and all(type(request) is AccessRequest and request.operation is Operation.READ
                         for request in requests)):
             from ._nand_acceleration import execute_read_batch
@@ -1595,13 +1618,6 @@ class NandCore:
                         for (index, _request), result in zip(group, batch):
                             results[index] = result
                 return tuple(results)
-        if len(requests) >= 2 and self._sequential_write_mode():
-            # Page-table reads are submitted one at a time; staged spans
-            # among them run as one exact compiled window.
-            from ._nand_acceleration import execute_sequential_read_group
-            results = execute_sequential_read_group(self, requests, _resource_sink)
-            if results is not None:
-                return results
         if _resource_sink is None:
             results = tuple(self.submit(request) for request in requests)
         else:
@@ -1907,8 +1923,16 @@ class NandCore:
         bank_count = base_units * config.planes_per_lun
         first = request.address // 4096
         last = (request.address + request.byte_count - 1) // 4096
-        banks = tuple((first + offset) % bank_count
-                      for offset in range(min(last - first + 1, bank_count)))
+        if request.operation is Operation.READ and self._sequential_write_mode():
+            # The scalar machine reads each page where the page table put it.
+            banks = tuple(dict.fromkeys((self._read_pages(first, last - first + 1) % bank_count).tolist()))
+        elif request.operation is Operation.WRITE and self._sequential_write_mode():
+            # ... and programs it at its channel's write pointer.
+            banks = tuple(dict.fromkeys(page % bank_count for page in
+                                        self._phase_batch_mappings(range(first, last + 1))[0]))
+        else:
+            banks = tuple((first + offset) % bank_count
+                          for offset in range(min(last - first + 1, bank_count)))
         units = tuple(dict.fromkeys(bank if config.planes_independent else bank % base_units
                                    for bank in banks))
         write_back = self._resident_handoff(banks, units)
