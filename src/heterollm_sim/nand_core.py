@@ -567,6 +567,53 @@ class NandCore:
         # Share of new tail pages the store keeps in the step a sampled run
         # stands for (the stationary sampler sets it); 1 admits by room only.
         self._tail_fraction = 1.
+        # Detailed OCP traffic evidence is opt-in and lives only on the live
+        # core.  Summary/default runs keep this as None, so no event list is
+        # allocated and the existing execution path remains unchanged.
+        import os
+        self._ocp_diag_events = (
+            [] if str(os.environ.get("HBF_OCP_DIAGNOSTICS", "0")).lower()
+            in {"1", "true", "yes"} and config.protocol_mode == "ocp_hbf_0_7"
+            else None
+        )
+
+    def _ocp_diag_append_event(self, kind: str, mapping, *, issue_ns: float,
+                               end_ns: Optional[float] = None,
+                               logical_page: Optional[int] = None,
+                               length: Optional[int] = None) -> None:
+        """Append one physical OCP event when evidence collection is enabled."""
+        events = self.__dict__.get("_ocp_diag_events")
+        if events is None:
+            return
+        page_bytes = int(self.config.page_bytes)
+        base_units = (int(self.config.channels) * int(self.config.targets_per_channel)
+                      * int(self.config.dies_per_target) * int(self.config.luns_per_die))
+        physical_page = int(mapping.address) // page_bytes
+        metadata = getattr(self.config, "metadata", {}) or {}
+        owner = metadata.get("physical_owner")
+        if not owner:
+            host_resource = str(metadata.get("host_resource_id", ""))
+            owner = host_resource.split(":nand:host", 1)[0] if ":nand:host" in host_resource else None
+        if not owner:
+            array_resource = str(metadata.get("array_resource_prefix", ""))
+            owner = array_resource.split(":nand:array", 1)[0] if ":nand:array" in array_resource else None
+        row = {
+            "kind": str(kind),
+            "issue_ns": float(issue_ns),
+            "end_ns": None if end_ns is None else float(end_ns),
+            "channel": int(mapping.channel),
+            "host_channel": int(mapping.channel) % int(self.config.host_channels),
+            "address": int(mapping.address),
+            "length": int(page_bytes if length is None else length),
+            "local_dlu": int(physical_page // base_units),
+            "plane": int(mapping.plane),
+            "block": int(mapping.block),
+            "page": int(mapping.page),
+            "physical_owner": str(owner or "unscoped"),
+        }
+        if logical_page is not None:
+            row["logical_page"] = int(logical_page)
+        events.append(row)
 
     def begin_transaction(self):
         """Protect program-order, wear and read buffers; caller owns other state."""
@@ -1139,6 +1186,11 @@ class NandCore:
             wear_scale = min(wear_config.max_program_latency_scale, 1.+float(extra))
         work = float(duration)*wear_scale
         stage = self._array_stage(name, resource, start, work)
+        if name in {"PAGE_PROGRAM", "BLOCK_ERASE"}:
+            self._ocp_diag_append_event(
+                "program" if name == "PAGE_PROGRAM" else "erase",
+                mapping, issue_ns=stage.start_ns, end_ns=stage.end_ns,
+            )
         if wear_config:
             wear = {"programs": wear["programs"]+int(name == "PAGE_PROGRAM"),
                     "erases": wear["erases"]+int(name == "BLOCK_ERASE")}

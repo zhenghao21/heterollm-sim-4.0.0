@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import copy
+from pathlib import Path
 from contextlib import contextmanager
 from contextvars import ContextVar
 from bisect import bisect_left
@@ -246,6 +247,496 @@ class PhysicalRuntimeContext:
     _tail_reserved: dict[str, tuple[int, float]] = field(default_factory=dict, repr=False)
     _execution_config_cache: dict[Any, Any] = field(default_factory=dict, repr=False)
     _physical_demand_cache: dict[Any, ResourceDemand] = field(default_factory=dict, repr=False)
+    # Optional read-only OCP placement diagnostics.  The collector is dormant
+    # unless HBF_OCP_DIAGNOSTICS=1, so ordinary native runs keep the exact
+    # existing execution path and memory footprint.
+    _ocp_diag_context: Any = field(default=None, repr=False)
+    _ocp_diag_window: Any = field(default=None, repr=False)
+    # A sampled window can be executed more than once while the stationary
+    # sampler widens an underestimated staging reservation.  Keep the
+    # diagnostic replay label on the cloned runtime so independent replays
+    # never get folded into one host-channel stream.
+    _ocp_diag_replay_counters: dict[str, int] = field(default_factory=dict, repr=False)
+    _ocp_diag_replay_id: Any = field(default=None, repr=False)
+    _ocp_diagnostics: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+    # Sidecar rows are staged until the surrounding physical transaction
+    # commits.  A failed task restores NAND pointers/page tables, so emitting
+    # its rows before that commit would leave a diagnostic-only duplicate page
+    # in an otherwise rolled-back write attempt.
+    _ocp_diag_pending_sidecar: list[tuple[Any, ...]] = field(default_factory=list, repr=False)
+    # A diagnostic sidecar is streamed from the active runtime instead of
+    # retaining every event until candidate finalisation.  The handle is
+    # deliberately excluded from runtime copies; each sampled clone opens its
+    # own append member and closes it when the clone is merged back.
+    _ocp_diag_sidecar_handle: Any = field(default=None, repr=False)
+
+    def _ocp_diag_begin(self, metadata: Mapping[str, Any], task_id: Any = None) -> None:
+        """Attach a task/layer/window label to the native owner for evidence."""
+        # Keep the production/default native path unchanged.  The sixth-round
+        # evidence runs opt in explicitly with HBF_OCP_DIAGNOSTICS=1; the
+        # collector never changes a request, timing, or page-table decision.
+        import os
+        if os.environ.get("HBF_OCP_DIAGNOSTICS", "0").lower() not in {"1", "true", "yes"}:
+            self._ocp_diag_context = None
+            return
+        layer = metadata.get("layer_id", metadata.get("layer"))
+        # Some native lowering wrappers keep the layer only in the task name;
+        # retain those pages under an explicit aggregate label instead of
+        # silently dropping the owned counter stream.
+        if layer is None:
+            layer = "layer-unknown"
+        step = metadata.get("decode_step", metadata.get("step", metadata.get("cohort_id")))
+        if step is None:
+            step = metadata.get("task_id", task_id if task_id is not None else "task")
+        window = getattr(self, "_ocp_diag_window", None)
+        if window is None:
+            window = metadata.get("window_id", "unscoped")
+        self._ocp_diag_context = (str(layer), str(window), str(step))
+
+    @staticmethod
+    def _ocp_diag_default_entry() -> dict[str, Any]:
+        return {
+            "read_by_bank": {}, "program_by_bank": {}, "read_wait_events": [],
+            "step_programs": {}, "pages_requested": 0, "pages_read": 0,
+            "pages_programmed": 0, "program_traffic": [],
+            "write_order_errors": 0, "windows": {},
+        }
+
+    @staticmethod
+    def _ocp_diag_default_window(window_id: str) -> dict[str, Any]:
+        return {
+            "window_id": str(window_id), "replay_id": None,
+            "programs": [], "erases": [], "reads": [],
+            "program_count": 0, "erase_count": 0, "read_count": 0,
+            "pages_requested": 0, "pages_read": 0, "pages_programmed": 0,
+            "write_order_errors": 0,
+        }
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Keep accumulated evidence out of native window kernel copies.
+
+        ``native_layer_sampling`` deep-copies the physical runtime for every
+        sampled window.  Detailed event rows belong to the source runtime and
+        are merged back explicitly after a window completes; copying them into
+        the next independent kernel would make memory grow with every window.
+        The production path has an empty diagnostics map and is unchanged.
+        """
+        # Finish the current gzip member before a sampled clone can append a
+        # new member to the same path.  Without this close, two live gzip
+        # handles can interleave bytes and make the concatenated stream
+        # unreadable.  The source runtime lazily reopens on its next event.
+        self._ocp_diag_sidecar_close()
+        state = self.__dict__.copy()
+        if state.get("_ocp_diagnostics"):
+            state["_ocp_diagnostics"] = {}
+        state["_ocp_diag_pending_sidecar"] = []
+        # File handles are process-local and cannot be copied into a sampled
+        # kernel.  The copy lazily opens the same sidecar in append mode when
+        # its first committed event is recorded.
+        state["_ocp_diag_sidecar_handle"] = None
+        return state
+
+    @staticmethod
+    def _ocp_diag_sidecar_name() -> str:
+        import os
+        return os.environ.get("HBF_OCP_DIAGNOSTICS_SIDECAR", "").strip()
+
+    def _ocp_diag_sidecar_open(self):
+        name = self._ocp_diag_sidecar_name()
+        if not name:
+            return None
+        handle = getattr(self, "_ocp_diag_sidecar_handle", None)
+        if handle is not None:
+            return handle
+        import gzip
+        path = Path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        opener = gzip.open if path.suffix.lower() == ".gz" else open
+        self._ocp_diag_sidecar_handle = opener(path, "ab")
+        return self._ocp_diag_sidecar_handle
+
+    def _ocp_diag_sidecar_close(self) -> None:
+        handle = getattr(self, "_ocp_diag_sidecar_handle", None)
+        if handle is None:
+            return
+        try:
+            handle.flush()
+            handle.close()
+        finally:
+            self._ocp_diag_sidecar_handle = None
+
+    def _ocp_diag_sidecar_commit(self, snapshot: Mapping[str, Any]) -> None:
+        """Publish sidecar batches only after a physical transaction commits."""
+        start = int(snapshot.get("_ocp_diag_pending_sidecar_len", 0))
+        pending = self._ocp_diag_pending_sidecar
+        for layer, window_id, owner, replay_id, events in pending[start:]:
+            self._ocp_diag_sidecar_write(layer, window_id, owner, events, replay_id)
+        if start <= len(pending):
+            del pending[start:]
+
+    def _ocp_diag_sidecar_discard(self, snapshot: Mapping[str, Any]) -> None:
+        """Drop rows recorded by a transaction that is being rolled back."""
+        start = int(snapshot.get("_ocp_diag_pending_sidecar_len", 0))
+        if start <= len(self._ocp_diag_pending_sidecar):
+            del self._ocp_diag_pending_sidecar[start:]
+
+    def _ocp_diag_sidecar_write(self, layer: str, window_id: str,
+                                owner: str, events: Iterable[Mapping[str, Any]],
+                                replay_id: Any = None) -> None:
+        """Append a bounded batch of event rows to the optional JSONL sidecar."""
+        handle = self._ocp_diag_sidecar_open()
+        if handle is None:
+            return
+        import json
+        prefix = {
+            "layer": str(layer), "window_id": str(window_id),
+            "physical_owner": str(owner),
+        }
+        if replay_id is not None:
+            prefix["replay_id"] = str(replay_id)
+        # Preserve the order in which NandCore committed the events.  The
+        # array-stage timestamps are intentionally allowed to overlap across
+        # planes, so sorting by ``issue_ns`` changes a host-channel admission
+        # stream into an array-service-time stream and can manufacture DLU
+        # jumps.  The caller already supplies erase, program, then read rows
+        # in the commit order for this task.
+        for event in events:
+            row = {**prefix, **dict(event)}
+            handle.write((json.dumps(row, ensure_ascii=False,
+                                     separators=(",", ":")) + "\n").encode("utf-8"))
+        # Keep rows durable while a long native sample is running.  The
+        # handle remains open so opening gzip for every task is avoided.
+        handle.flush()
+
+    def _ocp_diag_sidecar_flush_pending(self) -> None:
+        """Flush rows accumulated before streaming was first enabled."""
+        if self._ocp_diag_sidecar_name() == "":
+            return
+        # A final snapshot normally follows a committed transaction, but a
+        # shared native transaction can still own the last batch here.
+        for layer, window_id, owner, replay_id, events in self._ocp_diag_pending_sidecar:
+            self._ocp_diag_sidecar_write(layer, window_id, owner, events, replay_id)
+        self._ocp_diag_pending_sidecar.clear()
+        for layer, raw in self._ocp_diagnostics.items():
+            for window_key, source in raw.get("windows", {}).items():
+                events = [
+                    *source.get("erases", ()),
+                    *source.get("programs", ()),
+                    *source.get("reads", ()),
+                ]
+                if events:
+                    self._ocp_diag_sidecar_write(
+                        str(layer), str(source.get("window_id", window_key)),
+                        str(source.get("physical_owner", "unscoped")), events,
+                        source.get("replay_id"))
+                for field_name in ("programs", "erases", "reads"):
+                    source.get(field_name, []).clear()
+            raw.get("program_traffic", []).clear()
+
+    def _ocp_diag_sidecar_clear_rows(self) -> None:
+        """Release event rows after they have been emitted to the sidecar."""
+        for raw in self._ocp_diagnostics.values():
+            raw.get("program_traffic", []).clear()
+            for source in raw.get("windows", {}).values():
+                for field_name in ("programs", "erases", "reads"):
+                    source.get(field_name, []).clear()
+
+    def _ocp_diag_record(self, core: Any, operation: Any, address: int,
+                         byte_count: int, result: Any) -> None:
+        """Record one task's committed OCP events without merging windows.
+
+        The core event list is diagnostic-only.  Request reads are expanded to
+        one 4 KiB page segment here, so the checker can verify page boundaries
+        even when the native executor used a compiled batch without mappings.
+        """
+        context = self._ocp_diag_context
+        from .memory_types import NandConfig, Operation
+        if context is None or not isinstance(getattr(core, "config", None), NandConfig):
+            return
+        if core.config.protocol_mode != "ocp_hbf_0_7":
+            return
+        layer, window_id, step = context
+        replay_id = getattr(self, "_ocp_diag_replay_id", None)
+        metadata = getattr(core.config, "metadata", {}) or {}
+        owner = metadata.get("physical_owner")
+        if not owner:
+            host_resource = str(metadata.get("host_resource_id", ""))
+            owner = host_resource.split(":nand:host", 1)[0] if ":nand:host" in host_resource else None
+        if not owner:
+            array_resource = str(metadata.get("array_resource_prefix", ""))
+            owner = array_resource.split(":nand:array", 1)[0] if ":nand:array" in array_resource else None
+        owner = str(owner or "unscoped")
+        window_key = f"{window_id}@{owner}"
+        entry = self._ocp_diagnostics.setdefault(layer, self._ocp_diag_default_entry())
+        windows = entry.setdefault("windows", {})
+        window = windows.setdefault(window_key, self._ocp_diag_default_window(window_id))
+        window["physical_owner"] = owner
+        if replay_id is not None:
+            window["replay_id"] = str(replay_id)
+        first = int(address) // int(core.config.page_bytes)
+        last = (int(address) + int(byte_count) - 1) // int(core.config.page_bytes)
+        pages = max(0, last - first + 1)
+        counters = getattr(result, "counters", {}) or {}
+        actual_reads = int(counters.get("pages_read", 0)) if operation is Operation.READ else 0
+        actual_programs = int(counters.get("pages_programmed", 0)) if operation is Operation.WRITE else 0
+        # Scalar results carry mappings; numeric batches intentionally do not.
+        # In the latter case the committed logical page table is authoritative
+        # for writes and falls back to the deterministic logical mapper for
+        # preloaded reads.
+        mappings = tuple(getattr(result, "mapping", ()) or ())
+        mapping_by_page = {}
+        if len(mappings) == pages:
+            mapping_by_page = {first + offset: mapping for offset, mapping in enumerate(mappings)}
+        if not mapping_by_page:
+            from .memory_mapping import map_nand_address
+            for page in range(first, last + 1):
+                mapping = core._logical_page_table.get(page)
+                if mapping is None:
+                    mapping = map_nand_address(core.config, page * core.config.page_bytes)
+                mapping_by_page[page] = mapping
+
+        reverse_logical = {}
+        for logical_page, mapping in mapping_by_page.items():
+            reverse_logical.setdefault(int(mapping.address), int(logical_page))
+
+        # Compiled and detailed cores both publish the same compact event
+        # schema.  Consume the list after a successful result so a submit_many
+        # group is attributed to this task/window exactly once.
+        core_events = list(getattr(core, "_ocp_diag_events", ()) or ())
+        if core_events:
+            core.__dict__["_ocp_diag_events"].clear()
+        program_events = []
+        erase_events = []
+        read_events = []
+        for raw_event in core_events:
+            event = dict(raw_event)
+            event.setdefault("window_id", window_id)
+            event.setdefault("step", step)
+            event.setdefault("physical_owner", owner)
+            if replay_id is not None:
+                event.setdefault("replay_id", str(replay_id))
+            if event.get("logical_page") is None:
+                event["logical_page"] = reverse_logical.get(int(event.get("address", -1)))
+            kind = str(event.get("kind", ""))
+            if kind == "program":
+                program_events.append(event)
+                window["programs"].append(event)
+                entry["program_traffic"].append(event)
+                key = f"{int(event['channel'])}:{int(event['plane'])}"
+                entry["program_by_bank"][key] = entry["program_by_bank"].get(key, 0) + 1
+                step_counts = entry["step_programs"].setdefault(step, {})
+                step_counts[key] = step_counts.get(key, 0) + 1
+            elif kind == "erase":
+                erase_events.append(event)
+                window["erases"].append(event)
+
+        # Program rows are only accepted from NandCore's per-page diagnostic
+        # events.  Do not synthesize rows from the logical page table: doing so
+        # can select the same tail pages for two sampling attempts and make a
+        # recorder artifact look like a second physical write.
+        missing_programs = max(0, actual_programs - len(program_events))
+        if missing_programs:
+            window["missing_program_events"] = (
+                int(window.get("missing_program_events", 0)) + missing_programs
+            )
+            entry["missing_program_events"] = (
+                int(entry.get("missing_program_events", 0)) + missing_programs
+            )
+
+        if operation is Operation.READ:
+            target = entry["read_by_bank"]
+            read_banks = set()
+            window["pages_requested"] += pages
+            entry["pages_requested"] += pages
+            for page in range(first, last + 1):
+                mapping = mapping_by_page[page]
+                key = f"{int(mapping.channel)}:{int(mapping.plane)}"
+                target[key] = target.get(key, 0) + 1
+                read_banks.add(key)
+                lo = max(int(address), page * int(core.config.page_bytes))
+                hi = min(int(address) + int(byte_count), (page + 1) * int(core.config.page_bytes))
+                if hi <= lo:
+                    continue
+                read_event = {
+                    "kind": "read", "window_id": window_id, "step": step,
+                    "replay_id": str(replay_id) if replay_id is not None else None,
+                    "physical_owner": owner,
+                    "logical_page": int(page), "channel": int(mapping.channel),
+                    "host_channel": int(mapping.channel) % int(core.config.host_channels),
+                    "address": int(lo), "length": int(hi - lo),
+                    "physical_address": int(mapping.address) + (lo - page * int(core.config.page_bytes)),
+                    "plane": int(mapping.plane), "block": int(mapping.block),
+                    "page": int(mapping.page),
+                }
+                read_events.append(read_event)
+                window["reads"].append(read_event)
+            wait_ns = float(counters.get("media_queue_wait_ns", 0.0) or 0.0)
+            if wait_ns > 0.0 and actual_reads:
+                # NandCore exposes the maximum queue wait for this read batch;
+                # preserve it as an event rather than fabricating per-page
+                # stage timings in the accelerated executor.
+                entry["read_wait_events"].append({
+                    "pages": actual_reads, "wait_ns": wait_ns,
+                    "same_plane": bool(read_banks.intersection(entry["program_by_bank"])),
+                    "banks": sorted(read_banks.intersection(entry["program_by_bank"])),
+                    "step": step, "window_id": window_id,
+                })
+            window["pages_read"] += actual_reads
+            entry["pages_read"] += actual_reads
+        elif operation is Operation.WRITE:
+            window["pages_requested"] += pages
+            entry["pages_requested"] += pages
+            window["pages_programmed"] += actual_programs
+            entry["pages_programmed"] += actual_programs
+
+        # Counts remain cumulative even when event rows are immediately
+        # released after streaming.  Without a sidecar, the lists are kept
+        # and the same counters still describe their lengths.
+        window["program_count"] = int(window.get("program_count", 0)) + len(program_events)
+        window["erase_count"] = int(window.get("erase_count", 0)) + len(erase_events)
+        window["read_count"] = int(window.get("read_count", 0)) + len(read_events)
+        window["write_order_errors"] = max(
+            int(window.get("write_order_errors", 0)),
+            int(getattr(core, "_write_order_errors", 0)),
+        )
+        entry["write_order_errors"] = max(
+            int(entry.get("write_order_errors", 0)),
+            int(getattr(core, "_write_order_errors", 0)),
+        )
+        if self._ocp_diag_sidecar_name():
+            self._ocp_diag_pending_sidecar.append((
+                str(layer), str(window_id), str(owner),
+                None if replay_id is None else str(replay_id),
+                (*erase_events, *program_events, *read_events)))
+            # Program traffic and per-window event arrays are only a transient
+            # staging area.  The pending batch is bounded by the surrounding
+            # physical transaction and is discarded if that transaction
+            # rolls back.
+            self._ocp_diag_sidecar_clear_rows()
+
+    def ocp_diagnostic_snapshot(self) -> dict[str, Any]:
+        """Return JSON-safe per-layer OCP placement statistics by window."""
+        from statistics import mean
+
+        # Full event rows are intentionally kept out of candidate JSON when a
+        # sidecar is requested.  The runner serializes this return value in
+        # every candidate; embedding millions of rows there makes paired
+        # compare.py checks and ordinary JSON readers exhaust memory.  The
+        # sidecar is append-only JSONL (gzip when the path ends in ``.gz``),
+        # one independent layer/window record per line.
+        import gzip
+        import json
+        import os
+
+        sidecar_name = os.environ.get("HBF_OCP_DIAGNOSTICS_SIDECAR", "").strip()
+        if sidecar_name:
+            self._ocp_diag_sidecar_flush_pending()
+            self._ocp_diag_sidecar_close()
+            return {}
+
+        def quantiles(values):
+            values = sorted(int(value) for value in values)
+            if not values:
+                return {"max": 0, "mean": 0.0, "p50": 0, "p90": 0, "p99": 0}
+            def at(frac):
+                return values[min(len(values) - 1, int(math.ceil(frac * len(values))) - 1)]
+            return {"max": values[-1], "mean": float(mean(values)), "p50": at(.50),
+                    "p90": at(.90), "p99": at(.99)}
+
+        result = {}
+        for layer, raw in self._ocp_diagnostics.items():
+            reads = list(raw["read_by_bank"].values())
+            programs = list(raw["program_by_bank"].values())
+            step_rows = []
+            for step, counts in raw["step_programs"].items():
+                values = list(counts.values())
+                shared = sum(value for value in values if value > 1)
+                step_rows.append({"step": step, "distribution": quantiles(values),
+                                  "active_tail_bank_sharing": {
+                                      "max": max(values, default=0),
+                                      "count_gt1": sum(1 for value in values if value > 1),
+                                      "total": sum(values), "shared_total": shared,
+                                  }})
+            waits = raw["read_wait_events"]
+            windows = []
+            for window_id, source in raw.get("windows", {}).items():
+                window = dict(source)
+                window["programs"] = list(source.get("programs", ()))
+                window["erases"] = list(source.get("erases", ()))
+                window["reads"] = list(source.get("reads", ()))
+                window["program_count"] = len(window["programs"])
+                window["erase_count"] = len(window["erases"])
+                window["read_count"] = len(window["reads"])
+                windows.append(window)
+            result[layer] = {
+                "read_pages_by_channel_plane": quantiles(reads),
+                "program_pages_by_channel_plane": quantiles(programs),
+                "read_pages_by_channel_plane_values": dict(raw["read_by_bank"]),
+                "program_pages_by_channel_plane_values": dict(raw["program_by_bank"]),
+                "read_pages_requested": int(raw["pages_requested"]),
+                "read_pages": int(raw["pages_read"]),
+                "program_pages": int(raw["pages_programmed"]),
+                "read_wait_same_plane_pages": int(sum(item["pages"] for item in waits if item["same_plane"])),
+                "read_wait_total_ns": float(sum(item["wait_ns"] for item in waits if item["same_plane"])),
+                "read_wait_max_ns": float(max((item["wait_ns"] for item in waits if item["same_plane"]), default=0.0)),
+                "step_programs": step_rows,
+                "program_traffic": list(raw.get("program_traffic", ())),
+                "write_order_errors": int(raw.get("write_order_errors", 0)),
+                "windows": windows,
+            }
+        return result
+
+    def _ocp_diag_merge_from(self, other: Any) -> None:
+        """Merge a sampled native-window copy back into its source context."""
+        if not isinstance(other, PhysicalRuntimeContext) or other is self:
+            return
+        for layer, source in other._ocp_diagnostics.items():
+            target = self._ocp_diagnostics.setdefault(layer, self._ocp_diag_default_entry())
+            for field in ("read_by_bank", "program_by_bank"):
+                for key, value in source[field].items():
+                    target[field][key] = target[field].get(key, 0) + int(value)
+            target["read_wait_events"].extend(source["read_wait_events"])
+            target["program_traffic"].extend(source.get("program_traffic", ()))
+            for step, counts in source["step_programs"].items():
+                merged = target["step_programs"].setdefault(step, {})
+                for key, value in counts.items():
+                    merged[key] = merged.get(key, 0) + int(value)
+            for field in ("pages_requested", "pages_read", "pages_programmed"):
+                target[field] += int(source[field])
+            target_windows = target.setdefault("windows", {})
+            for window_id, source_window in source.get("windows", {}).items():
+                window = target_windows.setdefault(window_id, self._ocp_diag_default_window(window_id))
+                window["physical_owner"] = source_window.get("physical_owner", "unscoped")
+                window["replay_id"] = source_window.get("replay_id")
+                for field in ("programs", "erases", "reads"):
+                    window[field].extend(source_window.get(field, ()))
+                for field in ("pages_requested", "pages_read", "pages_programmed"):
+                    window[field] += int(source_window.get(field, 0))
+                window["program_count"] = len(window["programs"])
+                window["erase_count"] = len(window["erases"])
+                window["read_count"] = len(window["reads"])
+                window["write_order_errors"] = max(
+                    int(window.get("write_order_errors", 0)),
+                    int(source_window.get("write_order_errors", 0)),
+                )
+                window["missing_program_events"] = (
+                    int(window.get("missing_program_events", 0))
+                    + int(source_window.get("missing_program_events", 0))
+                )
+            target["write_order_errors"] = max(
+                int(target.get("write_order_errors", 0)),
+                int(source.get("write_order_errors", 0)),
+            )
+            target["missing_program_events"] = (
+                int(target.get("missing_program_events", 0))
+                + int(source.get("missing_program_events", 0))
+            )
+        if self._ocp_diag_sidecar_name():
+            # The sampled clone has already emitted its rows.  Closing here
+            # prevents a long-lived clone handle and releases its temporary
+            # event arrays before the next independent window is copied.
+            other._ocp_diag_sidecar_clear_rows()
+            other._ocp_diag_sidecar_close()
 
     def parse_config(self, raw: Any) -> Any:
         """Reuse complete serialized contracts while detecting mutable edits."""
@@ -506,7 +997,8 @@ class PhysicalRuntimeContext:
                     # saved retry point through a nested alias.
                     core_state[key] = copy.deepcopy(value)
                 elif key in {"_inflight", "_inflight_operations", "_write_buffer_pending", "_hbm_transactions",
-                             "_nand_transactions", "_tail_flushing", "_bank_log", "_write_pointer"} and isinstance(value, list):
+                             "_nand_transactions", "_tail_flushing", "_bank_log", "_write_pointer",
+                             "_ocp_diag_events"} and isinstance(value, list):
                     core_state[key] = list(value)
                 elif key == "_logical_page_table":
                     core_state[key] = dict(value)
@@ -596,6 +1088,7 @@ class PhysicalRuntimeContext:
             # without adding it to the current request's touched-resource bill.
             "_owned_native_writers": bool(native_owned_hooks),
             "committed_owners": set(self._committed_owners),
+            "_ocp_diag_pending_sidecar_len": len(self._ocp_diag_pending_sidecar),
         }
         if not transactional:
             # Transactions keep the high-water mark in their allocator save.
@@ -749,8 +1242,10 @@ class PhysicalRuntimeContext:
         timeline_token = snapshot["timeline"].get("_owned_transaction")
         if timeline_token is not None:
             timeline_token.finish()
+        self._ocp_diag_sidecar_commit(snapshot)
 
     def restore(self, snapshot: dict[str, Any]) -> None:
+        self._ocp_diag_sidecar_discard(snapshot)
         self.runtimes.clear()
         self.runtimes.update(snapshot["runtimes"])
         self.allocators.clear()
@@ -1283,6 +1778,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
 
     metadata, owners = prepared.metadata, prepared.owners
     validated = prepared.instructions
+    runtime._ocp_diag_begin(metadata, task_id=getattr(task, "task_id", None))
     # Previous accesses only constrain a new request when at least one side
     # writes.  The old implementation scanned every prior descriptor for
     # every descriptor (O(n**2)); a large line-expanded projection can contain
@@ -1381,6 +1877,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             active.clock_ns = max(active.clock_ns, completion)
             ledger.accept(Operation.WRITE, completion)
             physical_results.append((Operation.WRITE, owner, access_config, result))
+            runtime._ocp_diag_record(active.core, Operation.WRITE, address, byte_count, result)
             resolved_accesses.append({**dict(access), "address": address})
             index += 1
             continue
@@ -1475,6 +1972,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
             active.clock_ns = max(active.clock_ns, result.completion_ns)
             ledger.accept(result.operation, result.completion_ns)
             physical_results.append((op, owner, access_config, result))
+            runtime._ocp_diag_record(active.core, op, addr, count, result)
             if owner_resource_sink is not None:
                 # Native NAND already consumed its maps in submit(). Other
                 # Core results retain their original input order and maps.
@@ -1579,6 +2077,7 @@ def execute_prepared_physical_task(task, runtime, arrival_ns, prepared) -> TaskS
                       if runtime.timeline.canonical_resource_id(d.resource_id) not in canonical_memory_ids)
     metadata["physical_nonmemory_demand_ids"] = tuple(d.resource_id for d in preserved)
     resolved = replace(task, demands=preserved + demands, metadata=metadata)
+    runtime._ocp_diag_context = None
     return _recost_physical_kernel_envelope(resolved)
 
 
@@ -1624,7 +2123,9 @@ _SINK_CLASSES = tuple((cls, tuple((name, value) for name, value in vars(cls).ite
         _sink_hbm_module._HBMNumericState, _sink_dram_module._BankState,
         _sink_nand_acceleration_module._NATIVE_NUMERIC_TYPE,
         _sink_dram_module.DramCore, _sink_nand_module.NandCore))
-_SINK_RUNTIME_METHODS = tuple((name, value) for name, value in vars(PhysicalRuntimeContext).items()
+# An instance reads a staticmethod as its plain function; compare that.
+_SINK_RUNTIME_METHODS = tuple((name, value.__func__ if type(value) is staticmethod else value)
+                              for name, value in vars(PhysicalRuntimeContext).items()
                               if callable(value))
 _SINK_COPY_DISPATCH = copy._deepcopy_dispatch
 _SINK_COPY_HANDLERS = tuple(copy._deepcopy_dispatch.items())

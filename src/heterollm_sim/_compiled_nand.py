@@ -13,7 +13,9 @@ def run_generic_full_pages(first_page, count, read, page_indices, base, geometry
                            array_ids, channel_ids, host_ids, array_ready, buffer_ready,
                            tags, cache_ready, readers, uses, present, cache_clock,
                            starts, lane_counts, lanes, lane_directions, state, moved,
-                           directions, head_bytes, head_ns, tail_bytes, tail_ns):
+                           directions, head_bytes, head_ns, tail_bytes, tail_ns,
+                           trace_program_start, trace_program_end,
+                           trace_erase_start, trace_erase_end):
     """The ordinary generic page machine, with ordered IEEE additions.
 
     Admission remains one host request in NandCore.submit. Unlike the OCP
@@ -151,8 +153,15 @@ def run_generic_full_pages(first_page, count, read, page_indices, base, geometry
                         arrays_touched[group_unit] = True
                 program_start = common_end
                 erase_count += 1
+                if trace_erase_start.size:
+                    trace_erase_start[offset] = common_start
+                    trace_erase_end[offset] = common_end
+            if trace_program_start.size:
+                trace_program_start[offset] = program_start
             end = _reserve(ar, program_start, page_program, -1, 0,
                 starts, lane_counts, lanes, lane_directions, state, moved, directions, touched)
+            if trace_program_end.size:
+                trace_program_end[offset] = end
             array_ready[unit], buffer_ready[unit] = end, end
             arrays_touched[unit] = True
         if count < 128:
@@ -207,7 +216,8 @@ def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_prog
                             array_ids, channel_ids, host_read_ids, host_write_ids,
                             array_ready, buffer_ready, tags,
                             starts, lane_counts, lanes, lane_directions, state, moved,
-                            directions):
+                            directions, trace_program_start, trace_program_end,
+                            trace_erase_start, trace_erase_end):
     """Reserve a scratchpad page-program batch against resident NAND arrays.
 
     ``pages`` is already in the scalar flush order.  The scratchpad is the
@@ -279,6 +289,9 @@ def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_prog
                         arrays_touched[group_unit] = True
                 erase_ends[index] = common_end
                 erase_count += 1
+                if trace_erase_start.size:
+                    trace_erase_start[index] = common_start
+                    trace_erase_end[index] = common_end
 
     for index in range(len(pages)):
         page_index = pages[index]
@@ -319,9 +332,13 @@ def run_generic_flush_batch(pages, ready_times, start_times, geometry, page_prog
         program_start = max(internal_end, array_ready[unit], start_times[index])
         if erase_ends[index] >= 0.0 and erase_ends[index] > program_start:
             program_start = erase_ends[index]
+        if trace_program_start.size:
+            trace_program_start[index] = program_start
         program_end = _reserve(ar, program_start, page_program_ns, -1, 0,
                                starts, lane_counts, lanes, lane_directions, state,
                                moved, directions, touched)
+        if trace_program_end.size:
+            trace_program_end[index] = program_end
         array_ready[unit] = program_end
         buffer_ready[unit] = program_end
         arrays_touched[unit] = True

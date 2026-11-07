@@ -152,6 +152,16 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
                          int(config.planes_independent), per_channel,
                          config.host_channels), dtype=np.int64)
     internal_ns = config.transfer_page_bytes / config.internal_bandwidth_gb_s
+    trace_enabled = (getattr(core, "_ocp_diag_events", None) is not None
+                     and config.protocol_mode == "ocp_hbf_0_7")
+    trace_program_start = (np.full(len(pages), -1.0, dtype=np.float64)
+                           if trace_enabled else np.empty(0, dtype=np.float64))
+    trace_program_end = (np.full(len(pages), -1.0, dtype=np.float64)
+                         if trace_enabled else np.empty(0, dtype=np.float64))
+    trace_erase_start = (np.full(len(pages), -1.0, dtype=np.float64)
+                         if trace_enabled else np.empty(0, dtype=np.float64))
+    trace_erase_end = (np.full(len(pages), -1.0, dtype=np.float64)
+                       if trace_enabled else np.empty(0, dtype=np.float64))
     try:
         ends, touched, active_units, active_banks, erase_count = run_generic_flush_batch(
             physical_pages, ready_times, start_times, geometry, config.page_program_ns,
@@ -162,7 +172,8 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
             config.transfer_page_bytes / core._host_bandwidth(Operation.WRITE),
             array_ids, channel_ids, host_read_ids, host_write_ids,
             arrays, buffers, tags, starts, lane_counts, lanes, lane_directions,
-            state, moved, direction_values)
+            state, moved, direction_values, trace_program_start, trace_program_end,
+            trace_erase_start, trace_erase_end)
     except BaseException:
         packed.restore(before)
         raise
@@ -178,6 +189,19 @@ def execute_staged_flush_batch(core, pages, ready_times, start_times):
     timeline._touched.update(resources)
     timeline._intervals_truncated = bool(resources) or timeline._intervals_truncated
     core._nand_numeric_state = packed
+    if trace_enabled:
+        for index, logical_page in enumerate(pages.tolist()):
+            mapping = (phase_mappings[index] if len(phase_mappings) == len(pages)
+                       else map_nand_address(config, int(logical_page) * config.page_bytes))
+            if trace_erase_start[index] >= 0.0:
+                core._ocp_diag_append_event(
+                    "erase", mapping, issue_ns=trace_erase_start[index],
+                    end_ns=trace_erase_end[index],
+                )
+            core._ocp_diag_append_event(
+                "program", mapping, issue_ns=trace_program_start[index],
+                end_ns=trace_program_end[index], logical_page=logical_page,
+            )
     return {"pages": pages, "ends": ends, "internal_transfer_bytes": int(len(pages) * config.transfer_page_bytes),
             "host_transfer_bytes": int(2 * len(pages) * config.transfer_page_bytes),
             "erase_operations": int(erase_count),
@@ -341,6 +365,16 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
                        config.transfer_page_bytes / config.internal_bandwidth_gb_s,
                        4096 / host_bandwidth, config.transfer_page_bytes,
                        config.pages_per_block))
+    trace_enabled = (getattr(core, "_ocp_diag_events", None) is not None
+                     and config.protocol_mode == "ocp_hbf_0_7")
+    trace_program_start = (np.full(page_count, -1.0, dtype=np.float64)
+                           if trace_enabled else np.empty(0, dtype=np.float64))
+    trace_program_end = (np.full(page_count, -1.0, dtype=np.float64)
+                         if trace_enabled else np.empty(0, dtype=np.float64))
+    trace_erase_start = (np.full(page_count, -1.0, dtype=np.float64)
+                         if trace_enabled else np.empty(0, dtype=np.float64))
+    trace_erase_end = (np.full(page_count, -1.0, dtype=np.float64)
+                       if trace_enabled else np.empty(0, dtype=np.float64))
     try:
         completion, hits, misses, clock, touched, active_units, active_banks, resource_order, max_read_wait, erase_count = run_generic_full_pages(
             request.address // 4096, page_count, request.operation is Operation.READ,
@@ -348,7 +382,8 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
             request.arrival_ns + config.front_ns, geometry, timing, array_ids, channel_ids, host_ids,
             arrays, buffers, tags, ready, readers, uses, present, core._cache_use,
             start_values, lane_counts, lanes, lane_directions, state, moved, direction_values,
-            head_bytes, head_bytes / host_bandwidth, tail_bytes, tail_bytes / host_bandwidth)
+            head_bytes, head_bytes / host_bandwidth, tail_bytes, tail_bytes / host_bandwidth,
+            trace_program_start, trace_program_end, trace_erase_start, trace_erase_end)
         if not np.all(np.isfinite(state)) or not isfinite(completion):
             raise ValueError("resource reservation exceeds finite timing range")
     except BaseException:
@@ -395,6 +430,19 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
         _metrics.update(generic_metrics_delta(timeline, names, resource_indexes, before_busy, before_moved))
     read = request.operation is Operation.READ
     programmed = 0 if read else page_count
+    if trace_enabled and programmed:
+        for offset, logical_page in enumerate(logical_pages):
+            mapping = (phase_mappings[offset] if len(phase_mappings) == programmed
+                       else map_nand_address(config, int(logical_page) * config.page_bytes))
+            if trace_erase_start[offset] >= 0.0:
+                core._ocp_diag_append_event(
+                    "erase", mapping, issue_ns=trace_erase_start[offset],
+                    end_ns=trace_erase_end[offset],
+                )
+            core._ocp_diag_append_event(
+                "program", mapping, issue_ns=trace_program_start[offset],
+                end_ns=trace_program_end[offset], logical_page=logical_page,
+            )
     if programmed:
         if phase_write:
             core._commit_phase_batch(logical_pages, phase_mappings, phase_next_pointers)

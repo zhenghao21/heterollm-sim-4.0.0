@@ -54,6 +54,7 @@ from dataclasses import asdict, replace
 from fractions import Fraction
 import json
 import math
+import os
 import re
 from statistics import fmean
 import time
@@ -373,17 +374,43 @@ def staging_reserved(occupancy):
 def _execute_staged_window(prepared, *args, **kwargs):
     """``_execute_window`` with the store share the step leaves the run's KV tails.
 
-    Prefill runs carry no Decode occupancy and see an empty store.
+    Prefill runs carry no Decode occupancy and see an empty store. Only a
+    staging reservation or an opted-in OCP diagnostic run touches the
+    physical runtime here.
     """
     reserved = staging_reserved(prepared.get("page_staging_occupancy") or {})
-    if not reserved:
+    diagnostics = os.environ.get("HBF_OCP_DIAGNOSTICS", "0").lower() in {"1", "true", "yes"}
+    if not reserved and not diagnostics:
         return _execute_window(prepared["source"], *args, **kwargs)
     runtime = prepared["source"].physical_runtime
-    runtime._tail_reserved = reserved
+    if reserved:
+        runtime._tail_reserved = reserved
+    target = None
+    if diagnostics:
+        target_runtime = prepared.get("staging_runtime")
+        target = (getattr(getattr(target_runtime, "_execution_resource_kernel", None),
+                          "physical_runtime", None)
+                  if target_runtime is not None else None)
+        # A staging reservation can be underestimated.  The sampler then
+        # reruns the same sample on another independent runtime clone.  Give
+        # each replay its own diagnostic scope so the checker never compares
+        # the tail of one clone with the head of the next clone.
+        replay_key = str(kwargs.get("sample_id"))
+        replay_number = int(runtime._ocp_diag_replay_counters.get(replay_key, 0)) + 1
+        runtime._ocp_diag_replay_counters[replay_key] = replay_number
+        replay_id = f"{replay_key}#replay-{replay_number:04d}"
+        runtime._ocp_diag_replay_id = replay_id
+        runtime._ocp_diag_window = replay_id
     try:
         return _execute_window(prepared["source"], *args, **kwargs)
     finally:
-        runtime._tail_reserved = {}
+        if diagnostics:
+            if target is not None and target is not runtime:
+                target._ocp_diag_merge_from(runtime)
+            runtime._ocp_diag_window = None
+            runtime._ocp_diag_replay_id = None
+        if reserved:
+            runtime._tail_reserved = {}
 
 
 def _window_peaks(records):
@@ -1867,6 +1894,17 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
         if runtime is not None:
             diagnostics["physical_ingress_accounting"] = {**runtime._external_ingress_report(),
                 "first_output_status": "not_committed_by_isolated_layer_samples"}
+            # Keep diagnostic output entirely opt-in.  With the environment
+            # switch unset the candidate schema remains byte-for-byte the
+            # clean baseline; enabled runs may stream the detailed rows to a
+            # sidecar and expose the compact snapshot here.
+            import os
+            if (os.environ.get("HBF_OCP_DIAGNOSTICS", "0").lower()
+                    in {"1", "true", "yes"}
+                    and hasattr(runtime._execution_resource_kernel.physical_runtime,
+                                 "ocp_diagnostic_snapshot")):
+                ocp_diag = runtime._execution_resource_kernel.physical_runtime.ocp_diagnostic_snapshot()
+                diagnostics["ocp_placement_diagnostics"] = ocp_diag
             diagnostics["physical_boundary_accounting"] = {
                 "layer_composition": prepared.get("composition", {}),
                 "sample_boundary_origin_ns": prepared.get("origin"),

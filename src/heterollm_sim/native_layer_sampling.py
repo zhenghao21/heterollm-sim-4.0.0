@@ -1327,6 +1327,16 @@ def _execute_window(source, all_specs, selected_ids, *, origin_ns, control, samp
         # final pending copies before taking window observations so auxiliary
         # state such as staged NAND pages remains symmetric too.
         mirror.materialize(kernel)
+    # The sampled window executes on an independent native kernel copy. Keep
+    # its read-only OCP placement counters on the real sampling source before
+    # the copy is released; the stationary wrapper then merges this source
+    # stream into the candidate diagnostics. This observes only committed
+    # results and does not alter the simulation path.
+    source_runtime = getattr(source, "physical_runtime", None)
+    sampled_runtime = getattr(kernel, "physical_runtime", None)
+    if (source_runtime is not None and sampled_runtime is not None
+            and hasattr(source_runtime, "_ocp_diag_merge_from")):
+        source_runtime._ocp_diag_merge_from(sampled_runtime)
     physical_wall = time.perf_counter()-physical_started
     metadata_started = time.perf_counter()
     metadata = metrics.metadata()
