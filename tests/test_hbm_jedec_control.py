@@ -212,6 +212,21 @@ def test_periodic_refresh_targets_each_pc_all_sids_once_and_reopens_after_rfc():
     assert result.counters["activate_commands"] == 1
 
 
+@pytest.mark.parametrize("generation", ["HBM3E", "HBM4"])
+def test_refab_reserves_required_same_cycle_column_cnop_for_newer_generations(generation):
+    c = config(generation=generation, refresh_policy="all_bank",
+               refresh_interval_ns=100., refresh_cycle_ns=20.,
+               read_latency_ns=17. if generation == "HBM4" else 8.)
+    core = DramCore(c)
+    core.submit(request(c))
+    result = core.submit(request(c, time=105.))
+    refresh = stage(result, "REFRESH_ALL")
+    cnop = stage(result, "REFRESH_CNOP")
+    assert cnop.resource_id == "dram:column_command:0:0"
+    assert (cnop.start_ns, cnop.end_ns) == (refresh.start_ns, refresh.start_ns + c.command_clock_ns)
+    assert result.counters["column_command_bus_busy_ns"] >= c.command_clock_ns
+
+
 def test_long_idle_refresh_aggregation_matches_individual_epochs():
     c = config(refresh_policy="all_bank", refresh_interval_ns=100., refresh_cycle_ns=20.)
     reference, summary = DramCore(c), DramCore(c, capture_details=False)

@@ -512,10 +512,10 @@ FR_NOINLINE void fr_refresh_pc(const fr_state *s, int64_t lane, double due, doub
     last_act = channel[ch * 2];
     if (last_act >= 0)
         earliest = fr_max(earliest, fr_after(last_act, 2 * t[0], half));
-    if (g[7])
+    if (g[8])
         earliest = fr_max(earliest, s->resources[(s->channels + ch) * 4]);
     fr_command(s, ch, 0, earliest, t[2], 1, counts, &start);
-    if (g[7]) {
+    if (g[8]) {
         double ignored;
         fr_command(s, ch, 1, start, 1., 1, counts, &ignored);
     }
@@ -546,7 +546,7 @@ FR_NOINLINE int fr_idle_refresh(const fr_state *s, int64_t lane, double arrival,
     int64_t ch = lane >> 1, kind, pseudo, bank, periods, commands;
     double interval = t[20], due = channel[ch * 2 + 1];
     double values[5], cutoff, last_due, last_start;
-    int64_t index, kinds = g[7] ? 2 : 1;
+    int64_t index, kinds = g[8] ? 2 : 1;
     if (interval < t[21] + 2 * t[0])
         return 0;
     values[0] = t[0];
@@ -650,10 +650,10 @@ FR_NOINLINE int fr_idle_refresh_commands(const fr_state *s, int64_t lane, double
     while (due <= cutoff) {
         double next_due;
         for (pseudo = 0; pseudo < 2; ++pseudo) {
-            double earliest = g[7] ? fr_max(due, resources[column_id * 4]) : due;
+            double earliest = g[8] ? fr_max(due, resources[column_id * 4]) : due;
             double start, blocked;
             fr_command(s, ch, 0, earliest, t[2], 1, counts, &start);
-            if (g[7]) {
+            if (g[8]) {
                 double ignored;
                 fr_command(s, ch, 1, start, 1., 1, counts, &ignored);
             }

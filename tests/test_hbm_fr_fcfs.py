@@ -154,6 +154,9 @@ def check_legal(log, config=CONFIG):
                 last_refresh_end = start + config.refresh_cycle_ns
                 banks = {key: dict(state, open=None, act_allowed=last_refresh_end) for key, state in banks.items()}
                 continue
+            if name == "REFRESH_CNOP":
+                assert any(item["name"] == "REFRESH_ALL" and abs(item["start"] - start) <= slack for item in events), event
+                continue
             if name == "PRECHARGE_ALL":
                 for state in banks.values():
                     if state.get("open") is not None:

@@ -5,9 +5,10 @@ Command occupancy, array eligibility and DQ transfer are separate quantities.
 Bursts queue per pseudo channel and issue FR-FCFS across the requests of one
 batch; see _FrFcfsController.
 Configured maximum row-active deadlines also apply with refresh disabled.
-Training, auto-precharge and refresh postponement are not
-implemented. Timing values are supplied by DramConfig, with their provenance
-owned by the configuration builder rather than inferred here.
+Initialization/training, auto-precharge, RFM/ARFM and the low-power command
+families are not implemented. Periodic refresh is modeled with the JEDEC
+postponement bound. Timing values are supplied by DramConfig, with their
+provenance owned by the configuration builder rather than inferred here.
 """
 from __future__ import annotations
 
@@ -320,11 +321,16 @@ class _Controller:
         if last_act is not None:
             # The final half of ACT's second CK only admits restricted PRE.
             earliest = max(earliest, self.after(last_act, 2 * self.clock))
-        if self.hbm2:
-            earliest = max(earliest, self.timeline.available_ns(self.bus_id(key, "column")))
+        # REFab and its CNOP occupy the row and column command inputs in the
+        # same cycle. Do not let a prior column command split that pair.
+        earliest = max(earliest, self.timeline.available_ns(self.bus_id(key, "column")))
         ref = self.command(key, "row", earliest, self.config.precharge_command_cycles, "REFRESH_ALL", rising=True)
-        if self.hbm2:
-            self.command(key, "column", ref.start_ns, 1.0, "REFRESH_CNOP")
+        # REFab is a row command, but JEDEC also requires a same-cycle CNOP
+        # on the column command inputs unless the other pseudo-channel is
+        # carrying the paired column command. This controller schedules one
+        # pseudo-channel at a time, so reserve CNOP for every supported HBM
+        # generation, not only HBM2/HBM2E.
+        self.command(key, "column", ref.start_ns, 1.0, "REFRESH_CNOP")
         if ref.start_ns > due + 8 * self.config.refresh_interval_ns:
             raise ValueError("HBM periodic refresh missed the maximum eight postponed intervals")
         pc["blocked_until"] = self.after(ref.start_ns, self.config.refresh_cycle_ns)
@@ -398,8 +404,8 @@ class _Controller:
         commands = periods * pc_count
         duration = config.precharge_command_cycles * self.clock
         resources = [("row", row_id, duration)]
-        if self.hbm2:
-            resources.append(("column", column_id, self.clock))
+        # Every REFab also consumes a same-cycle CNOP on the column bus.
+        resources.append(("column", column_id, self.clock))
         for kind, rid, occupancy in resources:
             prior = self.timeline.busy_ns.get(rid, 0.0)
             self.timeline.reserve(rid, last_start + (pc_count - 1) * self.clock, occupancy)
