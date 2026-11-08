@@ -119,7 +119,8 @@ def test_configuration_reads_each_store_from_its_written_scenario(tmp_path):
         "physical_memory_config": {"generation": "HBM4", "stacks": 8, "read_bandwidth_gb_s": 12800.,
             "row_bytes": 1024}}}
     hbf = {"component_id": "hbf0", "kind": "hbf", "capacity_bytes": 4096e9, "metadata": {
-        "physical_memory_config": {"protocol_mode": "ocp_hbf_0_7", "page_read_ns": 1000.}}}
+        "physical_memory_config": {"protocol_mode": "ocp_hbf_0_7", "channels": 128, "luns_per_die": 1,
+            "internal_bandwidth_gb_s": 100., "page_read_ns": 1000., "blocks_per_plane": 1908}}}
     for store, memory in (("HBM4", hbm), ("HBF+", hbf)):
         write(tmp_path / "configurations" / f"{store}-B8.json", {"model": {"name": "Llama 3.1 405B",
             "graph": ["DO NOT PUBLISH"]}, "hardware": {"components": [
@@ -134,7 +135,8 @@ def test_configuration_reads_each_store_from_its_written_scenario(tmp_path):
         "memories": [{"kind": "hbm", "capacity_bytes": 288e9, "generation": "HBM4", "stacks": 8,
                       "read_bandwidth_gb_s": 12800.}]}
     assert configuration["hardware"]["HBF+"]["memories"] == [{"kind": "hbf", "capacity_bytes": 4096e9,
-        "protocol_mode": "ocp_hbf_0_7", "page_read_ns": 1000.}]
+        "protocol_mode": "ocp_hbf_0_7", "channels": 128, "luns_per_die": 1, "internal_bandwidth_gb_s": 100.,
+        "page_read_ns": 1000.}]
     assert configuration["run"]["runner_contract"] == "v28" and "cases" not in configuration["run"]
     assert "DO NOT PUBLISH" not in json.dumps(configuration)
 
@@ -280,3 +282,35 @@ def test_running_candidates_are_read_by_candidate_id_so_same_case_candidates_do_
     assert (paused["case_id"], paused["candidate_id"]) == ("d", "d__DP1_TP8_PP1_EP1__B1")
     markdown = report.render_markdown(snapshot)
     assert ids[0] in markdown and ids[1] in markdown and "d__DP1_TP8_PP1_EP1__B1" in markdown
+
+
+def _layer_class(layers, io):
+    return {"layers": layers, "class_key": json.dumps({"native": {"owner_io_shape": io}})}
+
+
+def _io(read, context, write):
+    return {"read_bytes": read, "context_read_bytes": context, "write_bytes": write}
+
+
+def test_step_io_sums_layer_classes_per_gpu_for_flat_and_pipelined_steps(tmp_path):
+    """A step's bytes are layers x per-owner layer IO, averaged over that memory kind's owners."""
+    flat = point("HBF+", layout=(4, 2, 1, 1))
+    flat["selected"]["approximation"] = {"error_budget": {"step_service_ns": {"lower": 9., "upper": 11.},
+        "step": {"classes": [_layer_class(3, {"hbf0.memory": _io(10, 4, 1), "hbf1.memory": _io(10, 4, 1),
+            "sram0.sram_fabric": _io(2, 0, 2), "sram1.sram_fabric": _io(2, 0, 2)})]}}}
+    piped = point("HBF", workload="MID", layout=(1, 2, 2, 1))
+    stage = lambda first: _layer_class(2, {f"hbf{first}.memory": _io(6, 2, 0), f"hbf{first + 1}.memory": _io(6, 2, 0)})
+    piped["selected"]["approximation"] = {"error_budget": {"step_service_ns": {"lower": 5., "upper": 5.},
+        "step": {"pipeline_blocks": [{"microbatch": m, "stage": s, "classes": [stage(2 * s)]}
+                                     for m in range(2) for s in range(2)]}}}
+    missing = point("HBM4", workload="LONG")
+    write(tmp_path / "results.json", {"cases": [flat, piped, missing]})
+    snapshot = report.build_snapshot(tmp_path)
+    a, b, c = (row["step_io"] for row in snapshot["completed_results"])
+    assert a == {"step_service_ns": {"lower": 9., "upper": 11.}, "gpus": {"hbf": 2, "sram": 2},
+        "per_gpu": {"hbf": {"read_bytes": 30., "context_read_bytes": 12., "write_bytes": 3.},
+                    "sram": {"read_bytes": 6., "context_read_bytes": 0., "write_bytes": 6.}}}
+    # Two microbatches cross two stages of two GPUs each: every GPU reads its stage's layers twice.
+    assert b["gpus"] == {"hbf": 4}
+    assert b["per_gpu"]["hbf"] == {"read_bytes": 24., "context_read_bytes": 8., "write_bytes": 0.}
+    assert c is None

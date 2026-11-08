@@ -104,6 +104,47 @@ def _baseline_key(case: dict[str, Any]) -> tuple[Any, ...]:
         "gpu_count", "weight_dtype", "kv_dtype"))
 
 
+_STEP_IO_FIELDS = ("read_bytes", "context_read_bytes", "write_bytes")
+
+
+def _step_io(selected: dict[str, Any]) -> dict[str, Any] | None:
+    """Per-GPU bytes one decode step moves through each memory kind, read from the step's layer classes.
+
+    PP=1 steps list their layer classes directly and PP>1 steps per (microbatch, stage) block. A class
+    holds one layer's IO per memory owner (``hbm0.hbm_fabric``, ``hbf3.memory``, ...), so the step's
+    bytes are layers x owner IO summed over classes and blocks, averaged over that kind's owners (one
+    per GPU of the replica). Embedding and output-head work outside the layer classes is not counted.
+    """
+    budget = (selected.get("approximation") or {}).get("error_budget") or {}
+    step, service = budget.get("step") or {}, budget.get("step_service_ns") or {}
+    lower, upper = _number(service.get("lower")), _number(service.get("upper"))
+    if lower is None or upper is None or lower <= 0:
+        return None
+    blocks = step.get("pipeline_blocks")
+    classes = ([item for block in blocks for item in block.get("classes") or ()]
+               if isinstance(blocks, list) else step.get("classes") or [])
+    totals: dict[str, dict[str, float]] = {}
+    owners: dict[str, set[str]] = {}
+    for item in classes:
+        try:
+            shape = json.loads(item["class_key"])["native"]["owner_io_shape"]
+            layers = int(item["layers"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        for owner, io in shape.items():
+            kind = owner.split(".", 1)[0].rstrip("0123456789")
+            owners.setdefault(kind, set()).add(owner)
+            total = totals.setdefault(kind, dict.fromkeys(_STEP_IO_FIELDS, 0.))
+            for key in _STEP_IO_FIELDS:
+                total[key] += layers * float(io.get(key) or 0)
+    if not totals:
+        return None
+    return {"step_service_ns": {"lower": lower, "upper": upper},
+            "gpus": {kind: len(names) for kind, names in owners.items()},
+            "per_gpu": {kind: {key: value / len(owners[kind]) for key, value in total.items()}
+                        for kind, total in totals.items()}}
+
+
 def _dashboard_case(point: dict[str, Any]) -> dict[str, Any]:
     """Keep online metrics and intervals, leave detailed physical ledgers local."""
     selected = point.get("selected")
@@ -121,7 +162,9 @@ def _dashboard_case(point: dict[str, Any]) -> dict[str, Any]:
     return {**point, "selected": brief}
 
 
-def _completed_results(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _completed_results(cases: list[dict[str, Any]], step_io: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """``step_io`` maps case ids to ``_step_io`` of the full selected rows, which the dashboard copies drop."""
+    step_io = step_io or {}
     rows = []
     for point in cases:
         selected = point.get("selected") or {}
@@ -153,6 +196,7 @@ def _completed_results(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "metric_bounds": (selected.get("native_window_forecast") or {}).get("metric_bounds"),
             "metric_bounds_scope": "single_simulated_replica" if selected.get("native_window_forecast") else None,
             "sampled_tokens": selected.get("sampled_tokens"), "forecast_tokens": selected.get("forecast_tokens", 0),
+            "step_io": step_io.get(point.get("case_id", case.get("case_id"))),
             "_baseline_key": (_baseline_key(case), selected.get("runner_contract"))})
     baselines = {row["_baseline_key"]: row for row in rows if row["hardware"] == "HBM4"
                  and all(value is not None for value in row["_baseline_key"][0])}
@@ -226,7 +270,8 @@ def _optimization_snapshot(directory, warnings):
 _MEMORY_FIELDS = {
     "hbm": ("generation", "stacks", "dies_per_stack", "data_rate_mt_s", "read_bandwidth_gb_s",
             "write_bandwidth_gb_s", "scheduler", "address_mapping", "refresh_policy"),
-    "hbf": ("protocol_mode", "erase_policy", "host_channels", "planes_per_lun", "page_bytes",
+    "hbf": ("protocol_mode", "erase_policy", "host_channels", "channels", "targets_per_channel",
+            "dies_per_target", "luns_per_die", "planes_per_lun", "page_bytes", "internal_bandwidth_gb_s",
             "host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s", "page_read_ns", "page_program_ns",
             "block_erase_ns", "read_cache_pages_per_bank"),
     "sram": ("read_bandwidth_gb_s", "write_bandwidth_gb_s", "read_latency_ns", "ports"),
@@ -295,6 +340,7 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         "slo_tpot_ns", "deployment_search", "candidate_wall_budget_seconds", "prefill_wall_budget_seconds",
         "max_parallel_configurations", "wall_factor")},
         **_scenario_summary(directory, cases, warnings)}
+    step_io = {point.get("case_id"): _step_io(point.get("selected") or {}) for point in cases}
     cases = [_dashboard_case(point) for point in cases]
     status["freshness"] = {"age_seconds": _age_seconds(status.get("updated_at"), now),
                            "manager_process": _process_info(status.get("manager_pid"))}
@@ -356,7 +402,7 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         "status": status, "cases": cases, "running": running, "paused": paused,
         "configuration": configuration,
         "optimization": optimization if optimization.get("schema") == "native-runtime-diagnostics/v1" else None,
-        "completed_results": _completed_results(cases),
+        "completed_results": _completed_results(cases, step_io),
         "saved_point_counts": dict(point_states), "saved_candidate_counts": dict(candidate_states),
         "eta": assessment, "notes": notes, "warnings": warnings}
 
