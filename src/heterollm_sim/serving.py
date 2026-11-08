@@ -63,7 +63,6 @@ from .event_kernel import (
     _validated_phase_sequence,
 )
 from .execution_control import ExecutionControl
-from .kv_placement import KVTailRing, settled_seed_blocks
 from ._token_binding import AuthoredTokenProgram
 from .llama_graph_runtime import LlamaGraphRuntime
 from .cuda_graph_serving import CudaGraphServingRuntime
@@ -3359,16 +3358,9 @@ class _KVBlockTables:
     id order; a release appends the freed blocks in their logical order and an
     allocation takes from the head. The ``chunk`` KV group serves the layers
     with chunked attention as a ring of at most ``ring`` blocks per request.
-
-    On striped NAND KV (``place_seeds``) a request's first allocation instead
-    picks from the free list by the banks of the other tails (see
-    kv_placement). ``slots`` are the group's slots in landing order, as the rows
-    each slot's occupant holds at the run's first step, and ``seeds`` the seeds
-    still to take the head of their planned list. With one output length the
-    step an import joins is the landing of the slot the FIFO pool gives it.
     """
 
-    __slots__ = ("counts", "ring", "free", "head", "tables", "rings", "slots", "seeds", "output", "tails")
+    __slots__ = ("counts", "ring", "free", "head", "tables")
 
     def __init__(self, groups: int, counts: Mapping[str, int], ring: int = 0) -> None:
         self.counts = dict(counts)
@@ -3377,11 +3369,6 @@ class _KVBlockTables:
                      for group in range(groups) for kind, count in self.counts.items()}
         self.head = dict.fromkeys(self.free, 0)
         self.tables: Dict[str, Dict[str, array]] = {}
-        self.rings: Dict[Tuple[int, str], KVTailRing] = {}
-        self.slots: Dict[int, deque] = {}
-        self.seeds: Dict[int, deque] = {}
-        self.output = 0
-        self.tails: Dict[str, Dict[str, int]] = {}
 
     def __deepcopy__(self, memo):
         result = type(self).__new__(type(self))
@@ -3391,11 +3378,6 @@ class _KVBlockTables:
         result.head = dict(self.head)
         result.tables = {request: {kind: blocks[:] for kind, blocks in table.items()}
                          for request, table in self.tables.items()}
-        result.rings = {key: ring.copy() for key, ring in self.rings.items()}
-        result.slots = {group: slots.copy() for group, slots in self.slots.items()}
-        result.seeds = {group: seeds.copy() for group, seeds in self.seeds.items()}
-        result.output = self.output
-        result.tails = {request: dict(tails) for request, tails in self.tails.items()}
         return result
 
     def settle(self, ages_by_group, prompt: int, output: int, group_pool: int, tokens_per_block: int) -> None:
@@ -3407,50 +3389,6 @@ class _KVBlockTables:
             if settled is not None:
                 self.free[group, kind] = array("q", settled)
                 self.head[group, kind] = 0
-
-    def place_seeds(self, ages_by_group, prompt: int, output: int, group_pool: int, geometry) -> None:
-        """Start from the layout the host's placement reaches, and place every later request by it.
-
-        ``geometry`` maps each KV group to its ``KVTailRing`` arguments.
-        """
-        self.output = output
-        for (group, kind), free in self.free.items():
-            ages = tuple(ages_by_group[group])
-            if len(ages) > len(free) or list(ages) != sorted(ages):
-                raise ValueError("striped KV needs its seeds, youngest first, within the pool")
-            self.free[group, kind] = array("q", settled_seed_blocks(ages, prompt, output, len(free), geometry[kind], group_pool))
-            self.rings[group, kind] = KVTailRing(*geometry[kind])
-        for group, ages in enumerate(ages_by_group):
-            self.slots[group] = deque(prompt + age for age in reversed(ages))
-            self.seeds[group] = deque(prompt + age for age in ages)
-
-    def _place(self, group: int, request_id: str) -> None:
-        """Put the block of a request's tail at the head of each free list, and note where the tail is."""
-        seeded = bool(self.seeds[group])
-        if seeded:
-            rows = self.seeds[group].popleft()
-        else:
-            rows = self.slots[group].popleft() - self.output
-            self.slots[group].append(rows)
-        tails = self.tails[request_id] = {}
-        for kind in self.counts:
-            key = group, kind
-            free, head, ring = self.free[key], self.head[key], self.rings[key]
-            if head >= len(free):
-                raise RuntimeError("KV block free list is exhausted")
-            if not seeded:
-                pick = ring.pick(free[head:], rows)
-                if pick:
-                    free.insert(head, free.pop(head + pick))
-            tails[kind] = ring.position(free[head], rows)
-            ring.add(tails[kind])
-
-    def tail_sharing(self):
-        """Per KV group, the worst EP group's (most K and V tails on one bank, tails on a shared bank, tails)."""
-        worst = {}
-        for (_group, kind), ring in self.rings.items():
-            worst[kind] = max(worst.get(kind, (0, 0, 0)), ring.sharing())
-        return worst
 
     def blocks_for_pages(self, kind: str, pages: int) -> int:
         return min(pages, self.ring) if kind == "chunk" else pages
@@ -3472,8 +3410,6 @@ class _KVBlockTables:
             if pages <= 0:
                 return {}
             table = self.tables[request_id] = {kind: array("q") for kind in self.counts}
-            if self.rings:
-                self._place(group, request_id)
         freed = {}
         for kind, blocks in table.items():
             key, target = (group, kind), self.blocks_for_pages(kind, pages)
@@ -3495,8 +3431,6 @@ class _KVBlockTables:
                 del blocks[target:]
         if pages <= 0:
             del self.tables[request_id]
-            for kind, position in self.tails.pop(request_id, {}).items():
-                self.rings[group, kind].add(position, -1)
         return freed
 
     def table(self, request_id: str) -> Mapping[str, Tuple[int, ...]]:

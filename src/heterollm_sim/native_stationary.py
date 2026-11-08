@@ -2264,8 +2264,6 @@ def simulate_native_stationary(scenario, *, batch_lowerer, execution_control=Non
             prepared["window_shards"] = sample_control.window_shards
             diagnostics["physical_admission_cutoff_ns"] = runtime.now
             diagnostics.update(kv_block_admission(runtime))
-            if runtime.ledger.blocks.rings:
-                diagnostics["kv_tail_bank_sharing"] = runtime.ledger.blocks.tail_sharing()
             admission = admission_reasons(runtime, prepared)
             if admission:
                 budget = {"accepted": False, "reasons": admission}
