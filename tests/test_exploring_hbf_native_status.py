@@ -114,18 +114,28 @@ def test_incomplete_baseline_precision_does_not_prove_a_matching_comparison(tmp_
                for value in report.build_snapshot(tmp_path)["completed_results"])
 
 
-def test_configuration_omits_native_model_graphs_and_keeps_real_hardware(tmp_path):
-    write(tmp_path / "plan.json", {"models": {"405b": {"layers": 126}}, "measurement": {"slo": 100},
-        "deployment_search": {"fixed": "TP8"}})
-    write(tmp_path / "native_inputs.json", {"models": {"huge_graph": ["DO NOT PUBLISH"]},
-        "hardware": {"HBM4": {"per_gpu_table": {"capacity": 288},
-            "native_hbm_config": {"bandwidth": 12800}, "other_unneeded": "omit"}}})
-    write(tmp_path / "run_manifest.json", {"batch_sizes": [1, 8], "layout": {"dp": 1, "tp": 8, "pp": 1, "ep": 1}})
+def test_configuration_reads_each_store_from_its_written_scenario(tmp_path):
+    hbm = {"component_id": "hbm0", "kind": "hbm", "capacity_bytes": 288e9, "metadata": {
+        "physical_memory_config": {"generation": "HBM4", "stacks": 8, "read_bandwidth_gb_s": 12800.,
+            "row_bytes": 1024}}}
+    hbf = {"component_id": "hbf0", "kind": "hbf", "capacity_bytes": 4096e9, "metadata": {
+        "physical_memory_config": {"protocol_mode": "ocp_hbf_0_7", "page_read_ns": 1000.}}}
+    for store, memory in (("HBM4", hbm), ("HBF+", hbf)):
+        write(tmp_path / "configurations" / f"{store}-B8.json", {"model": {"name": "Llama 3.1 405B",
+            "graph": ["DO NOT PUBLISH"]}, "hardware": {"components": [
+                {"component_id": "gpu0", "kind": "gpu", "peak_ops_per_s": 2.25e15},
+                {"component_id": "gpu1", "kind": "gpu"}, memory, {**memory, "component_id": memory["kind"] + "1"}]}})
+    write(tmp_path / "results.json", {"cases": [{**point("HBM4"), "candidate_ids": ["missing", "HBM4-B8"]},
+        {**point("HBF+"), "candidate_ids": ["HBF+-B8"]}]})
+    write(tmp_path / "run_manifest.json", {"runner_contract": "v28", "slo_tpot_ns": 1e8, "cases": ["omit"]})
     configuration = report.build_snapshot(tmp_path)["configuration"]
-    assert configuration["models"] == {"405b": {"layers": 126}}
-    assert configuration["hardware"]["HBM4"]["native_hbm_config"]["bandwidth"] == 12800
-    assert configuration["run"]["batch_sizes"] == [1, 8]
-    assert configuration["run"]["layout"] == {"dp": 1, "tp": 8, "pp": 1, "ep": 1}
+    assert configuration["models"] == {"405b": "Llama 3.1 405B"}
+    assert configuration["hardware"]["HBM4"] == {"gpu_peak_ops_per_s": 2.25e15,
+        "memories": [{"kind": "hbm", "capacity_bytes": 288e9, "generation": "HBM4", "stacks": 8,
+                      "read_bandwidth_gb_s": 12800.}]}
+    assert configuration["hardware"]["HBF+"]["memories"] == [{"kind": "hbf", "capacity_bytes": 4096e9,
+        "protocol_mode": "ocp_hbf_0_7", "page_read_ns": 1000.}]
+    assert configuration["run"]["runner_contract"] == "v28" and "cases" not in configuration["run"]
     assert "DO NOT PUBLISH" not in json.dumps(configuration)
 
 
@@ -153,7 +163,7 @@ def test_temporarily_incomplete_json_is_unknown_not_a_fabricated_failure(tmp_pat
     (tmp_path / "status.json").write_text("{", encoding="utf-8")
     snapshot = report.build_snapshot(tmp_path)
     assert snapshot["status"].get("state") is None
-    assert any("暂时无法读取" in note for note in snapshot["notes"])
+    assert any("暂时无法读取" in note for note in snapshot["warnings"])
 
 
 def test_paused_attempt_keeps_real_counters_and_does_not_publish_stale_eta(tmp_path):

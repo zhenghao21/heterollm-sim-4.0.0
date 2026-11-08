@@ -223,28 +223,78 @@ def _optimization_snapshot(directory, warnings):
     return data
 
 
+_MEMORY_FIELDS = {
+    "hbm": ("generation", "stacks", "dies_per_stack", "data_rate_mt_s", "read_bandwidth_gb_s",
+            "write_bandwidth_gb_s", "scheduler", "address_mapping", "refresh_policy"),
+    "hbf": ("protocol_mode", "erase_policy", "host_channels", "planes_per_lun", "page_bytes",
+            "host_read_bandwidth_gb_s", "host_write_bandwidth_gb_s", "page_read_ns", "page_program_ns",
+            "block_erase_ns", "read_cache_pages_per_bank"),
+    "sram": ("read_bandwidth_gb_s", "write_bandwidth_gb_s", "read_latency_ns", "ports"),
+}
+
+
+def _store_summary(hardware: dict[str, Any]) -> dict[str, Any]:
+    """GPU 0's own memories; every GPU of a written scenario carries the same set."""
+    components = {item.get("component_id"): item for item in hardware.get("components", ())
+                  if isinstance(item, dict)}
+    memories = []
+    for kind, fields in _MEMORY_FIELDS.items():
+        component = components.get(kind + "0")
+        if not component:
+            continue
+        physical = (component.get("metadata") or {}).get("physical_memory_config") or {}
+        memories.append({"kind": kind, "capacity_bytes": component.get("capacity_bytes"),
+                         **{key: physical[key] for key in fields if key in physical}})
+    # GPU count is the case's; a written scenario holds one simulated DP replica only.
+    return {"gpu_peak_ops_per_s": (components.get("gpu0") or {}).get("peak_ops_per_s"),
+            "memories": memories}
+
+
+def _scenario_summary(directory: Path, cases: list[dict[str, Any]], warnings: list[str]) -> dict[str, Any]:
+    """Per-GPU stores and model names read from this scan's own written scenarios.
+
+    All candidates of one store share the per-GPU memory system, so the first
+    written scenario of each store (and model) describes it for this scan.
+    """
+    hardware: dict[str, Any] = {}
+    models: dict[str, str] = {}
+    for point in cases:
+        case = point.get("case") or {}
+        store, model = case.get("hardware"), case.get("model")
+        if store in hardware and model in models:
+            continue
+        for identity in point.get("candidate_ids") or ():
+            if not isinstance(identity, str) or Path(identity).name != identity:
+                continue
+            scenario = _read(directory / "configurations" / (identity + ".json"), warnings)
+            if not scenario:
+                continue
+            name = (scenario.get("model") or {}).get("name")
+            if model not in models and isinstance(name, str):
+                models[model] = name
+            if store not in hardware:
+                hardware[store] = _store_summary(scenario.get("hardware") or {})
+            break
+    return {"hardware": hardware, "models": models}
+
+
 def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, Any] | None = None) -> dict[str, Any]:
     directory = Path(directory)
     now = datetime.now(BEIJING)
     warnings: list[str] = []
     status = _read(directory / "status.json", warnings)
     results = _read(directory / "results.json", warnings)
-    plan = _read(directory / "plan.json", warnings)
-    inputs = _read(directory / "native_inputs.json", warnings)
     manifest = _read(directory / "run_manifest.json", warnings)
     optimization = _optimization_snapshot(directory, warnings)
-    configuration = {key: plan.get(key) for key in ("models", "workloads", "measurement",
-        "execution_policy", "deployment_search", "phases", "sources")}
-    configuration["hardware"] = {hardware: {key: value for key, value in description.items()
-        if key == "per_gpu_table" or key.startswith("native_") or key == "logic_sram_status"}
-        for hardware, description in inputs.get("hardware", {}).items() if isinstance(description, dict)}
-    configuration["run"] = {key: manifest.get(key) for key in ("runner_contract", "backend",
-        "batch_sizes", "max_parallel_configurations", "phases", "forecast_tokens", "simulation_mode", "sampling_unit",
-        "layout", "deployment_search", "slo_tpot_ns", "selection_scope")}
     cases = results.get("cases", [])
     if not isinstance(cases, list):
         cases = []
         warnings.append("results.json中的配置列表不可读。")
+    configuration = {"run": {key: manifest.get(key) for key in ("runner_contract", "backend",
+        "search_contract", "search_scope", "layout_scope", "selection_scope", "simulation_mode",
+        "slo_tpot_ns", "deployment_search", "candidate_wall_budget_seconds", "prefill_wall_budget_seconds",
+        "max_parallel_configurations", "wall_factor")},
+        **_scenario_summary(directory, cases, warnings)}
     cases = [_dashboard_case(point) for point in cases]
     status["freshness"] = {"age_seconds": _age_seconds(status.get("updated_at"), now),
                            "manager_process": _process_info(status.get("manager_pid"))}
@@ -283,7 +333,7 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         if candidate.get("status"):
             candidate_states[candidate["status"]] += 1
     fast = manifest.get("simulation_mode") == "fast"
-    notes = ["本轮仅使用原生后端，按9＋6＋15顺序执行；每个候选（布局＋批量）在独立子进程中运行，按预测峰值内存自动增开并行，k个并行时单候选壁钟上限放宽为k倍。",
+    notes = ["本轮仅使用原生后端，30组配置的候选统一排队；每个候选（布局＋批量）在独立子进程中运行，按预测峰值内存自动增开并行，k个并行时单候选壁钟上限放宽为k倍。",
         "每组在有限的(DP, TP, PP, EP)布局和每副本批量候选中，选择通过约束者里单GPU吞吐最高的一项，不代表全局最优。DP副本互相独立，只仿真一个副本，集群吞吐为单GPU吞吐乘GPU总数。快速预测与完整物理结果分别标记。",
         "比值方向固定为当前存储/HBM4；只比较同模型、同负载、同GPU数、精度及采样合同的已完成结果，各存储取各自选中的布局与批量。",
         "当前cohort的completed/total是任务数，不是Token数、请求数或整轮完成百分比。累计Token与批次数独立记录，仅在原生提交完成后增加。",
@@ -308,7 +358,7 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         "optimization": optimization if optimization.get("schema") == "native-runtime-diagnostics/v1" else None,
         "completed_results": _completed_results(cases),
         "saved_point_counts": dict(point_states), "saved_candidate_counts": dict(candidate_states),
-        "eta": assessment, "notes": notes + warnings}
+        "eta": assessment, "notes": notes, "warnings": warnings}
 
 
 def _fmt(value: Any, digits: int = 3) -> str:
@@ -399,7 +449,7 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
                 f"{LABELS.get(row['status'], row['status'])}|{row['layer_windows']}|"
                 f"{_fmt(100*budget) + '%' if budget is not None else '—'}|{_fmt(row.get('submitted_target_write_gib'))}|")
         lines += ["", *[f"- {text}" for text in optimization.get("findings", ())]]
-    lines += ["", "## 统计口径", ""] + [f"- {text}" for text in snapshot["notes"]]
+    lines += ["", "## 统计口径", ""] + [f"- {text}" for text in snapshot["notes"] + snapshot["warnings"]]
     return "\n".join(lines) + "\n"
 
 
