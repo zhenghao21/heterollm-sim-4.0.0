@@ -945,11 +945,16 @@ def read_batch_sink_totals(ids, busy, moved, first, last, task_busy, owner_busy,
     ``task_busy``/``owner_busy`` hold each resource's current bill (zero when
     absent). Busy time is added request by request, exactly as consuming
     each request's map would; the latest interval keeps the earliest
-    request on ties. ``order`` lists resources by first appearance.
+    request on ties. ``order`` lists resources by first appearance and
+    ``byte_order`` by first nonzero payload, the order in which request byte
+    maps (which omit zero payloads) would insert them.
     """
     seen = np.zeros(resources, dtype=np.bool_)
+    moved_seen = np.zeros(resources, dtype=np.bool_)
     order = np.empty(len(ids), dtype=np.int64)
+    byte_order = np.empty(len(ids), dtype=np.int64)
     count = 0
+    byte_count = 0
     byte_totals = np.zeros(resources, dtype=np.int64)
     last_first = np.zeros(resources, dtype=np.float64)
     last_end = np.zeros(resources, dtype=np.float64)
@@ -958,6 +963,10 @@ def read_batch_sink_totals(ids, busy, moved, first, last, task_busy, owner_busy,
         task_busy[rid] += busy[entry]
         owner_busy[rid] += busy[entry]
         byte_totals[rid] += moved[entry]
+        if moved[entry] != 0 and not moved_seen[rid]:
+            moved_seen[rid] = True
+            byte_order[byte_count] = rid
+            byte_count += 1
         if not seen[rid]:
             seen[rid] = True
             order[count] = rid
@@ -965,4 +974,4 @@ def read_batch_sink_totals(ids, busy, moved, first, last, task_busy, owner_busy,
             last_first[rid], last_end[rid] = first[entry], last[entry]
         elif last[entry] > last_end[rid] or (last[entry] == last_end[rid] and first[entry] > last_first[rid]):
             last_first[rid], last_end[rid] = first[entry], last[entry]
-    return order[:count], byte_totals, last_first, last_end
+    return order[:count], byte_order[:byte_count], byte_totals, last_first, last_end

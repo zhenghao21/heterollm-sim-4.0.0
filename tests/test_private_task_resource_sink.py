@@ -22,6 +22,7 @@ from heterollm_sim import data_motion, _nand_acceleration, _resource_ledger, _to
 from heterollm_sim.contracts import ResourceDemand, TaskCategory, TaskSpec
 from heterollm_sim.event_kernel import CompiledGraphLayout, UnifiedEventKernel
 from heterollm_sim.memory_transfer import _TIMELINE_MAPS
+from heterollm_sim.memory_mapping import map_nand_address
 from heterollm_sim.memory_types import AccessRequest, NandConfig
 from heterollm_sim.nand_core import NandCore
 from test_hbm_compiled_control import configuration as hbm_configuration
@@ -70,7 +71,7 @@ class NativeTrace:
                 local.get("_resource_sink") is not None,
                 tuple(name for name in RESOURCE_FIELDS if name in value.counters)))
         elif code is self.batch and value is not None:
-            sink = local.get("_resource_sink") is not None
+            sink = local.get("_bills") is not None
             self.batches.append((len(value), sink))
             self.submits.extend((row.request_id, sink,
                 tuple(name for name in RESOURCE_FIELDS if name in row.counters)) for row in value)
@@ -91,7 +92,7 @@ class NativeTrace:
 
 
 def make_fixture(*, count=8, pages=2, scalar=True, large=False,
-                 foreign_groups=0, reorder=True):
+                 foreign_groups=0, reorder=True, layout=None, **nand_changes):
     """Build a genuine mixed task; setup and warmup are outside measurement."""
     if large:
         from exploring_hbf_native_config import build_native_comparison_scenario
@@ -102,7 +103,8 @@ def make_fixture(*, count=8, pages=2, scalar=True, large=False,
         nand = require_physical_memory_config(component)
         assert type(nand) is NandConfig
     else:
-        nand = nand_configuration(host_granularity_bytes=256, max_outstanding_requests=32)
+        nand = nand_configuration(**{"host_granularity_bytes": 256, "max_outstanding_requests": 32,
+                                     **nand_changes})
     hbm = hbm_configuration(channels=2)
     banks = (nand.channels * nand.targets_per_channel * nand.dies_per_target
              * nand.luns_per_die * nand.planes_per_lun)
@@ -137,9 +139,12 @@ def make_fixture(*, count=8, pages=2, scalar=True, large=False,
                 mapping[key] = mapping.pop(key)
     accesses = []
     def flash(number, single=False):
+        address, size = ((number + 1) * banks * PAGE + (17 if single or pages == 2 else 0),
+                         257 if single else pages * PAGE - (33 if pages == 2 else 0))
+        if layout is not None:
+            address, size = layout(number, single, banks)
         accesses.append({"physical_owner": NAND_OWNER, "resource_id": NAND_OWNER,
-            "operation": "read", "address": (number + 1) * banks * PAGE + (17 if single or pages == 2 else 0),
-            "byte_count": 257 if single else pages * PAGE - (33 if pages == 2 else 0)})
+            "operation": "read", "address": address, "byte_count": size})
     for index in range(count):
         flash(index)
     if scalar:
@@ -219,6 +224,34 @@ def test_real_owned_mixed_task_hits_sink_and_matches_complete_task_bits():
     assert state_bits(candidate) == state_bits(reference)
     compare_physical_state(candidate, reference)
 
+
+
+def test_host_channel_window_bills_shared_channels_in_input_order():
+    # OCP admission keeps one command population per host channel and admits
+    # a request on its first page's host channel, but later pages can lie on
+    # the other host channel's NAND channel. Requests alternate their first
+    # host channel and differ in size, so that shared channel's busy
+    # additions round differently unless they keep input-request order.
+    ocp = dict(kind="HBF", protocol_mode="ocp_hbf_0_7", queue_scope="host_channel", host_channels=2,
+               targets_per_channel=1, dies_per_target=1, host_granularity_bytes=64)
+    def layout(number, single, banks):
+        start = (number + 1) * banks * PAGE + (number % 2) * PAGE + 64 * (number % 5)
+        return start, (1 + number % 3) * PAGE - 64 * (number % 4) + (192 if single else 0)
+    reference, task, _ = make_fixture(layout=layout, **ocp)
+    candidate, candidate_task, _ = make_fixture(layout=layout, **ocp)
+    core = candidate.physical_runtime.runtimes[NAND_OWNER].core
+    config = core.config
+    hosts = [{map_nand_address(config, page * PAGE).channel % config.host_channels
+              for page in range(row["address"] // PAGE, (row["address"] + row["byte_count"] - 1) // PAGE + 1)}
+             for row in task.metadata["memory_accesses"] if row["physical_owner"] == NAND_OWNER]
+    assert sum(len(seen) > 1 for seen in hosts) > 8
+    expected, _ = observe_run(reference, task, False)
+    actual, trace = observe_run(candidate, candidate_task)
+    assert_actual_hit(trace)
+    assert core.__dict__["_host_inflight"] and len(trace.batches) >= 4
+    assert bits(actual) == bits(expected)
+    assert state_bits(candidate) == state_bits(reference)
+    compare_physical_state(candidate, reference)
 
 def test_final_maps_are_independent_and_last_tuples_keep_public_identity():
     kernel, task, _ = make_fixture()

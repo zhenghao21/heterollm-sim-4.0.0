@@ -478,7 +478,7 @@ def execute_buffered_full_pages(core, request, page_count, *, _metrics=None):
         })
 
 
-def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=None):
+def execute_read_batch(core, requests, *, _bills=None, _host_channel=None):
     """Schedule one submit_many READ batch on the out-of-order controller.
 
     The batch is one controller window (run_generic_read_batch): requests
@@ -488,6 +488,9 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
     then recorded exactly as a sequential submit would, from the scheduled
     completions. Returns results in input order, or None before any
     mutation when the core is not a native generic controller.
+
+    With a ``_bills`` list the results carry no resource maps; the batch's
+    per-request bills are appended to it instead, for ``fold_read_bills``.
     """
     import numpy as np
     from .nand_core import NandCore, _ReadCacheSlot
@@ -496,7 +499,7 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
     from ._nand_execution import _geometry_plan, _NandNumericState
     from ._nand_pack import (pack_single_lane, pack_multi_lane, validate_buffered_cache,
                             pack_buffered_cache, publish_active_timeline, publish_generic_controller)
-    from ._compiled_nand import run_generic_read_batch, read_batch_request_metrics, read_batch_sink_totals
+    from ._compiled_nand import run_generic_read_batch, read_batch_request_metrics
 
     config, timeline = core.config, core.timeline
     if (type(core) is not NandCore or type(timeline) is not ResourceTimeline
@@ -707,35 +710,8 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
         offsets, page_counts, page_hit, page_unit, page_channel, page_host, read_start, read_eligible,
         channel_start, host_start, head_bytes, head_bytes / host_bandwidth, tail_bytes,
         tail_bytes / host_bandwidth, timing, array_ids, channel_ids, initial_frontier, len(names))
-    if _resource_sink is not None:
-        # Fold the per-request bills into the task and owner bills with the
-        # same request-ordered additions as consuming each request's maps,
-        # without building those maps. A latest interval equal to the
-        # published one is that published tuple.
-        task_busy, task_bytes, task_last, owner_busy, owner_bytes, owner_last = _resource_sink
-        task_values = np.zeros(len(names), dtype=np.float64)
-        owner_values = np.zeros(len(names), dtype=np.float64)
-        for index in resource_indexes.tolist():
-            task_values[index] = task_busy.get(names[index], 0.0)
-            owner_values[index] = owner_busy.get(names[index], 0.0)
-        order, byte_totals, last_first, last_end = read_batch_sink_totals(
-            ids, busy, byte_counts, first, last, task_values, owner_values, len(names))
-        published = timeline.last_intervals
-        for index in order.tolist():
-            rid = names[index]
-            task_busy[rid] = float(task_values[index])
-            owner_busy[rid] = float(owner_values[index])
-            payload = int(byte_totals[index])
-            if payload:
-                task_bytes[rid] = task_bytes.get(rid, 0) + payload
-                owner_bytes[rid] = owner_bytes.get(rid, 0) + payload
-            interval = published[rid]
-            if interval != (last_first[index], last_end[index]):
-                interval = (float(last_first[index]), float(last_end[index]))
-            for bill in (task_last, owner_last):
-                previous = bill.get(rid)
-                if previous is None or (interval[1], interval[0]) > (previous[1], previous[0]):
-                    bill[rid] = interval
+    if _bills is not None:
+        _bills.append((names, request_offsets, ids, busy, byte_counts, first, last))
         request_metrics = None
     else:
         request_metrics = (request_offsets.tolist(), [names[rid] for rid in ids.tolist()],
@@ -806,6 +782,156 @@ def execute_read_batch(core, requests, *, _resource_sink=None, _host_channel=Non
             }))
         core._record_host_admission(host_channel, effective, admitted, completion, Operation.READ)
     return tuple(results)
+
+
+def _scalar_bill_rows(counters):
+    """A scalar result's maps as one (resource, busy, bytes, start, end) row per resource.
+
+    None unless the three maps list the same resources in the same order,
+    with float busy time, nonzero int64 byte counts and float intervals: only
+    then do rows fold exactly as consume_task_resource_sink would.
+    """
+    busy = counters.get("resource_busy_ns", {})
+    moved = counters.get("resource_bytes", {})
+    last = counters.get("resource_last_intervals", {})
+    if (type(busy) is not dict or type(moved) is not dict or type(last) is not dict
+            or list(busy) != list(last) or [rid for rid in busy if rid in moved] != list(moved)):
+        return None
+    rows = []
+    for rid, value in busy.items():
+        payload, interval = moved.get(rid, 0), last[rid]
+        if (type(value) is not float or type(payload) is not int or not 0 <= payload < 2**62
+                or (rid in moved and not payload) or type(interval) is not tuple or len(interval) != 2
+                or type(interval[0]) is not float or type(interval[1]) is not float):
+            return None
+        rows.append((rid, value, payload, interval[0], interval[1]))
+    return rows
+
+
+def _fold_bill_entries(sink, published, names, ids, busy, moved, first, last):
+    import numpy as np
+    from ._compiled_nand import read_batch_sink_totals
+    if not len(ids):
+        return
+    task_busy, task_bytes, task_last, owner_busy, owner_bytes, owner_last = sink
+    task_values = np.zeros(len(names), dtype=np.float64)
+    owner_values = np.zeros(len(names), dtype=np.float64)
+    for index in np.flatnonzero(np.bincount(ids, minlength=len(names))).tolist():
+        task_values[index] = task_busy.get(names[index], 0.0)
+        owner_values[index] = owner_busy.get(names[index], 0.0)
+    order, byte_order, byte_totals, last_first, last_end = read_batch_sink_totals(
+        ids, busy, moved, first, last, task_values, owner_values, len(names))
+    order = order.tolist()
+    for index in order:
+        rid = names[index]
+        task_busy[rid] = float(task_values[index])
+        owner_busy[rid] = float(owner_values[index])
+    for index in byte_order.tolist():
+        rid, payload = names[index], int(byte_totals[index])
+        task_bytes[rid] = task_bytes.get(rid, 0) + payload
+        owner_bytes[rid] = owner_bytes.get(rid, 0) + payload
+    for index in order:
+        rid = names[index]
+        interval = published.get(rid)
+        if interval != (last_first[index], last_end[index]):
+            interval = (float(last_first[index]), float(last_end[index]))
+        for bill in (task_last, owner_last):
+            previous = bill.get(rid)
+            if previous is None or (interval[1], interval[0]) > (previous[1], previous[0]):
+                bill[rid] = interval
+
+
+_BILL_NAME_INDEXES = {}
+
+
+def fold_read_bills(sink, published, bills, scalar):
+    """Fold one submit_many window's READ bills into a private task sink.
+
+    ``bills`` pairs the input positions of each native batch's requests with
+    the per-request bills execute_read_batch appended; ``scalar`` maps the
+    positions of requests served one at a time to their result counters.
+    Every resource gets its busy additions and its latest interval in input
+    order, exactly as consuming each request's maps in turn: a host-channel
+    window runs one batch per host channel, yet a request's pages can lie on
+    NAND channels of other host channels, so folding batch after batch would
+    reorder floating-point additions on a shared channel. A latest interval
+    equal to the published one is that published tuple.
+    """
+    import numpy as np
+    from ._resource_ledger import consume_task_resource_sink
+    names = bills[0][1][0] if bills else ()
+    if all(bill[0] is names or bill[0] == names for _positions, bill in bills):
+        # Batches of one core plan share its resource names; the plan cache
+        # keeps that tuple alive, so its index can be cached with it.
+        cached = _BILL_NAME_INDEXES.get(id(names))
+        if cached is None or cached[0] is not names:
+            if len(_BILL_NAME_INDEXES) >= 64:
+                _BILL_NAME_INDEXES.clear()
+            cached = _BILL_NAME_INDEXES[id(names)] = (names, {name: at for at, name in enumerate(names)})
+        index_of, remap = cached[1], False
+    else:
+        index_of, names, remap = {}, [], True
+    keys, ids, busy, moved, first, last = [], [], [], [], [], []
+    for positions, (local_names, offsets, local_ids, local_busy, local_moved, local_first, local_last) in bills:
+        if remap:
+            local = np.full(len(local_names), -1, dtype=np.int64)
+            for at in np.flatnonzero(np.bincount(local_ids, minlength=len(local_names))).tolist():
+                name = local_names[at]
+                value = index_of.get(name)
+                if value is None:
+                    value = index_of[name] = len(names)
+                    names.append(name)
+                local[at] = value
+            local_ids = local[local_ids]
+        keys.append(np.repeat(np.asarray(positions, dtype=np.int64), np.diff(offsets)))
+        ids.append(local_ids)
+        busy.append(local_busy)
+        moved.append(local_moved)
+        first.append(local_first)
+        last.append(local_last)
+    breaks = []
+    for position, counters in scalar.items():
+        rows = _scalar_bill_rows(counters)
+        if rows is None:
+            breaks.append(position)
+            continue
+        if not rows:
+            continue
+        row_ids = []
+        for row in rows:
+            value = index_of.get(row[0])
+            if value is None:
+                if not remap:
+                    # A resource outside the shared plan: name it in private
+                    # copies, never in the cached plan index.
+                    index_of, names, remap = dict(index_of), list(names), True
+                value = index_of[row[0]] = len(names)
+                names.append(row[0])
+            row_ids.append(value)
+        keys.append(np.full(len(rows), position, dtype=np.int64))
+        ids.append(np.array(row_ids, dtype=np.int64))
+        busy.append(np.array([row[1] for row in rows], dtype=np.float64))
+        moved.append(np.array([row[2] for row in rows], dtype=np.int64))
+        first.append(np.array([row[3] for row in rows], dtype=np.float64))
+        last.append(np.array([row[4] for row in rows], dtype=np.float64))
+    if keys:
+        keys = np.concatenate(keys)
+        columns = [np.concatenate(values) for values in (ids, busy, moved, first, last)]
+        if len(keys) > 1 and np.any(keys[1:] < keys[:-1]):
+            # Stable: one request's entries keep their bill order.
+            order = np.argsort(keys, kind="stable")
+            keys = keys[order]
+            columns = [values[order] for values in columns]
+    else:
+        keys = np.zeros(0, dtype=np.int64)
+        columns = [np.zeros(0, dtype=dtype) for dtype in (np.int64, np.float64, np.int64, np.float64, np.float64)]
+    start = 0
+    for position in sorted(breaks):
+        stop = int(np.searchsorted(keys, position))
+        _fold_bill_entries(sink, published, names, *(values[start:stop] for values in columns))
+        consume_task_resource_sink(sink, scalar[position])
+        start = stop
+    _fold_bill_entries(sink, published, names, *(values[start:] for values in columns))
 
 
 def _native_numeric_qualified(core):
@@ -906,23 +1032,38 @@ def _native_sink_qualified(core):
             or type(core._write_buffer_pending) is not list
             or not _footprint_methods_absent(core._nand_numeric_state, ("checkpoint", "restore", "publish"))):
         return False
-    population = core.__dict__["_inflight_operations"]
-    if (type(population) is not owner._HostPopulation
-            or type(population.commands) is not dict
-            or type(population.ends) is not list or type(population.write_ends) is not list
-            or any(type(getattr(population, name)) is not int for name in ("next_id", "reads", "writes"))):
-        return False
-    if not _footprint_methods_absent(population, ("preview", "record")):
-        return False
-    for key, item in population.commands.items():
-        if (type(key) is not int or type(item) is not tuple or len(item) != 2
-                or (type(item[0]) is not int and type(item[0]) is not float)
-                or item[1] is not Operation.READ and item[1] is not Operation.WRITE):
+    if core.config.queue_scope == "host_channel":
+        # OCP admission keeps one command population per host channel; the
+        # device population is never used and stays an empty list.
+        populations = core.__dict__["_host_inflight"]
+        device = core.__dict__["_inflight_operations"]
+        accepted = core.__dict__["_host_acceptance_ns"]
+        if (type(device) is not list or device or type(populations) is not dict
+                or type(accepted) is not dict
+                or any(type(key) is not int for key in populations)
+                or any(type(key) is not int or (type(value) is not int and type(value) is not float)
+                       for key, value in accepted.items())):
             return False
-    for item in (*population.ends, *population.write_ends):
-        if (type(item) is not tuple or len(item) != 2 or type(item[1]) is not int
-                or (type(item[0]) is not int and type(item[0]) is not float)):
+        populations = populations.values()
+    else:
+        populations = (core.__dict__["_inflight_operations"],)
+    for population in populations:
+        if (type(population) is not owner._HostPopulation
+                or type(population.commands) is not dict
+                or type(population.ends) is not list or type(population.write_ends) is not list
+                or any(type(getattr(population, name)) is not int for name in ("next_id", "reads", "writes"))):
             return False
+        if not _footprint_methods_absent(population, ("preview", "record")):
+            return False
+        for key, item in population.commands.items():
+            if (type(key) is not int or type(item) is not tuple or len(item) != 2
+                    or (type(item[0]) is not int and type(item[0]) is not float)
+                    or item[1] is not Operation.READ and item[1] is not Operation.WRITE):
+                return False
+        for item in (*population.ends, *population.write_ends):
+            if (type(item) is not tuple or len(item) != 2 or type(item[1]) is not int
+                    or (type(item[0]) is not int and type(item[0]) is not float)):
+                return False
     if (type(core._nand_transactions) is not list
             or any(type(token) is not owner._NandTransaction
                    or not _footprint_methods_absent(token, ("capture_numeric", "remember_frontiers",
@@ -1237,7 +1378,7 @@ def _footprint_cache_key(core):
 _OWNED_NAND_FUNCTIONS = tuple((name, globals()[name]) for name in (
     "execute_buffered_full_pages", "execute_read_batch", "execute_full_pages", "full_page_period",
     "_generic_resident_writers", "_buffered_layout_contract", "_native_numeric_qualified",
-    "_native_sink_qualified"))
+    "_native_sink_qualified", "fold_read_bills", "_fold_bill_entries", "_scalar_bill_rows"))
 _OWNED_NAND_PACK_FUNCTIONS = tuple((name, getattr(_owned_pack_module, name)) for name in (
     "pack_single_lane", "pack_multi_lane", "publish_timeline", "validate_buffered_cache",
     "pack_buffered_cache", "publish_buffered_cache", "can_own_resource_aliases", "publish_active_timeline",
