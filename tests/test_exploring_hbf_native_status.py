@@ -297,7 +297,9 @@ def test_step_io_sums_layer_classes_per_gpu_for_flat_and_pipelined_steps(tmp_pat
     flat = point("HBF+", layout=(4, 2, 1, 1))
     flat["selected"]["approximation"] = {"error_budget": {"step_service_ns": {"lower": 9., "upper": 11.},
         "step": {"classes": [_layer_class(3, {"hbf0.memory": _io(10, 4, 1), "hbf1.memory": _io(10, 4, 1),
-            "sram0.sram_fabric": _io(2, 0, 2), "sram1.sram_fabric": _io(2, 0, 2)})]}}}
+            "sram0.sram_fabric": _io(2, 0, 2), "sram1.sram_fabric": _io(2, 0, 2)})]},
+        # A record of two concurrent imports carries both requests' bytes.
+        "pd_imports": [{"request_ids": ["a"], "logical_bytes": 100}, {"request_ids": ["b", "c"], "logical_bytes": 200}]}}
     piped = point("HBF", workload="MID", layout=(1, 2, 2, 1))
     stage = lambda first: _layer_class(2, {f"hbf{first}.memory": _io(6, 2, 0), f"hbf{first + 1}.memory": _io(6, 2, 0)})
     piped["selected"]["approximation"] = {"error_budget": {"step_service_ns": {"lower": 5., "upper": 5.},
@@ -306,6 +308,7 @@ def test_step_io_sums_layer_classes_per_gpu_for_flat_and_pipelined_steps(tmp_pat
     missing = point("HBM4", workload="LONG")
     write(tmp_path / "results.json", {"cases": [flat, piped, missing]})
     snapshot = report.build_snapshot(tmp_path)
+    assert [row["pd_import_bytes_per_request"] for row in snapshot["completed_results"]] == [100., None, None]
     a, b, c = (row["step_io"] for row in snapshot["completed_results"])
     assert a == {"step_service_ns": {"lower": 9., "upper": 11.}, "gpus": {"hbf": 2, "sram": 2},
         "per_gpu": {"hbf": {"read_bytes": 30., "context_read_bytes": 12., "write_bytes": 3.},

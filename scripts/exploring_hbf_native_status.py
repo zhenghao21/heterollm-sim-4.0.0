@@ -145,6 +145,27 @@ def _step_io(selected: dict[str, Any]) -> dict[str, Any] | None:
                         for kind, total in totals.items()}}
 
 
+def _pd_import_bytes(selected: dict[str, Any]) -> float | None:
+    """Mean logical KV bytes one request's PD import writes into the decode replica (all its ranks).
+
+    A sampled import record may carry several concurrent requests; its logical bytes cover all of them.
+    """
+    imports = ((selected.get("approximation") or {}).get("error_budget") or {}).get("pd_imports") or []
+    total = requests = 0.
+    for item in imports:
+        size, ids = _number((item or {}).get("logical_bytes")), (item or {}).get("request_ids")
+        if size is None or size <= 0 or not isinstance(ids, list) or not ids:
+            continue
+        total += size
+        requests += len(ids)
+    return total / requests if requests else None
+
+
+def _selected_extras(selected: dict[str, Any]) -> dict[str, Any]:
+    """Facts of the full selected row that the dashboard copy of the case drops."""
+    return {"step_io": _step_io(selected), "pd_import_bytes_per_request": _pd_import_bytes(selected)}
+
+
 def _dashboard_case(point: dict[str, Any]) -> dict[str, Any]:
     """Keep online metrics and intervals, leave detailed physical ledgers local."""
     selected = point.get("selected")
@@ -162,9 +183,9 @@ def _dashboard_case(point: dict[str, Any]) -> dict[str, Any]:
     return {**point, "selected": brief}
 
 
-def _completed_results(cases: list[dict[str, Any]], step_io: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """``step_io`` maps case ids to ``_step_io`` of the full selected rows, which the dashboard copies drop."""
-    step_io = step_io or {}
+def _completed_results(cases: list[dict[str, Any]], extras: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """``extras`` maps case ids to ``_selected_extras`` of the full selected rows."""
+    extras = extras or {}
     rows = []
     for point in cases:
         selected = point.get("selected") or {}
@@ -196,7 +217,7 @@ def _completed_results(cases: list[dict[str, Any]], step_io: dict[str, Any] | No
             "metric_bounds": (selected.get("native_window_forecast") or {}).get("metric_bounds"),
             "metric_bounds_scope": "single_simulated_replica" if selected.get("native_window_forecast") else None,
             "sampled_tokens": selected.get("sampled_tokens"), "forecast_tokens": selected.get("forecast_tokens", 0),
-            "step_io": step_io.get(point.get("case_id", case.get("case_id"))),
+            **(extras.get(point.get("case_id", case.get("case_id"))) or _selected_extras({})),
             "_baseline_key": (_baseline_key(case), selected.get("runner_contract"))})
     baselines = {row["_baseline_key"]: row for row in rows if row["hardware"] == "HBM4"
                  and all(value is not None for value in row["_baseline_key"][0])}
@@ -340,7 +361,7 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         "slo_tpot_ns", "deployment_search", "candidate_wall_budget_seconds", "prefill_wall_budget_seconds",
         "max_parallel_configurations", "wall_factor")},
         **_scenario_summary(directory, cases, warnings)}
-    step_io = {point.get("case_id"): _step_io(point.get("selected") or {}) for point in cases}
+    extras = {point.get("case_id"): _selected_extras(point.get("selected") or {}) for point in cases}
     cases = [_dashboard_case(point) for point in cases]
     status["freshness"] = {"age_seconds": _age_seconds(status.get("updated_at"), now),
                            "manager_process": _process_info(status.get("manager_pid"))}
@@ -402,7 +423,7 @@ def build_snapshot(directory: Path | str = DEFAULT_DIRECTORY, *, eta: dict[str, 
         "status": status, "cases": cases, "running": running, "paused": paused,
         "configuration": configuration,
         "optimization": optimization if optimization.get("schema") == "native-runtime-diagnostics/v1" else None,
-        "completed_results": _completed_results(cases, step_io),
+        "completed_results": _completed_results(cases, extras),
         "saved_point_counts": dict(point_states), "saved_candidate_counts": dict(candidate_states),
         "eta": assessment, "notes": notes, "warnings": warnings}
 
