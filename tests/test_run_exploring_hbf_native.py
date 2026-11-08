@@ -1312,3 +1312,23 @@ def test_fast_runner_uses_and_records_the_shared_scenario_options(tmp_path, hard
     assert row["approximation"]["sampling_options"] == row["sampling_options"]
     saved = run.read_json(tmp_path / "configurations" / (row["candidate_id"] + ".json"))
     assert saved["simulation"]["native_window"] == row["sampling_options"]
+
+
+def test_fast_runs_require_every_compiled_module_current(tmp_path, monkeypatch):
+    import os
+    from importlib.machinery import EXTENSION_SUFFIXES
+    import build_resource_ledger as build
+
+    for name in build.BUILD_MODULES:
+        for source in (*build.MODULE_SOURCES.get(name, (name + ".py",)), *build.MODULE_HEADERS.get(name, ())):
+            (tmp_path / source).write_text("")
+            os.utime(tmp_path / source, (1000, 1000))
+        (tmp_path / (name + EXTENSION_SUFFIXES[0])).write_bytes(b"")
+        os.utime(tmp_path / (name + EXTENSION_SUFFIXES[0]), (2000, 2000))
+    assert build.stale_modules(tmp_path) == []
+    (tmp_path / ("_hbm_pack" + EXTENSION_SUFFIXES[0])).unlink()
+    os.utime(tmp_path / "_hbm_fr_core.h", (3000, 3000))
+    assert build.stale_modules(tmp_path) == ["_hbm_pack", "_hbm_fr_kernel"]
+    monkeypatch.setattr(build, "stale_modules", lambda package: ["_hbm_pack"])
+    with pytest.raises(SystemExit):
+        run.main(["--search", "--directory", str(tmp_path / "scan")])

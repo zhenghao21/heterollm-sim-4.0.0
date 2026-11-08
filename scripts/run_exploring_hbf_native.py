@@ -2231,6 +2231,13 @@ def main(argv=None):
             parser.error(f"--workers must be an integer in [1, {MAX_WORKERS}] or auto")
     if args.search:
         args.mode = "fast"
+    if args.mode == "fast":
+        import heterollm_sim
+        from build_resource_ledger import stale_modules
+        stale = stale_modules(Path(heterollm_sim.__file__).parent)
+        if stale:
+            parser.error("compiled modules missing or older than their sources: " + ", ".join(stale)
+                         + "; run scripts/build_resource_ledger.py --inplace")
     try:
         directory = checked_directory(args.directory)
         layout = make_layout(*args.layout, microbatches=args.microbatches)

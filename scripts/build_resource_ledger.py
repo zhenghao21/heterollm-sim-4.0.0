@@ -4,8 +4,9 @@ Run with the project's Python.  No dependencies are installed.  Generated C,
 objects and extensions stay under tmp/resource_ledger by default.  Pass
 --inplace to make the extension importable by ordinary simulator processes.
 Use --module NAME to build only a selected module (repeat for several).
-The pure-Python-mode modules are optional; _hbm_fr_kernel has no Python form,
-so each worktree must build it before the simulator can import.
+The pure-Python-mode modules are optional for tests; _hbm_fr_kernel has no
+Python form, so each worktree must build it before the simulator can import.
+Fast native runs refuse to start until every module is built and current.
 """
 from pathlib import Path
 import argparse
@@ -19,6 +20,24 @@ BUILD_MODULES = ("_resource_ledger", "_nand_pack", "_hbm_pack", "_cost_ledger",
 # Modules that are not pure-Python-mode sources: their files under the package.
 MODULE_SOURCES = {"_hbm_fr_kernel": ("_hbm_fr_kernel.pyx", "_hbm_fr_core.c")}
 MODULE_HEADERS = {"_hbm_fr_kernel": ("_hbm_fr_core.h",)}
+
+
+def stale_modules(package=Path(__file__).resolve().parents[1] / "src" / "heterollm_sim"):
+    """Modules whose extension is missing or older than one of its sources.
+
+    Python imports an extension ahead of a same-named .py, so a stale build
+    runs old code and a missing one runs the far slower pure-Python form.
+    """
+    from importlib.machinery import EXTENSION_SUFFIXES
+
+    stale = []
+    for name in BUILD_MODULES:
+        sources = (*MODULE_SOURCES.get(name, (name + ".py",)), *MODULE_HEADERS.get(name, ()))
+        built = [package / (name + suffix) for suffix in EXTENSION_SUFFIXES]
+        built = [path.stat().st_mtime for path in built if path.exists()]
+        if not built or max(built) < max((package / source).stat().st_mtime for source in sources):
+            stale.append(name)
+    return stale
 
 
 def main():
