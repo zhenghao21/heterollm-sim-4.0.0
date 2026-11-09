@@ -212,3 +212,18 @@ def test_scalar_handoff_publishes_before_mutable_resource_layout_changes(changed
     assert not core_of(contexts[0])._resident_scalar_eligible(request)
     submit(contexts, request)
     submit(contexts, read("after", 0, 2 * PAGE))
+
+
+def test_read_and_write_plans_share_the_controller_layout():
+    # A resident controller packed by a WRITE keeps the layout tuples the
+    # READ plan holds, so the native gates and batches compare by identity.
+    from heterollm_sim._nand_execution import _geometry_plan
+    from heterollm_sim.memory_types import Operation
+    core = NandCore(config(planes_per_lun=2))
+    cfg = core.config
+    base = cfg.channels * cfg.targets_per_channel * cfg.dies_per_target * cfg.luns_per_die
+    banks = base * cfg.planes_per_lun
+    read, write = (_geometry_plan(core, operation, banks, banks, base // cfg.channels)
+                   for operation in (Operation.READ, Operation.WRITE))
+    assert all(read[at] is write[at] for at in range(5))
+    assert read[5] != write[5]

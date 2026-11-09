@@ -7,27 +7,40 @@ from .memory_mapping import map_nand_address
 
 
 _GEOMETRY_PLANS = {}
+_GEOMETRY_BASES = {}
 
 
 def _geometry_plan(core, operation, banks, units, per_channel):
-    """Cache immutable address/resource descriptions, never live calendars."""
+    """Cache immutable address/resource descriptions, never live calendars.
+
+    READ and WRITE plans of one geometry share their operation-independent
+    tuples, so a packed controller layout built by either operation is the
+    very object the other operation's plan holds and identity checks hold.
+    """
     config = core.config
     prefixes = tuple(str(config.metadata.get(name, default)) for name, default in (
         ("array_resource_prefix", "nand:array"), ("parallel_resource_prefix", "nand:parallel"),
         ("channel_resource_prefix", "nand:channel"), ("host_resource_id", "nand:host")))
-    key = (config.channels, config.targets_per_channel, config.dies_per_target, config.luns_per_die,
-           config.planes_per_lun, config.planes_independent, config.parallel_units,
-           config.host_channels, config.host_full_duplex, prefixes,
-           tuple(core.timeline.resource_aliases.items()), operation)
+    base_key = (config.channels, config.targets_per_channel, config.dies_per_target, config.luns_per_die,
+                config.planes_per_lun, config.planes_independent, config.parallel_units,
+                config.host_channels, config.host_full_duplex, prefixes,
+                tuple(core.timeline.resource_aliases.items()))
+    key = (*base_key, operation)
     plan = _GEOMETRY_PLANS.get(key)
     if plan is not None:
         return plan
-    mappings = tuple(map_nand_address(config, bank * 4096) for bank in range(banks))
-    bank_keys = tuple(core._bank_key(mapping) for mapping in mappings)
-    tag_prefixes = tuple(core._staged_key(mapping)[:-2] for mapping in mappings)
-    array_names = tuple(core._array_id(mappings[unit]) for unit in range(units))
-    array_resources = tuple(core._array_resource_id(mappings[unit]) for unit in range(units))
-    channel_names = tuple(core._channel_id(mappings[channel * per_channel]) for channel in range(config.channels))
+    base = _GEOMETRY_BASES.get(base_key)
+    if base is None:
+        mappings = tuple(map_nand_address(config, bank * 4096) for bank in range(banks))
+        base = (mappings, tuple(core._bank_key(mapping) for mapping in mappings),
+                tuple(core._staged_key(mapping)[:-2] for mapping in mappings),
+                tuple(core._array_id(mappings[unit]) for unit in range(units)),
+                tuple(core._array_resource_id(mappings[unit]) for unit in range(units)),
+                tuple(core._channel_id(mappings[channel * per_channel]) for channel in range(config.channels)))
+        if len(_GEOMETRY_BASES) >= 64:
+            _GEOMETRY_BASES.clear()
+        _GEOMETRY_BASES[base_key] = base
+    mappings, bank_keys, tag_prefixes, array_names, array_resources, channel_names = base
     host_names = tuple(core._host_id(mappings[channel * per_channel], operation)
                        for channel in range(config.host_channels))
     nand_resources = tuple(dict.fromkeys((*array_resources, *channel_names, *host_names)))
