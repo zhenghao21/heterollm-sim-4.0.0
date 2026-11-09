@@ -1579,10 +1579,12 @@ class NandCore:
         """Submit requests that arrive together as one controller window.
 
         A native generic READ batch is scheduled by the out-of-order
-        controller: host credits are still taken in request order, but
-        channels and the host link serve pages as they become ready, so one
-        request's busy plane no longer holds back the others. Every page is
-        read where the host page table put it (``_read_pages``). OCP HBF
+        controller: host credits are still taken in request order, on the
+        device queue or, under OCP, on the host channel of each request's
+        first page, but every channel and host link serves pages as they
+        become ready, so one request's busy plane no longer holds back the
+        others. Every page is read where the host page table put it
+        (``_read_pages``). OCP HBF
         v0.7 5.3.1 lets reads of different AXI IDs complete out of order and
         keeps only the reads of one bank in order, which the controller's
         per-plane FIFO does. Other batches are submitted one request at a
@@ -1598,52 +1600,12 @@ class NandCore:
                         for request in requests)):
             from ._nand_acceleration import execute_read_batch, fold_read_bills
             bills = None if _resource_sink is None else []
-            if self.config.queue_scope == "device":
-                results = execute_read_batch(self, requests, _bills=bills)
-                if results is not None:
-                    if bills:
-                        fold_read_bills(_resource_sink, self.timeline.last_intervals,
-                                        [(range(len(requests)), bills[0])], {})
-                    return tuple(results)
-            elif self.config.queue_scope == "host_channel":
-                # A host-channel queue has an independent credit clock.  Run
-                # one native batch per channel so the compiled controller's
-                # global credit counter is exactly the channel-local 256
-                # command population.  A request is admitted on the host
-                # channel of its first page, but its later pages can lie on
-                # other host channels' NAND channels, so a sink is billed
-                # only after every group ran, in input order.  A one-request
-                # group remains on the scalar path because batching cannot
-                # amortize packing.
-                groups = {}
-                for index, request in enumerate(requests):
-                    mapping = map_nand_address(self.config, request.address)
-                    host = mapping.channel % self.config.host_channels
-                    groups.setdefault(host, []).append((index, request))
-                results = [None] * len(requests)
-                native, scalar = [], {}
-                for host, group in groups.items():
-                    collected = None if bills is None else []
-                    batch = None
-                    if len(group) >= 2:
-                        batch = execute_read_batch(
-                            self, tuple(request for _index, request in group),
-                            _bills=collected, _host_channel=host)
-                    if batch is None:
-                        for index, request in group:
-                            results[index] = self.submit(request)
-                            if bills is not None:
-                                scalar[index] = results[index].counters
-                    else:
-                        for (index, _request), result in zip(group, batch):
-                            results[index] = result
-                        if collected:
-                            native.append(([index for index, _request in group], collected[0]))
-                if bills is not None:
-                    fold_read_bills(_resource_sink, self.timeline.last_intervals, native, scalar)
-                    for index in scalar:
-                        if any(name in results[index].counters for name in _RESOURCE_MAP_FIELDS):
-                            results[index] = _without_resource_maps(results[index])
+            # One window for every queue: under OCP each host channel keeps
+            # its own credits, and all channels serve their pages at once.
+            results = execute_read_batch(self, requests, _bills=bills)
+            if results is not None:
+                if bills:
+                    fold_read_bills(_resource_sink, self.timeline.last_intervals, bills[0])
                 return tuple(results)
         if _resource_sink is None:
             results = tuple(self.submit(request) for request in requests)

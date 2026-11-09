@@ -230,8 +230,8 @@ def test_host_channel_window_bills_shared_channels_in_input_order():
     # OCP admission keeps one command population per host channel and admits
     # a request on its first page's host channel, but later pages can lie on
     # the other host channel's NAND channel. Requests alternate their first
-    # host channel and differ in size, so that shared channel's busy
-    # additions round differently unless they keep input-request order.
+    # host channel and differ in size; the one window of both host channels
+    # must bill that shared channel's busy additions in input-request order.
     ocp = dict(kind="HBF", protocol_mode="ocp_hbf_0_7", queue_scope="host_channel", host_channels=2,
                targets_per_channel=1, dies_per_target=1, host_granularity_bytes=64)
     def layout(number, single, banks):
@@ -248,7 +248,7 @@ def test_host_channel_window_bills_shared_channels_in_input_order():
     expected, _ = observe_run(reference, task, False)
     actual, trace = observe_run(candidate, candidate_task)
     assert_actual_hit(trace)
-    assert core.__dict__["_host_inflight"] and len(trace.batches) >= 4
+    assert len(core.__dict__["_host_inflight"]) == 2 and trace.batches
     assert bits(actual) == bits(expected)
     assert state_bits(candidate) == state_bits(reference)
     compare_physical_state(candidate, reference)

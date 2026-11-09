@@ -288,6 +288,34 @@ def test_read_window_reads_pages_where_the_page_table_put_them():
     assert [_arrays(result) for result in results] == [["nand:array:1"], ["nand:array:2"], ["nand:array:3"]]
 
 
+def test_read_window_serves_every_host_channel_at_once():
+    # A request is admitted on its first page's host channel, but its pages
+    # lie on every channel. With credits to spare, the host-channel window
+    # schedules exactly as one device-wide window: no host channel's
+    # requests queue behind another channel's requests on the NAND channels.
+    def window(scope):
+        core = _ocp_runtime(channels=4, host_channels=4, planes_per_lun=2, queue_scope=scope)
+        return core.submit_many([request(str(index), address=index * 6 * PAGE, count=6 * PAGE, arrival=1e6)
+                                 for index in range(8)])
+    ocp, device = window("host_channel"), window("device")
+    assert {index * 6 % 4 for index in range(8)} == {0, 2}
+    assert all("native_fullpage_pages" in result.counters for result in ocp)
+    assert [result.completion_ns for result in ocp] == [result.completion_ns for result in device]
+
+
+def test_read_window_takes_credits_per_host_channel():
+    core = _ocp_runtime(channels=2, host_channels=2, max_outstanding_requests=1,
+                        max_outstanding_write_requests=1)
+    first, second, other = core.submit_many([request("first", address=0, count=PAGE, arrival=1e6),
+                                             request("second", address=2 * PAGE, count=PAGE, arrival=1e6),
+                                             request("other", address=PAGE, count=PAGE, arrival=1e6)])
+    assert all("native_fullpage_pages" in result.counters for result in (first, second, other))
+    # Host channel 0 has one credit, so its second request waits for the
+    # first; host channel 1 admits its request at once.
+    assert first.counters["queue_wait_ns"] == other.counters["queue_wait_ns"] == 0
+    assert second.arrival_ns + second.counters["queue_wait_ns"] == first.completion_ns
+
+
 def test_read_window_moves_staged_pages_over_the_scratchpad_lane():
     core = _ocp_runtime(planes_per_lun=1, page_staging="logic_die",
                         page_staging_bytes_per_host_channel=2_500_000)

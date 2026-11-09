@@ -64,9 +64,11 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # per-channel sequential writes behind a page table, one block erase per
 # channel billed by erase_policy, credits 256/64, scratchpad staging) and
 # serves page-table reads in the out-of-order controller window.
-FAST_CONTRACT = "native_stationary_layout_fast_v28"
-# Prefill runs on HBM4, so its runner follows v25 (as v24) and v27 (as v25); v26
-# and v28 change neither its physics nor its forecast.
+# v29 serves every OCP host channel in that one window with its own credits;
+# v28 ran the host channels' requests one channel after another.
+FAST_CONTRACT = "native_stationary_layout_fast_v29"
+# Prefill runs on HBM4, so its runner follows v25 (as v24) and v27 (as v25); v26,
+# v28 and v29 change neither its physics nor its forecast.
 PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v25"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # sample a whole prompt by its stage blocks and a chunked one by the

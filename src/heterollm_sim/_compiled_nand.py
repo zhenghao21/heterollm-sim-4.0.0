@@ -438,17 +438,23 @@ def _arrive(page, rid, time, now, queue_times, queue_pages, queue_first, queue_s
 
 @njit(cache=True, nogil=True, fastmath=False)
 def run_generic_read_batch(page_indices, page_counts, arrivals, head_bytes, head_ns, tail_bytes, tail_ns,
-                           staged_ready, staging_ns, staging_host, acceptance, prior_ends, limit, front, geometry, timing,
+                           staged_ready, staging_ns, staging_host, request_queues, queue_acceptance,
+                           prior_ends, prior_offsets, limit, front, geometry, timing,
                            array_ids, channel_ids, host_ids, stage_ids, array_ready, buffer_ready,
                            tags, cache_ready, readers, uses, present, cache_clock,
                            starts, lane_counts, lanes, lane_directions, state, moved, directions):
     """Out-of-order generic-NAND controller for one batch of READ requests.
 
     Admission, buffer choice and per-plane order follow submission order:
-    requests take device credits in order (``prior_ends`` are the sorted
-    completions already holding credits), every page makes the same
-    two-slot LRU hit/victim decision as a sequential controller, and each
-    array unit reads its pages first-in first-out. A unit reads its next
+    every request takes a credit of its own queue (``request_queues``: one
+    queue per OCP host channel, or the single device queue) in submission
+    order, and queues admit independently, so a host channel whose credits
+    are spent never delays another channel's requests. Queue ``q`` starts
+    no earlier than ``queue_acceptance[q]`` and its credits are held by the
+    sorted completions ``prior_ends[prior_offsets[q]:prior_offsets[q + 1]]``.
+    Every page makes the same two-slot LRU hit/victim decision as a
+    sequential controller, and each array unit reads its pages first-in
+    first-out. A unit reads its next
     page only after the previous one left its page register over the
     channel. Shared resources are not first-come calendars: a channel
     moves whichever read page became eligible first (its target slot's
@@ -626,11 +632,34 @@ def run_generic_read_batch(page_indices, page_counts, arrivals, head_bytes, head
     completions = np.zeros(requests, dtype=np.float64)
     remaining = page_counts.copy()
     done_at = np.zeros(requests, dtype=np.float64)
-    outstanding = len(prior_ends)
-    prior = 0
-    next_request = 0
-    blocked = False
-    size = _event_push(event_times, event_keys, 0, max(arrivals[0], acceptance), (_ADMIT << _KIND_SHIFT) | 0)
+    # Each queue admits its own requests in submission order.
+    queues = len(queue_acceptance)
+    queue_end = np.zeros(queues, dtype=np.int64)
+    for request in range(requests):
+        queue_end[request_queues[request]] += 1
+    queue_next = np.empty(queues, dtype=np.int64)
+    total = 0
+    for queue in range(queues):
+        queue_next[queue] = total
+        total += queue_end[queue]
+        queue_end[queue] = total
+    queue_order = np.empty(requests, dtype=np.int64)
+    for request in range(requests):
+        queue = request_queues[request]
+        queue_order[queue_next[queue]] = request
+        queue_next[queue] += 1
+    outstanding = np.empty(queues, dtype=np.int64)
+    prior = np.empty(queues, dtype=np.int64)
+    blocked = np.zeros(queues, dtype=np.bool_)
+    size = 0
+    for queue in range(queues):
+        queue_next[queue] = queue_end[queue - 1] if queue else 0
+        outstanding[queue] = prior_offsets[queue + 1] - prior_offsets[queue]
+        prior[queue] = prior_offsets[queue]
+        if queue_next[queue] < queue_end[queue]:
+            request = queue_order[queue_next[queue]]
+            size = _event_push(event_times, event_keys, size, max(arrivals[request], queue_acceptance[queue]),
+                               (_ADMIT << _KIND_SHIFT) | request)
     while size:
         now, key = event_times[0], event_keys[0]
         size = _event_pop(event_times, event_keys, size)
@@ -653,9 +682,11 @@ def run_generic_read_batch(page_indices, page_counts, arrivals, head_bytes, head
             remaining[request] -= 1
             if not remaining[request]:
                 completions[request] = max(bases[request], done_at[request])
-                outstanding -= 1
-                if blocked:
-                    size = _event_push(event_times, event_keys, size, now, (_ADMIT << _KIND_SHIFT) | next_request)
+                queue = request_queues[request]
+                outstanding[queue] -= 1
+                if blocked[queue]:
+                    size = _event_push(event_times, event_keys, size, now,
+                                       (_ADMIT << _KIND_SHIFT) | queue_order[queue_next[queue]])
             rid = page_host[item]
             if queue_size[rid] and dispatch_now[rid] != now:
                 dispatch_now[rid] = now
@@ -708,29 +739,34 @@ def run_generic_read_batch(page_indices, page_counts, arrivals, head_bytes, head
                 size = _event_push(event_times, event_keys, size, now, (_DISPATCH << _KIND_SHIFT) | rid)
         elif kind == _ADMIT:
             request = item
-            if request != next_request:
+            queue = request_queues[request]
+            position = queue_next[queue]
+            if position == queue_end[queue] or queue_order[position] != request:
                 continue
-            while prior < len(prior_ends) and prior_ends[prior] <= now:
-                prior += 1
-                outstanding -= 1
-            if outstanding >= limit:
-                # Retry at the next known prior completion; a completing
-                # batch request also retries while admission is blocked.
-                blocked = True
-                if prior < len(prior_ends):
-                    size = _event_push(event_times, event_keys, size, prior_ends[prior],
+            stop = prior_offsets[queue + 1]
+            while prior[queue] < stop and prior_ends[prior[queue]] <= now:
+                prior[queue] += 1
+                outstanding[queue] -= 1
+            if outstanding[queue] >= limit:
+                # Retry at the queue's next known prior completion; a
+                # completing batch request of the queue also retries.
+                blocked[queue] = True
+                if prior[queue] < stop:
+                    size = _event_push(event_times, event_keys, size, prior_ends[prior[queue]],
                                        (_ADMIT << _KIND_SHIFT) | request)
                 continue
-            blocked = False
+            blocked[queue] = False
             admitted[request] = True
             admissions[request] = now
             base = now + front
             bases[request] = base
-            outstanding += 1
-            next_request += 1
-            if next_request < requests:
-                size = _event_push(event_times, event_keys, size, max(arrivals[next_request], now),
-                                   (_ADMIT << _KIND_SHIFT) | next_request)
+            outstanding[queue] += 1
+            position += 1
+            queue_next[queue] = position
+            if position < queue_end[queue]:
+                following = queue_order[position]
+                size = _event_push(event_times, event_keys, size, max(arrivals[following], now),
+                                   (_ADMIT << _KIND_SHIFT) | following)
             for page in range(offsets[request], offsets[request + 1]):
                 if staged_ready[page] >= 0:
                     if staging_host:
