@@ -1,0 +1,683 @@
+{
+  "parameter_basis": "configuration-derived ceilings, not vendor calibration",
+  "vendor_calibrated": false,
+  "validation_scope": "internal consistency: interface ceilings, sequential convergence, byte-once billing, half-duplex lane serialisation",
+  "variants": {
+    "hbm3e_reference": {
+      "envelope": {
+        "lanes": 256,
+        "burst_bytes": 32,
+        "lane_bandwidth_gb_s": 15.625,
+        "burst_occupancy_ns": 2.048,
+        "physical_interface_gb_s": 4000.0,
+        "declared_read_gb_s": 1600.0,
+        "declared_write_gb_s": 1600.0,
+        "sequential_read_gb_s": 1600.0,
+        "sequential_write_gb_s": 1600.0,
+        "identities": {
+          "physical_equals_lanes_times_lane_rate": true,
+          "burst_occupancy_matches_burst_interval": true,
+          "directional_caps_do_not_exceed_interface": true
+        }
+      },
+      "sequential": [
+        {
+          "id": "sequential-read-32bursts",
+          "kind": "sequential_read",
+          "bursts": 32,
+          "bytes": 1024,
+          "completion_ns": 67.584,
+          "measured_gb_s": 15.15151515151515,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.009469696969696968,
+          "burst_count": 32,
+          "row_hits": 0,
+          "row_misses": 32,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-256bursts",
+          "kind": "sequential_read",
+          "bursts": 256,
+          "bytes": 8192,
+          "completion_ns": 67.584,
+          "measured_gb_s": 121.2121212121212,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.07575757575757575,
+          "burst_count": 256,
+          "row_hits": 0,
+          "row_misses": 256,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-2048bursts",
+          "kind": "sequential_read",
+          "bursts": 2048,
+          "bytes": 65536,
+          "completion_ns": 88.06400000000001,
+          "measured_gb_s": 744.1860465116279,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.46511627906976744,
+          "burst_count": 2048,
+          "row_hits": 1024,
+          "row_misses": 1024,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-16384bursts",
+          "kind": "sequential_read",
+          "bursts": 16384,
+          "bytes": 524288,
+          "completion_ns": 374.784,
+          "measured_gb_s": 1398.9071038251366,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.8743169398907104,
+          "burst_count": 16384,
+          "row_hits": 15360,
+          "row_misses": 1024,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-131072bursts",
+          "kind": "sequential_read",
+          "bursts": 131072,
+          "bytes": 4194304,
+          "completion_ns": 2668.544,
+          "measured_gb_s": 1571.7574827321566,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.9823484267075979,
+          "burst_count": 131072,
+          "row_hits": 126976,
+          "row_misses": 4096,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-1048576bursts",
+          "kind": "sequential_read",
+          "bursts": 1048576,
+          "bytes": 33554432,
+          "completion_ns": 21018.624,
+          "measured_gb_s": 1596.4143038098023,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.9977589398811264,
+          "burst_count": 1048576,
+          "row_hits": 1015808,
+          "row_misses": 16384,
+          "row_conflicts": 16384
+        }
+      ],
+      "sequential_write": [
+        {
+          "id": "sequential-write-16384bursts",
+          "kind": "sequential_write",
+          "bursts": 16384,
+          "bytes": 524288,
+          "completion_ns": 350.208,
+          "measured_gb_s": 1497.0760233918127,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.9356725146198829
+        }
+      ],
+      "random": [
+        {
+          "id": "random-read-256bursts",
+          "kind": "random_read",
+          "bursts": 256,
+          "bytes": 8192,
+          "window_ns": 102.4,
+          "measured_gb_s": 80.0,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.05
+        },
+        {
+          "id": "random-read-2048bursts",
+          "kind": "random_read",
+          "bursts": 2048,
+          "bytes": 65536,
+          "window_ns": 177.15200000000002,
+          "measured_gb_s": 369.94219653179186,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.2312138728323699
+        },
+        {
+          "id": "random-read-16384bursts",
+          "kind": "random_read",
+          "bursts": 16384,
+          "bytes": 524288,
+          "window_ns": 965.6320000000001,
+          "measured_gb_s": 542.948038176034,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.33934252386002123
+        },
+        {
+          "id": "random-read-65536bursts",
+          "kind": "random_read",
+          "bursts": 65536,
+          "bytes": 2097152,
+          "window_ns": 4608.0,
+          "measured_gb_s": 455.1111111111111,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.28444444444444444
+        }
+      ],
+      "duplex": {
+        "id": "mixed_duplex",
+        "bursts": 16384,
+        "bytes": 524288,
+        "window_ns": 960.5120000000001,
+        "measured_gb_s": 545.8422174840085,
+        "sum_of_directional_caps_gb_s": 3200.0,
+        "physical_interface_gb_s": 4000.0,
+        "bounded_by_sum_of_caps": true,
+        "bounded_by_physical": true
+      },
+      "dq_conservation": {
+        "id": "dq_conservation",
+        "passed": true,
+        "metrics": {
+          "requests": 8192,
+          "reads": 4096,
+          "writes": 4096,
+          "bursts": 8192,
+          "lanes_touched": 256,
+          "lanes_total": 256,
+          "physical_bytes": 262144,
+          "payload_bytes": 262144,
+          "lane_busy_ns": 16777.215999999982,
+          "expected_lane_busy_ns": 16777.216,
+          "overlap_count": 0,
+          "window_ns": 420.86400000000003,
+          "aggregate_gb_s": 622.8710462287104,
+          "max_lane_utilization": 0.42307692307692263,
+          "mixed_directions": true
+        },
+        "overlaps": [],
+        "reason": "Each 32 B burst occupies its lane for burst/effective_lane_bandwidth; the lane calendar must serialise every burst, so an overlap would mean one lane served two bursts at once."
+      }
+    },
+    "hbm4_reference": {
+      "envelope": {
+        "lanes": 512,
+        "burst_bytes": 32,
+        "lane_bandwidth_gb_s": 7.8125,
+        "burst_occupancy_ns": 4.096,
+        "physical_interface_gb_s": 4000.0,
+        "declared_read_gb_s": 1600.0,
+        "declared_write_gb_s": 1600.0,
+        "sequential_read_gb_s": 1600.0,
+        "sequential_write_gb_s": 1600.0,
+        "identities": {
+          "physical_equals_lanes_times_lane_rate": true,
+          "burst_occupancy_matches_burst_interval": true,
+          "directional_caps_do_not_exceed_interface": true
+        }
+      },
+      "sequential": [
+        {
+          "id": "sequential-read-32bursts",
+          "kind": "sequential_read",
+          "bursts": 32,
+          "bytes": 1024,
+          "completion_ns": 100.352,
+          "measured_gb_s": 10.204081632653061,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.006377551020408163,
+          "burst_count": 32,
+          "row_hits": 0,
+          "row_misses": 32,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-256bursts",
+          "kind": "sequential_read",
+          "bursts": 256,
+          "bytes": 8192,
+          "completion_ns": 100.352,
+          "measured_gb_s": 81.63265306122449,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.05102040816326531,
+          "burst_count": 256,
+          "row_hits": 0,
+          "row_misses": 256,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-2048bursts",
+          "kind": "sequential_read",
+          "bursts": 2048,
+          "bytes": 65536,
+          "completion_ns": 120.83200000000001,
+          "measured_gb_s": 542.3728813559321,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.33898305084745756,
+          "burst_count": 2048,
+          "row_hits": 1024,
+          "row_misses": 1024,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-16384bursts",
+          "kind": "sequential_read",
+          "bursts": 16384,
+          "bytes": 524288,
+          "completion_ns": 407.552,
+          "measured_gb_s": 1286.43216080402,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.8040201005025125,
+          "burst_count": 16384,
+          "row_hits": 15360,
+          "row_misses": 1024,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-131072bursts",
+          "kind": "sequential_read",
+          "bursts": 131072,
+          "bytes": 4194304,
+          "completion_ns": 2701.312,
+          "measured_gb_s": 1552.691432903715,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.9704321455648218,
+          "burst_count": 131072,
+          "row_hits": 126976,
+          "row_misses": 4096,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-1048576bursts",
+          "kind": "sequential_read",
+          "bursts": 1048576,
+          "bytes": 33554432,
+          "completion_ns": 21667.84,
+          "measured_gb_s": 1548.5822306238185,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.9678638941398866,
+          "burst_count": 1048576,
+          "row_hits": 1011200,
+          "row_misses": 37376,
+          "row_conflicts": 0
+        }
+      ],
+      "sequential_write": [
+        {
+          "id": "sequential-write-16384bursts",
+          "kind": "sequential_write",
+          "bursts": 16384,
+          "bytes": 524288,
+          "completion_ns": 358.40000000000003,
+          "measured_gb_s": 1462.8571428571427,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.9142857142857141
+        }
+      ],
+      "random": [
+        {
+          "id": "random-read-256bursts",
+          "kind": "random_read",
+          "bursts": 256,
+          "bytes": 8192,
+          "window_ns": 139.264,
+          "measured_gb_s": 58.8235294117647,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.03676470588235294
+        },
+        {
+          "id": "random-read-2048bursts",
+          "kind": "random_read",
+          "bursts": 2048,
+          "bytes": 65536,
+          "window_ns": 215.04,
+          "measured_gb_s": 304.76190476190476,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.19047619047619047
+        },
+        {
+          "id": "random-read-16384bursts",
+          "kind": "random_read",
+          "bursts": 16384,
+          "bytes": 524288,
+          "window_ns": 686.08,
+          "measured_gb_s": 764.1791044776119,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.4776119402985074
+        },
+        {
+          "id": "random-read-65536bursts",
+          "kind": "random_read",
+          "bursts": 65536,
+          "bytes": 2097152,
+          "window_ns": 2736.128,
+          "measured_gb_s": 766.4670658682634,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.4790419161676646
+        }
+      ],
+      "duplex": {
+        "id": "mixed_duplex",
+        "bursts": 16384,
+        "bytes": 524288,
+        "window_ns": 741.376,
+        "measured_gb_s": 707.182320441989,
+        "sum_of_directional_caps_gb_s": 3200.0,
+        "physical_interface_gb_s": 4000.0,
+        "bounded_by_sum_of_caps": true,
+        "bounded_by_physical": true
+      },
+      "sequential_no_refresh": [
+        {
+          "id": "sequential-read-32bursts",
+          "kind": "sequential_read",
+          "bursts": 32,
+          "bytes": 1024,
+          "completion_ns": 100.352,
+          "measured_gb_s": 10.204081632653061,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.006377551020408163,
+          "burst_count": 32,
+          "row_hits": 0,
+          "row_misses": 32,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-256bursts",
+          "kind": "sequential_read",
+          "bursts": 256,
+          "bytes": 8192,
+          "completion_ns": 100.352,
+          "measured_gb_s": 81.63265306122449,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.05102040816326531,
+          "burst_count": 256,
+          "row_hits": 0,
+          "row_misses": 256,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-2048bursts",
+          "kind": "sequential_read",
+          "bursts": 2048,
+          "bytes": 65536,
+          "completion_ns": 120.83200000000001,
+          "measured_gb_s": 542.3728813559321,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.33898305084745756,
+          "burst_count": 2048,
+          "row_hits": 1024,
+          "row_misses": 1024,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-16384bursts",
+          "kind": "sequential_read",
+          "bursts": 16384,
+          "bytes": 524288,
+          "completion_ns": 407.552,
+          "measured_gb_s": 1286.43216080402,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.8040201005025125,
+          "burst_count": 16384,
+          "row_hits": 15360,
+          "row_misses": 1024,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-131072bursts",
+          "kind": "sequential_read",
+          "bursts": 131072,
+          "bytes": 4194304,
+          "completion_ns": 2701.312,
+          "measured_gb_s": 1552.691432903715,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.9704321455648218,
+          "burst_count": 131072,
+          "row_hits": 126976,
+          "row_misses": 4096,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-1048576bursts",
+          "kind": "sequential_read",
+          "bursts": 1048576,
+          "bytes": 33554432,
+          "completion_ns": 21051.392,
+          "measured_gb_s": 1593.9293705613386,
+          "ceiling_gb_s": 1600.0,
+          "fraction_of_ceiling": 0.9962058566008366,
+          "burst_count": 1048576,
+          "row_hits": 1015808,
+          "row_misses": 32768,
+          "row_conflicts": 0
+        }
+      ],
+      "refresh_overhead": {
+        "bursts": 1048576,
+        "refreshed_ns": 21667.84,
+        "no_refresh_ns": 21051.392,
+        "refresh_commands": 134144,
+        "overhead_fraction": 0.029283004183286332,
+        "note": "periodic refresh is a real cost that grows with run length, so a refreshed stream is not required to be monotone in size; the no-refresh run is"
+      },
+      "dq_conservation": {
+        "id": "dq_conservation",
+        "passed": true,
+        "metrics": {
+          "requests": 8192,
+          "reads": 4096,
+          "writes": 4096,
+          "bursts": 8192,
+          "lanes_touched": 512,
+          "lanes_total": 512,
+          "physical_bytes": 262144,
+          "payload_bytes": 262144,
+          "lane_busy_ns": 33554.43199999994,
+          "expected_lane_busy_ns": 33554.432,
+          "overlap_count": 0,
+          "window_ns": 319.488,
+          "aggregate_gb_s": 820.5128205128206,
+          "max_lane_utilization": 0.47619047619047633,
+          "mixed_directions": true
+        },
+        "overlaps": [],
+        "reason": "Each 32 B burst occupies its lane for burst/effective_lane_bandwidth; the lane calendar must serialise every burst, so an overlap would mean one lane served two bursts at once."
+      }
+    },
+    "hbm3e_uncapped": {
+      "envelope": {
+        "lanes": 256,
+        "burst_bytes": 32,
+        "lane_bandwidth_gb_s": 15.625,
+        "burst_occupancy_ns": 2.048,
+        "physical_interface_gb_s": 4000.0,
+        "declared_read_gb_s": 4000.0,
+        "declared_write_gb_s": 4000.0,
+        "sequential_read_gb_s": 4000.0,
+        "sequential_write_gb_s": 4000.0,
+        "identities": {
+          "physical_equals_lanes_times_lane_rate": true,
+          "burst_occupancy_matches_burst_interval": true,
+          "directional_caps_do_not_exceed_interface": true
+        }
+      },
+      "sequential": [
+        {
+          "id": "sequential-read-32bursts",
+          "kind": "sequential_read",
+          "bursts": 32,
+          "bytes": 1024,
+          "completion_ns": 64.512,
+          "measured_gb_s": 15.873015873015873,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.003968253968253968,
+          "burst_count": 32,
+          "row_hits": 0,
+          "row_misses": 32,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-256bursts",
+          "kind": "sequential_read",
+          "bursts": 256,
+          "bytes": 8192,
+          "completion_ns": 64.512,
+          "measured_gb_s": 126.98412698412699,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.031746031746031744,
+          "burst_count": 256,
+          "row_hits": 0,
+          "row_misses": 256,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-2048bursts",
+          "kind": "sequential_read",
+          "bursts": 2048,
+          "bytes": 65536,
+          "completion_ns": 68.608,
+          "measured_gb_s": 955.2238805970148,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.2388059701492537,
+          "burst_count": 2048,
+          "row_hits": 1024,
+          "row_misses": 1024,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-16384bursts",
+          "kind": "sequential_read",
+          "bursts": 16384,
+          "bytes": 524288,
+          "completion_ns": 183.296,
+          "measured_gb_s": 2860.335195530726,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.7150837988826816,
+          "burst_count": 16384,
+          "row_hits": 15360,
+          "row_misses": 1024,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-131072bursts",
+          "kind": "sequential_read",
+          "bursts": 131072,
+          "bytes": 4194304,
+          "completion_ns": 1100.8,
+          "measured_gb_s": 3810.232558139535,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.9525581395348837,
+          "burst_count": 131072,
+          "row_hits": 126976,
+          "row_misses": 4096,
+          "row_conflicts": 0
+        },
+        {
+          "id": "sequential-read-1048576bursts",
+          "kind": "sequential_read",
+          "bursts": 1048576,
+          "bytes": 33554432,
+          "completion_ns": 8455.168,
+          "measured_gb_s": 3968.5115659440476,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.9921278914860119,
+          "burst_count": 1048576,
+          "row_hits": 1015808,
+          "row_misses": 16384,
+          "row_conflicts": 16384
+        }
+      ],
+      "sequential_write": [
+        {
+          "id": "sequential-write-16384bursts",
+          "kind": "sequential_write",
+          "bursts": 16384,
+          "bytes": 524288,
+          "completion_ns": 158.72,
+          "measured_gb_s": 3303.225806451613,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.8258064516129033
+        }
+      ],
+      "random": [
+        {
+          "id": "random-read-256bursts",
+          "kind": "random_read",
+          "bursts": 256,
+          "bytes": 8192,
+          "window_ns": 102.4,
+          "measured_gb_s": 80.0,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.02
+        },
+        {
+          "id": "random-read-2048bursts",
+          "kind": "random_read",
+          "bursts": 2048,
+          "bytes": 65536,
+          "window_ns": 177.15200000000002,
+          "measured_gb_s": 369.94219653179186,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.09248554913294797
+        },
+        {
+          "id": "random-read-16384bursts",
+          "kind": "random_read",
+          "bursts": 16384,
+          "bytes": 524288,
+          "window_ns": 969.7280000000001,
+          "measured_gb_s": 540.6546990496304,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.1351636747624076
+        },
+        {
+          "id": "random-read-65536bursts",
+          "kind": "random_read",
+          "bursts": 65536,
+          "bytes": 2097152,
+          "window_ns": 4621.312,
+          "measured_gb_s": 453.8001329492577,
+          "ceiling_gb_s": 4000.0,
+          "fraction_of_ceiling": 0.11345003323731442
+        }
+      ],
+      "duplex": {
+        "id": "mixed_duplex",
+        "bursts": 16384,
+        "bytes": 524288,
+        "window_ns": 978.9440000000001,
+        "measured_gb_s": 535.5648535564853,
+        "sum_of_directional_caps_gb_s": 8000.0,
+        "physical_interface_gb_s": 4000.0,
+        "bounded_by_sum_of_caps": true,
+        "bounded_by_physical": true
+      }
+    }
+  },
+  "checks": {
+    "hbm3e_reference": {
+      "identities_hold": true,
+      "sequential_never_exceeds_ceiling": true,
+      "sequential_converges": true,
+      "random_never_exceeds_ceiling": true,
+      "random_below_sequential": true,
+      "duplex_within_physical": true,
+      "dq_conservation": true
+    },
+    "hbm4_reference": {
+      "identities_hold": true,
+      "sequential_never_exceeds_ceiling": true,
+      "sequential_converges": true,
+      "random_never_exceeds_ceiling": true,
+      "random_below_sequential": true,
+      "duplex_within_physical": true,
+      "no_refresh_monotone_in_size": true,
+      "dq_conservation": true
+    },
+    "hbm3e_uncapped": {
+      "identities_hold": true,
+      "sequential_never_exceeds_ceiling": true,
+      "sequential_converges": true,
+      "random_never_exceeds_ceiling": true,
+      "random_below_sequential": true,
+      "duplex_within_physical": true
+    }
+  }
+}
