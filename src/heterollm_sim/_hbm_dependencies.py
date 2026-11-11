@@ -273,6 +273,23 @@ def validate_hbm_timing_constraints(payload: Mapping):
                  "重新选择可排程的刷新配置，使 tRFCpb≤tREFI；仍须满足 tRFCpb 表中下限和支持的刷新间隔范围。",
                  "Choose a feasible refresh configuration with tRFCpb <= tREFI, preserving the device-table minimum and supported refresh interval range.",
                  category="model_limit", rule="refresh_schedule", related_values={"refresh_interval_ns": interval, "maximum_ns": interval})
+        # Every SID's set of 16 REFpb falls due once per tREFI, and after each set
+        # the PC issues no REFpb for tRFCpb (the PC-wide reading of the set gap).
+        # The controller prepares one bank at a time: PRE, tRP, REFpb, tRREFD.
+        # Below this interval refresh falls behind without bound and takes the PC.
+        sets = payload.get("bank_groups_per_rank", 0) * payload.get("banks_per_group", 0) // 16
+        shortest = sets * (16 * (payload.get("precharge_to_activate_ns", 0) + payload["refresh_bank_gap_ns"])
+                           + payload["refresh_bank_cycle_ns"])
+        if shortest > interval:
+            fail("refresh_interval_ns", "per_bank refresh cannot keep up: every SID's set of 16 REFpb (one bank closed and "
+                 "refreshed at a time) plus tRFCpb after each set must fit in tREFI",
+                 f"每个 tREFI 内每个 SID 都要完成一组 16 次 REFpb，控制器一次关闭并刷新一个 bank（PRE、tRP、REFpb、tRREFD），"
+                 f"每组结束后本 PC 须等待 tRFCpb；{sets} 组至少需要 {shortest:g} ns，超过刷新间隔 {interval:g} ns，刷新会一直落后。",
+                 "加大刷新间隔，或在该温度档改用 all_bank（REFab）刷新。这是本模型刷新策略的限制，不是 JEDEC 对器件的限制。",
+                 "Use a longer refresh interval, or all_bank (REFab) refresh at this temperature rate. This is a limit of "
+                 "the modelled refresh policy, not a JEDEC device limit.",
+                 category="model_limit", rule="refresh_schedule",
+                 related_values={"refresh_interval_ns": interval, "minimum_ns": shortest, "sets": sets})
     if payload.get("refresh_policy") == "all_bank":
         if not _positive(interval) or not _positive(payload.get("refresh_cycle_ns")):
             fail("refresh_cycle_ns", "all_bank refresh requires positive tRFC and tREFI", "启用全 bank 刷新时，刷新耗时和刷新间隔都必须大于 0。",

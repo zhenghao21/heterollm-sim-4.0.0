@@ -402,7 +402,8 @@ def make_hbm_geometry_config(
     record(("activate_to_read_ns", "activate_to_write_ns", "write_to_precharge_ns"),
            "assumption", "simulator", "retained analytical tRCD14ns/tWR15ns; normative AC minimum cells are unspecified")
     record(("refresh_policy",), "controller_policy", "simulator",
-           "periodic REFpb per PC in bank order, postponed at most one tREFI under traffic" if refresh_bank_ns
+           "periodic REFpb per PC, one SID set of 16 at a time; within a set a bank without queued work goes first, "
+           "postponed at most one tREFI under traffic" if refresh_bank_ns
            else "periodic REFab per PC; no postponement/pull-in or per-bank optimization; disabled where tRFC is unresolved")
     record(("refresh_bank_cycle_ns",), "standard_reference" if refresh_bank_ns else "unknown", organization_source,
            "AC tRFCpb table for the selected density; not defined here for HBM2/3")

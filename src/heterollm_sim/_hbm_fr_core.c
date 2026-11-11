@@ -41,9 +41,10 @@
 #define FR_MIRROR_SOURCES 128
 #define FR_FIELDS 34
 /* A PC's columns: last PRE, blocked until, next read and write data, then its
- * per-bank refresh: the tRREFD gate, the next due time, and the tRFCpb gate
- * after the last REFpb completing a 16-bank SID group. */
-#define FR_PC 7
+ * per-bank refresh: the tRREFD gate, the next due time, the tRFCpb gate after
+ * the last REFpb completing a 16-bank SID set, and the banks of the current
+ * set already refreshed (bit i is bank i of the SID). */
+#define FR_PC 8
 /* Below this a product with the SID count's inverse divides exactly. */
 #define FR_SID_FAST (INT64_C(1) << 24)
 
@@ -1072,7 +1073,7 @@ typedef struct fr_item {
 typedef struct fr_queue {
     fr_item *items;
     uint64_t *hits;
-    int64_t *pending_hit;
+    int64_t *pending_hit, *queued;
     int64_t head, count, bypass, iter_request, iter_cursor;
     double slot_free;
     int dirty;
@@ -1170,10 +1171,59 @@ static int64_t fr_bank_cursor(const int64_t *g, int64_t lane, int64_t within)
     return ((sid * g[4] + rest % g[4]) * g[3] * g[0] + lane) * g[15] + rest / g[4];
 }
 
+FR_INLINE int64_t fr_bits16(uint64_t value)
+{
+    int64_t count = 0;
+    for (value &= 0xFFFF; value; value &= value - 1)
+        count += 1;
+    return count;
+}
+
+/* The bank a lane's due REFpb takes. Within an SID's set of 16 the order is the
+ * controller's choice: a bank with no queued work goes first, then one whose
+ * queued entries all need a row command anyway, and a bank with queued row hits
+ * last; ties go to the lowest bank. Without queues this is plain bank order. */
+FR_NOINLINE int64_t fr_refresh_pick(const fr_state *s, int64_t lane, double due, const fr_queue *lane_queues)
+{
+    int64_t base = fr_mod(fr_round(due / s->t[33]), s->banks) / 16 * 16, slot, best = -1, best_rank = 3;
+    uint64_t done = (uint64_t)s->pc[lane * FR_PC + 7];
+    for (slot = 0; slot < 16; ++slot) {
+        int64_t within = base + slot, rank = 0;
+        if (done >> slot & 1)
+            continue;
+        if (lane_queues) {
+            if (lane_queues[0].pending_hit[within] > 0 || lane_queues[1].pending_hit[within] > 0)
+                rank = 2;
+            else if (lane_queues[0].queued[within] > 0 || lane_queues[1].queued[within] > 0)
+                rank = 1;
+        }
+        if (rank < best_rank) {
+            best = within;
+            best_rank = rank;
+            if (!rank)
+                break;
+        }
+    }
+    return best;
+}
+
+/* REFpb from step ``first`` until bank ``within`` is refreshed, in bank order
+ * from a set of which ``done`` is already refreshed. */
+static int64_t fr_refresh_turn(uint64_t done, int64_t first, int64_t banks, int64_t within)
+{
+    int64_t slot = fr_mod(first, 16), base = fr_mod(first, banks) / 16 * 16;
+    if (base <= within && within < base + 16) {
+        int64_t bit = within - base;
+        if (done >> bit & 1)
+            return 16 - slot + banks - 16 + bit;
+        return bit - fr_bits16(done & ((UINT64_C(1) << bit) - 1));
+    }
+    return 16 - slot + fr_mod(within - base - 16, banks);
+}
+
 /* A REFpb's rising edge. It needs the bank closed past tRP and tRC, tRREFD from
- * the lane's last REFpb, and the ACT gaps and tFAW, which count it as an ACT.
- * Banks refresh in index order, so the first bank of a SID's set also waits out
- * the last bank of the set before it. */
+ * the lane's last REFpb, the tRFCpb gate of the last completed set, and the ACT
+ * gaps and tFAW, which count it as an ACT. */
 FR_NOINLINE double fr_refresh_bank_start(const fr_state *s, int64_t lane, int64_t within, double earliest)
 {
     const double *t = s->t;
@@ -1184,8 +1234,6 @@ FR_NOINLINE double fr_refresh_bank_start(const fr_state *s, int64_t lane, int64_
     double ready = fr_max(fr_max(fr_max(fr_max(fr_max(earliest, bank_bf[1]), lane_pc[1]), lane_pc[4]), lane_pc[6]), row_bus);
     double anchor;
     int64_t group = within / s->g[4], previous;
-    if (within % 16 == 0)
-        ready = fr_max(ready, bank_bf[15 * 7 + 1]);
     if (bank_bf[0] >= 0)
         ready = fr_max(ready, fr_after_tick(bank_bf[0], t[8], ticks[8], half, inverse));
     anchor = fr_align(ready, t[0]);
@@ -1219,8 +1267,15 @@ FR_NOINLINE void fr_refresh_bank(const fr_state *s, int64_t lane, int64_t within
     done = fr_after_tick(start, t[31], s->ticks[31], s->half, s->inverse);
     bank_bf[1] = done;
     bank_bf[5] = done;
-    if (within % 16 == 15)
-        lane_pc[6] = fr_after_tick(start, t[31], s->ticks[31], s->half, s->inverse);
+    {
+        uint64_t set = (uint64_t)lane_pc[7] | (UINT64_C(1) << (within & 15));
+        if (set == 0xFFFF) {
+            /* The set is complete: no REFpb on this PC for tRFCpb. */
+            set = 0;
+            lane_pc[6] = fr_after_tick(start, t[31], s->ticks[31], s->half, s->inverse);
+        }
+        lane_pc[7] = (double)set;
+    }
     if (t[30] > 0) {
         fr_faw_prune(s, lane, fr_max(0., s->resources[ch * 4]));
         fr_record_activate(s, lane, start);
@@ -1235,7 +1290,8 @@ FR_NOINLINE void fr_refresh_bank(const fr_state *s, int64_t lane, int64_t within
  * queued hits stays open for them. A REFpb one tREFI late takes the lane.
  *
  * Returns the plan start below which this cannot change. The times it compares
- * only rise until a command reaches this bank, which resets the caller's copy.
+ * only rise, and the bank chosen stays, until a command or a new queue entry
+ * reaches a bank of the set, which resets the caller's copy.
  */
 FR_NOINLINE double fr_plan_refresh(const fr_state *s, int64_t lane, const fr_queue *lane_queues,
                                    double *plan_start, int64_t *plan_kind, int64_t *plan_offset, int64_t *target)
@@ -1243,7 +1299,7 @@ FR_NOINLINE double fr_plan_refresh(const fr_state *s, int64_t lane, const fr_que
     const double *t = s->t;
     const double *lane_pc = s->pc + lane * FR_PC;
     double planned = *plan_start, due = lane_pc[5], late = due + t[20], when, floor_;
-    int64_t within = fr_mod(fr_round(due / t[33]), s->banks), bank = lane * s->banks + within, kind;
+    int64_t within = fr_refresh_pick(s, lane, due, lane_queues), bank = lane * s->banks + within, kind;
     int take;
     *target = within;
     if (s->rows[bank] >= 0) {
@@ -1343,14 +1399,15 @@ FR_NOINLINE int fr_skip_refresh_gap(const fr_state *s, int64_t ch, double latest
     if (t[29] > 0) {
         for (pseudo = 0; pseudo < 2; ++pseudo) {
             int64_t lane = 2 * ch + pseudo, first = fr_round(s->pc[lane * FR_PC + 5] / step);
-            int64_t skipped = resume - first, phase = fr_mod(first, banks);
+            int64_t skipped = resume - first;
+            uint64_t done = (uint64_t)s->pc[lane * FR_PC + 7];
             if (skipped <= 0)
                 continue;
             group_gate[pseudo] = fr_refresh_skip_group_gate(s, lane, first, skipped);
             if (group_gate[pseudo] > latest)
                 return 0;
             for (within = 0; within < banks; ++within) {
-                int64_t bank = lane * banks + within, turn = within - phase + (within < phase ? banks : 0);
+                int64_t bank = lane * banks + within, turn = fr_refresh_turn(done, first, banks, within);
                 if (s->rows[bank] >= 0
                         && s->bf[bank * 7] + t[29] <= (double)(turn < skipped ? first + turn : resume) * step)
                     return 0;
@@ -1359,21 +1416,30 @@ FR_NOINLINE int fr_skip_refresh_gap(const fr_state *s, int64_t ch, double latest
     }
     for (pseudo = 0; pseudo < 2; ++pseudo) {
         int64_t lane = 2 * ch + pseudo, first = fr_round(s->pc[lane * FR_PC + 5] / step);
-        int64_t skipped = resume - first, phase = fr_mod(first, banks);
+        int64_t skipped = resume - first, taken;
+        uint64_t done = (uint64_t)s->pc[lane * FR_PC + 7];
         if (skipped <= 0)
             continue;
         for (within = 0; within < banks; ++within) {
-            int64_t bank = lane * banks + within, turn = within - phase + (within < phase ? banks : 0);
+            int64_t bank = lane * banks + within, turn = fr_refresh_turn(done, first, banks, within);
             if (s->rows[bank] >= 0 && turn < skipped) {
                 s->rows[bank] = -1;
                 counts[1] += 1;
                 commands += 1;
             }
         }
+        if (skipped < 16 - fr_mod(first, 16)) {
+            /* The lowest unrefreshed banks of the current set, as REFpb without traffic takes them. */
+            for (taken = 0; taken < skipped; ++taken)
+                done |= ~done & (done + 1);
+        } else {
+            done = (UINT64_C(1) << fr_mod(resume, 16)) - 1;
+        }
         counts[4] += (double)skipped;
         commands += skipped;
         s->pc[lane * FR_PC + 5] = (double)resume * step;
         s->pc[lane * FR_PC + 6] = group_gate[pseudo];
+        s->pc[lane * FR_PC + 7] = (double)done;
     }
     if (!commands)
         return 0;
@@ -1411,7 +1477,7 @@ FR_NOINLINE void fr_refresh_gap(const fr_state *s, int64_t ch, double first_arri
                 continue;
             }
         }
-        within = fr_mod(fr_round(due / t[33]), s->banks);
+        within = fr_refresh_pick(s, lane, due, NULL);
         bank = lane * s->banks + within;
         opened = s->rows[bank] >= 0;
         when = opened ? fr_precharge_start(s, lane, bank, due) : fr_refresh_bank_start(s, lane, within, due);
@@ -1514,7 +1580,7 @@ static int fr_state_matches(const fr_state *s, const fr_sources *o, int64_t sour
     for (pseudo = 0; pseudo < 2; ++pseudo) {
         const double *mine = s->pc + (first_lane + pseudo) * FR_PC;
         const double *theirs = pc_before + pseudo * FR_PC;
-        if (mine[2] != theirs[2] || mine[3] != theirs[3] || mine[5] != theirs[5]
+        if (mine[2] != theirs[2] || mine[3] != theirs[3] || mine[5] != theirs[5] || mine[7] != theirs[7]
                 || fr_max(mine[4], lowest) != fr_max(theirs[4], lowest)
                 || fr_max(mine[6], lowest) != fr_max(theirs[6], lowest)
                 || fr_max(mine[1], lowest) != fr_max(theirs[1], lowest)
@@ -1812,7 +1878,7 @@ typedef struct fr_tables {
     double *saved_stats, *partial_stats, *close_deadlines, *close_starts, *gaps, *no_gaps;
     fr_item *items;
     uint64_t *hits, *row_seen;
-    int64_t *pending_hit;
+    int64_t *pending_hit, *queued;
     int8_t *early;
     double *act_gates;
     uint8_t *act_gate_ready;
@@ -1845,6 +1911,7 @@ static void fr_lay_out(fr_arena *arena, const fr_args *a, int mirror, int64_t ca
     w->act_gates = (double *)fr_carve(arena, groups, sizeof(double));
     w->act_gate_ready = (uint8_t *)fr_carve(arena, groups, sizeof(uint8_t));
     w->pending_hit = (int64_t *)fr_carve(arena, 4 * banks, sizeof(int64_t));
+    w->queued = (int64_t *)fr_carve(arena, 4 * banks, sizeof(int64_t));
     w->early = (int8_t *)fr_carve(arena, 2 * banks, sizeof(int8_t));
     w->gaps = (double *)fr_carve(arena, 2 * groups * groups, sizeof(double));
     w->no_gaps = (double *)fr_carve(arena, groups, sizeof(double));
@@ -2041,6 +2108,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
             queue->items = tables.items + (pseudo * 2 + direction) * depth;
             queue->hits = tables.hits + (pseudo * 2 + direction) * hit_words;
             queue->pending_hit = tables.pending_hit + (pseudo * 2 + direction) * banks;
+            queue->queued = tables.queued + (pseudo * 2 + direction) * banks;
         }
     }
 
@@ -2207,6 +2275,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 queue->slot_free = 0.;
                 queue->dirty = 0;
                 memset(queue->pending_hit, 0, (size_t)banks * sizeof(int64_t));
+                memset(queue->queued, 0, (size_t)banks * sizeof(int64_t));
                 memset(queue->hits, 0, (size_t)hit_words * sizeof(uint64_t));
             }
             draining[pseudo] = 0;
@@ -2290,6 +2359,10 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                                 stale_deadline = 1;
                         }
                         pc_seen[lane] = 1;
+                        queue->queued[bank_within] += 1;
+                        /* Queued work changes which bank of the set a due REFpb takes. */
+                        if (refresh_target[pseudo] >= 0 && (bank_within >> 4) == (refresh_target[pseudo] >> 4))
+                            refresh_floor[pseudo] = pc[lane * FR_PC + 5];
                         if (rows[bank] == row) {
                             queue->pending_hit[bank_within] += 1;
                             fr_set_bit(queue->hits, queue->count);
@@ -2555,7 +2628,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 }
                 continue;
             }
-            if (bank_within == refresh_target[pseudo])
+            if (refresh_target[pseudo] >= 0 && (bank_within >> 4) == (refresh_target[pseudo] >> 4))
                 refresh_floor[pseudo] = pc[lane * FR_PC + 5];
             if (kind == 3) {
                 fr_refresh_bank(s, lane, bank_within, start, tally);
@@ -2563,7 +2636,9 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 refresh_target[pseudo] = -1;
                 faw_expiry[pseudo] = -HUGE_VAL;
                 refresh_issued[pseudo] += 1;
-                if (!refreshed && refresh_issued[0] >= banks && refresh_issued[1] >= banks) {
+                /* A set in progress is finished in any order, so every bank is only
+                 * certain to have had its REFpb 15 after a whole round. */
+                if (!refreshed && refresh_issued[0] >= banks + 15 && refresh_issued[1] >= banks + 15) {
                     refreshed = 1;
                     reach_open = fr_max(reach, resources[row_bus * 4]);
                 }
@@ -2729,6 +2804,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 ch_int[request * 3 + outcome] += 1;
                 lane_stats[outcome] += 1;
                 queue->pending_hit[bank_within] -= 1;
+                queue->queued[bank_within] -= 1;
                 fr_remove_bit(queue->hits, hit_words, chosen);
                 /* Remove the entry, keeping the others in age order. */
                 first_slot = queue->head;

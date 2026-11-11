@@ -47,6 +47,8 @@ def hbm4(**overrides):
 CONFIG = hbm4()
 REFAB = hbm4(refresh_policy="all_bank")
 TWELVE_HIGH = hbm4(dies_per_stack=12, die_density_gbits=24)
+# The half-rate periodic refresh of the hot temperature range.
+HALF_RATE = hbm4(dies_per_stack=12, die_density_gbits=24, refresh_interval_ns=1950.)
 
 
 def numeric_core(config=CONFIG):
@@ -324,7 +326,7 @@ def dense_stream(config, count=2500, arrival=0.):
         sid=rng.randrange(sids), row=rng.randrange(3), config=config), arrival=arrival) for index in range(count)]
 
 
-@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH), ids=("16H", "12H"))
+@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH, HALF_RATE), ids=("16H", "12H", "12H-half-rate"))
 def test_per_bank_refresh_under_traffic_meets_every_constraint(config):
     results, log = run_recorded(dense_stream(config, arrival=config.refresh_interval_ns - 100.), config=config)
     checked = check_legal(log, config)
@@ -356,7 +358,7 @@ def test_a_gap_catches_up_every_refresh_in_every_organization(dies, density):
     assert checked["REFpb"] >= expected
 
 
-@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH), ids=("16H", "12H"))
+@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH, HALF_RATE), ids=("16H", "12H", "12H-half-rate"))
 def test_skipping_a_gap_changes_nothing_later_commands_can_see(config, monkeypatch):
     def run(skip):
         if not skip:
@@ -371,7 +373,7 @@ def test_skipping_a_gap_changes_nothing_later_commands_can_see(config, monkeypat
         return ([result.completion_ns for result in results], sorted(timeline.ready_ns.items()),
                 sorted(timeline.bytes_moved.items()), sorted((key, bank.open_row) for key, bank in core._banks.items()),
                 {key: (state["refresh_gate"], state["refresh_group_gate"], state["next_refresh"],
-                        state["activate_window"])
+                        state["refresh_done"], state["activate_window"])
                  for key, state in core._hbm_control_state["pcs"].items()},
                 sum(result.counters.get("refresh_commands", 0) for result in results),
                 sum(result.counters.get("precharge_commands", 0) for result in results)), dict(timeline.busy_ns)
@@ -436,6 +438,78 @@ def test_row_command_chooses_the_earliest_bank_instead_of_the_oldest_miss(gate):
     assert first["mapping"].bank == 1
     assert first["start"] == 0.
     assert results[1].completion_ns < results[0].completion_ns
+
+
+def test_due_refresh_takes_an_idle_bank_ahead_of_one_with_queued_hits():
+    step = CONFIG.refresh_interval_ns / CONFIG.bank_count
+    due = CONFIG.refresh_interval_ns + 3 * step
+    # Banks 0-2 of the set are refreshed; bank 3 holds queued hits when the fourth REFpb falls due.
+    items = [request(index, READ, address(0, bank=3, column=index), arrival=due - 15.) for index in range(30)]
+    items.append(request("last", READ, address(0, bank=4, sid=1), arrival=due + 400.))
+    results, log = run_recorded(items)
+    refreshes = [event for event in log if event["name"] == "REFRESH_BANK" and event["key"][2] == 0]
+    fourth = refreshes[3]
+    columns = [event["start"] for event in log if event["name"] == "READ_COMMAND" and event["mapping"].bank == 3]
+    # It does not wait for the hits: the lowest bank without queued work takes it, and bank 3 follows after them.
+    assert (fourth["mapping"].bank_group, fourth["mapping"].bank) == (0, 4)
+    assert fourth["start"] < max(columns)
+    assert fourth["start"] - due < CONFIG.precharge_to_activate_ns + step
+    later = next(event["start"] for event in refreshes[4:]
+                 if (event["mapping"].bank_group, event["mapping"].bank) == (0, 3))
+    assert later > max(columns)
+    assert sum(result.counters["row_hits"] for result in results) == 29
+    check_legal(log)
+
+
+def test_refresh_order_within_a_set_never_repeats_a_bank_and_completes_each_set():
+    config = HALF_RATE
+    results, log = run_recorded(dense_stream(config, 4000, arrival=config.refresh_interval_ns - 100.), config=config)
+    for pseudo in range(2):
+        banks = [event["mapping"].bank_group * config.banks_per_group + event["mapping"].bank
+                 for event in log if event["name"] == "REFRESH_BANK" and event["key"][2] == pseudo]
+        assert len(banks) >= 5 * 16
+        out_of_order = 0
+        for first in range(0, len(banks) - 15, 16):
+            group = banks[first:first + 16]
+            sid = first // 16 % config.sid_count
+            assert sorted(group) == list(range(sid * 16, sid * 16 + 16)), (pseudo, first, group)
+            out_of_order += group != sorted(group)
+        # Under traffic the order follows the queues, not the bank index.
+        assert out_of_order > 0
+    check_legal(log, config)
+
+
+@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH, hbm4(dies_per_stack=4, die_density_gbits=24, capacity_bytes=80 * GB)),
+                         ids=("16H", "12H", "4H"))
+def test_refresh_turns_match_stepping_the_sets_in_bank_order(config):
+    controller = _FrFcfsController(reference_core(config), (request("x", READ, 0),))
+    rng = random.Random(17)
+    banks = config.bank_count
+    for _ in range(400):
+        first = rng.randrange(0, 50 * banks)
+        slot = first % 16
+        done = sum(1 << bit for bit in rng.sample(range(16), slot))
+        # Step the REFpb from ``first``: the rest of this set in bank order, then whole sets.
+        base = first % banks // 16 * 16
+        order = [base + bit for bit in range(16) if not done >> bit & 1]
+        while len(order) < 2 * banks:
+            base = (base + 16) % banks
+            order += range(base, base + 16)
+        for within in range(banks):
+            assert controller.refresh_turn(done, first, within) == order.index(within), (first, done, within)
+
+
+def test_a_refresh_rate_the_policy_cannot_sustain_is_rejected_when_configured():
+    from heterollm_sim._hbm_errors import HBMConfigError
+    # Twelve-high: three sets of (16 x (tRP + tRREFD) + tRFCpb) fit the half rate, not the quarter rate.
+    assert HALF_RATE.refresh_policy == "per_bank"
+    for overrides in ({"dies_per_stack": 12, "die_density_gbits": 24, "refresh_interval_ns": 975.},
+                      {"refresh_interval_ns": 1950.}):
+        with pytest.raises(HBMConfigError, match="per_bank refresh cannot keep up"):
+            hbm4(**overrides)
+    # REFab remains available at that rate.
+    quarter = hbm4(dies_per_stack=12, die_density_gbits=24, refresh_interval_ns=975., refresh_policy="all_bank")
+    assert quarter.refresh_policy == "all_bank"
 
 
 def test_queued_hits_keep_a_row_open_past_the_refresh_it_is_due():
@@ -830,7 +904,7 @@ def test_row_command_ties_keep_the_oldest_miss_for_each_bank():
     assert (first["mapping"].bank, first["row"]) == (3, 1)
 
 
-@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH), ids=("16H", "12H"))
+@pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH, HALF_RATE), ids=("16H", "12H", "12H-half-rate"))
 def test_dense_traffic_with_refresh_is_bit_identical_on_both_paths(config):
     compiled, scalar = numeric_core(config), reference_core(config)
     first, second = [], []
@@ -843,7 +917,7 @@ def test_dense_traffic_with_refresh_is_bit_identical_on_both_paths(config):
     assert left["pcs"].keys() == right["pcs"].keys()
     for key, state in right["pcs"].items():
         for name in ("last_precharge", "blocked_until", "refresh_gate", "refresh_group_gate",
-                     "next_refresh", "scheduler_stats"):
+                     "next_refresh", "refresh_done", "scheduler_stats"):
             assert left["pcs"][key][name] == state[name], (key, name)
 
 
@@ -1080,7 +1154,8 @@ def test_kernel_reports_its_failures_as_python_errors():
 
 @pytest.mark.parametrize("seed", range(3))
 @pytest.mark.parametrize("policy,overrides", (
-    ("all_bank", {}), ("disabled", {}), ("per_bank", {}), ("per_bank", {"dies_per_stack": 12, "die_density_gbits": 24})))
+    ("all_bank", {}), ("disabled", {}), ("per_bank", {}), ("per_bank", {"dies_per_stack": 12, "die_density_gbits": 24}),
+    ("per_bank", {"dies_per_stack": 12, "die_density_gbits": 24, "refresh_interval_ns": 1950.})))
 def test_channel_mirror_matches_simulating_every_channel(seed, policy, overrides):
     from heterollm_sim._compiled_hbm import _pack_hbm_numeric
     from heterollm_sim._hbm_numeric import _run_fr_fcfs_channels

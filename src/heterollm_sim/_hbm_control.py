@@ -61,8 +61,10 @@ class _Controller:
             "column": {"read": {}, "write": {}}, "write_end": {},
             "last_precharge": None, "blocked_until": 0.0,
             "next_data_start": {"read": 0.0, "write": 0.0},
-            "refresh_gate": 0.0, "refresh_group_gate": 0.0, "next_refresh": -1.0})
+            "refresh_gate": 0.0, "refresh_group_gate": 0.0, "next_refresh": -1.0,
+            "refresh_done": 0})
         state.setdefault("refresh_group_gate", 0.0)
+        state.setdefault("refresh_done", 0)
         return state
 
     def bank(self, mapping):
@@ -581,14 +583,51 @@ class _FrFcfsController(_Controller):
             target = self.refresh_targets[(key, within)] = (mapping, self.core._bank_id(mapping))
         return target
 
+    def refresh_pick(self, key, due, lane=None):
+        """The bank the due REFpb takes; ``fr_refresh_pick`` in the kernel.
+
+        Within an SID's set of 16 the order is the controller's choice.  A bank with
+        no queued work goes first, then one whose queued entries all need a row
+        command anyway, and a bank with queued row hits last; ties go to the lowest
+        bank.  Without queued work this is plain bank order.
+        """
+        base = self.refresh_within(due) // 16 * 16
+        done = self.pc(key)["refresh_done"]
+        best, best_rank = -1, 3
+        for slot in range(16):
+            if done >> slot & 1:
+                continue
+            rank = 0
+            if lane is not None and lane["queued"]:
+                rid = self.refresh_target(key, base + slot)[1]
+                if lane["pending_hit"][0].get(rid, 0) > 0 or lane["pending_hit"][1].get(rid, 0) > 0:
+                    rank = 2
+                elif lane["queued"].get(rid, 0) > 0:
+                    rank = 1
+            if rank < best_rank:
+                best, best_rank = base + slot, rank
+                if rank == 0:
+                    break
+        return best
+
+    def refresh_turn(self, done, first, within):
+        """REFpb from step ``first`` until bank ``within`` is refreshed, in bank order."""
+        count = self.config.bank_count
+        slot = first % 16
+        base = first % count // 16 * 16
+        if base <= within < base + 16:
+            bit = within - base
+            if done >> bit & 1:
+                return 16 - slot + count - 16 + bit
+            return bit - (done & ((1 << bit) - 1)).bit_count()
+        return 16 - slot + (within - base - 16) % count
+
     def refresh_bank_start(self, key, within, mapping, bank, earliest):
         """A REFpb's rising edge; ``fr_refresh_bank_start`` in the kernel."""
         c, pc = self.config, self.pc(key)
         row_bus = self.timeline.available_ns(self.bus_id(key, "row"))
         ready = max(earliest, bank["activate_ready"], pc["blocked_until"],
                     pc["refresh_gate"], pc["refresh_group_gate"], row_bus)
-        if within % 16 == 0:
-            ready = max(ready, self.banks[self.refresh_target(key, within + 15)[1]]["activate_ready"])
         if bank["last_activate"] is not None:
             ready = max(ready, self.after(bank["last_activate"], c.activate_cycle_ns))
         anchor = self.align(ready, self.clock)
@@ -610,7 +649,10 @@ class _FrFcfsController(_Controller):
         if command.start_ns > due + 8 * c.refresh_interval_ns:
             raise ValueError("HBM periodic refresh missed the maximum eight postponed intervals")
         pc["refresh_gate"] = self.after(command.start_ns, c.refresh_bank_gap_ns)
-        if within % 16 == 15:
+        pc["refresh_done"] |= 1 << within % 16
+        if pc["refresh_done"] == 0xFFFF:
+            # The set is complete: no REFpb on this PC for tRFCpb.
+            pc["refresh_done"] = 0
             pc["refresh_group_gate"] = self.after(command.start_ns, c.refresh_bank_cycle_ns)
         bank["activate_ready"] = self.after(command.start_ns, c.refresh_bank_cycle_ns)
         old.ready_ns = bank["activate_ready"]
@@ -674,19 +716,28 @@ class _FrFcfsController(_Controller):
             if gate > latest:
                 return False
             closing = []
+            done = pc["refresh_done"]
             for within in range(c.bank_count):
                 old, bank = self.bank(self.refresh_target(lane["key"], within)[0])
                 if old.open_row is None:
                     continue
-                turn = (within - first) % c.bank_count
+                turn = self.refresh_turn(done, first, within)
                 if (c.maximum_active_ns > 0 and bank["last_activate"] + c.maximum_active_ns
                         <= (first + turn if turn < skipped else resume) * step):
                     return False
                 if turn < skipped:
                     closing.append(old)
-            plans.append((pc, skipped, closing, gate))
+            if skipped < 16 - first % 16:
+                # The lowest unrefreshed banks of the current set, as REFpb without traffic takes them.
+                after = done
+                for _ in range(skipped):
+                    after |= ~after & (after + 1)
+            else:
+                after = (1 << (resume % 16)) - 1
+            plans.append((pc, skipped, closing, gate, after))
         commands = 0
-        for pc, skipped, closing, gate in plans:
+        for pc, skipped, closing, gate, after in plans:
+            pc["refresh_done"] = after
             for old in closing:
                 old.open_row = None
             self.counts["precharge_commands"] += len(closing)
@@ -733,7 +784,7 @@ class _FrFcfsController(_Controller):
                 skip_floor = math.inf
                 if self.skip_refresh_gap(lanes, latest):
                     continue
-            within = self.refresh_within(due)
+            within = self.refresh_pick(key, due)
             mapping = self.refresh_target(key, within)[0]
             old, bank = self.bank(mapping)
             opened = old.open_row is not None
@@ -754,7 +805,7 @@ class _FrFcfsController(_Controller):
         due = pc["next_refresh"]
         if due > planned:
             return
-        within = self.refresh_within(due)
+        within = self.refresh_pick(key, due, lane)
         mapping, rid = self.refresh_target(key, within)
         old, bank = self.bank(mapping)
         if old.open_row is not None:
@@ -811,6 +862,7 @@ class _FrFcfsController(_Controller):
                          rid=rid, within=within, group=mapping.bank_group,
                          sid=within // 16, arrival=max(self.requests[index].arrival_ns, lane["slot_free"][direction]))
             queue.append(entry)
+            lane["queued"][rid] = lane["queued"].get(rid, 0) + 1
             if old.open_row == row:
                 lane["pending_hit"][direction][rid] = lane["pending_hit"][direction].get(rid, 0) + 1
             else:
@@ -945,7 +997,7 @@ class _FrFcfsController(_Controller):
             reads, writes = pseudo_lanes.get(pseudo, ([], []))
             lanes.append(dict(key=(*channel_key, pseudo), pending=(reads, writes), cursor=[0, 0],
                               queues=([], []), slot_free=[0.0, 0.0], dirty=[False, False],
-                              pending_hit=[{}, {}], bypass=[0, 0], early={}, draining=False,
+                              pending_hit=[{}, {}], queued={}, bypass=[0, 0], early={}, draining=False,
                               reads_since=q[4], last_column=-1.0, last_group=-1, lane_request=-1,
                               act_floor=0.0, stale=True, start=math.inf, kind=-1, direction=0, offset=0,
                               own_last={}, own_wait={},
@@ -1118,6 +1170,10 @@ class _FrFcfsController(_Controller):
         stats[outcome] += 1
         hits = lane["pending_hit"][direction]
         hits[rid] = hits.get(rid, 0) - 1
+        if lane["queued"][rid] == 1:
+            del lane["queued"][rid]
+        else:
+            lane["queued"][rid] -= 1
         del queue[offset]
         lane["bypass"][direction] = lane["bypass"][direction] + 1 if offset else 0
         lane["slot_free"][direction] = command.start_ns
