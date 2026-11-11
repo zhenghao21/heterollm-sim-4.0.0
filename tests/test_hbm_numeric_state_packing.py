@@ -149,7 +149,7 @@ def test_seen_flag_materializes_default_pc_even_without_changed_timing_values():
     assert pc == {"activate_window": [], "activate": {}, "column": {"read": {}, "write": {}},
                   "write_end": {}, "last_precharge": None, "blocked_until": 0.,
                   "next_data_start": {"read": 0., "write": 0.}, "scheduler_stats": [0.] * 10,
-                  "refresh_gate": 0., "refresh_group_gate": 0., "next_refresh": -1.}
+                  "refresh_gate": 0., "refresh_group_gate": 0., "next_refresh": -1., "refresh_done": 0}
 
 
 def test_commit_preserves_materialization_of_control_only_bank():

@@ -215,8 +215,9 @@ typedef struct fr_state {
     int64_t *close_banks, *close_order;
     double *close_deadlines, *close_starts;
     int grouped;
-    double *act_gates;
-    uint8_t *act_gate_ready;
+    double *act_gates, *act_floors;
+    uint8_t *act_gate_ready, *act_floor_ready;
+    uint64_t *miss_seen;
 } fr_state;
 
 static void fr_command(const fr_state *s, int64_t channel, int64_t kind, double earliest, double cycles, int rising,
@@ -972,6 +973,34 @@ FR_INLINE double fr_activate_group_gate(const fr_state *s, int64_t lane, int64_t
     return gate;
 }
 
+/* The ACT edge from a ready time that already holds the bank's own terms, under tRRD
+ * gate ``gate``. ``base`` gets the anchor before the gate, ``fixed`` the anchor the
+ * tFAW loop settles on. The edge never falls when ``ready`` or ``gate`` rises: every
+ * step is a max, a round up to the clock, or the earliest tFAW slot no earlier than its
+ * argument; the loop runs that inflationary map to its least fixed point. */
+FR_INLINE double fr_activate_from(const fr_state *s, int64_t lane, double gate, double ready, double *base,
+                                  double *fixed)
+{
+    const double *t = s->t;
+    const int64_t *ticks = s->ticks;
+    const double *lane_pc = s->pc + lane * FR_PC;
+    double half = s->half, inverse = s->inverse;
+    double anchor = fr_max(fr_after_tick(fr_align(ready, t[0]), t[0], ticks[0], half, inverse), lane_pc[4]);
+    *base = anchor;
+    anchor = fr_max(anchor, gate);
+    for (;;) {
+        double start, aligned;
+        anchor = fr_faw_ready(s, lane, anchor);
+        start = fr_align(fr_after_tick(anchor, -t[0], s->clock_back, half, inverse), t[0]);
+        aligned = fr_after_tick(start, t[0], ticks[0], half, inverse);
+        if (t[30] <= 0 || aligned == anchor) {
+            *fixed = t[30] <= 0 ? *base : anchor;
+            return start;
+        }
+        anchor = aligned;
+    }
+}
+
 /* _activate_start for an entry already on the queue, on precomputed ticks.
  * The row bus alone bounds later ACTs, so the caller has pruned tFAW history to it. */
 FR_INLINE double fr_activate_start(const fr_state *s, int64_t lane, int64_t bank, int64_t group, double earliest)
@@ -982,21 +1011,37 @@ FR_INLINE double fr_activate_start(const fr_state *s, int64_t lane, int64_t bank
     double half = s->half, inverse = s->inverse;
     double row_bus = s->resources[(lane >> 1) * 4];
     double ready = fr_max(fr_max(fr_max(earliest, bf[bank * 7 + 1]), lane_pc[1]), row_bus);
-    double anchor;
+    double base, fixed;
     if (bf[bank * 7] >= 0)
         ready = fr_max(ready, fr_after_tick(fr_after_tick(bf[bank * 7], t[8], ticks[8], half, inverse),
                                             -t[0], s->clock_back, half, inverse));
-    anchor = fr_max(fr_after_tick(fr_align(ready, t[0]), t[0], ticks[0], half, inverse), lane_pc[4]);
-    anchor = fr_max(anchor, fr_activate_group_gate(s, lane, group));
-    for (;;) {
-        double start, aligned;
-        anchor = fr_faw_ready(s, lane, anchor);
-        start = fr_align(fr_after_tick(anchor, -t[0], s->clock_back, half, inverse), t[0]);
-        aligned = fr_after_tick(start, t[0], ticks[0], half, inverse);
-        if (t[30] <= 0 || aligned == anchor)
-            return start;
-        anchor = aligned;
+    return fr_activate_from(s, lane, fr_activate_group_gate(s, lane, group), ready, &base, &fixed);
+}
+
+/* The lowest ACT edge any closed bank of ``group`` can have in this row scan: the edge
+ * from the lane's bank-free ready time. Every bank's own terms only raise its ready time,
+ * so its edge is at least this. Slot ``groups`` holds the edge without a gate and
+ * ``groups + 1`` its fixed point; a gate at or below that point leaves the edge as is. */
+FR_INLINE double fr_activate_floor(const fr_state *s, int64_t lane, int64_t group, double act_floor)
+{
+    int64_t groups = s->g[5];
+    double *floors = s->act_floors, gate, base, fixed;
+    if (s->act_floor_ready[group])
+        return floors[group];
+    if (!s->act_floor_ready[groups]) {
+        double ready = fr_max(fr_max(act_floor, s->pc[lane * FR_PC + 1]), s->resources[(lane >> 1) * 4]);
+        floors[groups] = fr_activate_from(s, lane, -HUGE_VAL, ready, &base, &floors[groups + 1]);
+        s->act_floor_ready[groups] = 1;
     }
+    gate = fr_activate_group_gate(s, lane, group);
+    if (gate <= floors[groups + 1]) {
+        floors[group] = floors[groups];
+    } else {
+        double ready = fr_max(fr_max(act_floor, s->pc[lane * FR_PC + 1]), s->resources[(lane >> 1) * 4]);
+        floors[group] = fr_activate_from(s, lane, gate, ready, &base, &fixed);
+    }
+    s->act_floor_ready[group] = 1;
+    return floors[group];
 }
 
 /* Exact queued PRE/ACT edge, unless a conservative lower bound already loses.
@@ -1029,6 +1074,9 @@ FR_INLINE double fr_queued_row_start(const fr_state *s, int64_t lane, int64_t ba
     /* The half-clock margin covers rounding of the plain sums below 2**44
      * half clocks; outside that range use the exact clock helpers. */
     if (row_floor - s->half >= best && row_floor < plain_limit)
+        return HUGE_VAL;
+    /* A tie loses too, so a group floor at or after ``best`` settles every bank of it. */
+    if (fr_activate_floor(s, lane, group, act_floor) >= best)
         return HUGE_VAL;
     return fr_activate_start(s, lane, bank, group, fr_max(entry, act_floor));
 }
@@ -1069,10 +1117,12 @@ typedef struct fr_item {
 
 /* One FIFO scheduling queue of a PC: its entries in ring slots, age order from
  * head. Bit i of ``hits`` says whether the i-th oldest entry's row is open, so
- * planning visits row hits and row misses without scanning the queue. */
+ * planning visits row hits and row misses without scanning the queue. Bit i of
+ * ``firsts`` says whether the i-th oldest entry is its bank's oldest row miss:
+ * a row command only ever serves that entry, so planning visits one per bank. */
 typedef struct fr_queue {
     fr_item *items;
-    uint64_t *hits;
+    uint64_t *hits, *firsts;
     int64_t *pending_hit, *queued;
     int64_t head, count, bypass, iter_request, iter_cursor;
     double slot_free;
@@ -1110,6 +1160,26 @@ FR_INLINE void fr_remove_bit(uint64_t *bits, int64_t words, int64_t offset)
     bits[word] = value;
 }
 
+/* Point ``firsts`` of one bank at its oldest entry whose row is not ``open_row``
+ * (-1: the bank is closed, so its oldest entry). */
+static void fr_first_of_bank(fr_queue *queue, int64_t capacity, int64_t within, int64_t open_row)
+{
+    int64_t position = queue->head, index, found = 0;
+    for (index = 0; index < queue->count; ++index) {
+        const fr_item *item = &queue->items[position];
+        if (item->within == within) {
+            queue->firsts[index >> 6] &= ~(UINT64_C(1) << (index & 63));
+            if (!found && item->row != open_row) {
+                queue->firsts[index >> 6] |= UINT64_C(1) << (index & 63);
+                found = 1;
+            }
+        }
+        position += 1;
+        if (position == capacity)
+            position = 0;
+    }
+}
+
 /* Rebuild each direction's open-row hits after maintenance closed rows. */
 FR_NOINLINE void fr_recount(const fr_state *s, int64_t ch, fr_queue queues[2][2], int64_t hit_words)
 {
@@ -1123,11 +1193,16 @@ FR_NOINLINE void fr_recount(const fr_state *s, int64_t ch, fr_queue queues[2][2]
             queue->dirty = 1;
             memset(queue->pending_hit, 0, (size_t)s->banks * sizeof(int64_t));
             memset(queue->hits, 0, (size_t)hit_words * sizeof(uint64_t));
+            memset(queue->firsts, 0, (size_t)hit_words * sizeof(uint64_t));
+            memset(s->miss_seen, 0, (size_t)((s->banks + 63) >> 6) * sizeof(uint64_t));
             for (index = 0; index < queue->count; ++index) {
                 const fr_item *item = &queue->items[slot];
                 if (lane_rows[item->within] == item->row) {
                     queue->pending_hit[item->within] += 1;
                     fr_set_bit(queue->hits, index);
+                } else if (!(s->miss_seen[item->within >> 6] & (UINT64_C(1) << (item->within & 63)))) {
+                    s->miss_seen[item->within >> 6] |= UINT64_C(1) << (item->within & 63);
+                    fr_set_bit(queue->firsts, index);
                 }
                 slot += 1;
                 if (slot == q[direction])
@@ -1159,6 +1234,8 @@ static void fr_forget_bank(fr_queue *lane_queues, const int64_t *q, int64_t hit_
             }
             other->pending_hit[within] = 0;
         }
+        if (other->queued[within] > 0)
+            fr_first_of_bank(other, q[side], within, -1);
         other->dirty = 1;
     }
 }
@@ -1877,11 +1954,12 @@ typedef struct fr_tables {
     double *tally_own, *ch_float_own, *own_last, *own_wait;
     double *saved_stats, *partial_stats, *close_deadlines, *close_starts, *gaps, *no_gaps;
     fr_item *items;
-    uint64_t *hits, *row_seen;
+    uint64_t *hits, *firsts, *row_seen;
     int64_t *pending_hit, *queued;
     int8_t *early;
-    double *act_gates;
-    uint8_t *act_gate_ready;
+    double *act_gates, *act_floors;
+    uint8_t *act_gate_ready, *act_floor_ready;
+    uint64_t *miss_seen;
 } fr_tables;
 
 static void fr_lay_out(fr_arena *arena, const fr_args *a, int mirror, int64_t capacity_sources, int64_t depth,
@@ -1907,9 +1985,13 @@ static void fr_lay_out(fr_arena *arena, const fr_args *a, int mirror, int64_t ca
     w->partial_stats = (double *)fr_carve(arena, 2 * stat_fields, sizeof(double));
     w->items = (fr_item *)fr_carve(arena, 4 * depth, sizeof(fr_item));
     w->hits = (uint64_t *)fr_carve(arena, 4 * hit_words, sizeof(uint64_t));
+    w->firsts = (uint64_t *)fr_carve(arena, 4 * hit_words, sizeof(uint64_t));
     w->row_seen = (uint64_t *)fr_carve(arena, (banks + 63) >> 6, sizeof(uint64_t));
+    w->miss_seen = (uint64_t *)fr_carve(arena, (banks + 63) >> 6, sizeof(uint64_t));
     w->act_gates = (double *)fr_carve(arena, groups, sizeof(double));
     w->act_gate_ready = (uint8_t *)fr_carve(arena, groups, sizeof(uint8_t));
+    w->act_floors = (double *)fr_carve(arena, groups + 2, sizeof(double));
+    w->act_floor_ready = (uint8_t *)fr_carve(arena, groups + 1, sizeof(uint8_t));
     w->pending_hit = (int64_t *)fr_carve(arena, 4 * banks, sizeof(int64_t));
     w->queued = (int64_t *)fr_carve(arena, 4 * banks, sizeof(int64_t));
     w->early = (int8_t *)fr_carve(arena, 2 * banks, sizeof(int8_t));
@@ -2107,6 +2189,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
             fr_queue *queue = &queues[pseudo][direction];
             queue->items = tables.items + (pseudo * 2 + direction) * depth;
             queue->hits = tables.hits + (pseudo * 2 + direction) * hit_words;
+            queue->firsts = tables.firsts + (pseudo * 2 + direction) * hit_words;
             queue->pending_hit = tables.pending_hit + (pseudo * 2 + direction) * banks;
             queue->queued = tables.queued + (pseudo * 2 + direction) * banks;
         }
@@ -2157,6 +2240,9 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
     state.grouped = grouped;
     state.act_gates = tables.act_gates;
     state.act_gate_ready = tables.act_gate_ready;
+    state.act_floors = tables.act_floors;
+    state.miss_seen = tables.miss_seen;
+    state.act_floor_ready = tables.act_floor_ready;
 
     source_count = 0;
     first_arrival = HUGE_VAL;
@@ -2277,6 +2363,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 memset(queue->pending_hit, 0, (size_t)banks * sizeof(int64_t));
                 memset(queue->queued, 0, (size_t)banks * sizeof(int64_t));
                 memset(queue->hits, 0, (size_t)hit_words * sizeof(uint64_t));
+                memset(queue->firsts, 0, (size_t)hit_words * sizeof(uint64_t));
             }
             draining[pseudo] = 0;
             stale[pseudo] = 1;
@@ -2359,6 +2446,8 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                                 stale_deadline = 1;
                         }
                         pc_seen[lane] = 1;
+                        if (rows[bank] != row && queue->queued[bank_within] == queue->pending_hit[bank_within])
+                            fr_set_bit(queue->firsts, queue->count);
                         queue->queued[bank_within] += 1;
                         /* Queued work changes which bank of the set a due REFpb takes. */
                         if (refresh_target[pseudo] >= 0 && (bank_within >> 4) == (refresh_target[pseudo] >> 4))
@@ -2471,21 +2560,21 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                     int unserved = 0, eligible = 0;
                     int64_t word, in_refresh = -1;
                     double refresh_floor = resources[row_bus * 4] + t[6];
-                    memset(tables.row_seen, 0, (size_t)((banks + 63) >> 6) * sizeof(uint64_t));
                     memset(tables.act_gate_ready, 0, (size_t)groups * sizeof(uint8_t));
-                    /* Only the oldest miss of each bank participates. Compare its exact
-                     * command edge; queue order breaks ties and a column wins a tie. */
+                    memset(tables.act_floor_ready, 0, (size_t)(groups + 1) * sizeof(uint8_t));
+                    /* Only the oldest miss of each bank participates (``firsts``). Compare
+                     * its exact command edge; queue order breaks ties and a column wins a tie. */
                     for (word = 0; word << 6 < waiting; ++word) {
                         uint64_t rest = ~queue->hits[word];
                         if (waiting - (word << 6) < 64)
                             rest &= (UINT64_C(1) << (waiting - (word << 6))) - 1;
                         if (rest)
                             unserved = 1;
+                        rest = queue->firsts[word];
                         if (forced)
                             rest &= word == 0 ? UINT64_C(1) : UINT64_C(0);
                         while (rest) {
                             double row_start;
-                            uint64_t mask;
                             offset = word * 64 + fr_lowest_bit(rest);
                             rest &= rest - 1;
                             slot = first_slot + offset;
@@ -2493,10 +2582,6 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                                 slot -= capacity;
                             item = &queue->items[slot];
                             bank_within = item->within;
-                            mask = UINT64_C(1) << (bank_within & 63);
-                            if (tables.row_seen[bank_within >> 6] & mask)
-                                continue;
-                            tables.row_seen[bank_within >> 6] |= mask;
                             if (lane_rows[bank_within] >= 0 && queue->pending_hit[bank_within] > 0
                                     && !(forced && offset == 0))
                                 continue;
@@ -2734,6 +2819,8 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                             position = 0;
                     }
                     other->pending_hit[bank_within] = hits_now;
+                    if (other->queued[bank_within] > 0)
+                        fr_first_of_bank(other, q[side], bank_within, row);
                     other->dirty = 1;
                 }
                 stale[pseudo] = 1;
@@ -2806,6 +2893,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                 queue->pending_hit[bank_within] -= 1;
                 queue->queued[bank_within] -= 1;
                 fr_remove_bit(queue->hits, hit_words, chosen);
+                fr_remove_bit(queue->firsts, hit_words, chosen);
                 /* Remove the entry, keeping the others in age order. */
                 first_slot = queue->head;
                 position = slot;
