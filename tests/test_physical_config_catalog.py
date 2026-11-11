@@ -27,7 +27,10 @@ class PhysicalConfigCatalogTests(unittest.TestCase):
 
     def test_analytical_profile_has_explicit_study_physical_parameters(self):
         analytical = asdict(resolve_physical_config("hbm_analytical_zero"))
-        expected = asdict(make_hbm_config(rows_per_bank=524288, burst_interval_ns=0.0))
+        # Analytical study profiles declare their queue size independently
+        # of the example/JEDEC default selected for the HBM controller.
+        expected = asdict(make_hbm_config(rows_per_bank=524288, burst_interval_ns=0.0,
+                                          read_queue_depth_per_pc=32))
         analytical.pop("metadata")
         expected.pop("metadata")
         self.assertEqual(analytical, expected)

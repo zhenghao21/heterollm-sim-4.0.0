@@ -326,7 +326,7 @@ def dense_stream(config, count=2500, arrival=0.):
 
 @pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH), ids=("16H", "12H"))
 def test_per_bank_refresh_under_traffic_meets_every_constraint(config):
-    results, log = run_recorded(dense_stream(config), config=config)
+    results, log = run_recorded(dense_stream(config, arrival=config.refresh_interval_ns - 100.), config=config)
     checked = check_legal(log, config)
     for name in ("REFpb", "REFpb tRC", "REFpb tRRD", "REFpb tRREFD", "REFpb tFAW", "tFAW", "tRRD_L", "tRRD_S"):
         assert checked[name] > 0, name
@@ -378,7 +378,7 @@ def test_skipping_a_gap_changes_nothing_later_commands_can_see(config, monkeypat
     skipped, skipped_busy = run(True)
     stepped, stepped_busy = run(False)
     assert skipped == stepped
-    assert skipped_busy == pytest.approx(stepped_busy, rel=1e-9)
+    assert skipped_busy == stepped_busy
 
 
 def test_a_gap_after_traffic_skips_refresh_that_cannot_be_seen():
@@ -416,6 +416,26 @@ def test_a_refreshing_bank_holds_up_only_its_own_entries():
                    and event["mapping"].bank == 3 and event["mapping"].bank_group == 0)
     assert completions["blocked"] >= refresh + CONFIG.refresh_bank_cycle_ns
     check_legal(log)
+
+
+@pytest.mark.parametrize("gate", ("tRP", "tRC"))
+def test_row_command_chooses_the_earliest_bank_instead_of_the_oldest_miss(gate):
+    config = hbm4(refresh_policy="disabled")
+    core = reference_core(config)
+    items = (request("old", READ, address(0, bank=0, config=config)),
+             request("young", READ, address(0, bank=1, config=config)))
+    controller = Recorder(core, items)
+    mapping = map_dram_address(config, items[0].address)
+    _, blocked = controller.bank(mapping)
+    if gate == "tRP":
+        blocked["activate_ready"] = 100.
+    else:
+        blocked["last_activate"] = 0.
+    results = controller.execute()
+    first = next(event for event in controller.log if event["name"] == "ACTIVATE")
+    assert first["mapping"].bank == 1
+    assert first["start"] == 0.
+    assert results[1].completion_ns < results[0].completion_ns
 
 
 def test_queued_hits_keep_a_row_open_past_the_refresh_it_is_due():
@@ -496,6 +516,318 @@ def test_scalar_and_compiled_paths_are_bit_identical(seed, config):
         first += compiled.submit_many(items)
         second += scalar.submit_many(items)
     assert fingerprint(compiled, first) == fingerprint(scalar, second)
+
+
+def assert_all_fr_results_equal(compiled, scalar, items):
+    # fingerprint exposes public state after each batch, ending residency.
+    compiled._hbm_numeric_enabled = True
+    fast = compiled.submit_many(items)
+    slow = scalar.submit_many(items)
+    assert len(fast) == len(slow)
+    for actual, expected in zip(fast, slow):
+        assert actual.counters["compiled_hbm_float64"] is True
+        # Capture-only intervals/payloads describe the detailed recording, not
+        # controller counters; the numeric path intentionally omits them.
+        capture = {"compiled_hbm_float64", "resource_intervals", "resource_interval_payloads",
+                   "intervals_truncated", "details_truncated"}
+        counters = {key: value for key, value in actual.counters.items() if key not in capture}
+        expected_counters = {key: value for key, value in expected.counters.items() if key not in capture}
+        assert counters == expected_counters
+        for key, value in counters.items():
+            if isinstance(value, float):
+                assert value.hex() == float(expected_counters[key]).hex(), key
+        assert actual.completion_ns.hex() == expected.completion_ns.hex()
+        assert (actual.request_id, actual.operation, actual.arrival_ns, actual.logical_bytes,
+                actual.transfer_bytes) == (expected.request_id, expected.operation, expected.arrival_ns,
+                                          expected.logical_bytes, expected.transfer_bytes)
+    assert fingerprint(compiled, fast) == fingerprint(scalar, slow)
+    return fast, slow
+
+
+@pytest.mark.parametrize("seed", (11, 29, 47))
+@pytest.mark.parametrize("block_bytes", (512 << 10, 128 << 10, 64 << 10))
+def test_scattered_kv_blocks_fill_128_entries_and_match_every_counter(seed, block_bytes):
+    config = TWELVE_HIGH
+    rng = random.Random(seed)
+    count = config.read_queue_depth_per_pc * config.lane_count * 32 // block_bytes + 2
+    blocks = rng.sample(range(64, 1024), count)
+    items = [request(index, READ, block * block_bytes, block_bytes)
+             for index, block in enumerate(blocks)]
+    compiled, scalar = numeric_core(config), reference_core(config)
+    assert config.read_queue_depth_per_pc == 128
+    assert_all_fr_results_equal(compiled, scalar, items)
+    peak = FR_STAT_FIELDS.index("peak_read_queue")
+    assert compiled.hbm_scheduler_stats()[:, peak].max() == 128
+
+
+@pytest.mark.parametrize("seed", (11, 29, 47))
+def test_mixed_drains_multiple_refresh_intervals_match_every_counter(seed):
+    config = TWELVE_HIGH
+    compiled, scalar = numeric_core(config), reference_core(config)
+    rng = random.Random(seed)
+    refreshes = 0
+    for step, arrival in enumerate((0., 3 * config.refresh_interval_ns, 7 * config.refresh_interval_ns)):
+        # Distinct bursts keep dependency splitting from cutting the window
+        # before each PC's write queue reaches its drain watermark.
+        positions = rng.sample(range(2 * config.bank_count * 32), 600)
+        items = []
+        for index, position in enumerate(positions):
+            within = position // 2 % config.bank_count
+            items.append(request(f"{step}:{index}", WRITE if index % 3 == 0 else READ, address(
+                position % 2, group=within // config.banks_per_group, bank=within % config.banks_per_group,
+                sid=within // 16, column=position // (2 * config.bank_count), row=rng.randrange(4), config=config),
+                arrival=arrival))
+        fast, _ = assert_all_fr_results_equal(compiled, scalar, items)
+        refreshes += sum(result.counters.get("refresh_commands", 0) for result in fast)
+    assert refreshes > 2 * config.bank_count
+    assert compiled.hbm_scheduler_stats()[:, FR_STAT_FIELDS.index("write_drains")].sum() > 0
+
+
+@pytest.mark.parametrize("seed", (11, 29, 47))
+def test_long_row_activation_floor_matches_every_counter(seed):
+    config = hbm4(refresh_policy="disabled", maximum_active_ns=200.)
+    compiled, scalar = numeric_core(config), reference_core(config)
+    rng = random.Random(seed)
+    # The occupied DQ bus moves ACT to the end of the admissible tRASmax window.
+    for core in (compiled, scalar):
+        core.timeline.reserve("dram:data:0", 0., 10000.)
+    items = [request(index, READ, address(0, group=index % 2, bank=rng.randrange(4),
+                                         column=index % 32, row=index // 64, config=config))
+             for index in range(256)]
+    _, slow = assert_all_fr_results_equal(compiled, scalar, items)
+    activates = [stage.start_ns for result in slow for stage in result.stages if stage.name == "ACTIVATE"]
+    assert min(activates) > 9000.
+
+
+@pytest.mark.parametrize("read", (True, False), ids=("read", "write"))
+def test_single_bank_stream_reaches_the_column_bypass_limit_before_head_service(read):
+    config = hbm4(refresh_policy="disabled")
+    direction = READ if read else WRITE
+    depth = config.read_queue_depth_per_pc if read else config.write_queue_depth_per_pc
+    # The head conflicts with a row whose younger hits keep arriving beyond the
+    # initial window. This fixture proves the column-bypass limit. Other banks,
+    # directions, refresh and the sibling PC can add commands independently.
+    core = reference_core(config)
+    core.submit(request("warm", direction, address(0, row=0, config=config)))
+    items = (request("head", direction, address(0, row=1, config=config)),
+             *(request(index, direction, address(0, column=index % 32, config=config))
+               for index in range(3 * depth)))
+    controller = Recorder(core, items)
+    results = controller.execute()
+    columns = [event for event in controller.log if event["name"] in ("READ_COMMAND", "WRITE_COMMAND")]
+    head = next(event for event in columns if event["row"] == 1)
+    assert sum(event["row"] == 0 for event in columns if event["start"] < head["start"]) == depth
+    assert results[0].completion_ns < max(result.completion_ns for result in results[1:])
+
+
+def test_shared_row_frontier_invalidates_a_cached_refresh_fallback():
+    from heterollm_sim._compiled_hbm import execute_fr_fcfs_numeric
+
+    config = hbm4()
+    items = [request("older", READ, address(0, bank=0)),
+             request("younger", READ, address(0, bank=1)),
+             request("other-PC", READ, address(1, bank=2), arrival=80.)]
+    scalar = reference_core(config)
+    controller = Recorder(scalar, items)
+    for item, ready in zip(items[:2], (120., 90.)):
+        _, bank = controller.bank(map_dram_address(config, item.address))
+        bank["activate_ready"] = ready
+    slow = controller.execute()
+    first = next(event for event in controller.log
+                 if event["name"] == "ACTIVATE" and event["key"][2] == 0)
+    assert first["mapping"].bank == 1
+    assert first["start"] == 90.24
+    numeric = numeric_core(config)
+    seeded = _FrFcfsController(numeric, items)
+    for item, ready in zip(items[:2], (120., 90.)):
+        _, bank = seeded.bank(map_dram_address(config, item.address))
+        bank["activate_ready"] = ready
+    fast, _ = execute_fr_fcfs_numeric(numeric, items)
+    assert all(result.counters["compiled_hbm_float64"] for result in fast)
+    assert [result.completion_ns.hex() for result in fast] == [result.completion_ns.hex() for result in slow]
+    assert fingerprint(numeric, fast) == fingerprint(scalar, slow)
+
+
+@pytest.mark.parametrize("read", (True, False), ids=("read", "write"))
+def test_multi_bank_starvation_limits_column_bypasses_and_forces_only_the_head(read):
+    config = hbm4(refresh_policy="disabled")
+    direction = READ if read else WRITE
+    depth = config.read_queue_depth_per_pc if read else config.write_queue_depth_per_pc
+    core = reference_core(config)
+    core.submit(request("warm", direction, address(0)))
+    items = [request("head", direction, address(0, row=1))]
+    for index in range(5 * depth):
+        within = 0 if index % 4 else 1 + (index // 4) % (config.bank_count - 1)
+        items.append(request(index, direction, address(0, bank=within % config.banks_per_group,
+            group=(within % 16) // config.banks_per_group, sid=within // 16,
+            column=index % 32 if within == 0 else (index // config.bank_count) % 32,
+            row=0 if within == 0 else (index // (2 * config.bank_count)) % 3)))
+
+    class Checked(Recorder):
+        forced = 0
+
+        def issue(self, lane, lanes, kind, start):
+            if kind < 3 and lane["bypass"][lane["direction"]] >= depth:
+                assert lane["offset"] == 0
+                self.forced += 1
+            return super().issue(lane, lanes, kind, start)
+
+        def command(self, *args, **kwargs):
+            result = super().command(*args, **kwargs)
+            self.log[-1]["request_index"] = self.entry.get("index") if self.entry else None
+            return result
+
+    controller = Checked(core, items)
+    controller.execute()
+    head = next(index for index, event in enumerate(controller.log)
+                if event["name"] in ("READ_COMMAND", "WRITE_COMMAND") and event["request_index"] == 0)
+    commands = [event for event in controller.log[:head + 1] if event.get("bus") in ("row", "column")]
+    bypasses = sum(event["name"] in ("READ_COMMAND", "WRITE_COMMAND")
+                   and event["request_index"] != 0 for event in commands)
+    assert bypasses == depth and controller.forced > 0
+    # An observed command count is a lower bound on any general maximum.
+    assert len(commands) > depth + 3
+    print(f"multi_bank_starvation {direction.value}: commands_through_head={len(commands)} column_bypasses={bypasses}")
+
+
+def _exhaustive_fr_choice(controller, lane):
+    """Independent issue-time enumeration; no dirty bits or pending-hit cache."""
+    from heterollm_sim._hbm_control import _FrFcfsIssue
+
+    c = controller.config
+    column_floor = controller.timeline.available_ns(controller.bus_id(lane["key"], "column"))
+    reads, writes = lane["queues"]
+    if lane["draining"] or not reads:
+        direction = 1
+    elif not writes:
+        direction = 0
+    else:
+        direction = 0 if reads[0]["arrival"] <= max(writes[0]["arrival"], column_floor) else 1
+    queue = lane["queues"][direction]
+    forced = lane["bypass"][direction] >= controller.q[direction]
+    controller.request = _FrFcfsIssue(READ if direction == 0 else WRITE, 0.)
+    hit_banks = {entry["rid"] for entry in queue if entry["old"].open_row == entry["row"]}
+    oldest = {}
+    for offset, entry in enumerate(queue):
+        if entry["old"].open_row != entry["row"] and (not forced or offset == 0):
+            oldest.setdefault(entry["rid"], (offset, entry))
+    eligible, refreshing = [], []
+    frontier = controller.timeline.available_ns(controller.bus_id(lane["key"], "row"))
+    for offset, entry in oldest.values():
+        if entry["old"].open_row is not None and entry["rid"] in hit_banks and not (forced and offset == 0):
+            continue
+        target = refreshing if (controller.per_bank and entry["old"].open_row is None
+            and entry["bank"]["activate_ready"] > frontier + c.precharge_to_activate_ns
+            and not (forced and offset == 0)) else eligible
+        target.append((offset, entry))
+    rows = []
+    for offset, entry in eligible or refreshing[:1]:
+        kind = 1 if entry["old"].open_row is not None else 2
+        when = (controller.precharge_start(entry["mapping"], entry["bank"], entry["arrival"]) if kind == 1
+                else controller.activate_start(entry["mapping"], entry["bank"], max(entry["arrival"], lane["act_floor"])))
+        rows.append((when, offset, kind))
+    row = min(rows, default=None)
+    # Keep the existing column policy, including its unaligned lower-bound
+    # ordering; the task changes only the row picker and cache validity.
+    previous, previous_group = lane["last_column"], lane["last_group"]
+    floor = column_floor if previous < 0 else max(column_floor, previous + c.column_different_group_ns)
+    history = controller.pc(lane["key"])["column"]["read" if direction == 0 else "write"]
+    best, hit = float("inf"), -1
+    for offset, entry in enumerate(queue):
+        if forced and offset:
+            break
+        if entry["old"].open_row != entry["row"]:
+            continue
+        group = entry["group"]
+        lower = max(floor, entry["bank"]["read_ready" if direction == 0 else "write_ready"], entry["arrival"])
+        if (entry["sid"], group) in history:
+            lower = max(lower, history[(entry["sid"], group)] + c.column_same_group_ns)
+        if previous >= 0:
+            if previous_group == group:
+                lower = max(lower, previous + c.column_same_group_ns)
+            elif direction == 0 and previous_group // controller.groups_per_sid != group // controller.groups_per_sid:
+                lower = max(lower, previous + c.column_different_sid_ns)
+        if lower < best:
+            best, hit = lower, offset
+    column = None
+    if hit >= 0:
+        entry = queue[hit]
+        column = (controller.column_start(entry["mapping"], entry["bank"]["read_ready" if direction == 0 else "write_ready"],
+                                         entry["arrival"]), hit, 0)
+    return direction, column if column is not None and (row is None or column[0] <= row[0]) else row
+
+
+@pytest.mark.parametrize("seed,pattern", (
+    (190734863, "scatter128"), (190734869, "mixed"), (190734877, "gap"),
+    (190734889, "scatter64"), (190734913, "scatter512"), (190734917, "act_floor"),
+    (202611101, "mixed"), (202611103, "gap"), (202611107, "act_floor")))
+def test_issue_time_row_choice_matches_independent_exhaustive_enumeration(monkeypatch, seed, pattern):
+    import heterollm_sim._hbm_control as control
+
+    checked = []
+
+    class Checked(_FrFcfsController):
+        def issue(self, lane, lanes, kind, start):
+            if kind < 3:
+                saved = self.request
+                direction, expected = _exhaustive_fr_choice(self, lane)
+                self.request = saved
+                actual = (start, lane["offset"], kind)
+                assert direction == lane["direction"]
+                assert expected == actual, (lane["key"], expected, actual)
+                checked.append(actual)
+            return super().issue(lane, lanes, kind, start)
+
+    monkeypatch.setattr(control, "_FrFcfsController", Checked)
+    config = hbm4(stacks=1, dies_per_stack=12, die_density_gbits=24, capacity_bytes=36 * (1 << 30),
+        interface_bandwidth_gb_s=1600., read_bandwidth_gb_s=1600., write_bandwidth_gb_s=1600.,
+        **({"refresh_policy": "disabled", "maximum_active_ns": 200.} if pattern == "act_floor" else {}))
+    compiled, scalar = numeric_core(config), reference_core(config)
+    rng = random.Random(seed)
+
+    def mapped(lane, position):
+        within = position % config.bank_count
+        return address(lane, bank=within % config.banks_per_group, group=(within % 16) // config.banks_per_group,
+            sid=within // 16, column=(position // config.bank_count) % 32,
+            row=position // (config.bank_count * 32), config=config)
+
+    if pattern.startswith("scatter"):
+        size = int(pattern[7:]) << 10
+        count = {64 << 10: 10, 128 << 10: 6, 512 << 10: 3}[size]
+        batches = [[request(index, READ, block * size, size)
+                    for index, block in enumerate(rng.sample(range(1300, 9400), count))]]
+    elif pattern == "mixed":
+        batches = [[request(index, WRITE if index % 3 == 0 else READ, mapped(index % 2, position),
+                            arrival=config.refresh_interval_ns - 73.125)
+                    for index, position in enumerate(rng.sample(range(config.bank_count * 32 * 5), 1600))]]
+    elif pattern == "gap":
+        batches = []
+        for step, arrival in enumerate((0., 2 * config.refresh_interval_ns + 41.875,
+                                       11 * config.refresh_interval_ns + 269.375)):
+            positions = rng.sample(range(config.bank_count * 32 * 4), 700)
+            batches.append([request(f"{step}:{index}", READ if rng.randrange(5) else WRITE,
+                mapped(index % 2, position), arrival=arrival) for index, position in enumerate(positions)])
+    else:
+        for core in (compiled, scalar):
+            core.timeline.reserve("dram:data:0", 0., 17000.)
+        batches = [[request(index, READ, mapped(0, position))
+                    for index, position in enumerate(rng.sample(range(config.bank_count * 32 * 3), 260))]]
+    for items in batches:
+        assert_all_fr_results_equal(compiled, scalar, items)
+    assert checked
+    print(f"brute {seed} {pattern}: decisions={len(checked)} mismatches=0")
+
+
+def test_row_command_ties_keep_the_oldest_miss_for_each_bank():
+    config = hbm4(refresh_policy="disabled")
+    core = reference_core(config)
+    items = (request("old", READ, address(0, bank=3, row=1, config=config)),
+             request("same-bank-young", READ, address(0, bank=3, row=2, config=config)),
+             request("other-bank", READ, address(0, bank=1, config=config)))
+    controller = Recorder(core, items)
+    controller.execute()
+    first = next(event for event in controller.log if event["name"] == "ACTIVATE")
+    assert (first["mapping"].bank, first["row"]) == (3, 1)
 
 
 @pytest.mark.parametrize("config", (CONFIG, TWELVE_HIGH), ids=("16H", "12H"))
@@ -585,7 +917,7 @@ def test_conflicting_row_closes_ahead_of_its_turn():
 
 def test_read_goes_first_until_the_write_queue_reaches_its_watermark():
     read_depth, write_depth, high, low, min_reads = fr_queue_parameters(CONFIG)
-    assert (read_depth, write_depth, high, low, min_reads) == (32, 64, 55, 32, 16)
+    assert (read_depth, write_depth, high, low, min_reads) == (128, 64, 55, 32, 16)
     core = numeric_core()
     writes = [request(f"w{i}", WRITE, address(0, column=i % 32, row=1 + i // 32)) for i in range(40)]
     read = request("r", READ, address(0, bank=2))
@@ -601,7 +933,7 @@ def test_write_drain_starts_and_stops_on_its_watermarks():
     core.submit_many((*reads, *writes))
     stats = core.hbm_scheduler_stats()[0]
     assert stats[FR_STAT_FIELDS.index("write_drains")] >= 2
-    assert stats[FR_STAT_FIELDS.index("peak_read_queue")] == 32
+    assert stats[FR_STAT_FIELDS.index("peak_read_queue")] == 128
     assert stats[FR_STAT_FIELDS.index("peak_write_queue")] == 64
     assert stats[FR_STAT_FIELDS.index("direction_switches")] >= 4
 
@@ -782,16 +1114,11 @@ def test_channel_mirror_matches_simulating_every_channel(seed, policy, overrides
             mirrored += row
         assert outcome[0].tobytes() == expected[0].tobytes()
         assert outcome[1].tobytes() == expected[1].tobytes()
-        assert mirrored[:5].tobytes() == counts[:5].tobytes()
-        assert mirrored[5:] == pytest.approx(counts[5:], rel=1e-9)
+        assert mirrored.tobytes() == counts.tobytes()
         for name, left, right in zip(("rows", "bf", "addresses", "pc", "history", "pc_seen", "channel", "channel_int",
                                       "resources", "moved", "directions", "touched", "windows", "window_counts", "stats"),
                                      whole, single):
-            if name == "resources":
-                # Busy totals add per channel when mirroring: the same sums, in another order.
-                assert left[:, 1] == pytest.approx(right[:, 1], rel=1e-9)
-                left, right = np.delete(left, 1, axis=1), np.delete(right, 1, axis=1)
-            elif name == "windows":
+            if name == "windows":
                 # Slots past an ACT window's count hold nothing.
                 left = [row[:count].tobytes() for row, count in zip(left, whole[13])]
                 right = [row[:count].tobytes() for row, count in zip(right, single[13])]
@@ -874,3 +1201,23 @@ def test_refresh_free_organization_meets_row_deadlines_on_both_paths():
     results, log = run_recorded(*batches, config=config)
     assert check_legal(log, config)["tRASmax"] > 0
     assert sum(result.counters["precharge_commands"] for result in results) > 0
+
+
+def test_idle_refresh_tail_keeps_an_open_sid_boundary_identical_to_issuing_every_refresh(monkeypatch):
+    config=TWELVE_HIGH
+    compiled,scalar,direct=numeric_core(config),reference_core(config),reference_core(config)
+    warm=[request('warm'+str(lane),READ,address(lane,group=1,bank=7,config=config)) for lane in (0,1)]
+    later=[request(f'{lane}:{within}',READ,address(lane,sid=within//16,group=(within%16)//8,
+                   bank=within%8,row=1,config=config),arrival=5640.3)
+           for within in (17,30) for lane in (0,1)]
+    capture={'compiled_hbm_float64','resource_intervals','resource_interval_payloads',
+             'intervals_truncated','details_truncated'}
+    for items in (warm,later):
+        _,actual=assert_all_fr_results_equal(compiled,scalar,items)
+        with monkeypatch.context() as patch:
+            patch.setattr(_FrFcfsController,'skip_refresh_gap',lambda self,lanes,latest:False)
+            expected=direct.submit_many(items)
+        for first,second in zip(actual,expected):
+            assert first.completion_ns.hex()==second.completion_ns.hex()
+            assert ({key:value for key,value in first.counters.items() if key not in capture}
+                    =={key:value for key,value in second.counters.items() if key not in capture})

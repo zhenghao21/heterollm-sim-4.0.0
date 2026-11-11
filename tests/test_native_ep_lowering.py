@@ -108,8 +108,11 @@ def test_ep1_toy_lowering_is_byte_identical_to_the_single_group_graph():
     # fields and assumed turnaround timings changed it, then the per-layer KV
     # block pools (buffer ids and offsets) and their 256-token blocks, not the graph.
     # So did the HBM4 24Gb 12H organization and its REFpb fields.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "fbc8393245299b59")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "bd769cdab1af9346")
+    # The 2026-11-10 read depth of 128 and canonical CA occupancy change
+    # only physical configuration/counters; topology and demands are unchanged.
+    # The HBM controller-policy notes now reach the returned config metadata.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "0ab392e208696411")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "099abe653c5086fe")
 
 
 def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
@@ -125,8 +128,11 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # which only moves the NAND KV blocks' addresses. The switch to OCP mode
     # changed only the serialized protocol_mode and its provenance record, and
     # the OCP erase policy only adds the serialized erase_policy field.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "467420c597974a9a")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "a1fcc9a9331394f6")
+    # The 2026-11-10 read depth and canonical CA occupancy change only
+    # physical configuration/counters; topology and demands are unchanged.
+    # The HBM controller-policy notes now reach the returned config metadata.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "ba2150d8c7b742ab")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "f30241ed316adb3c")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():

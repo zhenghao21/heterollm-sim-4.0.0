@@ -115,7 +115,7 @@ class _Controller:
         quantum = self.clock if rising or kind == "column" else self.row_step
         start = self.align(max(earliest, self.timeline.available_ns(rid)), quantum)
         transfer = self.reserve_clock(rid, start, cycles * self.clock)
-        self.counts[kind + "_command_bus_busy_ns"] += transfer.duration_ns
+        self.counts[kind + "_command_bus_busy_ns"] += cycles * self.clock
         self.record(name, transfer.start_ns, transfer.end_ns, transfer.resource_id)
         return transfer
 
@@ -508,8 +508,36 @@ class _FrFcfsController(_Controller):
                 lanes.setdefault(key[2], ([], []))[direction].append((index, segment))
                 self.logical[index] += segment.logical_bytes
                 self.physical[index] += segment.transfer_bytes
+        totals = dict(self.counts)
         for channel_key in sorted(channels, key=lambda item: (item[0], item[1])):
+            # The kernel reduces channel-local counts in channel order. Match
+            # that addition order, including the configured CA occupancies.
+            self.counts = {name: type(value)(0) for name, value in totals.items()}
+            row_id, column_id = (self.bus_id(channel_key, kind) for kind in ("row", "column"))
+            first_lane = (channel_key[0] * self.config.channels + channel_key[1]) * 2
+            prefix = self.config.metadata.get("data_resource_prefix", "dram:data")
+            data_ids = [self.timeline.canonical_resource_id(f"{prefix}:{first_lane + pseudo}")
+                        for pseudo in range(2)]
+            busy = {rid: self.timeline.busy_ns.get(rid, 0.) for rid in (row_id, column_id, *data_ids)}
+            moved = {rid: self.timeline.bytes_moved.get(rid, 0) for rid in data_ids}
             self.run_channel(channel_key, channels[channel_key])
+            c, counts = self.config, self.counts
+            counts["row_command_bus_busy_ns"] = (
+                counts["activate_commands"] * (c.activate_command_cycles * self.clock)
+                + (counts["precharge_commands"] + counts.get("refresh_commands", 0))
+                * (c.precharge_command_cycles * self.clock))
+            counts["column_command_bus_busy_ns"] = (
+                (counts["read_commands"] + counts["write_commands"]) * (c.column_command_cycles * self.clock)
+                + (counts.get("refresh_commands", 0) * self.clock if self.hbm2 else 0.))
+            for rid, duration in ((row_id, counts["row_command_bus_busy_ns"]),
+                                  (column_id, counts["column_command_bus_busy_ns"]),
+                                  *((rid, (self.timeline.bytes_moved.get(rid, 0) - moved[rid]) // c.burst_bytes
+                                     * (c.burst_bytes / c.effective_lane_bandwidth_gb_s)) for rid in data_ids)):
+                if rid in self.timeline.busy_ns:
+                    self.timeline.busy_ns[rid] = self.after(busy[rid], duration)
+            for name, value in self.counts.items():
+                totals[name] += value
+        self.counts = totals
         results = []
         total = sum(self.physical) // self.config.burst_bytes
         if total > self.config.max_expanded_segments and not self.truncated:
@@ -689,7 +717,10 @@ class _FrFcfsController(_Controller):
         c = self.config
         self.stages = self.request_stages[0]
         first, second = (self.pc(lane["key"]) for lane in lanes)
-        latest = arrival - (c.refresh_bank_cycle_ns + c.precharge_to_activate_ns + c.four_activate_window_ns + 4 * self.clock)
+        # A PRE-delayed SID boundary and the two-PC CA phase must be
+        # rebuilt before row eligibility can observe a bank-ready edge.
+        latest = arrival - (16 * self.refresh_step + c.refresh_bank_cycle_ns
+                            + c.precharge_to_activate_ns + c.four_activate_window_ns + 4 * self.clock)
         skip_floor = (self.refresh_floor(lanes) if latest - min(first["next_refresh"], second["next_refresh"]) >= self.refresh_step
                       else math.inf)
         while True:
@@ -848,15 +879,29 @@ class _FrFcfsController(_Controller):
                 best, hit_offset = ready, offset
                 if ready <= floor:
                     break
+        start, kind, chosen = math.inf, -1, -1
+        self.request = _FrFcfsIssue(Operation.READ if read else Operation.WRITE, 0.0)
+        if hit_offset >= 0:
+            entry = queue[hit_offset]
+            start = self.column_start(entry["mapping"], entry["bank"]["read_ready" if read else "write_ready"],
+                                      entry["arrival"])
+            kind, chosen = 0, hit_offset
         if lane["dirty"][direction]:
             unserved = False
             in_refresh = -1
+            seen = set()
+            row_best = math.inf
             # A bank closed past the next tRP is refreshing; it holds up only its own entries.
             refresh_floor = self.timeline.available_ns(self.bus_id(key, "row")) + c.precharge_to_activate_ns
             for offset, entry in enumerate(queue):
                 if entry["old"].open_row == entry["row"]:
                     continue
                 unserved = True
+                if forced and offset != 0:
+                    continue
+                if entry["rid"] in seen:
+                    continue
+                seen.add(entry["rid"])
                 if (entry["old"].open_row is not None
                         and lane["pending_hit"][direction].get(entry["rid"], 0) > 0
                         and not (forced and offset == 0)):
@@ -866,18 +911,16 @@ class _FrFcfsController(_Controller):
                     if in_refresh < 0:
                         in_refresh = offset
                     continue
-                row_offset = offset
-                break
+                if entry["old"].open_row is not None:
+                    ready = self.precharge_start(entry["mapping"], entry["bank"], entry["arrival"])
+                else:
+                    ready = self.activate_start(entry["mapping"], entry["bank"],
+                                                max(entry["arrival"], lane["act_floor"]))
+                if ready < row_best:
+                    row_best, row_offset = ready, offset
             if row_offset < 0:
                 row_offset = in_refresh
             lane["dirty"][direction] = unserved
-        start, kind, chosen = math.inf, -1, -1
-        self.request = _FrFcfsIssue(Operation.READ if read else Operation.WRITE, 0.0)
-        if hit_offset >= 0:
-            entry = queue[hit_offset]
-            start = self.column_start(entry["mapping"], entry["bank"]["read_ready" if read else "write_ready"],
-                                      entry["arrival"])
-            kind, chosen = 0, hit_offset
         if row_offset >= 0:
             entry = queue[row_offset]
             if entry["old"].open_row is not None:
@@ -948,6 +991,17 @@ class _FrFcfsController(_Controller):
                 continue
             self.issue(lane, lanes, kind, start)
             if not lane["stale_only"]:
+                other = lanes[1 - pseudo]
+                # The row CA frontier changes refresh eligibility, row ties,
+                # and the channel's last-ACT restriction on PRE. A column
+                # changes hit ordering and can make an arrived read take over
+                # from a planned write. DQ, tFAW/tRRD and bank gates are PC-local.
+                if kind != 0:
+                    if other["kind"] != 0 or any(other["dirty"]):
+                        other["stale"] = True
+                elif (other["kind"] == 0 or (other["direction"] == 1
+                        and other["queues"][0] and not other["draining"])):
+                    other["stale"] = True
                 last_pseudo = pseudo
         for lane in lanes:
             for index, wait in lane["own_wait"].items():

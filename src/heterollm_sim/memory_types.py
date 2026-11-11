@@ -15,6 +15,10 @@ from typing import Any, Mapping, Optional, Tuple
 from ._hbm_errors import HBMConfigError
 
 
+# User-selected controller policy (2026-11-10), independent of JEDEC timing.
+HBM_READ_QUEUE_DEPTH_PER_PC = 128
+
+
 def _hbm_config_error(config, field, *, category, rule, requirement_en,
                       requirement_zh, remedy_zh, remedy_en, label=None,
                       unit=None, related_values=None, source=None):
@@ -288,7 +292,7 @@ class DramConfig:
     # HBM FR-FCFS controller policy: queue capacities in bursts per
     # pseudo-channel, the write drain's fill fractions, and the reads a lane
     # serves after a drain before the next one can begin.
-    read_queue_depth_per_pc: int = field(default=32, kw_only=True)
+    read_queue_depth_per_pc: int = field(default=HBM_READ_QUEUE_DEPTH_PER_PC, kw_only=True)
     write_queue_depth_per_pc: int = field(default=64, kw_only=True)
     write_high_watermark: float = field(default=0.85, kw_only=True)
     write_low_watermark: float = field(default=0.50, kw_only=True)

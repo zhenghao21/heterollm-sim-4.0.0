@@ -84,6 +84,17 @@ def test_bundled_reference_hbm_uses_standard_organization():
     assert "dies_per_stack" in config.metadata["unknown_parameters"]
 
 
+@pytest.mark.parametrize("generation,hbm4", [("HBM3E", False), ("HBM4", True)])
+def test_controller_policy_notes_reach_the_returned_and_parsed_config(generation, hbm4):
+    from heterollm_sim.hbm_geometry import make_hbm_geometry_config
+    payload = make_hbm_geometry_config(generation=generation, capacity_bytes=16 * 1024**3,
+                                       read_bandwidth_gbps=8192., write_bandwidth_gbps=8192.)
+    for metadata in (payload["metadata"], parse_physical_memory_config(payload).metadata):
+        assert {"address_mapping_basis", "controller_policy", "queue_policy"} <= set(metadata)
+        assert metadata["queue_policy"]["read_depth_per_pc"] == payload["read_queue_depth_per_pc"] == 128
+        assert ("timing_assumptions" in metadata) is hbm4
+
+
 @pytest.mark.parametrize("generation,channels", [("HBM3", 16), ("HBM4", 32)])
 @pytest.mark.parametrize("builder", ["cluster", "superchip", "nvl2"])
 def test_physical_stack_channels_reach_controller_link_endpoint_and_core(builder, generation, channels):

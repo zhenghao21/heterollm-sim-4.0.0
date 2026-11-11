@@ -66,10 +66,12 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # serves page-table reads in the out-of-order controller window.
 # v29 serves every OCP host channel in that one window with its own credits;
 # v28 ran the host channels' requests one channel after another.
-FAST_CONTRACT = "native_stationary_layout_fast_v29"
+# v30：HBM 行命令发给命令最早能发的 bank，读队列每 PC 128。
+FAST_CONTRACT = "native_stationary_layout_fast_v30"
 # Prefill runs on HBM4, so its runner follows v25 (as v24) and v27 (as v25); v26,
 # v28 and v29 change neither its physics nor its forecast.
-PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v25"
+# v26：HBM 行命令发给命令最早能发的 bank，读队列每 PC 128。
+PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v26"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # sample a whole prompt by its stage blocks and a chunked one by the
 # conditional chunk forecast; detailed passes retain the complete native
