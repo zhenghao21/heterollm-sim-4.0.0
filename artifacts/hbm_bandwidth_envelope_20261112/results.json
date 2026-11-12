@@ -144,28 +144,28 @@
           "kind": "random_read",
           "bursts": 16384,
           "bytes": 524288,
-          "window_ns": 965.6320000000001,
-          "measured_gb_s": 542.948038176034,
+          "window_ns": 505.856,
+          "measured_gb_s": 1036.4372469635628,
           "ceiling_gb_s": 1600.0,
-          "fraction_of_ceiling": 0.33934252386002123
+          "fraction_of_ceiling": 0.6477732793522267
         },
         {
           "id": "random-read-65536bursts",
           "kind": "random_read",
           "bursts": 65536,
           "bytes": 2097152,
-          "window_ns": 4608.0,
-          "measured_gb_s": 455.1111111111111,
+          "window_ns": 1739.776,
+          "measured_gb_s": 1205.414949970571,
           "ceiling_gb_s": 1600.0,
-          "fraction_of_ceiling": 0.28444444444444444
+          "fraction_of_ceiling": 0.7533843437316068
         }
       ],
       "duplex": {
         "id": "mixed_duplex",
         "bursts": 16384,
         "bytes": 524288,
-        "window_ns": 960.5120000000001,
-        "measured_gb_s": 545.8422174840085,
+        "window_ns": 521.216,
+        "measured_gb_s": 1005.893909626719,
         "sum_of_directional_caps_gb_s": 3200.0,
         "physical_interface_gb_s": 4000.0,
         "bounded_by_sum_of_caps": true,
@@ -183,12 +183,12 @@
           "lanes_total": 256,
           "physical_bytes": 262144,
           "payload_bytes": 262144,
-          "lane_busy_ns": 16777.215999999982,
+          "lane_busy_ns": 16777.21599999998,
           "expected_lane_busy_ns": 16777.216,
           "overlap_count": 0,
-          "window_ns": 420.86400000000003,
-          "aggregate_gb_s": 622.8710462287104,
-          "max_lane_utilization": 0.42307692307692263,
+          "window_ns": 283.648,
+          "aggregate_gb_s": 924.1877256317689,
+          "max_lane_utilization": 0.42424242424242375,
           "mixed_directions": true
         },
         "overlaps": [],
@@ -288,13 +288,13 @@
           "kind": "sequential_read",
           "bursts": 1048576,
           "bytes": 33554432,
-          "completion_ns": 21667.84,
-          "measured_gb_s": 1548.5822306238185,
+          "completion_ns": 21051.392,
+          "measured_gb_s": 1593.9293705613386,
           "ceiling_gb_s": 1600.0,
-          "fraction_of_ceiling": 0.9678638941398866,
+          "fraction_of_ceiling": 0.9962058566008366,
           "burst_count": 1048576,
-          "row_hits": 1011200,
-          "row_misses": 37376,
+          "row_hits": 1015808,
+          "row_misses": 32768,
           "row_conflicts": 0
         }
       ],
@@ -326,38 +326,38 @@
           "kind": "random_read",
           "bursts": 2048,
           "bytes": 65536,
-          "window_ns": 215.04,
-          "measured_gb_s": 304.76190476190476,
+          "window_ns": 202.752,
+          "measured_gb_s": 323.2323232323232,
           "ceiling_gb_s": 1600.0,
-          "fraction_of_ceiling": 0.19047619047619047
+          "fraction_of_ceiling": 0.20202020202020202
         },
         {
           "id": "random-read-16384bursts",
           "kind": "random_read",
           "bursts": 16384,
           "bytes": 524288,
-          "window_ns": 686.08,
-          "measured_gb_s": 764.1791044776119,
+          "window_ns": 591.872,
+          "measured_gb_s": 885.8131487889274,
           "ceiling_gb_s": 1600.0,
-          "fraction_of_ceiling": 0.4776119402985074
+          "fraction_of_ceiling": 0.5536332179930796
         },
         {
           "id": "random-read-65536bursts",
           "kind": "random_read",
           "bursts": 65536,
           "bytes": 2097152,
-          "window_ns": 2736.128,
-          "measured_gb_s": 766.4670658682634,
+          "window_ns": 1753.088,
+          "measured_gb_s": 1196.2616822429907,
           "ceiling_gb_s": 1600.0,
-          "fraction_of_ceiling": 0.4790419161676646
+          "fraction_of_ceiling": 0.7476635514018691
         }
       ],
       "duplex": {
         "id": "mixed_duplex",
         "bursts": 16384,
         "bytes": 524288,
-        "window_ns": 741.376,
-        "measured_gb_s": 707.182320441989,
+        "window_ns": 608.256,
+        "measured_gb_s": 861.952861952862,
         "sum_of_directional_caps_gb_s": 3200.0,
         "physical_interface_gb_s": 4000.0,
         "bounded_by_sum_of_caps": true,
@@ -451,10 +451,10 @@
       ],
       "refresh_overhead": {
         "bursts": 1048576,
-        "refreshed_ns": 21667.84,
+        "refreshed_ns": 21051.392,
         "no_refresh_ns": 21051.392,
-        "refresh_commands": 134144,
-        "overhead_fraction": 0.029283004183286332,
+        "refresh_commands": 130048,
+        "overhead_fraction": 0.0,
         "note": "periodic refresh is a real cost that grows with run length, so a refreshed stream is not required to be monotone in size; the no-refresh run is"
       },
       "dq_conservation": {
@@ -472,8 +472,8 @@
           "lane_busy_ns": 33554.43199999994,
           "expected_lane_busy_ns": 33554.432,
           "overlap_count": 0,
-          "window_ns": 319.488,
-          "aggregate_gb_s": 820.5128205128206,
+          "window_ns": 288.768,
+          "aggregate_gb_s": 907.8014184397164,
           "max_lane_utilization": 0.47619047619047633,
           "mixed_directions": true
         },
@@ -622,28 +622,28 @@
           "kind": "random_read",
           "bursts": 16384,
           "bytes": 524288,
-          "window_ns": 969.7280000000001,
-          "measured_gb_s": 540.6546990496304,
+          "window_ns": 450.56,
+          "measured_gb_s": 1163.6363636363637,
           "ceiling_gb_s": 4000.0,
-          "fraction_of_ceiling": 0.1351636747624076
+          "fraction_of_ceiling": 0.29090909090909095
         },
         {
           "id": "random-read-65536bursts",
           "kind": "random_read",
           "bursts": 65536,
           "bytes": 2097152,
-          "window_ns": 4621.312,
-          "measured_gb_s": 453.8001329492577,
+          "window_ns": 1305.6000000000001,
+          "measured_gb_s": 1606.2745098039213,
           "ceiling_gb_s": 4000.0,
-          "fraction_of_ceiling": 0.11345003323731442
+          "fraction_of_ceiling": 0.4015686274509803
         }
       ],
       "duplex": {
         "id": "mixed_duplex",
         "bursts": 16384,
         "bytes": 524288,
-        "window_ns": 978.9440000000001,
-        "measured_gb_s": 535.5648535564853,
+        "window_ns": 477.184,
+        "measured_gb_s": 1098.7124463519312,
         "sum_of_directional_caps_gb_s": 8000.0,
         "physical_interface_gb_s": 4000.0,
         "bounded_by_sum_of_caps": true,

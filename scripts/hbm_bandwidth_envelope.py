@@ -423,7 +423,7 @@ def summarise(report: dict[str, Any]) -> dict[str, Any]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path,
-                        default=ROOT / "artifacts" / "hbm_bandwidth_envelope_20261109")
+                        default=ROOT / "artifacts" / "hbm_bandwidth_envelope_20261112")
     parser.add_argument("--no-variants", action="store_true")
     arguments = parser.parse_args(argv)
     report = run(arguments.out, variants=not arguments.no_variants)

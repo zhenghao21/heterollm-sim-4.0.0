@@ -5,12 +5,16 @@ DramConfig the core executes, so they catch a model that bills bytes twice or
 overlaps a lane, not a model that disagrees with an unmeasured vendor part.
 """
 from pathlib import Path
+import random
 import sys
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import hbm_bandwidth_envelope as envelope
+from heterollm_sim.dram_core import DramCore
+from heterollm_sim.memory_transfer import ResourceTimeline
+from heterollm_sim.memory_types import AccessRequest, Operation
 
 
 @pytest.fixture(scope="module")
@@ -62,13 +66,21 @@ def test_mixed_directions_exceed_one_cap_but_not_the_physical_link(hbm3e):
 
 
 def test_refresh_is_a_cost_not_a_monotonicity_defect():
-    """A refreshed stream is non-monotone only because refresh accumulates."""
+    """Refresh never speeds a stream up, and costs time once it meets queued work."""
     config = envelope.reference_config(profile_id="hbm4_reference")
     edited = envelope.reference_config(profile_id="hbm4_reference", refresh=False)
     assert config.refresh_policy != "disabled"
     assert edited.refresh_policy == "disabled"
     overhead = envelope.refresh_overhead(config)
-    # Positive because refresh costs time.  Not asserted tight: the fraction is
-    # a function of run length, and short runs accumulate no refresh at all.
-    assert overhead["overhead_fraction"] > 0.0
+    # A sequential stream keeps few banks busy, so the traffic-aware REFpb
+    # order can refresh idle banks for free: zero is allowed, negative is not.
     assert overhead["refresh_commands"] > 0
+    assert overhead["overhead_fraction"] >= 0.0
+    # Scattered 64 KiB reads keep queued work on every bank: refresh costs time.
+    rng = random.Random(1)
+    requests = [AccessRequest(f"r{index}", Operation.READ, slot * 64 * 1024, 64 * 1024)
+                for index, slot in enumerate(rng.sample(range(400 * 1024 ** 3 // (64 * 1024)), 600))]
+    spans = [max(result.completion_ns for result in
+                 DramCore(variant, ResourceTimeline(), capture_details=False).submit_many(requests))
+             for variant in (config, edited)]
+    assert spans[0] > spans[1]
