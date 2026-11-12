@@ -112,8 +112,9 @@ def test_ep1_toy_lowering_is_byte_identical_to_the_single_group_graph():
     # only physical configuration/counters; topology and demands are unchanged.
     # The HBM controller-policy notes now reach the returned config metadata.
     # The refresh-policy provenance now describes the REFpb bank choice within a set.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "e13c5abb31da46c6")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "f105a9c0ea5a799b")
+    # The serialized write_drain_refill field and its queue-policy note changed it again.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (241, "366299b072a2e1f8")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (453, "db6a8444327f5c53")
 
 
 def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
@@ -132,8 +133,9 @@ def test_ep1_maverick_lowering_is_byte_identical_to_the_single_group_graph():
     # The 2026-11-10 read depth and canonical CA occupancy change only
     # physical configuration/counters; topology and demands are unchanged.
     # The HBM controller-policy notes now reach the returned config metadata.
-    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "61d281880b171fd4")
-    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "0f2edcad9aed7b7d")
+    # The serialized write_drain_refill field and its queue-policy note changed it again.
+    assert _structure_digest(_tasks(build(), "decode", 4)) == (1159, "85e2729f124a73e8")
+    assert _structure_digest(_tasks(build(), "mixed", 4)) == (2225, "a368cba0eabecf10")
 
 
 def test_ep1_lowering_has_no_attention_data_parallel_scaffolding():
