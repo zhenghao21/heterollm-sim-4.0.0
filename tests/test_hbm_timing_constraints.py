@@ -195,11 +195,13 @@ def test_joint_frequency_and_timing_edit_uses_the_new_clock_for_hard_minima(path
 
 @pytest.mark.parametrize("path", PATHS)
 def test_reediting_refresh_interval_recomputes_its_unchanged_derived_maximum(path):
-    initial = reconfigure_physical_config(reference("HBM4"), overrides={"refresh_interval_ns": 1000.})
-    assert initial.maximum_active_ns == 9000.
-    updated = update(initial, {"refresh_interval_ns": 500.}, path)
-    assert updated.refresh_interval_ns == 500.
-    assert updated.maximum_active_ns == 4500.
+    # Both intervals stay above tREFI/3: per-bank refresh refuses shorter ones at
+    # configuration (test_hbm_fr_fcfs covers that refusal).
+    initial = reconfigure_physical_config(reference("HBM4"), overrides={"refresh_interval_ns": 2600.})
+    assert initial.maximum_active_ns == 23400.
+    updated = update(initial, {"refresh_interval_ns": 1300.}, path)
+    assert updated.refresh_interval_ns == 1300.
+    assert updated.maximum_active_ns == 11700.
     assert updated.metadata["parameter_provenance"]["maximum_active_ns"]["status"] == "derived_from_input"
 
 

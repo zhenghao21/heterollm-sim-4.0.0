@@ -92,8 +92,8 @@ def test_sparse_nonfinite_result_declines_and_restores_every_touched_array(monke
     request = AccessRequest("overflow", "write", span + 3, 65, 5000.)
     before = tuple(array.copy() for array in packed.arrays)
     original = packed.run_fr_fcfs
-    def nonfinite(*args):
-        result = original(*args)
+    def nonfinite(*args, **kwargs):
+        result = original(*args, **kwargs)
         packed.arrays[1][0, 0] = np.inf
         return result
     monkeypatch.setattr(packed, "run_fr_fcfs", nonfinite)

@@ -157,7 +157,8 @@ def test_unchanged_derived_values_recompute_but_manually_changed_values_remain()
     assert status(authored, "refresh_cycle_ns") == "explicit_assumption"
 
 
-@pytest.mark.parametrize("interval,maximum", [(1950., 17550.), (975., 8775.)])
+# tREFI/2 and tREFI/3; per-bank refresh refuses tREFI/4 at configuration.
+@pytest.mark.parametrize("interval,maximum", [(1950., 17550.), (1300., 11700.)])
 @pytest.mark.parametrize("path", PATHS)
 def test_refresh_rate_changes_recompute_the_maximum_active_limit(path, interval, maximum):
     old = reference()
