@@ -3165,8 +3165,9 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                     reads_since[pseudo] = 0;
                 }
                 for (direction = 0; direction < 2; ++direction) {
-                    /* A drain lowers the write queue only if refill waits for its end. */
-                    if (direction == 1 && draining[pseudo])
+                    /* By default a drain lowers the write queue only if refill waits for
+                     * its end; q[5] (write_drain_refill) refills during the drain too. */
+                    if (direction == 1 && draining[pseudo] && !q[5])
                         continue;
                     queue = &queues[pseudo][direction];
                     capacity = q[direction];

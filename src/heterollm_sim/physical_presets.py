@@ -33,6 +33,7 @@ _DRAM_RESEARCH_BASE = {
     "address_mapping": "bank_interleaved", "scheduler": "fcfs", "scheduler_window": 16,
     "queue_scope": "device", "read_queue_depth_per_pc": 32, "write_queue_depth_per_pc": 64,
     "write_high_watermark": 0.85, "write_low_watermark": 0.50, "min_reads_per_switch": 16,
+    "write_drain_refill": False,
     **{name: 0.0 for name in HBM_CONTROL_TIMING_FIELDS},
     "bank_groups_per_rank": 1, "banks_per_group": 8,
     "rows_per_bank": 524288, "row_bytes": 8192, "burst_bytes": 64,

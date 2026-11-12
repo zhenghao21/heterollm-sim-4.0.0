@@ -290,6 +290,7 @@ def make_hbm_geometry_config(
         address_mapping="sid_aware", scheduler="fr_fcfs", queue_scope="pc",
         read_queue_depth_per_pc=HBM_READ_QUEUE_DEPTH_PER_PC, write_queue_depth_per_pc=64,
         write_high_watermark=0.85, write_low_watermark=0.50, min_reads_per_switch=16,
+        write_drain_refill=False,
         read_latency_ns=read_latency_ns, write_latency_ns=write_latency_ns,
         burst_interval_ns=32 / lane_gb_s, capacity_bytes=capacity_bytes,
         bank_geometry_scope="per_stack", stack_interface_mode="independent",
@@ -322,11 +323,13 @@ def make_hbm_geometry_config(
         "controller_policy": "per-PC/bank FR-FCFS with cross-request PRE/ACT lookahead",
         "queue_policy": {"read_depth_per_pc": HBM_READ_QUEUE_DEPTH_PER_PC, "write_depth_per_pc": 64,
                           "write_high_watermark": 0.85, "write_low_watermark": 0.50,
-                          "min_reads_per_switch": 16,
+                          "min_reads_per_switch": 16, "write_drain_refill": False,
                           "basis": "Read depth is the user-selected model policy of 2026-11-10, not a JEDEC "
                                    "requirement: 128 bursts of 32 B = 4 KiB per PC. Write policy retains gem5 MemInterface "
                                    "and MemCtrl defaults (write_buffer_size 64, write_high_thresh_perc 85, "
-                                   "write_low_thresh_perc 50, min_reads_per_switch 16)"},
+                                   "write_low_thresh_perc 50, min_reads_per_switch 16). A drain admits no new writes "
+                                   "by default; write_drain_refill=True refills during a drain as Ramulator 2.0 does "
+                                   "(user-selected second option of 2026-11-12)"},
     })
     if hbm4:
         metadata["timing_assumptions"] = {

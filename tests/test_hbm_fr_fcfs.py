@@ -990,8 +990,8 @@ def test_conflicting_row_closes_ahead_of_its_turn():
 
 
 def test_read_goes_first_until_the_write_queue_reaches_its_watermark():
-    read_depth, write_depth, high, low, min_reads = fr_queue_parameters(CONFIG)
-    assert (read_depth, write_depth, high, low, min_reads) == (128, 64, 55, 32, 16)
+    read_depth, write_depth, high, low, min_reads, refill = fr_queue_parameters(CONFIG)
+    assert (read_depth, write_depth, high, low, min_reads, refill) == (128, 64, 55, 32, 16, 0)
     core = numeric_core()
     writes = [request(f"w{i}", WRITE, address(0, column=i % 32, row=1 + i // 32)) for i in range(40)]
     read = request("r", READ, address(0, bank=2))
@@ -1010,6 +1010,48 @@ def test_write_drain_starts_and_stops_on_its_watermarks():
     assert stats[FR_STAT_FIELDS.index("peak_read_queue")] == 128
     assert stats[FR_STAT_FIELDS.index("peak_write_queue")] == 64
     assert stats[FR_STAT_FIELDS.index("direction_switches")] >= 4
+
+
+def drain_stream(config):
+    reads = [request(f"r{i}", READ, address(0, bank=1, column=i % 32, row=i // 32, config=config))
+             for i in range(400)]
+    writes = [request(f"w{i}", WRITE, address(0, bank=2, column=i % 32, row=i // 32, config=config))
+              for i in range(400)]
+    return (*reads, *writes)
+
+
+def test_write_drain_refill_is_off_by_default_and_drains_waiting_writes_in_one_pass():
+    assert CONFIG.write_drain_refill is False
+    refill = hbm4(write_drain_refill=True)
+    assert fr_queue_parameters(refill)[5] == 1
+    stats = {}
+    for name, config in (("hold", CONFIG), ("refill", refill)):
+        core = numeric_core(config)
+        core.submit_many(drain_stream(config))
+        stats[name] = core.hbm_scheduler_stats()[0]
+    drains, switches = FR_STAT_FIELDS.index("write_drains"), FR_STAT_FIELDS.index("direction_switches")
+    # Every write waits from the start, so a refilled drain only ends when the writes run out.
+    assert stats["refill"][drains] == 1 < stats["hold"][drains]
+    assert stats["refill"][switches] < stats["hold"][switches]
+    with pytest.raises(ValueError, match="write_drain_refill must be a bool"):
+        hbm4(write_drain_refill=1)
+
+
+@pytest.mark.parametrize("seed", (11, 29))
+def test_write_drain_refill_paths_are_bit_identical(seed):
+    config = hbm4(dies_per_stack=12, die_density_gbits=24, write_drain_refill=True)
+    compiled, scalar = numeric_core(config), reference_core(config)
+    rng = random.Random(seed)
+    positions = rng.sample(range(2 * config.bank_count * 32), 600)
+    items = []
+    for index, position in enumerate(positions):
+        within = position // 2 % config.bank_count
+        items.append(request(index, WRITE if index % 3 == 0 else READ, address(
+            position % 2, group=within // config.banks_per_group, bank=within % config.banks_per_group,
+            sid=within // 16, column=position // (2 * config.bank_count), row=rng.randrange(4), config=config)))
+    assert_all_fr_results_equal(compiled, scalar, items)
+    assert assert_all_fr_results_equal(compiled, scalar, list(drain_stream(config)))
+    assert compiled.hbm_scheduler_stats()[:, FR_STAT_FIELDS.index("write_drains")].sum() > 0
 
 
 def test_read_after_overlapping_write_waits_for_its_completion():

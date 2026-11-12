@@ -113,7 +113,7 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
     cdef double[:, :, ::1] view_history = history
     cdef fr_args args
     cdef int code
-    if (view_t.shape[0] < 34 or view_q.shape[0] < 5 or view_g.shape[0] < 16 or view_bf.shape[1] != 7
+    if (view_t.shape[0] < 34 or view_q.shape[0] < 6 or view_g.shape[0] < 16 or view_bf.shape[1] != 7
             or view_pc.shape[1] != 8 or view_history.shape[2] != 4 or view_channel.shape[1] != 2
             or view_channel_int.shape[1] != 2 or view_resources.shape[1] != 4 or view_stats.shape[1] < 10
             or view_out_int.shape[1] != 3 or view_out_float.shape[1] != 2 or view_counts.shape[1] != 7):

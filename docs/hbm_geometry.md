@@ -277,7 +277,7 @@ tRTW 采用 JESD238 表 93 注 18（p.164）的公式，并加入单独声明的
 
 参数包支持 `fast/reference/slow` 三档、来源于开源模型的 `ramulator2` 对照组和明确不套包的 `none`；RL/WL及周期单位时序随CK换算，RTW按对应参数组的公式向上取整，逐字段保存输入单位、来源、范围和手工覆盖。`ramulator2` 固定在0.625 ns，其他三档可随CK换算。三档不构成真实器件上下界或统计置信区间；所有参数组均为 `vendor_calibrated=False`。已有纯几何/分组消融预设维持自身研究语义，第20组分组对照显式使用 `hbm_parameter_profile="none"`，不混入普通主实验的新时序包。
 
-HBM 控制器只有一种组合：`address_mapping=sid_aware`、`scheduler=fr_fcfs`、`queue_scope=pc`。映射为“突发、SID 内 bank group、lane、列、组内 bank、SID、行”，每个 lane 的条带等于一个 SID 内的 bank group 数（HBM4 为 2，HBM2/3 为 4）。可配置项是每伪通道的读写队列深度、写水位和读写切换前的最少读数。FR-FCFS 在一次 `submit_many` 的请求内逐命令重排，结果保持输入顺序；批内地址重叠且含写的请求，后者等前者完成。`bank_interleaved/row_local`、`fcfs/row_hit_first/read_write_batch`、`scheduler_window` 和 `queue_scope=device/channel` 只用于解析模型的 DRAM。
+HBM 控制器只有一种组合：`address_mapping=sid_aware`、`scheduler=fr_fcfs`、`queue_scope=pc`。映射为“突发、SID 内 bank group、lane、列、组内 bank、SID、行”，每个 lane 的条带等于一个 SID 内的 bank group 数（HBM4 为 2，HBM2/3 为 4）。可配置项是每伪通道的读写队列深度、写水位、读写切换前的最少读数，以及写排空期间是否补写队列（`write_drain_refill`）。默认 `False`：排空期间不收新写，写队列降到低水位就切回读，限制读的等待。`True` 是第二选择，与 Ramulator 2.0 相同：排空期间照常补写，等待中的写一次排完、读写换向更少，代价是读等得更久。在 405B HBM4 MID TP8 B458 上，`True` 使 TPOT 低 0.57%，换向少 80%，最长读等待从 996 ns 升到 1,491 ns（2026-11-12）。FR-FCFS 在一次 `submit_many` 的请求内逐命令重排，结果保持输入顺序；批内地址重叠且含写的请求，后者等前者完成。`bank_interleaved/row_local`、`fcfs/row_hit_first/read_write_batch`、`scheduler_window` 和 `queue_scope=device/channel` 只用于解析模型的 DRAM。
 
 版本10历史控制中的HBF使用逻辑页服务分析：4 KiB介质页、64 B主机传输计费、64个有效阵列单元、16个全双工主机通道和每bank两页读缓存。读/编程延迟4 / 75 µs是分析假设；接口1600 / 16 GB/s与理想冷阵列65.536 / 3.495253 GB/s上限分别输出。`published_hbf` 的未给定并行度采用固定128单元假设，主实验显式覆盖为64，均不按接口吞吐反推单元数。逻辑模型可执行RMW，但未包含主机重映射、物理页序和擦除成本；严格完整页事务另用 `hbf_ocp_0_7` 预设。这些记录仅保留为历史控制；64单元及其推导吞吐均未获得器件校准，不能据此判断真实HBF相对HBM的性能，`hbf_ocp_0_7` 的名称也不解除上述限制。
 

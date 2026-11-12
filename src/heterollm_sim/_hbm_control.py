@@ -441,11 +441,14 @@ class _Controller:
 
 
 def fr_queue_parameters(c):
-    """Queue capacities and drain thresholds, in bursts, for one pseudo channel."""
+    """Queue capacities and drain thresholds, in bursts, for one pseudo channel.
+
+    The last entry is 1 when the write queue refills during a drain."""
     write_depth = c.write_queue_depth_per_pc
     return (c.read_queue_depth_per_pc, write_depth,
             max(1, math.ceil(write_depth * c.write_high_watermark)),
-            math.floor(write_depth * c.write_low_watermark), c.min_reads_per_switch)
+            math.floor(write_depth * c.write_low_watermark), c.min_reads_per_switch,
+            int(c.write_drain_refill))
 
 
 _FR_STAT_COUNT = 10
@@ -885,7 +888,7 @@ class _FrFcfsController(_Controller):
             lane["draining"] = False
             lane["reads_since"] = 0
         self.enqueue(lane, 0)
-        if not lane["draining"]:
+        if not lane["draining"] or q[5]:
             self.enqueue(lane, 1)
         reads, writes = queues
         if not reads and not writes:

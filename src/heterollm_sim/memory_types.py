@@ -82,6 +82,7 @@ DRAM_CONTROLLER_FIELDS = (
 DRAM_FR_FCFS_FIELDS = (
     "read_queue_depth_per_pc", "write_queue_depth_per_pc",
     "write_high_watermark", "write_low_watermark", "min_reads_per_switch",
+    "write_drain_refill",
 )
 
 # HBM command occupancy and array constraints are separate quantities. These
@@ -297,6 +298,11 @@ class DramConfig:
     write_high_watermark: float = field(default=0.85, kw_only=True)
     write_low_watermark: float = field(default=0.50, kw_only=True)
     min_reads_per_switch: int = field(default=16, kw_only=True)
+    # False (default): a drain admits no new writes, so it ends at the low
+    # watermark and reads resume. True: the write queue refills during a drain
+    # (Ramulator 2.0's behaviour), so waiting writes drain in one pass and
+    # reads wait longer.
+    write_drain_refill: bool = field(default=False, kw_only=True)
     open_ns: float = 14.0
     close_ns: float = 14.0
     read_latency_ns: float = 14.0
@@ -412,6 +418,8 @@ class DramConfig:
         _positive_int("read_queue_depth_per_pc", self.read_queue_depth_per_pc)
         _positive_int("write_queue_depth_per_pc", self.write_queue_depth_per_pc)
         _positive_int("min_reads_per_switch", self.min_reads_per_switch)
+        if not isinstance(self.write_drain_refill, bool):
+            raise TypeError("write_drain_refill must be a bool")
         for name in ("write_high_watermark", "write_low_watermark"):
             value = _nonnegative(name, getattr(self, name))
             if value > 1:
