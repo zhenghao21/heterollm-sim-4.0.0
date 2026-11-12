@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>14 个 LLM 与内存仿真器：各自能回答什么问题</title>
+<style>
+/* 英文走 Malgun Gothic，中文走微软雅黑 */
+@font-face{font-family:"LatinMG";src:local("Malgun Gothic"),local("MalgunGothic");
+  unicode-range:U+0000-024F,U+2013,U+2264-2265}
+@font-face{font-family:"LatinMG";font-weight:700 900;src:local("Malgun Gothic Bold"),local("MalgunGothicBold"),local("MalgunGothic-Bold");
+  unicode-range:U+0000-024F,U+2013,U+2264-2265}
+:root{
+  --page:#f9f9f7; --surface:#fcfcfb; --tint:#f3f2ee; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --line:#e1e0d9; --line2:#c3c2b7;
+  --good:#2a78d6; --good-bg:#eef5fd; --good-line:#b7d3f6;
+  --bad:#d03b3b; --bad-bg:#fdf0ef; --bad-line:#f3c9c5;
+  --unk:#898781; --unk-bg:#f2f1ed;
+  --font:"LatinMG","Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{max-width:100%;overflow-x:hidden}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.7 var(--font);-webkit-font-smoothing:antialiased}
+button{font-family:var(--font)}
+.wrap{width:min(1240px,100%);margin:0 auto;padding:0 28px 48px}
+h1{font-size:clamp(26px,3.4vw,34px);line-height:1.25;letter-spacing:-.01em;margin:0 0 8px;font-weight:800}
+h2{font-size:20px;line-height:1.35;margin:0;font-weight:800}
+p{margin:0}
+b{font-weight:800}
+a{color:inherit;text-decoration-color:#a9a8a1;text-underline-offset:2px}
+a:hover{text-decoration-color:currentColor}
+.good{color:var(--good)} .bad{color:var(--bad)} .dim{color:var(--muted)}
+
+/* 页头 */
+.top{padding:36px 0 8px}
+.sub{color:var(--ink2);font-size:16px;max-width:860px}
+.meta{margin-top:8px;font-size:12.5px;color:var(--muted)}
+.toc{margin-top:16px;display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--ink2)}
+.toc a{text-decoration:none}
+.toc a:hover{color:var(--ink)}
+.toc i{font-style:normal;color:var(--muted);margin-right:5px;font-weight:800}
+
+/* 术语 */
+.gloss{margin-top:22px;padding:14px 18px 16px;background:var(--tint);border-radius:10px}
+.gloss h3{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.06em;margin:0 0 10px}
+.gloss dl{margin:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px 22px}
+.gloss dt{font-weight:800;font-size:13px;line-height:1.4}
+.gloss dd{margin:2px 0 0;font-size:12.5px;line-height:1.55;color:var(--ink2)}
+
+/* 章节 */
+section{padding:34px 0 0}
+.sechead{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+.num{font-weight:800;font-size:12px;line-height:1;color:var(--muted);border:1px solid var(--line2);border-radius:99px;padding:5px 9px}
+.lede{color:var(--ink2);font-size:14.5px;margin-bottom:16px;max-width:920px}
+.note{margin-top:12px;font-size:12.5px;color:var(--muted);line-height:1.65;max-width:980px}
+.note b{color:var(--ink2)}
+
+/* 1 结论 */
+.pick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--surface);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.pick>div{padding:16px 18px 18px;border-left:1px solid var(--line)}
+.pick>div:first-child{border-left:0}
+.pick .q{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:.04em;margin-bottom:2px}
+.pick .qq{font-weight:800;font-size:14.5px;line-height:1.45;margin-bottom:10px}
+.pick .a{font-weight:800;font-size:15px;line-height:1.45;padding-top:10px;border-top:1px dashed var(--line2)}
+.pick .w{font-size:12.5px;color:var(--ink2);margin-top:6px;line-height:1.6}
+.self{margin-top:12px;display:flex;gap:14px;align-items:baseline;font-size:13px;color:var(--ink2);line-height:1.65}
+.self .tag{flex:none;font-size:11.5px;font-weight:800;color:var(--ink2);background:var(--tint);border-radius:6px;padding:2px 8px}
+
+/* 2 判断标准 */
+.flow{display:grid;gap:12px;max-width:1060px}
+.lane{display:grid;grid-template-columns:150px minmax(0,1fr) 118px minmax(0,1fr);align-items:stretch}
+.lane .who{display:flex;flex-direction:column;justify-content:center;padding-right:14px;font-weight:800;font-size:14.5px;line-height:1.35}
+.lane .who small{font-weight:500;font-size:12px;color:var(--muted)}
+.box{background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:11px 14px;font-size:13px;line-height:1.55}
+.box .k{display:block;font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.05em;margin-bottom:2px}
+.box b{display:block;font-size:14px}
+.box small{display:block;color:var(--ink2);font-size:12.5px;margin-top:2px}
+.arr{position:relative;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--ink2)}
+.arr span{position:relative;z-index:1;background:var(--page);padding:0 6px;margin-top:-22px}
+.arr::before{content:"";position:absolute;left:8px;right:14px;top:50%;border-top:1.5px solid var(--line2)}
+.arr::after{content:"";position:absolute;right:8px;top:calc(50% - 5px);border:5px solid transparent;border-left:7px solid var(--line2);border-right:0}
+.box.out-good{border-color:var(--good-line);background:var(--good-bg)}
+.box.out-good b{color:var(--good)}
+.box.out-bad{border-color:var(--bad-line);background:var(--bad-bg)}
+.box.out-bad b{color:var(--bad)}
+.so{margin-top:16px;max-width:1060px;font-size:14px;line-height:1.7;padding-left:14px;border-left:3px solid var(--line2);color:var(--ink2)}
+.so b{color:var(--ink)}
+
+/* 图例与状态 */
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;font-size:12.5px;color:var(--ink2);margin-bottom:12px}
+.legend>span{display:inline-flex;align-items:center;gap:6px}
+.toggle{margin-left:auto;border:1px solid var(--line2);background:var(--surface);border-radius:7px;
+  padding:5px 11px;font-weight:600;font-size:12.5px;line-height:1;color:var(--ink2);cursor:pointer}
+.toggle:hover{color:var(--ink);border-color:var(--ink2)}
+.mark{display:inline-flex;align-items:center;justify-content:center;gap:4px;font-style:normal;
+  font-size:12px;font-weight:700;border-radius:99px;padding:1px 8px;line-height:1.6;white-space:nowrap}
+.mark.sym{min-width:34px;font-size:14px}
+.m-S{color:var(--good);background:var(--good-bg);border:1px solid var(--good-line)}
+.m-P{color:var(--good);background:transparent;border:1px dashed var(--good-line)}
+.m-N{color:var(--bad);background:var(--bad-bg);border:1px solid var(--bad-line)}
+.m-U{color:var(--unk);background:var(--unk-bg);border:1px solid transparent}
+.m-NA{color:#b9b7ae;background:transparent;border:1px solid transparent}
+
+/* 列含义 */
+.cols{display:grid;grid-template-columns:3fr 4fr 3fr;gap:0;margin-bottom:16px;border-top:1px solid var(--line2)}
+.cols>div{padding:10px 18px 4px 0}
+.cols>div+div{padding-left:18px;border-left:1px solid var(--line)}
+.cols h3{font-size:12.5px;font-weight:800;margin:0 0 6px}
+.cols p{font-size:12.5px;line-height:1.55;color:var(--ink2);margin-bottom:5px}
+.cols p b{color:var(--ink)}
+
+/* 表格通用 */
+.shell{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid var(--line)}
+tbody tr:last-child>*{border-bottom:0}
+thead th{background:var(--tint);font-size:11.5px;font-weight:800;color:var(--ink2);line-height:1.35}
+.shell th.grp{background:#eceae4;text-align:left;padding:6px 16px;font-size:11.5px;font-weight:800;color:var(--ink2);
+  letter-spacing:.05em;border-bottom:1px solid var(--line2)}
+.nm{font-weight:800;font-size:13.5px;line-height:1.35;display:block}
+.own{display:block;font-weight:500;color:var(--muted);font-size:11.5px;line-height:1.4;margin-top:1px}
+/* 窄屏横向滚动时工具名列固定 */
+.shell tbody th:not(.grp){position:sticky;left:0;z-index:1;background:var(--surface)}
+.shell thead tr:first-child th:first-child{position:sticky;left:0;z-index:2;background:var(--tint)}
+.shell tr.mine>th,.shell tr.mine>td{background:#f7f6f1}
+
+/* 3 能力矩阵 */
+.crit{table-layout:fixed;min-width:1000px}
+.crit th,.crit td{padding:9px 4px;text-align:center;vertical-align:middle}
+.crit thead tr:first-child th{border-bottom:1px solid var(--line)}
+.crit thead th.g1{border-left:1px solid var(--line2)}
+.crit thead th:first-child{text-align:left;padding-left:16px}
+.crit tbody th.name{text-align:left;padding:9px 10px 9px 16px}
+.crit td.g1{border-left:1px solid var(--line)}
+.crit tbody tr:hover>:not(.grp){background:#f6f5f0}
+.crit td[data-note]{cursor:default}
+.crit td[data-note]:focus{outline:2px solid var(--good-line);outline-offset:-2px}
+
+/* 4 成本来源 */
+.cost{table-layout:fixed;min-width:1000px}
+.cost th,.cost td{padding:11px 14px;text-align:left;vertical-align:top;font-size:12.5px;line-height:1.55}
+.cost tbody th{padding-left:16px}
+.cost thead th{letter-spacing:.03em}
+.cost thead th.pair{border-left:1px solid var(--line2)}
+.cost td.src.pair{border-left:1px solid var(--line)}
+.cost .lbl{display:block;font-size:11px;font-weight:800;color:var(--ink2);margin-bottom:3px}
+.cost .eff .mark{margin:0 0 5px;font-size:11.5px}
+.cost .eff p{color:var(--ink2)}
+
+/* 5 工具明细 */
+.tools{table-layout:fixed;min-width:1100px}
+.tools th,.tools td{padding:13px 14px;text-align:left;vertical-align:top;font-size:12.5px;line-height:1.6}
+.tools tbody th{padding-left:16px}
+.tools thead th{letter-spacing:.03em}
+.tools tbody tr:hover>:not(.grp){background:#f6f5f0}
+.tools .ask{color:var(--ink);font-weight:600}
+.tools ul{margin:0;padding-left:15px}
+.tools li{margin:0 0 4px}
+.tools li:last-child{margin-bottom:0}
+.tools li::marker{color:var(--line2)}
+.pro li{color:var(--good)}
+.con li{color:var(--bad)}
+.acc{color:var(--ink);font-weight:700}
+.acc small{display:block;font-weight:400;color:var(--muted);font-size:11.5px;margin-top:3px;line-height:1.55}
+.links{display:flex;flex-direction:column;gap:3px;font-size:11.5px}
+.links a{color:var(--ink2)}
+
+/* 6 容易混淆 */
+.mix{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 40px;counter-reset:mix;max-width:1120px}
+.mix>div{position:relative;padding:12px 0 14px 34px;border-top:1px solid var(--line)}
+.mix>div::before{counter-increment:mix;content:counter(mix);position:absolute;left:0;top:13px;width:22px;height:22px;
+  border-radius:99px;background:var(--tint);color:var(--ink2);font-size:12px;font-weight:800;line-height:22px;text-align:center}
+.mix h3{font-size:14px;font-weight:800;margin:0 0 4px}
+.mix p{font-size:13px;color:var(--ink2);line-height:1.65}
+.foot{margin-top:30px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.7}
+
+/* 悬停提示 */
+#tip{position:fixed;z-index:9;max-width:320px;background:#1c1c1a;color:#f4f3ef;border-radius:8px;
+  padding:9px 11px;font-size:12.5px;line-height:1.55;pointer-events:none;opacity:0;transition:opacity .08s;left:0;top:0}
+#tip.on{opacity:1}
+#tip b{display:block;font-size:12.5px;margin-bottom:3px;color:#fff}
+
+@media(max-width:980px){
+  .pick{grid-template-columns:1fr 1fr}
+  .pick>div:nth-child(3){border-left:0}
+  .pick>div:nth-child(n+3){border-top:1px solid var(--line)}
+  .gloss dl{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cols{grid-template-columns:1fr}
+  .cols>div+div{padding-left:0;border-left:0;border-top:1px solid var(--line)}
+  .lane{grid-template-columns:1fr;gap:6px}
+  .lane .who{padding:0}
+  .arr{justify-content:flex-start;height:26px}
+  .arr span{margin:0;padding-left:0}
+  .arr::before,.arr::after{display:none}
+  .arr span::before{content:"↓ "}
+  .mix{grid-template-columns:1fr}
+}
+@media(max-width:560px){
+  .wrap{padding:0 16px 40px}
+  .pick{grid-template-columns:1fr}
+  .pick>div{border-left:0;border-top:1px solid var(--line)}
+  .pick>div:first-child{border-top:0}
+  .gloss dl{grid-template-columns:1fr}
+  .toggle{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <h1>14 个 LLM 与内存仿真器：各自能回答什么问题</h1>
+  <p class="sub">这页帮你按要研究的问题挑工具，并看清每个工具的结果里，哪些是按机制算出来的，哪些直接沿用了实测数据。</p>
+  <p class="meta">截至 2026-11-10 · 依据各项目公开代码、文档和论文核查 · 本次未运行统一基准，各工具精度口径不同，不做精度排名</p>
+  <nav class="toc">
+    <a href="#s1"><i>1</i>按问题选工具</a>
+    <a href="#s2"><i>2</i>判断标准</a>
+    <a href="#s3"><i>3</i>能力总表</a>
+    <a href="#s4"><i>4</i>内存时间从哪来</a>
+    <a href="#s5"><i>5</i>逐个工具</a>
+    <a href="#s6"><i>6</i>容易混淆的地方</a>
+  </nav>
+
+  <div class="gloss">
+    <h3>先认识 10 个词</h3>
+    <dl>
+      <div><dt>TTFT / TPOT</dt><dd>请求到达后多久出第一个 token / 之后平均每个 token 的生成间隔。</dd></div>
+      <div><dt>KV 缓存</dt><dd>注意力层为每个请求保存的历史键值，随生成变长，占显存。</dd></div>
+      <div><dt>Prefill / Decode · PD 分离</dt><dd>先一次处理整段提示词，再逐 token 生成；PD 分离是把两步放到不同机器上。</dd></div>
+      <div><dt>TP / PP / EP</dt><dd>张量并行 / 流水线并行 / 专家并行：把一个模型切到多张卡上的三种方式。</dd></div>
+      <div><dt>profile（性能画像）</dt><dd>在真机上实测好的算子耗时表，仿真时查表或插值。</dd></div>
+      <div><dt>HBM</dt><dd>GPU 旁边堆叠的 DRAM 显存，按 bank 和行组织。</dd></div>
+      <div><dt>HBF</dt><dd>用 NAND 闪存堆叠成的高带宽存储，容量大，但写入（编程）慢。</dd></div>
+      <div><dt>tRCD</dt><dd>HBM 用 ACT 命令打开一行后，要等这么久才能读写；PRE 命令关闭该行。</dd></div>
+      <div><dt>tPROG</dt><dd>NAND 写入（编程）一页所需的时间，远长于读一页。</dd></div>
+      <div><dt>FTL / GC</dt><dd>闪存的地址映射层 / 垃圾回收：回收时要把有效页搬走再擦除整块。</dd></div>
+    </dl>
+  </div>
+</header>
+
+<!-- 1 结论 -->
+<section id="s1">
+  <div class="sechead"><span class="num">1</span><h2>先看结论：按要研究的问题选工具</h2></div>
+  <p class="lede">没有一个工具能回答所有问题。先确定问题落在哪一层：服务调度、硬件设计，还是内存器件；再选在这一层真正建了模的工具。</p>
+  <div class="pick">
+    <div>
+      <div class="q">问题</div>
+      <div class="qq">要预测 TTFT / TPOT，挑部署配置</div>
+      <div class="a">AISimulate · Vidur · LLMServingSim 2.0</div>
+      <div class="w">请求、组批、KV 容量和排队都在模型里；器件快慢来自实测数据，换新硬件要重新测。</div>
+    </div>
+    <div>
+      <div class="q">问题</div>
+      <div class="qq">要研究 HBM 行命令、刷新与时序</div>
+      <div class="a">Ramulator 2.1 · DRAMsim3</div>
+      <div class="w">逐条模拟 DRAM 命令，但只算内存请求何时完成，没有 LLM 请求；要看到 TTFT / TPOT 的变化，需要接跨层前端，如本项目 HeteroLLM-sim。</div>
+    </div>
+    <div>
+      <div class="q">问题</div>
+      <div class="qq">要研究 HBF 写入、GC 与寿命</div>
+      <div class="a">HBFSim（FlashLabAE）· MQSim</div>
+      <div class="w">页编程、擦除、地址映射、GC 和磨损都会计时。MQSim 走 SSD 接口，不等于 GPU 直连的 HBF；想在真实 GPU 上看注入效应，用 SlugLab 版 HBFSim。</div>
+    </div>
+    <div>
+      <div class="q">问题</div>
+      <div class="qq">要比较算力、带宽、拓扑设计</div>
+      <div class="a">LLMCompass · GenZ · ASTRA-sim · SimAI</div>
+      <div class="w">计算阵列、片上缓冲、Roofline（算力 / 带宽上限估算）和集合通信；不模拟内存器件时序。</div>
+    </div>
+  </div>
+  <p class="self"><span class="tag">本项目的位置</span><span>HeteroLLM-sim 把服务调度、多卡并行和 HBM / HBF 器件时序放在同一条时间线上，覆盖面最宽；但还没有统一的实机误差，HBM 只覆盖正常操作子集，HBF 也没有 FTL / GC（见第 3、5、6 节）。</span></p>
+</section>
+
+<!-- 2 判断标准 -->
+<section id="s2">
+  <div class="sechead"><span class="num">2</span><h2>判断标准：改一个参数，结果变不变</h2></div>
+  <p class="lede">功能清单很容易写满，所以这页不按“有没有提到某功能”打分，只问一件事：<b>把这个机制的参数改大，仿真结果会不会跟着变</b>。同样是“算了 HBM”，两个工具的做法可以完全不同：</p>
+  <div class="flow">
+    <div class="lane">
+      <div class="who">Vidur<small>服务仿真器</small></div>
+      <div class="box"><span class="k">HBM 时间从哪来</span><b>真机实测的算子耗时</b><small>HBM 的影响已经包含在测量值里</small></div>
+      <div class="arr"><span>把 tRCD 调大</span></div>
+      <div class="box out-bad"><span class="k">结果</span><b>✕ 不变</b><small>没有任何计算读取 tRCD；只有重测 profile 才会变</small></div>
+    </div>
+    <div class="lane">
+      <div class="who">Ramulator 2.1<small>DRAM 仿真器</small></div>
+      <div class="box"><span class="k">HBM 时间从哪来</span><b>逐条模拟 ACT → RD 等命令</b><small>每条命令都要满足时序间隔</small></div>
+      <div class="arr"><span>把 tRCD 调大</span></div>
+      <div class="box out-good"><span class="k">结果</span><b>● 会变</b><small>开行到读写的间隔变长，没命中已开行的访问和排队都会变慢</small></div>
+    </div>
+  </div>
+  <p class="so">所以，Vidur 并没有“忽略内存”，它只是把内存的影响折进了实测数字里，底层参数传不进去。下面的总表只把后一种情况记为“支持”；对前一种，第 4 节会说明它的内存时间到底从哪来。</p>
+</section>
+
+<!-- 3 能力总表 -->
+<section id="s3">
+  <div class="sechead"><span class="num">3</span><h2>能力总表：同一把尺子量 14 个工具</h2></div>
+  <p class="lede">10 个机制分成三组，每格都按第 2 节的标准判断。悬停或用 Tab 键聚焦任一格，可以看到判断依据。</p>
+  <div class="cols">
+    <div>
+      <h3>服务调度</h3>
+      <p><b>连续批处理</b>：请求一结束，空位马上由新请求补上，批的组成随之改变。</p>
+      <p><b>KV 容量</b>：KV 缓存随生成增长、结束后释放；装不下时，新请求要等待或被抢占。</p>
+      <p><b>PD 分离</b>：KV 从 Prefill 机读出、经链路传输、写入 Decode 机，三段都要计时。</p>
+    </div>
+    <div>
+      <h3>多卡并行与互联</h3>
+      <p><b>TP / PP / EP</b>：模型按张量、流水段、专家切到多张卡，切法要进入计算和通信时间。</p>
+      <p><b>链路争用</b>：多路数据同时走同一条链路时，要排队分带宽，而不是各按满带宽算。</p>
+    </div>
+    <div>
+      <h3>内存器件</h3>
+      <p><b>HBM 命令</b>：逐条模拟开行、读写、关行和刷新，行命中与否改变时延。</p>
+      <p><b>NAND 时序</b>：HBF 的页读、页编程、块擦除各自占用闪存阵列。</p>
+      <p><b>FTL / GC</b>：垃圾回收搬运有效页产生的读写也要计时。</p>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i class="mark sym m-S">●</i>支持：已实现并核实</span>
+    <span><i class="mark sym m-P">◐</i>部分：有这条路径，缺关键环节</span>
+    <span><i class="mark sym m-N">✕</i>不提供：属于它的研究范围，但没有这个机制</span>
+    <span><i class="mark sym m-U">?</i>待核实：公开材料不足，不算劣势</span>
+    <span><i class="mark sym m-NA">—</i>不适用：不在它的设计范围内</span>
+    <button class="toggle" id="toggleText" type="button">显示文字</button>
+  </div>
+  <div class="shell">
+    <table class="crit" id="critTable">
+      <colgroup><col style="width:17%"><col span="10"></colgroup>
+      <thead id="critHead"></thead>
+      <tbody id="critBody"></tbody>
+    </table>
+  </div>
+  <p class="note"><b>✕ 和 — 的区别</b>：✕ 是该做而没做，例如 HBF 仿真器没有 FTL / GC；— 是本来就不做，例如服务仿真器不模拟器件，DRAM 仿真器不处理 LLM 请求。服务类工具的器件列多是 —，但它们的结果里照样有内存时间，见下一节。</p>
+</section>
+
+<!-- 4 成本来源 -->
+<section id="s4">
+  <div class="sechead"><span class="num">4</span><h2>✕ 和 — 不等于没算：内存时间藏在哪</h2></div>
+  <p class="lede">用两个器件参数做探针：HBM 的 <b>tRCD</b>（开行后到能读写的等待）和 NAND 的 <b>tPROG</b>（写一页的时间）。每个工具看两件事：这部分时间从哪来，只改这一个参数结果会怎样。</p>
+  <div class="legend">
+    <span><i class="mark m-S">● 会变</i>参数进入时间线</span>
+    <span><i class="mark m-P">◐ 有条件</i>只在特定后端或路径上进入</span>
+    <span><i class="mark m-N">✕ 不变</i>没有入口，只能改更高层参数或另接模型</span>
+    <span><i class="mark m-U">? 待核实</i></span>
+    <span><i class="mark m-NA">— 不适用</i></span>
+  </div>
+  <div class="shell">
+    <table class="cost">
+      <colgroup><col style="width:15%"><col style="width:23%"><col style="width:19.5%"><col style="width:23%"><col style="width:19.5%"></colgroup>
+      <thead>
+        <tr><th style="padding-left:16px">工具</th><th class="pair">HBM 时间从哪来</th><th>只改 tRCD</th><th class="pair">NAND 时间从哪来</th><th>只改 tPROG</th></tr>
+      </thead>
+      <tbody id="costBody"></tbody>
+    </table>
+  </div>
+  <p class="note">结果“不变”的工具想研究新器件，只能改更高层的有效参数（带宽、时延、profile），或另接一个器件模型。例如把聚合存储层的带宽设成 HBF 的数值，并不会凭空产生页编程或擦除。</p>
+</section>
+
+<!-- 5 工具明细 -->
+<section id="s5">
+  <div class="sechead"><span class="num">5</span><h2>逐个工具：适合回答什么、强在哪、边界在哪</h2></div>
+  <p class="lede">精度一栏只写该工具<b>自己声明</b>的数字和验证对象。算子误差、请求延迟误差、命令合法性彼此不能比较，详见第 6 节。</p>
+  <div class="shell">
+    <table class="tools">
+      <colgroup><col style="width:13%"><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:17%"><col style="width:10%"></colgroup>
+      <thead>
+        <tr><th style="padding-left:16px">工具</th><th>最适合回答的问题</th><th class="good">优势</th><th class="bad">短板 / 边界</th><th>精度口径</th><th>来源</th></tr>
+      </thead>
+      <tbody id="toolBody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 6 容易混淆 -->
+<section id="s6">
+  <div class="sechead"><span class="num">6</span><h2>容易混淆的地方</h2></div>
+  <p class="lede">下面这几处最常被读错，引用表中结论前先核对。</p>
+  <div class="mix">
+    <div>
+      <h3>两个同名的 HBFSim</h3>
+      <p>FlashLabAE/HBFSim 是事件驱动的系统模型，SlugLab/HBFSim 在真实 GPU 上插桩注入，二者是独立项目，能力、论文和精度数字不能合并。另有一篇 HBF-Sim 论文（Accel-Sim 扩展），本轮未确认公开仓库和许可证，没有列入。</p>
+    </div>
+    <div>
+      <h3>精度数字不能横着比</h3>
+      <p>算子误差、请求延迟误差、命令合法性、延迟注入误差和训练一致性，回答的是不同问题；本次也没有跑统一基准。另外，“支持某种配置”和“该配置的精度已验证”是两种不同的证据。</p>
+    </div>
+    <div>
+      <h3>公开基线 ≠ 论文扩展</h3>
+      <p>Exploring HBF 论文用的是扩展版 LLMSimulator（增加了 HBF、PD 导入、连续满批和部署搜索），扩展版仓库本轮未确认，表中只按公开基线评。ASTRA-sim 同理：按公开 2.x 主干评，3.0 论文的初始补丁（PR #389）核查时仍开放。</p>
+    </div>
+    <div>
+      <h3>名称与版本</h3>
+      <p>AISimulate 是 AIConfigurator 的继任项目，发行名正迁移为 aisim。LLMServingSim 按当前 2.0 主干（vLLM 层级 profile + ASTRA-Sim 解析网络）评，2024 版基于 ONNXim 的描述已不代表现状。SimAI 当前版本含推理，不只是训练仿真器。</p>
+    </div>
+    <div>
+      <h3>本项目的边界</h3>
+      <p>HeteroLLM-sim 的 HBF 当前没有 FTL / GC；HBM 只覆盖正常操作子集（初始化、低功耗、训练、ECC / RAS 未建模），不是完整的 JEDEC 控制器。研究报告里的 10% 是条件预测预算，不是“实机误差 ≤ 10%”。</p>
+    </div>
+    <div>
+      <h3>仿真速度 ≠ 被仿真系统的性能</h3>
+      <p>仿真器跑完一次要多少分钟，和它算出来的 TTFT / 吞吐是两回事。各论文的工作负载、硬件、版本和保真度都不同，本次不按分钟数或加速比给仿真速度排名。</p>
+    </div>
+  </div>
+  <p class="foot">数据来源：<a href="LLM仿真器对比调研_20261110.xlsx">LLM仿真器对比调研_20261110.xlsx</a>（完整对比、精度与证据、名称与版本三张表）。每个工具的原始出处见第 5 节“来源”列。</p>
+</section>
+
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+<script>
+(function(){
+// 状态：S 支持 · P 部分 · N 不提供 · U 待核实 · NA 不适用
+const SYM={S:'●',P:'◐',N:'✕',U:'?',NA:'—'};
+const WORD={S:'支持',P:'部分',N:'不提供',U:'待核实',NA:'不适用'};
+const EFFECT={S:'会变',P:'有条件',N:'不变',U:'待核实',NA:'不适用'};
+
+const GROUPS=['本项目 · 跨层系统','服务与集群仿真','LLM + 详细内存 / HBF','硬件设计空间','单一组件（需外接前端）'];
+const COLGROUPS=[['服务调度',3],['多卡并行与互联',4],['内存器件',3]];
+const COLS=[
+ ['batch','连续批处理','连续批处理与补位'],['kv','KV 容量','KV 容量与生命周期'],['pd','PD 分离','PD 分离与 KV 入站'],
+ ['tp','TP','张量并行 TP'],['pp','PP','流水线并行 PP'],['ep','EP','专家并行 EP'],['link','链路争用','共享链路争用'],
+ ['hbm','HBM 命令','HBM 命令与行状态'],['nand','NAND 时序','NAND 页 / 块时序'],['ftl','FTL / GC','FTL / GC 搬移计费']];
+const GROUP_START=new Set(['batch','tp','hbm']);
+
+// 每个工具一条记录：总表状态与依据、内存时间来源、明细
+const TOOLS=[
+ {g:0,name:'HeteroLLM-sim 4.0.0',own:'本项目',mine:true,
+  st:{batch:'S',kv:'S',pd:'P',tp:'S',pp:'S',ep:'S',link:'S',hbm:'S',nand:'S',ftl:'N'},
+  nt:{batch:'在线调度在请求完成时补位，新的批组成会改变后续执行。',kv:'KV 的分配、增长、释放和迁移约束新请求能否进入。',
+   pd:'KV 入站计入源端读、链路和目标端写；生产者一侧尚未完整闭环。',tp:'原生 TP 分片与集合通信生成执行任务。',
+   pp:'原生 PP 阶段与微批依赖，保留流水线气泡。',ep:'EP 专家分区、分发与合并通信进入执行。',
+   link:'拓扑路由与共享链路资源排队（阶段 / 链路粒度）。',hbm:'正常 ACT/PRE/RD/WR 时序参与调度；不是完整 JEDEC 控制器。',
+   nand:'页读、页编程、块擦除占用有限的阵列与传输资源。',ftl:'当前 NAND 核心明确没有 FTL 和垃圾回收。'},
+  hbm:['逐条命令 + 行状态','控制器维护每个 bank 的行状态、ACT/PRE、读写间隔、总线方向与刷新。','S','需要 ACT 的访问完成时间会变；对总时延的影响取决于行命中率和是否在关键路径上。'],
+  nand:['页操作占资源','页读、页编程、块擦除与传输依赖显式占用资源。','S','改 page_program_ns 会改变编程占用时间和其后的操作。'],
+  q:'HBM、HBF、SRAM 的数据放置、介质时序、服务调度和并行布局，如何共同影响 LLM 推理？',
+  pro:['服务调度、算子 DAG 与 HBM / HBF / SRAM 共用一条执行时间线','HBF 与 SRAM 参数可自由组合，不依赖现成 GPU'],
+  con:['没有统一的实机误差；HBM 不是完整 JEDEC，NAND 没有 FTL / GC / ECC','网络是链路级而非包级协议；系统能耗模型不完整'],
+  acc:'10% 是条件预测预算',accNote:'不是实机误差 ≤ 10%；30 个配置的原生研究用层 / 阶段采样加条件预测',
+  links:[['GitHub','https://github.com/zhenghao21/heterollm-sim-4.0.0'],['研究报告','../artifacts/exploring_hbf_native_20261108/report.md'],['HBM 范围','hbm_jedec_control_audit_20261107.md']]},
+
+ {g:1,name:'AISimulate',own:'NVIDIA / ai-dynamo',
+  st:{batch:'S',kv:'S',pd:'P',tp:'S',pp:'U',ep:'U',link:'P',hbm:'NA',nand:'NA',ftl:'NA'},
+  nt:{batch:'Replay 按引擎准入规则和 token 预算动态组批。',kv:'G1 KV 块容量与引擎准入规则参与回放。',
+   pd:'请求交接、传输与准入已建模；源端读 / 目标端写未完整核实。',tp:'TP 形状改变计算与通信定价。',
+   pp:'公开有 PP 参数，未确认微批气泡的完整执行。',ep:'已知有 EP 定价；逐专家放置与分发时序未核实。',
+   link:'按 rank 的发送 / 接收链路公平共享；不含交换机路径。',hbm:'GPU HBM 不展开成命令，见第 4 节。',
+   nand:'没有 NAND 器件模型，G3 是聚合的 KV 存储层。',ftl:'没有 FTL / GC 机制。'},
+  hbm:['实测表 / 解析式','查实测表、插值或 SOL（理论上限）模型；实测时长已含访存影响，KV 容量另行约束准入。','N','不会生成新的 ACT→RD 时间；只有走带宽类解析路径时才有响应。'],
+  nand:['G3 聚合 KV 池','主机缓存之后的一层通用存储池：容量、首字节时延、读写带宽、LRU 替换。','N','没有介质状态可改；只能改有效写带宽，或另接模型。'],
+  q:'在现有 NVIDIA 平台上，给定模型、负载和 SLA，该选哪种框架、并行方式和 PD 部署？',
+  pro:['贴近真实框架，可按 SLA 搜索部署与 PD 配置','不用起完整集群就能比较候选方案'],
+  con:['精度受实测数据覆盖范围限制；新硬件要有匹配的性能数据','没有 Flash 内部语义；E2E 精度快照不含多节点'],
+  acc:'按已测配置发布 E2E 精度',accNote:'分别给出 TTFT / TPOT 误差、曲线误差与覆盖率',
+  links:[['GitHub','https://github.com/ai-dynamo/aisimulate'],['论文','https://arxiv.org/abs/2601.06288'],['精度证据','https://ai-dynamo.org/aisimulate/e2e-accuracy/']]},
+
+ {g:1,name:'Vidur',own:'Microsoft',
+  st:{batch:'S',kv:'S',pd:'U',tp:'S',pp:'S',ep:'U',link:'P',hbm:'NA',nand:'NA',ftl:'NA'},
+  nt:{batch:'请求级调度，批完成后继续接纳新请求。',kv:'显存 / KV 约束及抢占作用于请求级调度。',
+   pd:'主干未确认完整的 P/D KV 传输闭环。',tp:'TP 形状与 collective profiling 进入延迟。',
+   pp:'PP 阶段级调度与传输影响流水执行。',ep:'已核实的主干不足以确认 EP 分发。',
+   link:'拓扑与通信 profiling 影响成本；不是链路排队。',hbm:'算子实测耗时已含该 GPU 的 HBM 影响。',
+   nand:'公开路径未核实独立 NAND 模型。',ftl:'无。'},
+  hbm:['实测算子耗时','GPU 算子 profile 已含测量时那张卡的 HBM 影响；KV 容量另由服务状态管理。','N','profile 固定时没有因果路径；须重测或新增物理后端。'],
+  nand:['无已核实模型','公开服务 / profile 路径未核实独立 NAND 模型；HBM profile 不等于卸载模型。','N','须先加入或核实卸载模型。'],
+  q:'给定硬件和请求轨迹，哪种调度策略、批量、路由和 TP / PP 部署更好？',
+  pro:['请求级指标直接可用，支持调度器与 SLO 搜索','算子与通信成本由实测 + 随机森林预测支撑'],
+  con:['新硬件 / 新算子要先 profiling','内存侧只到容量与 KV 管理，没有命令或 GC'],
+  acc:'论文延迟误差 < 9%',accNote:'只覆盖论文评估的模型、硬件与配置；会议网页旧摘要写 < 5%，以全文为准',
+  links:[['GitHub','https://github.com/microsoft/vidur'],['论文','https://www.microsoft.com/en-us/research/wp-content/uploads/2024/05/vidur_mlsys24.pdf']]},
+
+ {g:1,name:'LLMServingSim 2.0',own:'KAIST',
+  st:{batch:'S',kv:'S',pd:'S',tp:'S',pp:'S',ep:'S',link:'S',hbm:'NA',nand:'NA',ftl:'NA'},
+  nt:{batch:'Python 前端复现 vLLM 连续批处理与实时准入。',kv:'KV 块池、前缀缓存、抢占与多级放置影响准入。',
+   pd:'统一运行时连接 P/D、KV 搬移与目标端准入。',tp:'TP 分片与 ASTRA-Sim 集合通信共同执行。',
+   pp:'多阶段微批与 PP lookahead 进入完成依赖。',ep:'MoE 路由、专家并行与通信经统一运行时执行。',
+   link:'ASTRA-Sim 拓扑 / 链路后端执行通信并反馈依赖。',hbm:'本地 HBM 时间主要包含在实测算子耗时里。',
+   nand:'CPU / CXL / PIM 卸载另定成本，没有 NAND 页模型。',ftl:'未核实。'},
+  hbm:['实测耗时 + KV 块池','本地 HBM 时间在实测算子耗时里；KV 块池独立约束容量与卸载。','N','profile 固定时没有独立的 tRCD 输入；须更新 profile 或后端。'],
+  nand:['卸载另定成本','文档涉及 CPU / CXL / PIM 卸载，但不能由此推出 NAND 页操作。','U','是否消费 tPROG 待核实。'],
+  q:'异构、解耦的服务里，调度、KV 放置、卸载和通信如何共同影响推理？',
+  pro:['统一调度、数据搬移与网络，覆盖 PD 与 TP / PP / EP / DP','公开的实机验证范围写得最清楚'],
+  con:['计算耗时依赖目标设备的 profile','器件时序是抽象的；四个验证部署之外的配置要另验'],
+  acc:'四个部署的 TTFT / TPOT / 总延迟最大误差 ≤ 1.2%',accNote:'与 2026 论文的 A6000 / H100 评估是不同集合，不能合成一个普适精度',
+  links:[['GitHub','https://github.com/casys-kaist/LLMServingSim'],['论文','https://arxiv.org/abs/2602.23036'],['验证','https://llmservingsim.ai/docs/validation']]},
+
+ {g:1,name:'SimAI 1.7',own:'Alibaba Cloud',
+  st:{batch:'S',kv:'S',pd:'U',tp:'S',pp:'U',ep:'P',link:'S',hbm:'NA',nand:'NA',ftl:'NA'},
+  nt:{batch:'Vidur 派生的请求调度器运行多请求批处理。',kv:'MemoryPlanner 限定 KV 预算，按请求分配和释放。',
+   pd:'可记录 PD P2P 完成时间；源端读 / 目标端写闭环未核实。',tp:'推理可分片并计 TP 通信。',
+   pp:'文档声明有 PP 路径；微批气泡范围待核实。',ep:'EP 固定为 world_size，MoE 支持仍在进行中。',
+   link:'可用 ns-3 后端建拓扑与网络争用。',hbm:'MemoryPlanner 管容量，耗时来自所选成本后端。',
+   nand:'公开推理后端未核实 NAND 页操作。',ftl:'未核实。'},
+  hbm:['后端成本 + 容量规划','MemoryPlanner 管容量与 KV 准入；耗时来自所选的 profile / 解析 / 基准后端。','N','取决于后端；走固定 profile 路径时没有行激活可改。'],
+  nand:['无已核实模型','公开推理后端未核实到独立的 NAND 页操作。','N','须先明确用哪个存储后端。'],
+  q:'大规模训练 / 推理中，拓扑、集合通信和并行策略怎样影响性能与通信瓶颈？',
+  pro:['网络后端可选（解析 / ns-3）；自 1.5 起支持推理与 PD','训练与推理工作负载共用一套工具链'],
+  con:['各后端支持的并行方式与模型不一致','98.1% 一致性来自训练结果，不能代表推理模块'],
+  acc:'NSDI 2025：与真机平均 98.1% 一致',accNote:'评估对象是训练工作负载',
+  links:[['GitHub','https://github.com/aliyun/SimAI'],['NSDI 2025','https://www.usenix.org/conference/nsdi25/presentation/wang-xizheng-simai']]},
+
+ {g:2,name:'HBFSim · FlashLabAE',own:'FlashLabAE',
+  st:{batch:'S',kv:'S',pd:'U',tp:'U',pp:'U',ep:'U',link:'P',hbm:'N',nand:'S',ftl:'S'},
+  nt:{batch:'服务前端用连续批处理，批组成由完成事件驱动。',kv:'分页 KV、前缀共享、容量准入与抢占都会影响服务。',
+   pd:'有服务和层级迁移，未核实完整的 P/D 闭环。',tp:'已核实的案例主要是单加速器。',
+   pp:'未核实 PP 的阶段、微批依赖与气泡实现。',ep:'有 MoE 工作负载，但不证明跨设备 EP 分发。',
+   link:'内存层级链路有有限资源争用；不是集群网络模型。',hbm:'HBM 是通道聚合模型，行命令与刷新已删除。',
+   nand:'页读 / 编程 / 块擦除受 bank 与内部日历约束。',ftl:'主机 FTL / GC 的复制经 HBF→HBM 读写并占用缓冲。'},
+  hbm:['通道带宽日历','按 burst 取整、伪通道共享仲裁，用平均时延与带宽效率计时，不是行命令。','N','没有独立的 tRCD 状态；只能重估平均时延 / 效率。'],
+  nand:['页操作 + 主机 FTL','HBF 阵列显式执行读 / 编程 / 擦除；FTL、GC、地址映射在主机侧。','S','编程变慢会拉长写入、缓冲排空（drain）和 GC 争用。'],
+  q:'HBF 该放权重还是 KV、HBM 怎么分，主机映射和回收对性能与寿命有什么影响？',
+  pro:['主机映射、FTL、GC、写放大与磨损完整成链','能同时权衡容量与寿命'],
+  con:['HBM 已改为通道聚合，回答不了行局部性与刷新','HBM4 / HBF 未经实物校准；案例多为单卡、短时间窗口'],
+  acc:'H200 batch 平均误差 5.8%',accNote:'这是计算 / 服务前端的校准，不是 HBF 或 HBM4 器件误差',
+  links:[['GitHub','https://github.com/FlashLabAE/HBFSim'],['论文','https://arxiv.org/abs/2610.23503'],['当前模型范围','https://github.com/FlashLabAE/HBFSim/blob/main/docs/reference/model.md']]},
+
+ {g:2,name:'HBFSim · SlugLab',own:'SlugLab',
+  st:{batch:'P',kv:'P',pd:'U',tp:'U',pp:'U',ep:'U',link:'U',hbm:'NA',nand:'P',ftl:'U'},
+  nt:{batch:'由真实 vLLM 调度；注入只覆盖部分访问。',kv:'容量模式与 HBM 页缓存可运行，覆盖写仍有限。',
+   pd:'未核实 P/D 两端与 KV 落地的完整注入链。',tp:'依托真实框架运行，未确认 TP 通信是否被覆盖。',
+   pp:'未确认跨阶段传输与 PP 微批的联合覆盖。',ep:'MoE 内核被注入，不证明跨设备 EP 通信。',
+   link:'多堆栈接口不等于已核实的集群争用。',hbm:'普通访问由真实硬件执行，tRCD 由实机决定。',
+   nand:'注册地址走模拟后端（含 MQSim 集成）。',ftl:'取决于后端；注入路径的 FTL / GC 计费未核实。'},
+  hbm:['真实 GPU','未注册的普通访问由真机执行；注册的地址范围走模拟路径。','N','在模拟配置里改 tRCD 不影响真实 GPU；后端是否暴露该参数须逐个核实。'],
+  nand:['可选 HBF 后端','注册范围由 HBF 模型处理（含 MQSim 集成与快速模式）。','P','只有写路径进入带编程状态的后端时才生效；快速模式须核实。'],
+  q:'在真实 CUDA / LLM 软件栈上，被注册地址的 HBF 时延和容量效应有多大？',
+  pro:['保留真实 GPU 与真实内核','能观察真实计算与被模拟存储之间的交互'],
+  con:['必须有 GPU；注入只覆盖注册的地址范围','公开 TODO 仍列页写计费、容量模式原位覆盖；热效应未进入时序'],
+  acc:'0.152% 是延迟注入误差',accNote:'不是 HBF 性能预测误差；Qwen3-30B 案例在约 61 GB 张量中只注册了 16 KB',
+  links:[['GitHub','https://github.com/SlugLab/HBFSim'],['论文','https://arxiv.org/abs/2609.09800'],['已知问题','https://github.com/SlugLab/HBFSim/blob/main/TODO.md']]},
+
+ {g:2,name:'LLMSimulator / Duplex',own:'scale-snu',
+  st:{batch:'U',kv:'U',pd:'U',tp:'U',pp:'U',ep:'U',link:'U',hbm:'S',nand:'NA',ftl:'NA'},
+  nt:{batch:'有请求注入与 Duplex 基线，公开的补位实现未核实。',kv:'批量与内存模型不能证明 KV 的动态生命周期与准入。',
+   pd:'论文扩展含 PD；公开代码版本本轮未确认。',tp:'多节点配置不能证明逐项 TP 成本。',
+   pp:'未确认公开基线的 PP 微批与气泡。',ep:'支持 MoE 与多节点，不证明跨设备 EP 调度。',
+   link:'多节点说明不足以确认拓扑争用。',hbm:'DRAM 访问交给修改版 Ramulator 2，命令级。',
+   nand:'公开基线未确认 NAND 后端。',ftl:'未确认。'},
+  hbm:['命令级 DRAM','DRAM 访问交给修改版 Ramulator 2，细粒度时序来自该后端。','S','需要 ACT 的访问会变；参数与标准须对所选版本核实。'],
+  nand:['公开基线未见','公开基线 README 未确认 NAND 后端；论文扩展不能算作基线能力。','N','没有已核实的入口。'],
+  q:'LLM 图执行、MoE / 注意力结构与详细内存系统、PIM 架构怎么协同设计？',
+  pro:['LLM 图执行直接接 Ramulator 2 的命令级内存','面向 MoE、GQA / MLA 与 PIM 结构'],
+  con:['cycle-accurate 是建模自述，不等于端到端误差','Exploring HBF 论文的 HBF 扩展代码未确认公开'],
+  acc:'本轮未核实公开基线的 E2E 误差',accNote:'不要把论文扩展的能力算进当前公开基线',
+  links:[['GitHub','https://github.com/scale-snu/LLMSimulator'],['Duplex 论文','https://arxiv.org/abs/2409.01141']]},
+
+ {g:3,name:'LLMCompass',own:'Princeton',
+  st:{batch:'N',kv:'P',pd:'U',tp:'S',pp:'U',ep:'U',link:'P',hbm:'NA',nand:'NA',ftl:'NA'},
+  nt:{batch:'固定 batch 运行算子，不做完成驱动的补位。',kv:'有权重 / KV 容量可行性分析；没有请求级分配释放。',
+   pd:'未确认 KV 导出、传输、落地与准入的闭环。',tp:'按 TP 分片，并计入各层 ring all-reduce。',
+   pp:'已知有阶段划分 / P2P 成本；微批气泡未核实。',ep:'ring / P2P 不足以判定 EP 专家放置。',
+   link:'链路 / P2P 与 ring 用解析式计成本；不是多流排队。',hbm:'主存作为容量与带宽资源，没有行命令。',
+   nand:'没有独立 NAND 页模型。',ftl:'无。'},
+  hbm:['容量 / 带宽 + 映射','主存是容量与带宽资源，与 buffer / tiling 决定的数据搬运一起形成耗时。','N','没有逐次行激活可重算；须折算成有效性能参数。'],
+  nand:['无独立页模型','用主存 / 互联成本评估，未核实 NAND 页模型。','N','没有对应状态。'],
+  q:'算力、片上缓冲和主存带宽怎么配，LLM 推理的性能 / 面积 / 成本效率最高？',
+  pro:['参数化计算阵列、多级 buffer 与 tiling 搜索','带面积与成本模型，可做性价比设计空间探索'],
+  con:['固定 batch 运行算子，没有在线排队与补位','主存只到容量 / 带宽；buffer 不区分 cache 与 scratchpad'],
+  acc:'算子平均误差 10.9%；单层 Prefill 0.69%、Decode 7.5%',accNote:'不是完整请求的 TTFT / TPOT 或 P99 精度；旧 arXiv 版为 10.4%，勿混用',
+  links:[['GitHub','https://github.com/PrincetonUniversity/LLMCompass'],['ISCA 2024','https://www.cl.cam.ac.uk/~ey204/teaching/ACS/R244_2024_2025/papers/LLMCOMPASS_ISCA_2024.pdf']]},
+
+ {g:3,name:'GenZ / ECHELON',own:'ASTRA-sim 组织',
+  st:{batch:'U',kv:'P',pd:'U',tp:'S',pp:'U',ep:'N',link:'U',hbm:'NA',nand:'NA',ftl:'NA'},
+  nt:{batch:'论文的解析路径是固定 batch；新后端覆盖未核实。',kv:'容量与 offload 比例影响估计；没有运行时块分配。',
+   pd:'当前依赖新后端，未确认 PD 闭环。',tp:'TP 分配权重 / KV，并计 ring all-reduce。',
+   pp:'有 PP 解析分析；显式微批气泡未核实。',ep:'README 仍把 EP 列为 TODO。',
+   link:'论文给的是最优拓扑通信公式；共享争用未核实。',hbm:'HBM / DDR 作为快层，用容量与有效带宽表示。',
+   nand:'慢层用容量 / 带宽抽象，不执行页编程与擦除。',ftl:'无。'},
+  hbm:['有效容量 / 带宽','主存时间 = 所需字节 ÷ 带宽；分快 / 慢两级存储。','N','tRCD 不在公式里；须更新有效参数。'],
+  nand:['慢层带宽抽象','SSD / Flash 作为慢层，用容量、带宽和效率表示 offload。','N','须显式更新慢层写性能参数。'],
+  q:'某类 LLM 负载首先卡在算力、内存带宽、容量还是互联？',
+  pro:['一阶解析，扫参最快','显式区分 Prefill / Decode 与快 / 慢存储'],
+  con:['重叠与效率因子是假设，解释不了争用与控制器行为','慢层带宽 ≠ NAND 页编程 / 擦除；EP 仍是 TODO'],
+  acc:'TTFT 5.88% / TPOT 3.86%（几何均值误差）',accNote:'H100 + vLLM + Llama2；代入 60% 算力效率、70% 带宽效率',
+  links:[['GitHub','https://github.com/astra-sim/GenZ-LLM-Analyzer'],['论文','https://arxiv.org/abs/2406.01698']]},
+
+ {g:4,name:'Ramulator 2.1',own:'CMU-SAFARI · DRAM',
+  st:{batch:'NA',kv:'NA',pd:'NA',tp:'NA',pp:'NA',ep:'NA',link:'NA',hbm:'S',nand:'NA',ftl:'NA'},
+  nt:{hbm:'显式维护 DRAM 命令、bank / 行状态与时序门限。'},
+  hbm:['逐条命令 + 控制器','设备状态、控制器、命令依赖和时序；细节由所选标准决定。','S','ACT 之后的读写受约束，非行命中的访问与排队会变。'],
+  nand:['不在范围','研究对象是 DRAM；需要另加设备模型与前端。','NA','不属于该模型。'],
+  q:'HBM 命令合法性、行局部性、刷新、地址映射和控制器调度。',
+  pro:['命令、状态、时序与控制器调度齐全，可嵌入其他仿真器','覆盖多代 DRAM，含 HBM4'],
+  con:['单独运行没有 LLM 请求、KV 或 TTFT','周期级建模不等于所有器件参数都经厂商标定'],
+  acc:'命令合法性、时序门控、延迟 / 吞吐形状测试',accNote:'是内存子系统验证，不是 LLM 服务精度',
+  links:[['GitHub','https://github.com/CMU-SAFARI/ramulator2'],['论文','https://arxiv.org/abs/2606.13844'],['验证','https://github.com/CMU-SAFARI/ramulator2#5-validation-and-regression-tests']]},
+
+ {g:4,name:'DRAMsim3',own:'UMD · DRAM 时序 / 热',
+  st:{batch:'NA',kv:'NA',pd:'NA',tp:'NA',pp:'NA',ep:'NA',link:'NA',hbm:'S',nand:'NA',ftl:'NA'},
+  nt:{hbm:'bank 状态机、FR-FCFS、命令队列与刷新实际参与执行。'},
+  hbm:['逐条命令 + 刷新','bank、控制器、命令队列、刷新与相关时序实际参与执行。','S','需要激活的访问会变；是否影响服务排队取决于前端。'],
+  nand:['不在范围','DRAM 组件不提供 NAND 页读 / 编程 / 擦除或 FTL / GC。','NA','须另外耦合 Flash 模型。'],
+  q:'DRAM 时序、功耗、温度与三维堆叠之间的关系。',
+  pro:['时序之外还有功耗与运行时热模型','可对照 Micron Verilog 模型验证'],
+  con:['需要外部系统 / LLM 前端','Verilog 验证脚本只覆盖列出的协议与配置'],
+  acc:'部分协议可对照 Verilog 测试台',accNote:'命令级验证不等于端到端 LLM 精度',
+  links:[['GitHub','https://github.com/umd-memsys/DRAMsim3'],['CAL 2020','https://user.eng.umd.edu/~blj/papers/cal2020.pdf']]},
+
+ {g:4,name:'ASTRA-sim 2.x',own:'ASTRA-sim · 网络',
+  st:{batch:'NA',kv:'NA',pd:'NA',tp:'NA',pp:'NA',ep:'NA',link:'S',hbm:'NA',nand:'NA',ftl:'NA'},
+  nt:{link:'集成 ns-3 网络后端，按拓扑推进通信。'},
+  hbm:['实测 ET / 带宽','本地内存成本隐含在 ET（执行轨迹）节点的计算时长里，或由 local-mem-bw 与数据量估算。','N','固定 ET 或带宽不消费 tRCD，除非另接命令级后端。'],
+  nand:['看所接后端','执行成本只来自 ET 节点与实际后端。','N','须确认后端是否表达编程。'],
+  q:'分布式 AI 中的集合通信、拓扑、拥塞以及计算与通信重叠。',
+  pro:['计算 / 网络 / 内存后端可插拔，网络细节最完整','Chakra DAG 能表达计算、通信与远端内存依赖'],
+  con:['需要上层前端提供 LLM 请求与服务决策','公开 2.x 与 3.0 论文 / 补丁状态不同，不能混用'],
+  acc:'精度取决于所选后端',accNote:'3.0 初始补丁 PR #389 本轮核查时仍开放',
+  links:[['GitHub','https://github.com/astra-sim/astra-sim'],['3.0 论文','https://arxiv.org/abs/2606.10440'],['网络后端','https://astra-sim.github.io/astra-sim-docs/network-backend/ns3-network-backend.html']]},
+
+ {g:4,name:'MQSim',own:'CMU-SAFARI · SSD / Flash',
+  st:{batch:'NA',kv:'NA',pd:'NA',tp:'NA',pp:'NA',ep:'NA',link:'NA',hbm:'NA',nand:'S',ftl:'S'},
+  nt:{nand:'NAND 读写 / 擦除与通道 / 芯片 / plane 冲突参与执行。',ftl:'设备侧 FTL、GC 与有效页复制产生计时 I/O。'},
+  hbm:['SSD 内部 DRAM','这是 SSD 控制器缓存 / 元数据的容量与访问成本，不是 GPU 的 HBM。','NA','GPU 的 tRCD 不属于 SSD 接口。'],
+  nand:['页操作 + FTL / GC','请求经 FTL / 调度形成 NAND 读写擦除，有限的内部并行决定完成时间。','S','编程变慢会拉长写入与 GC 迁移，并经排队拖慢读。'],
+  q:'SSD 稳态性能、多队列干扰、写放大、GC 和维护开销。',
+  pro:['FTL、GC、磨损均衡与多队列 I/O 路径完整','有真实 SSD 对照'],
+  con:['NVMe / SATA 语义 ≠ GPU 直连的 HBF','没有 LLM 计算与服务调度'],
+  acc:'对四款 SSD 偏差约 6%–18%',accNote:'SSD 性能验证，不是 HBF 或整个服务的误差',
+  links:[['GitHub','https://github.com/CMU-SAFARI/MQSim'],['FAST 2018','https://people.inf.ethz.ch/omutlu/pub/MQSim-SSD-simulation-framework_fast18.pdf']]}
+];
+
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function head(t){return `<span class="nm">${esc(t.name)}</span><span class="own">${esc(t.own)}</span>`;}
+function rowsByGroup(ncol,row){
+  let html='',last=-1;
+  TOOLS.forEach(t=>{
+    if(t.g!==last){last=t.g;html+=`<tr><th class="grp" colspan="${ncol}">${GROUPS[t.g]}</th></tr>`;}
+    html+=row(t);
+  });
+  return html;
+}
+
+// 3 能力总表
+document.getElementById('critHead').innerHTML=
+  `<tr><th rowspan="2">工具</th>${COLGROUPS.map(g=>`<th class="g1" colspan="${g[1]}">${g[0]}</th>`).join('')}</tr>`+
+  `<tr>${COLS.map(c=>`<th${GROUP_START.has(c[0])?' class="g1"':''}>${c[1]}</th>`).join('')}</tr>`;
+let showText=location.hash==='#text';
+const toggle=document.getElementById('toggleText');
+function renderMatrix(){
+  document.getElementById('critBody').innerHTML=rowsByGroup(COLS.length+1,t=>
+    `<tr${t.mine?' class="mine"':''}><th class="name">${head(t)}</th>`+
+    COLS.map(([k,,long])=>{
+      const s=t.st[k],note=t.nt[k]||WORD[s];
+      return `<td${GROUP_START.has(k)?' class="g1"':''} tabindex="0" data-title="${esc(t.name+' · '+long)}" data-note="${esc(WORD[s]+'：'+note)}">`+
+        `<span class="mark m-${s}${showText?'':' sym'}">${showText?WORD[s]:SYM[s]}</span></td>`;
+    }).join('')+'</tr>');
+  toggle.textContent=showText?'显示符号':'显示文字';
+}
+renderMatrix();
+toggle.addEventListener('click',()=>{showText=!showText;renderMatrix();});
+
+// 4 内存时间从哪来
+function effect(e){return `<td class="eff"><span class="mark m-${e[2]}">${SYM[e[2]]} ${EFFECT[e[2]]}</span><p>${esc(e[3])}</p></td>`;}
+function source(e){return `<td class="src pair"><span class="lbl">${esc(e[0])}</span>${esc(e[1])}</td>`;}
+document.getElementById('costBody').innerHTML=rowsByGroup(5,t=>
+  `<tr${t.mine?' class="mine"':''}><th>${head(t)}</th>${source(t.hbm)}${effect(t.hbm)}${source(t.nand)}${effect(t.nand)}</tr>`);
+
+// 5 逐个工具
+const list=a=>`<ul>${a.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+document.getElementById('toolBody').innerHTML=rowsByGroup(6,t=>`<tr${t.mine?' class="mine"':''}>
+  <th>${head(t)}</th>
+  <td class="ask">${esc(t.q)}</td>
+  <td class="pro">${list(t.pro)}</td>
+  <td class="con">${list(t.con)}</td>
+  <td class="acc">${esc(t.acc)}<small>${esc(t.accNote)}</small></td>
+  <td><div class="links">${t.links.map(([l,u])=>`<a href="${esc(u)}"${u.startsWith('http')?' target="_blank" rel="noopener noreferrer"':''}>${esc(l)} ↗</a>`).join('')}</div></td>
+</tr>`);
+
+// 悬停 / 聚焦提示（委托到 document，重绘矩阵后仍有效）
+const tip=document.getElementById('tip');
+function move(x,y){const r=tip.getBoundingClientRect();let L=x+14,T=y+16;
+  if(L+r.width>innerWidth-8)L=x-r.width-14; if(T+r.height>innerHeight-8)T=y-r.height-16;
+  tip.style.left=Math.max(8,L)+'px';tip.style.top=Math.max(8,T)+'px';}
+function show(el,x,y){const b=document.createElement('b');b.textContent=el.dataset.title;
+  tip.replaceChildren(b,document.createTextNode(el.dataset.note));tip.classList.add('on');move(x,y);}
+function hide(){tip.classList.remove('on');}
+document.addEventListener('pointerover',e=>{const el=e.target.closest('[data-note]');if(el)show(el,e.clientX,e.clientY);});
+document.addEventListener('pointermove',e=>{if(tip.classList.contains('on')&&e.target.closest('[data-note]'))move(e.clientX,e.clientY);});
+document.addEventListener('pointerout',e=>{const el=e.target.closest('[data-note]');if(el&&!el.contains(e.relatedTarget))hide();});
+document.addEventListener('focusin',e=>{const el=e.target.closest('[data-note]');if(el){const b=el.getBoundingClientRect();show(el,b.right,b.bottom);}});
+document.addEventListener('focusout',e=>{if(e.target.closest('[data-note]'))hide();});
+})();
+</script>
+</body>
+</html>
