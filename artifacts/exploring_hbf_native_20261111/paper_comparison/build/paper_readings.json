@@ -1,0 +1,246 @@
+{
+ "source": "paper Fig. 3/4 readings (8 GPU), as stored in artifacts/exploring_hbf_native_20261103/paper_comparison/data.json; the original tmp/paper_comparison_20261026/comparison.json is gone",
+ "rows": [
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "HBM4",
+   "paper_tps_approx": 3300.0,
+   "paper_normalized_tps_approx": 1.0,
+   "paper_max_batch_per_gpu_approx": 194.0
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "HBF",
+   "paper_tps_approx": 2515.92,
+   "paper_normalized_tps_approx": 0.7624,
+   "paper_max_batch_per_gpu_approx": 253.558
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "HBF+",
+   "paper_tps_approx": 3249.1800000000003,
+   "paper_normalized_tps_approx": 0.9846,
+   "paper_max_batch_per_gpu_approx": 326.69599999999997
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "CONV",
+   "paper_tps_approx": 790.02,
+   "paper_normalized_tps_approx": 0.2394,
+   "paper_max_batch_per_gpu_approx": 78.958
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "CONV+",
+   "paper_tps_approx": 957.33,
+   "paper_normalized_tps_approx": 0.2901,
+   "paper_max_batch_per_gpu_approx": 95.836
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "HBM4",
+   "paper_tps_approx": 1800.0,
+   "paper_normalized_tps_approx": 1.0,
+   "paper_max_batch_per_gpu_approx": 61.5
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "HBF",
+   "paper_tps_approx": 1494.72,
+   "paper_normalized_tps_approx": 0.8304,
+   "paper_max_batch_per_gpu_approx": 146.4315
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "HBF+",
+   "paper_tps_approx": 1943.2799999999997,
+   "paper_normalized_tps_approx": 1.0796,
+   "paper_max_batch_per_gpu_approx": 189.297
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "CONV",
+   "paper_tps_approx": 345.96000000000004,
+   "paper_normalized_tps_approx": 0.1922,
+   "paper_max_batch_per_gpu_approx": 33.948
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "CONV+",
+   "paper_tps_approx": 421.38,
+   "paper_normalized_tps_approx": 0.2341,
+   "paper_max_batch_per_gpu_approx": 41.082
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "HBM4",
+   "paper_tps_approx": 147.0,
+   "paper_normalized_tps_approx": 1.0,
+   "paper_max_batch_per_gpu_approx": 3.75
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "HBF",
+   "paper_tps_approx": 158.9511,
+   "paper_normalized_tps_approx": 1.0813,
+   "paper_max_batch_per_gpu_approx": 15.89625
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "HBF+",
+   "paper_tps_approx": 189.8946,
+   "paper_normalized_tps_approx": 1.2918,
+   "paper_max_batch_per_gpu_approx": 18.9975
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "CONV",
+   "paper_tps_approx": 24.4755,
+   "paper_normalized_tps_approx": 0.1665,
+   "paper_max_batch_per_gpu_approx": 2.39625
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "CONV+",
+   "paper_tps_approx": 30.6201,
+   "paper_normalized_tps_approx": 0.2083,
+   "paper_max_batch_per_gpu_approx": 2.9962500000000003
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "HBM4",
+   "paper_tps_approx": 19000.0,
+   "paper_normalized_tps_approx": 1.0,
+   "paper_max_batch_per_gpu_approx": 460.0
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "HBF",
+   "paper_tps_approx": 16872.0,
+   "paper_normalized_tps_approx": 0.888,
+   "paper_max_batch_per_gpu_approx": 1682.68
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "HBF+",
+   "paper_tps_approx": 18585.8,
+   "paper_normalized_tps_approx": 0.9782,
+   "paper_max_batch_per_gpu_approx": 768.1999999999999
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "CONV",
+   "paper_tps_approx": 3100.8,
+   "paper_normalized_tps_approx": 0.1632,
+   "paper_max_batch_per_gpu_approx": 307.28000000000003
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "CONV+",
+   "paper_tps_approx": 3836.1,
+   "paper_normalized_tps_approx": 0.2019,
+   "paper_max_batch_per_gpu_approx": 380.88
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "HBM4",
+   "paper_tps_approx": 6300.0,
+   "paper_normalized_tps_approx": 1.0,
+   "paper_max_batch_per_gpu_approx": 151.5
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "HBF",
+   "paper_tps_approx": 6284.25,
+   "paper_normalized_tps_approx": 0.9975,
+   "paper_max_batch_per_gpu_approx": 624.6345
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "HBF+",
+   "paper_tps_approx": 7481.88,
+   "paper_normalized_tps_approx": 1.1876,
+   "paper_max_batch_per_gpu_approx": 743.4105
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "CONV",
+   "paper_tps_approx": 1008.0,
+   "paper_normalized_tps_approx": 0.16,
+   "paper_max_batch_per_gpu_approx": 98.9295
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "CONV+",
+   "paper_tps_approx": 1251.81,
+   "paper_normalized_tps_approx": 0.1987,
+   "paper_max_batch_per_gpu_approx": 123.16949999999999
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "HBM4",
+   "paper_tps_approx": 1300.0,
+   "paper_normalized_tps_approx": 1.0,
+   "paper_max_batch_per_gpu_approx": 31.0
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "HBF",
+   "paper_tps_approx": 1388.92,
+   "paper_normalized_tps_approx": 1.0684,
+   "paper_max_batch_per_gpu_approx": 139.965
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "HBF+",
+   "paper_tps_approx": 1627.6,
+   "paper_normalized_tps_approx": 1.252,
+   "paper_max_batch_per_gpu_approx": 164.703
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "CONV",
+   "paper_tps_approx": 237.38000000000002,
+   "paper_normalized_tps_approx": 0.1826,
+   "paper_max_batch_per_gpu_approx": 23.87
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "CONV+",
+   "paper_tps_approx": 279.24,
+   "paper_normalized_tps_approx": 0.2148,
+   "paper_max_batch_per_gpu_approx": 27.900000000000002
+  }
+ ],
+ "paper_values": "HBM4 labels are rounded published annotations; other Figure 4 values read from PDF vector coordinates, approximately +/-0.01 in normalized units, not author raw data. Figure 3 batch ratios are graph readings approximately +/-0.02. Derived absolute non-HBM4 TPS inherits rounded HBM4 anchor."
+}
