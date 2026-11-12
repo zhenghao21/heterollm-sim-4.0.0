@@ -44,9 +44,16 @@ typedef struct fr_args {
     double *out_float, *channel_counts;
     int64_t requests, entries, window_capacity, stat_fields;
     int64_t channel_first, channel_stop, span, stripe_shift;
+    unsigned char *audit_history;
+    int64_t audit_stride;
 } fr_args;
 
 /* Runs without the GIL; returns FR_OK or the error for the caller to raise. */
 int fr_run_channels(const fr_args *args);
+
+#include <stdio.h>
+#include <stddef.h>
+size_t fr_audit_image_size(int64_t banks,int64_t bgs,int64_t sids);
+FILE *fr_audit_take_file(int summary);
 
 #endif

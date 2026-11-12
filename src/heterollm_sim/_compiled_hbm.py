@@ -249,11 +249,15 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
                 channel_int[ch, 1] = pc_lookup[last_pc]
     except (KeyError, IndexError, TypeError, ValueError, OverflowError):
         return None
+    # g[11] is reserved by the C kernel for trace-only physical geometry.
+    # Keeping lanes_per_stack here does not participate in scheduling; it
+    # lets an optional command observer recover stack/local-channel identity
+    # without changing any timing inputs or state transitions.
     g = np.array([lanes, banks, c.bank_groups_per_sid,
                   c.row_bytes // c.burst_bytes, c.banks_per_group, groups,
                   c.refresh_policy == "per_bank",
                   c.generation in {"HBM2", "HBM2E"}, c.refresh_policy == "all_bank", c.burst_bytes,
-                  history_stride, 0], dtype=np.int64)
+                  history_stride, c.lanes_per_stack], dtype=np.int64)
     t = np.array([getattr(c, field) for field in TIMING_FIELDS] + [
         c.burst_bytes / c.effective_lane_bandwidth_gb_s,
         c.burst_bytes / c.directional_lane_bandwidth_gb_s(Operation.READ),
@@ -269,8 +273,15 @@ def _pack_hbm_numeric(core, request, *, refresh_requests=None):
     ticks = np.rint(stamps / half_clock)
     grid_history = bool(np.all((stamps < 0) | ((np.abs(ticks) < 2. ** 49)
                                              & (stamps == ticks * half_clock))))
-    g = np.append(g, np.array([np.int64(grid_history), 1, np.int64(c.sid_count), np.int64(c.bank_groups_per_sid)],
-                              dtype=np.int64))
+    # g[16] is audit-only identity.  Numeric command state is copied between
+    # batches, while separate HBM components must never share the observer's
+    # bank/refresh history.  Resource prefixes are stable across deepcopy and
+    # include the component namespace, unlike ``id(core)``.
+    audit_token = 1469598103934665603
+    for byte in prefix.encode("utf-8"):
+        audit_token = ((audit_token ^ byte) * 1099511628211) & ((1 << 63) - 1)
+    g = np.append(g, np.array([np.int64(grid_history), 1, np.int64(c.sid_count),
+                               np.int64(c.bank_groups_per_sid), np.int64(audit_token)], dtype=np.int64))
     if not all(np.isfinite(a).all() for a in (bf, pc, history, channel, resources, t, windows)):
         return None
     arrays = (rows, bf, addresses, pc, history, pc_seen, channel, channel_int,
@@ -500,7 +511,7 @@ class _HBMNumericState:
             out_int, out_float, counts = self.run_fr_fcfs(
                 firsts, stops, arrivals, reads, self._fr_queue, self.g, self.t, rows, bf, addresses,
                 pc, history, pc_seen, channel, channel_int, resources, moved, directions, touched,
-                windows, window_counts, stats)
+                windows, window_counts, stats, audit=getattr(self.core,"_hbm_audit",None))
         except OverflowError:
             return None
         if not (np.isfinite(out_float).all() and np.isfinite(resources).all() and np.isfinite(bf).all()):
@@ -645,9 +656,14 @@ class _RequestSpan:
 
 def execute_fr_fcfs_numeric(core, requests, *, resource_accumulator=None):
     """Execute one batch, returning its results and metrics, or decline with None."""
+    from ._hbm_audit import audit_for
+    audit=audit_for(core)
+    audit_before=audit.checkpoint() if audit is not None else None
     packed = _pack_hbm_numeric(core, requests[0], refresh_requests=requests)
     if packed is None:
         return None
+    if audit is not None:
+        audit.configure(packed.g)
     resident = core._hbm_numeric_state is packed
     before = packed.checkpoint(_RequestSpan(requests) if len(requests) > 1 else requests[0]) if resident else None
     capture = None
@@ -661,10 +677,14 @@ def execute_fr_fcfs_numeric(core, requests, *, resource_accumulator=None):
     try:
         results = packed.execute_fr_fcfs(requests)
     except BaseException:
+        if audit is not None:
+            audit.restore(audit_before)
         if resident:
             packed.restore_checkpoint(before)
         raise
     if results is None:
+        if audit is not None:
+            audit.restore(audit_before)
         if resident:
             packed.restore_checkpoint(before)
         return None
@@ -672,6 +692,8 @@ def execute_fr_fcfs_numeric(core, requests, *, resource_accumulator=None):
     if not resident:
         packed.commit_controller()
     packed.commit_timeline(requests[0])
+    if audit is not None:
+        audit.publish()
     if capture is not None:
         return results, capture.finish()
     return results, core.timeline._core_metrics_delta(before_metrics)

@@ -235,6 +235,10 @@ class DramCore:
                                     and self._analytical_banks_exposed):
             token.materialize(self)
         self._hbm_transactions.append(token)
+        from ._hbm_audit import audit_for
+        audit=audit_for(self)
+        if audit is not None:
+            audit.begin(token)
         return token
 
     def _finish_transaction(self, token):
@@ -244,10 +248,16 @@ class DramCore:
 
     def commit_transaction(self, token):
         self._finish_transaction(token)
+        audit=getattr(self,"_hbm_audit",None)
+        if audit is not None:
+            audit.commit(token)
 
     def rollback_transaction(self, token):
         self._finish_transaction(token)
         token.rollback(self)
+        audit=getattr(self,"_hbm_audit",None)
+        if audit is not None:
+            audit.rollback(token)
 
     def _hbm_before_reference(self):
         self._hbm_publish_numeric()
@@ -626,6 +636,13 @@ class DramCore:
                 outcome = execute_fr_fcfs_numeric(self, requests, resource_accumulator=accumulator)
         if outcome is None:
             from ._hbm_control import execute_fr_fcfs_reference
+            from ._hbm_audit import audit_for
+            audit = audit_for(self)
+            if audit is not None:
+                # The observer sees kernel commands only; count what bypasses it.
+                audit.counts["unaudited_batches"] += 1
+                audit.counts["unaudited_requests"] += len(requests)
+                audit.publish()
             before = self.timeline.metrics_snapshot(
                 max_intervals=c.max_expanded_segments if self.capture_details else 0)
             results = execute_fr_fcfs_reference(self, requests)

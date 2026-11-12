@@ -1,6 +1,8 @@
 # cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False
 """Python entry of the HBM FR-FCFS command kernel; the kernel itself is _hbm_fr_core.c."""
 from libc.stdint cimport int8_t, int64_t
+from libc.stdio cimport FILE, ftell, fseek, fread, fclose, SEEK_SET
+from cpython.bytes cimport PyBytes_FromStringAndSize, PyBytes_AS_STRING
 
 import numpy as np
 
@@ -53,8 +55,12 @@ cdef extern from "_hbm_fr_core.h" nogil:
         int64_t channel_stop
         int64_t span
         int64_t stripe_shift
+        unsigned char *audit_history
+        int64_t audit_stride
 
     int fr_run_channels(const fr_args *args)
+    size_t fr_audit_image_size(int64_t banks, int64_t bgs, int64_t sids)
+    FILE *fr_audit_take_file(int summary)
 
 
 FR_MIRROR_MIN_BURSTS = _MIRROR_MIN_BURSTS
@@ -91,8 +97,10 @@ cdef raise_failure(int code):
 def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc, history, pc_seen,
                           channel, channel_int, resources, moved, directions, touched, windows, window_counts,
                           stats, out_int, out_float, Py_ssize_t channel_first, Py_ssize_t channel_stop,
-                          Py_ssize_t span, channel_counts):
+                          Py_ssize_t span, channel_counts, audit_history=None):
     """Issue one batch's bursts command by command through per-PC queues, for channels in a range."""
+    cdef unsigned char[:,::1] audit_view
+    cdef object trace_output, summary_output
     cdef const int64_t[::1] view_firsts = firsts, view_stops = stops, view_q = q, view_g = g
     cdef const double[::1] view_arrivals = arrivals, view_t = t
     cdef const int8_t[::1] view_reads = flags(reads)
@@ -147,7 +155,36 @@ def _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, rows, bf, add
     args.stripe_shift = 0
     while (view_g[15] >> args.stripe_shift) > 1:
         args.stripe_shift += 1
+    args.audit_history = NULL
+    args.audit_stride = 0
+    if audit_history is not None:
+        audit_view = audit_history
+        args.audit_history = &audit_view[0,0]
+        args.audit_stride = audit_view.shape[1]
     with nogil:
         code = fr_run_channels(&args)
+    trace_output = take_audit_output(0)
+    summary_output = take_audit_output(1)
     if code != FR_OK:
         raise_failure(code)
+    return trace_output, summary_output
+
+cdef take_audit_output(int summary):
+    cdef FILE *handle = fr_audit_take_file(summary)
+    cdef long length
+    cdef object result
+    if handle == NULL:
+        return b""
+    try:
+        length = ftell(handle)
+        if length < 0 or fseek(handle,0,SEEK_SET):
+            raise OSError("Cannot read the buffered HBM audit")
+        result = PyBytes_FromStringAndSize(NULL,length)
+        if length and fread(PyBytes_AS_STRING(result),1,length,handle) != <size_t>length:
+            raise OSError("Incomplete buffered HBM audit")
+        return result
+    finally:
+        fclose(handle)
+
+def audit_image_size(banks,bgs,sids):
+    return fr_audit_image_size(banks,bgs,sids)

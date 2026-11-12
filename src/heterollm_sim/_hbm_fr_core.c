@@ -9,14 +9,17 @@
 #include "_hbm_fr_core.h"
 
 #include <float.h>
+#include <limits.h>
 #include <math.h>
 #include <setjmp.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <emmintrin.h>
 
 #if defined(_MSC_VER)
 #include <intrin.h>
+#include <windows.h>
 #define FR_INLINE static __forceinline
 #define FR_NOINLINE static __declspec(noinline)
 #define FR_NORETURN __declspec(noreturn)
@@ -49,6 +52,176 @@
 #define FR_SID_FAST (INT64_C(1) << 24)
 
 static FR_THREAD jmp_buf *fr_escape;
+
+/* Optional audit-only observer. It is completely inert unless the caller
+ * supplies an audit path; each worker uses its own fragment to avoid locking
+ * the numeric command path. */
+static FR_THREAD FILE *fr_trace_file;
+static FR_THREAD FILE *fr_trace_summary_file;
+static FR_THREAD long long fr_trace_total;
+static FR_THREAD long long fr_trace_counts[7];
+static FR_THREAD long long fr_trace_limit;
+static FR_THREAD double fr_trace_min_time, fr_trace_max_time;
+/* The limit is process/thread-wide, because a fast simulation opens the
+ * observer once for every small numeric batch.  Resetting it per batch would
+ * still allow millions of sampled rows. */
+static FR_THREAD long long fr_trace_emitted;
+
+enum {
+    AUDIT_BANK_OPEN, AUDIT_TRP, AUDIT_ROW_MATCH, AUDIT_REFRESH_BLOCK,
+    AUDIT_PRE_CLOSED, AUDIT_TRC, AUDIT_TRAS, AUDIT_TRASMAX, AUDIT_TRCD,
+    AUDIT_RTP, AUDIT_WR, AUDIT_TPPD, AUDIT_TRRD, AUDIT_TFAW, AUDIT_WTR,
+    AUDIT_RTW, AUDIT_DQ, AUDIT_TCCDL, AUDIT_TCCDS, AUDIT_TCCDR,
+    AUDIT_BUS_ROW, AUDIT_BUS_COL, AUDIT_REFAB_CLOSED, AUDIT_REFAB_TRP,
+    AUDIT_REFAB_NOP, AUDIT_REFAB_INTERVAL, AUDIT_REF_CLOSED, AUDIT_REF_TRP,
+    AUDIT_ACT_REF, AUDIT_REF_ACT, AUDIT_REF_SPACING, AUDIT_REFRESH_ORDER,
+    AUDIT_REFRESH_GROUP_GAP, AUDIT_REFRESH_INTERVAL, AUDIT_REFRESH_RATE,
+    AUDIT_RULE_COUNT
+};
+
+static const char *fr_audit_rule_names[AUDIT_RULE_COUNT] = {
+    "1.bank_open", "1.tRP", "1.row_match", "7.refresh_block",
+    "1.pre_closed", "2.tRC", "2.tRAS", "2.tRASmax", "2.tRCD",
+    "2.tRTP", "2.tWR", "3.tPPD", "3.tRRD", "3.tFAW", "4.WTR",
+    "4.RTW", "5.DQ_nonoverlap", "6.tCCDL", "6.tCCDS", "6.tCCDR",
+    "bus.row_serial", "bus.col_serial", "6.refab_closed", "6.refab_tRP",
+    "6.refab_nop", "6.refab_interval", "7.refresh_closed", "7.refresh_tRP",
+    "8.act_to_refpb", "8.refpb_to_act", "9.refpb_spacing", "10.refresh_order",
+    "10.refresh_group_gap", "11.refresh_interval", "11.refresh_rate"
+};
+
+typedef struct fr_audit_state {
+    int initialized, lanes, banks, groups, bgs, sids, channels;
+    int64_t token;
+    int64_t *open_row;
+    double *act_anchor, *pre_time, *last_rd, *last_wr_end, *blocked, *last_ref;
+    double *last_pre, *last_rd_lane, *data_available;
+    double *act_group, *act_group_top1, *act_group_top2;
+    int64_t *act_group_bank1, *act_group_bank2;
+    double *act_top1, *act_top2;
+    int64_t *act_top_group1, *act_top_group2;
+    double *ref_top1, *ref_top2;
+    int64_t *ref_bank1, *ref_bank2;
+    double *last_col, *last_col_sid_top1, *last_col_sid_top2, *last_col_lane_top1, *last_col_lane_top2, *write_bg;
+    int64_t *last_col_sid_group1, *last_col_sid_group2, *last_col_lane_sid1, *last_col_lane_sid2;
+    double *faw, *refresh_ring, *round_end, *pc_group_gate, *bank_ref_ring, *refresh_t0;
+    uint8_t *faw_count, *refresh_count, *refresh_ring_count, *round_seen, *bank_ref_count;
+    uint64_t *refresh_mask;
+    long long *refresh_total;
+    double *row_busy, *col_busy, *refab_blocked, *last_refab;
+    int64_t *open_count;
+    long long commands, by_type[7];
+    long long delta_commands;
+    long long checks[AUDIT_RULE_COUNT], violations[AUDIT_RULE_COUNT];
+    long long delta_checks[AUDIT_RULE_COUNT], delta_violations[AUDIT_RULE_COUNT];
+    uint8_t delta_first_seen[AUDIT_RULE_COUNT];
+    char first_kind[AUDIT_RULE_COUNT][8];
+    double first_time[AUDIT_RULE_COUNT];
+    int64_t first_stack[AUDIT_RULE_COUNT], first_channel[AUDIT_RULE_COUNT], first_pc[AUDIT_RULE_COUNT];
+    int64_t first_sid[AUDIT_RULE_COUNT], first_bg[AUDIT_RULE_COUNT], first_bank[AUDIT_RULE_COUNT], first_row[AUDIT_RULE_COUNT];
+} fr_audit_state;
+
+static FR_THREAD fr_audit_state fr_audit;
+static FR_THREAD unsigned char *fr_audit_empty;
+
+static void fr_audit_free(void);
+static void fr_audit_image_transfer(unsigned char *image, int64_t ch, int writing);
+static void fr_audit_recent_update(double *top1, double *top2, int64_t *key1, int64_t *key2, int64_t key, double time);
+
+static void fr_audit_reset_delta(void)
+{
+    fr_audit.delta_commands = 0;
+    memset(fr_audit.delta_checks, 0, sizeof(fr_audit.delta_checks));
+    memset(fr_audit.delta_violations, 0, sizeof(fr_audit.delta_violations));
+    memset(fr_audit.delta_first_seen, 0, sizeof(fr_audit.delta_first_seen));
+}
+
+static int fr_trace_kind_index(const char *kind)
+{
+    if (strcmp(kind, "ACT") == 0) return 0;
+    if (strcmp(kind, "PRE") == 0) return 1;
+    if (strcmp(kind, "PRE_ALL") == 0) return 2;
+    if (strcmp(kind, "REFab") == 0) return 3;
+    if (strcmp(kind, "REFpb") == 0) return 4;
+    if (strcmp(kind, "RD") == 0) return 5;
+    if (strcmp(kind, "WR") == 0) return 6;
+    return -1;
+}
+
+static void fr_trace_open(void)
+{
+    const char *path = getenv("HETEROLLM_HBM_TRACE_FILE");
+    const char *summary = getenv("HETEROLLM_HBM_TRACE_SUMMARY_FILE");
+    const char *limit = getenv("HETEROLLM_HBM_TRACE_LIMIT");
+    const char *minimum = getenv("HETEROLLM_HBM_TRACE_MIN_NS");
+    const char *maximum = getenv("HETEROLLM_HBM_TRACE_MAX_NS");
+    char trace_path[4096], summary_path[4096];
+    const char *trace_name = path;
+    const char *summary_name = summary;
+#if defined(_MSC_VER)
+    unsigned long thread_id = (unsigned long)GetCurrentThreadId();
+    if (path != NULL && path[0] != '\0') {
+        _snprintf_s(trace_path, sizeof(trace_path), _TRUNCATE, "%s.thread_%lu", path, thread_id);
+        trace_name = trace_path;
+    }
+    if (summary != NULL && summary[0] != '\0') {
+        _snprintf_s(summary_path, sizeof(summary_path), _TRUNCATE, "%s.thread_%lu", summary, thread_id);
+        summary_name = summary_path;
+    }
+#endif
+    fr_trace_total = 0;
+    memset(fr_trace_counts, 0, sizeof(fr_trace_counts));
+    fr_trace_min_time = (minimum != NULL && minimum[0] != '\0') ? strtod(minimum, NULL) : -DBL_MAX;
+    fr_trace_max_time = (maximum != NULL && maximum[0] != '\0') ? strtod(maximum, NULL) : DBL_MAX;
+    if (!isfinite(fr_trace_min_time)) fr_trace_min_time = -DBL_MAX;
+    if (!isfinite(fr_trace_max_time)) fr_trace_max_time = DBL_MAX;
+    /* History belongs to the component's channel image, not this worker. */
+    fr_audit_reset_delta();
+    memset(fr_audit.first_kind,0,sizeof(fr_audit.first_kind));
+    fr_trace_limit = (limit != NULL && limit[0] != '\0') ? strtoll(limit, NULL, 10) : LLONG_MAX;
+    if (fr_trace_limit < 0)
+        fr_trace_limit = LLONG_MAX;
+    fr_trace_file = (trace_name != NULL && trace_name[0] != '\0') ? tmpfile() : NULL;
+    fr_trace_summary_file = (summary_name != NULL && summary_name[0] != '\0') ? tmpfile() : NULL;
+    if (fr_trace_file != NULL)
+        setvbuf(fr_trace_file, NULL, _IOFBF, 1 << 20);
+    if (fr_trace_summary_file != NULL)
+        setvbuf(fr_trace_summary_file, NULL, _IOFBF, 1 << 20);
+    if (fr_trace_file != NULL)
+        fputs("#BEGIN\n", fr_trace_file);
+}
+
+static void fr_trace_close(void)
+{
+    if (fr_trace_file != NULL) {
+        fputs("#END\n", fr_trace_file);
+        fflush(fr_trace_file);
+
+    }
+    if (fr_trace_summary_file != NULL) {
+        fprintf(fr_trace_summary_file,
+                "SUMMARY\ttotal=%lld\tACT=%lld\tPRE=%lld\tPRE_ALL=%lld\tREFab=%lld\tREFpb=%lld\tRD=%lld\tWR=%lld\n",
+                fr_trace_total, fr_trace_counts[0], fr_trace_counts[1], fr_trace_counts[2],
+                fr_trace_counts[3], fr_trace_counts[4], fr_trace_counts[5], fr_trace_counts[6]);
+        if (fr_audit.initialized) {
+            int rule;
+            fprintf(fr_trace_summary_file, "AUDIT_DELTA\tcommands=%lld\tchecks=", fr_audit.delta_commands);
+            for (rule = 0; rule < AUDIT_RULE_COUNT; ++rule) fprintf(fr_trace_summary_file, "%s%lld", rule ? "," : "", fr_audit.delta_checks[rule]);
+            fputs("\tviolations=", fr_trace_summary_file);
+            for (rule = 0; rule < AUDIT_RULE_COUNT; ++rule) fprintf(fr_trace_summary_file, "%s%lld", rule ? "," : "", fr_audit.delta_violations[rule]);
+            fputs("\tfirst=", fr_trace_summary_file);
+            for (rule = 0; rule < AUDIT_RULE_COUNT; ++rule) if (fr_audit.delta_first_seen[rule]) {
+                if (rule) fputc(';', fr_trace_summary_file);
+                fprintf(fr_trace_summary_file, "%d,%s,%.17g,%lld,%lld,%lld,%lld,%lld,%lld,%lld", rule, fr_audit.first_kind[rule], fr_audit.first_time[rule],
+                        (long long)fr_audit.first_stack[rule], (long long)fr_audit.first_channel[rule], (long long)fr_audit.first_pc[rule],
+                        (long long)fr_audit.first_sid[rule], (long long)fr_audit.first_bg[rule], (long long)fr_audit.first_bank[rule], (long long)fr_audit.first_row[rule]);
+            }
+            fputc('\n', fr_trace_summary_file);
+        }
+        fflush(fr_trace_summary_file);
+
+    }
+}
 
 FR_NORETURN FR_NOINLINE void fr_fail(int code)
 {
@@ -220,6 +393,564 @@ typedef struct fr_state {
     uint64_t *miss_seen;
 } fr_state;
 
+static void fr_audit_free(void)
+{
+#define FR_AUDIT_FREE(name) do { free(fr_audit.name); fr_audit.name = NULL; } while (0)
+    FR_AUDIT_FREE(open_row); FR_AUDIT_FREE(act_anchor); FR_AUDIT_FREE(pre_time);
+    FR_AUDIT_FREE(last_rd); FR_AUDIT_FREE(last_wr_end); FR_AUDIT_FREE(blocked); FR_AUDIT_FREE(last_ref);
+    FR_AUDIT_FREE(last_pre); FR_AUDIT_FREE(last_rd_lane); FR_AUDIT_FREE(data_available);
+    FR_AUDIT_FREE(act_group); FR_AUDIT_FREE(act_group_top1); FR_AUDIT_FREE(act_group_top2);
+    FR_AUDIT_FREE(act_group_bank1); FR_AUDIT_FREE(act_group_bank2);
+    FR_AUDIT_FREE(act_top1); FR_AUDIT_FREE(act_top2); FR_AUDIT_FREE(act_top_group1); FR_AUDIT_FREE(act_top_group2);
+    FR_AUDIT_FREE(ref_top1); FR_AUDIT_FREE(ref_top2); FR_AUDIT_FREE(ref_bank1); FR_AUDIT_FREE(ref_bank2);
+    FR_AUDIT_FREE(last_col); FR_AUDIT_FREE(last_col_sid_top1); FR_AUDIT_FREE(last_col_sid_top2);
+    FR_AUDIT_FREE(last_col_sid_group1); FR_AUDIT_FREE(last_col_sid_group2);
+    FR_AUDIT_FREE(last_col_lane_top1); FR_AUDIT_FREE(last_col_lane_top2);
+    FR_AUDIT_FREE(last_col_lane_sid1); FR_AUDIT_FREE(last_col_lane_sid2);
+    FR_AUDIT_FREE(write_bg); FR_AUDIT_FREE(faw); FR_AUDIT_FREE(refresh_ring); FR_AUDIT_FREE(round_end);
+    FR_AUDIT_FREE(pc_group_gate); FR_AUDIT_FREE(bank_ref_ring); FR_AUDIT_FREE(refresh_t0);
+    FR_AUDIT_FREE(faw_count); FR_AUDIT_FREE(refresh_count); FR_AUDIT_FREE(refresh_ring_count); FR_AUDIT_FREE(round_seen); FR_AUDIT_FREE(bank_ref_count); FR_AUDIT_FREE(refresh_mask);
+    FR_AUDIT_FREE(refresh_total);
+    FR_AUDIT_FREE(row_busy); FR_AUDIT_FREE(col_busy); FR_AUDIT_FREE(refab_blocked); FR_AUDIT_FREE(last_refab); FR_AUDIT_FREE(open_count);
+#undef FR_AUDIT_FREE
+    free(fr_audit_empty); fr_audit_empty = NULL;
+    memset(&fr_audit, 0, sizeof(fr_audit));
+}
+
+static int fr_audit_alloc(void **out, size_t count, size_t size)
+{
+    *out = calloc(count ? count : 1, size);
+    return *out != NULL;
+}
+
+static void fr_audit_fill_double(double *values, size_t count, double value)
+{
+    size_t index;
+    for (index = 0; index < count; ++index)
+        values[index] = value;
+}
+
+static void fr_audit_seed(const fr_state *s, int64_t first_channel, int64_t last_channel)
+{
+    int64_t lane, bank, sid, group, ch, index;
+    int64_t lanes = s->g[0], banks = s->banks, groups = s->g[5], sids = s->g[14];
+    if (first_channel < 0) first_channel = 0;
+    if (last_channel > s->channels) last_channel = s->channels;
+    for (lane = 2 * first_channel; lane < 2 * last_channel; ++lane) {
+        int64_t bank_open = 0;
+        double data_available = -DBL_MAX, last_rd = -DBL_MAX;
+        fr_audit.last_pre[lane] = s->pc[lane * FR_PC] >= 0 ? s->pc[lane * FR_PC] : -DBL_MAX;
+        if (s->pc[lane * FR_PC + 6] > 0)
+            fr_audit.pc_group_gate[lane] = s->pc[lane * FR_PC + 6];
+
+        /* The numeric state may enter this observer between two REFpb
+         * commands.  Seed the current SID's partial 16-bank group from the
+         * controller's next-refresh cursor instead of pretending that the
+         * first command of this observer is the group's first command. */
+        if (s->t[33] > 0 && s->pc[lane * FR_PC + 5] >= 0) {
+            int64_t next = fr_mod(fr_round(s->pc[lane * FR_PC + 5] / s->t[33]), banks);
+            int64_t next_sid = next / 16, position = next % 16;
+            int64_t sid_item = lane * sids + next_sid;
+            if (position > 0 && next_sid >= 0 && next_sid < sids) {
+                fr_audit.refresh_count[sid_item] = (uint8_t)position;
+                fr_audit.refresh_mask[sid_item] = position == 64 ? UINT64_MAX : ((UINT64_C(1) << position) - 1);
+            }
+            /* The bank ready frontier is the completed REFpb edge plus
+             * tRFCpb.  It supplies the same-SID boundary when this stream
+             * starts at the first bank of a later group. */
+            for (sid = 0; sid < sids; ++sid) {
+                int64_t last = sid * 16 + 15;
+                if (last < banks) {
+                    double ready = s->bf[(lane * banks + last) * 7 + 1];
+                    if (ready >= s->t[31] - 1e-7)
+                        fr_audit.round_end[lane * sids + sid] = ready - s->t[31];
+                }
+            }
+        }
+        for (group = 0; group < groups; ++group) {
+            fr_audit.act_group[lane * groups + group] = -DBL_MAX;
+            fr_audit.write_bg[lane * groups + group] = -DBL_MAX;
+        }
+        /* Seed only the first observed state of a component. Every subsequent
+         * batch imports its exact channel image, including closed-bank ACTs,
+         * ACT groups, columns, WTR/DQ and both command buses. */
+        fr_audit.data_available[lane] = data_available;
+        fr_audit.last_rd_lane[lane] = last_rd;
+        for (index = 0; index < s->window_counts[lane] && index < 5; ++index)
+            fr_audit.faw[lane * 5 + index] = s->windows[lane * s->window_capacity + index];
+        fr_audit.faw_count[lane] = (uint8_t)(s->window_counts[lane] < 5 ? s->window_counts[lane] : 5);
+        ch = lane >> 1;
+        for (bank = 0; bank < banks; ++bank) {
+            int64_t item = lane * banks + bank;
+            fr_audit.open_row[item] = s->rows[item];
+            if (s->rows[item] >= 0) {
+                fr_audit.act_anchor[item] = s->bf[item * 7];
+                bank_open += 1;
+            } else {
+                fr_audit.act_anchor[item] = -DBL_MAX;
+            }
+            fr_audit.blocked[item] = s->bf[item * 7 + 1];
+        }
+        fr_audit.open_count[lane] += bank_open;
+    }
+    /* This seed runs once per component/channel. Later calls restore the
+     * committed image, never a worker-local stream with cleared history. */
+    for (ch = first_channel; ch < last_channel; ++ch) {
+        fr_audit.row_busy[ch] = s->resources[ch*4];
+        fr_audit.col_busy[ch] = s->resources[(s->channels+ch)*4];
+    }
+}
+
+static int fr_audit_ensure(const fr_state *s)
+{
+    /* g[5] is the global bank-group count.  g[15] is the groups-per-SID
+     * stride used by the address mapper; command fields carry global BGs. */
+    int64_t lanes = s->g[0], banks = s->banks, bgs = s->g[5], sids = s->g[14], channels = s->channels;
+    int64_t bank_n = lanes * banks, lane_group_n = lanes * bgs, lane_sid_n = lanes * sids;
+    int64_t column_n = lane_sid_n * bgs, faw_n = lanes * 5, ring_n = lanes * 49;
+    int64_t bank_ref_n = bank_n * 9;
+    int64_t index;
+    if (lanes <= 0 || banks <= 0 || bgs <= 0 || sids <= 0 || channels <= 0)
+        return 0;
+    if (fr_audit.initialized && fr_audit.lanes == lanes && fr_audit.banks == banks
+            && fr_audit.bgs == bgs && fr_audit.sids == sids && fr_audit.channels == channels)
+        return 1;
+    if (fr_audit.initialized)
+        fr_audit_free();
+    fr_audit.lanes = (int)lanes; fr_audit.banks = (int)banks; fr_audit.bgs = (int)bgs;
+    fr_audit.sids = (int)sids; fr_audit.channels = (int)channels; fr_audit.token = s->g[16];
+#define FR_AUDIT_ALLOC(name, count, type) if (!fr_audit_alloc((void **)&fr_audit.name, (size_t)(count), sizeof(type))) goto failed
+    FR_AUDIT_ALLOC(open_row, bank_n, int64_t); FR_AUDIT_ALLOC(act_anchor, bank_n, double);
+    FR_AUDIT_ALLOC(pre_time, bank_n, double); FR_AUDIT_ALLOC(last_rd, bank_n, double);
+    FR_AUDIT_ALLOC(last_wr_end, bank_n, double); FR_AUDIT_ALLOC(blocked, bank_n, double); FR_AUDIT_ALLOC(last_ref, bank_n, double);
+    FR_AUDIT_ALLOC(last_pre, lanes, double); FR_AUDIT_ALLOC(last_rd_lane, lanes, double); FR_AUDIT_ALLOC(data_available, lanes, double);
+    FR_AUDIT_ALLOC(act_group, lane_group_n, double); FR_AUDIT_ALLOC(act_group_top1, lane_group_n, double); FR_AUDIT_ALLOC(act_group_top2, lane_group_n, double);
+    FR_AUDIT_ALLOC(act_group_bank1, lane_group_n, int64_t); FR_AUDIT_ALLOC(act_group_bank2, lane_group_n, int64_t);
+    FR_AUDIT_ALLOC(act_top1, lanes, double); FR_AUDIT_ALLOC(act_top2, lanes, double); FR_AUDIT_ALLOC(act_top_group1, lanes, int64_t); FR_AUDIT_ALLOC(act_top_group2, lanes, int64_t);
+    FR_AUDIT_ALLOC(ref_top1, lanes, double); FR_AUDIT_ALLOC(ref_top2, lanes, double); FR_AUDIT_ALLOC(ref_bank1, lanes, int64_t); FR_AUDIT_ALLOC(ref_bank2, lanes, int64_t);
+    FR_AUDIT_ALLOC(last_col, 2 * column_n, double);
+    FR_AUDIT_ALLOC(last_col_sid_top1, 2 * lane_sid_n, double); FR_AUDIT_ALLOC(last_col_sid_top2, 2 * lane_sid_n, double);
+    FR_AUDIT_ALLOC(last_col_sid_group1, 2 * lane_sid_n, int64_t); FR_AUDIT_ALLOC(last_col_sid_group2, 2 * lane_sid_n, int64_t);
+    FR_AUDIT_ALLOC(last_col_lane_top1, lanes, double); FR_AUDIT_ALLOC(last_col_lane_top2, lanes, double);
+    FR_AUDIT_ALLOC(last_col_lane_sid1, lanes, int64_t); FR_AUDIT_ALLOC(last_col_lane_sid2, lanes, int64_t);
+    FR_AUDIT_ALLOC(write_bg, lane_group_n, double);
+    FR_AUDIT_ALLOC(faw, faw_n, double); FR_AUDIT_ALLOC(refresh_ring, ring_n, double); FR_AUDIT_ALLOC(round_end, lane_sid_n, double);
+    FR_AUDIT_ALLOC(pc_group_gate, lanes, double); FR_AUDIT_ALLOC(bank_ref_ring, bank_ref_n, double); FR_AUDIT_ALLOC(refresh_t0, lanes, double);
+    FR_AUDIT_ALLOC(faw_count, lanes, uint8_t); FR_AUDIT_ALLOC(refresh_count, lane_sid_n, uint8_t); FR_AUDIT_ALLOC(refresh_ring_count, lanes, uint8_t); FR_AUDIT_ALLOC(round_seen, lane_sid_n, uint8_t); FR_AUDIT_ALLOC(bank_ref_count, bank_n, uint8_t); FR_AUDIT_ALLOC(refresh_mask, lane_sid_n, uint64_t);
+    FR_AUDIT_ALLOC(refresh_total, lanes, long long);
+    FR_AUDIT_ALLOC(row_busy, channels, double); FR_AUDIT_ALLOC(col_busy, channels, double); FR_AUDIT_ALLOC(refab_blocked, lanes, double); FR_AUDIT_ALLOC(last_refab, lanes, double); FR_AUDIT_ALLOC(open_count, lanes, int64_t);
+#undef FR_AUDIT_ALLOC
+    for (index = 0; index < bank_n; ++index) {
+        fr_audit.open_row[index] = -1;
+        fr_audit.act_anchor[index] = fr_audit.pre_time[index] = fr_audit.last_rd[index] = fr_audit.last_wr_end[index] = fr_audit.blocked[index] = fr_audit.last_ref[index] = -DBL_MAX;
+    }
+    fr_audit_fill_double(fr_audit.last_pre, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.last_rd_lane, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.data_available, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.act_group, (size_t)lane_group_n, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.act_group_top1, (size_t)lane_group_n, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.act_group_top2, (size_t)lane_group_n, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.act_top1, (size_t)lanes, -DBL_MAX); fr_audit_fill_double(fr_audit.act_top2, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.ref_top1, (size_t)lanes, -DBL_MAX); fr_audit_fill_double(fr_audit.ref_top2, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.last_col, (size_t)(2 * column_n), -DBL_MAX);
+    fr_audit_fill_double(fr_audit.last_col_sid_top1, (size_t)(2 * lane_sid_n), -DBL_MAX);
+    fr_audit_fill_double(fr_audit.last_col_sid_top2, (size_t)(2 * lane_sid_n), -DBL_MAX);
+    fr_audit_fill_double(fr_audit.last_col_lane_top1, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.last_col_lane_top2, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.write_bg, (size_t)lane_group_n, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.faw, (size_t)faw_n, -DBL_MAX); fr_audit_fill_double(fr_audit.refresh_ring, (size_t)ring_n, -DBL_MAX); fr_audit_fill_double(fr_audit.round_end, (size_t)lane_sid_n, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.pc_group_gate, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.bank_ref_ring, (size_t)bank_ref_n, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.refresh_t0, (size_t)lanes, -DBL_MAX);
+    fr_audit_fill_double(fr_audit.row_busy, (size_t)channels, -DBL_MAX); fr_audit_fill_double(fr_audit.col_busy, (size_t)channels, -DBL_MAX); fr_audit_fill_double(fr_audit.refab_blocked, (size_t)lanes, -DBL_MAX); fr_audit_fill_double(fr_audit.last_refab, (size_t)lanes, -DBL_MAX);
+    for (index = 0; index < lane_group_n; ++index) { fr_audit.act_group_bank1[index] = fr_audit.act_group_bank2[index] = -1; }
+    for (index = 0; index < 2 * lane_sid_n; ++index) { fr_audit.last_col_sid_group1[index] = fr_audit.last_col_sid_group2[index] = -1; }
+    for (index = 0; index < lanes; ++index) {
+        fr_audit.act_top_group1[index] = fr_audit.act_top_group2[index] = -1;
+        fr_audit.ref_bank1[index] = fr_audit.ref_bank2[index] = -1;
+        fr_audit.last_col_lane_sid1[index] = fr_audit.last_col_lane_sid2[index] = -1;
+    }
+    for (index = 0; index < AUDIT_RULE_COUNT; ++index) { fr_audit.first_time[index] = DBL_MAX; fr_audit.first_kind[index][0] = '\0'; }
+    fr_audit_empty=(unsigned char *)calloc(fr_audit_image_size(banks,bgs,sids),1);
+    if(!fr_audit_empty) goto failed;
+    fr_audit_image_transfer(fr_audit_empty,0,1);
+    fr_audit.initialized = 1;
+    fr_audit_reset_delta();
+    return 1;
+failed:
+#undef FR_AUDIT_ALLOC
+    fr_audit_free();
+    return 0;
+}
+
+size_t fr_audit_image_size(int64_t banks, int64_t bgs, int64_t sids)
+{
+    int64_t lanes = 2, channels = 1;
+    int64_t bank_n = lanes*banks, lane_group_n = lanes*bgs, lane_sid_n = lanes*sids;
+    int64_t column_n = lane_sid_n*bgs, faw_n = lanes*5, ring_n = lanes*49, bank_ref_n = bank_n*9;
+    return 8 + (bank_n)*sizeof(int64_t) + (bank_n)*sizeof(double) + (bank_n)*sizeof(double) + (bank_n)*sizeof(double) + (bank_n)*sizeof(double) + (bank_n)*sizeof(double) + (bank_n)*sizeof(double) + (lanes)*sizeof(double) + (lanes)*sizeof(double) + (lanes)*sizeof(double) + (lane_group_n)*sizeof(double) + (lane_group_n)*sizeof(double) + (lane_group_n)*sizeof(double) + (lane_group_n)*sizeof(int64_t) + (lane_group_n)*sizeof(int64_t) + (lanes)*sizeof(double) + (lanes)*sizeof(double) + (lanes)*sizeof(int64_t) + (lanes)*sizeof(int64_t) + (lanes)*sizeof(double) + (lanes)*sizeof(double) + (lanes)*sizeof(int64_t) + (lanes)*sizeof(int64_t) + (2 * column_n)*sizeof(double) + (2 * lane_sid_n)*sizeof(double) + (2 * lane_sid_n)*sizeof(double) + (2 * lane_sid_n)*sizeof(int64_t) + (2 * lane_sid_n)*sizeof(int64_t) + (lanes)*sizeof(double) + (lanes)*sizeof(double) + (lanes)*sizeof(int64_t) + (lanes)*sizeof(int64_t) + (lane_group_n)*sizeof(double) + (faw_n)*sizeof(double) + (ring_n)*sizeof(double) + (lane_sid_n)*sizeof(double) + (lanes)*sizeof(double) + (bank_ref_n)*sizeof(double) + (lanes)*sizeof(double) + (lanes)*sizeof(uint8_t) + (lane_sid_n)*sizeof(uint8_t) + (lanes)*sizeof(uint8_t) + (lane_sid_n)*sizeof(uint8_t) + (bank_n)*sizeof(uint8_t) + (lane_sid_n)*sizeof(uint64_t) + (lanes)*sizeof(long long) + (channels)*sizeof(double) + (channels)*sizeof(double) + (lanes)*sizeof(double) + (lanes)*sizeof(double) + (lanes)*sizeof(int64_t);
+}
+
+static void fr_audit_image_transfer(unsigned char *image, int64_t ch, int writing)
+{
+    int64_t lanes=fr_audit.lanes, banks=fr_audit.banks, bgs=fr_audit.bgs;
+    int64_t sids=fr_audit.sids, channels=fr_audit.channels;
+    int64_t bank_n=lanes*banks, lane_group_n=lanes*bgs, lane_sid_n=lanes*sids;
+    int64_t column_n=lane_sid_n*bgs, faw_n=lanes*5, ring_n=lanes*49, bank_ref_n=bank_n*9;
+    unsigned char *cursor=image+8;
+#define IMAGE_FIELD(name, count, type) do { \
+    size_t n=(size_t)(count)/(size_t)channels, bytes=n*sizeof(type); \
+    if(writing) memcpy(cursor,fr_audit.name+ch*n,bytes); \
+    else memcpy(fr_audit.name+ch*n,cursor,bytes); \
+    cursor+=bytes; } while(0)
+    IMAGE_FIELD(open_row, bank_n, int64_t);
+    IMAGE_FIELD(act_anchor, bank_n, double);
+    IMAGE_FIELD(pre_time, bank_n, double);
+    IMAGE_FIELD(last_rd, bank_n, double);
+    IMAGE_FIELD(last_wr_end, bank_n, double);
+    IMAGE_FIELD(blocked, bank_n, double);
+    IMAGE_FIELD(last_ref, bank_n, double);
+    IMAGE_FIELD(last_pre, lanes, double);
+    IMAGE_FIELD(last_rd_lane, lanes, double);
+    IMAGE_FIELD(data_available, lanes, double);
+    IMAGE_FIELD(act_group, lane_group_n, double);
+    IMAGE_FIELD(act_group_top1, lane_group_n, double);
+    IMAGE_FIELD(act_group_top2, lane_group_n, double);
+    IMAGE_FIELD(act_group_bank1, lane_group_n, int64_t);
+    IMAGE_FIELD(act_group_bank2, lane_group_n, int64_t);
+    IMAGE_FIELD(act_top1, lanes, double);
+    IMAGE_FIELD(act_top2, lanes, double);
+    IMAGE_FIELD(act_top_group1, lanes, int64_t);
+    IMAGE_FIELD(act_top_group2, lanes, int64_t);
+    IMAGE_FIELD(ref_top1, lanes, double);
+    IMAGE_FIELD(ref_top2, lanes, double);
+    IMAGE_FIELD(ref_bank1, lanes, int64_t);
+    IMAGE_FIELD(ref_bank2, lanes, int64_t);
+    IMAGE_FIELD(last_col, 2 * column_n, double);
+    IMAGE_FIELD(last_col_sid_top1, 2 * lane_sid_n, double);
+    IMAGE_FIELD(last_col_sid_top2, 2 * lane_sid_n, double);
+    IMAGE_FIELD(last_col_sid_group1, 2 * lane_sid_n, int64_t);
+    IMAGE_FIELD(last_col_sid_group2, 2 * lane_sid_n, int64_t);
+    IMAGE_FIELD(last_col_lane_top1, lanes, double);
+    IMAGE_FIELD(last_col_lane_top2, lanes, double);
+    IMAGE_FIELD(last_col_lane_sid1, lanes, int64_t);
+    IMAGE_FIELD(last_col_lane_sid2, lanes, int64_t);
+    IMAGE_FIELD(write_bg, lane_group_n, double);
+    IMAGE_FIELD(faw, faw_n, double);
+    IMAGE_FIELD(refresh_ring, ring_n, double);
+    IMAGE_FIELD(round_end, lane_sid_n, double);
+    IMAGE_FIELD(pc_group_gate, lanes, double);
+    IMAGE_FIELD(bank_ref_ring, bank_ref_n, double);
+    IMAGE_FIELD(refresh_t0, lanes, double);
+    IMAGE_FIELD(faw_count, lanes, uint8_t);
+    IMAGE_FIELD(refresh_count, lane_sid_n, uint8_t);
+    IMAGE_FIELD(refresh_ring_count, lanes, uint8_t);
+    IMAGE_FIELD(round_seen, lane_sid_n, uint8_t);
+    IMAGE_FIELD(bank_ref_count, bank_n, uint8_t);
+    IMAGE_FIELD(refresh_mask, lane_sid_n, uint64_t);
+    IMAGE_FIELD(refresh_total, lanes, long long);
+    IMAGE_FIELD(row_busy, channels, double);
+    IMAGE_FIELD(col_busy, channels, double);
+    IMAGE_FIELD(refab_blocked, lanes, double);
+    IMAGE_FIELD(last_refab, lanes, double);
+    IMAGE_FIELD(open_count, lanes, int64_t);
+#undef IMAGE_FIELD
+    if(writing) image[0]=1;
+}
+
+static void fr_audit_prepare(const fr_state *s)
+{
+    int64_t ch;
+    size_t size=fr_audit_image_size(s->banks,s->g[5],s->g[14]);
+    if(!s->a->audit_history) return;
+    if(s->a->audit_stride!=(int64_t)size || !fr_audit_ensure(s)) fr_fail(FR_ERR_MEMORY);
+    for(ch=s->a->channel_first;ch<s->a->channel_stop;++ch) {
+        unsigned char *image=s->a->audit_history+(ch-s->a->channel_first)*size;
+        if(image[0]) fr_audit_image_transfer(image,ch,0);
+        else {
+            fr_audit_image_transfer(fr_audit_empty,ch,0);
+            fr_audit_seed(s,ch,ch+1);
+        }
+    }
+}
+
+static void fr_audit_save(const fr_args *args)
+{
+    int64_t ch;
+    if(!args->audit_history || !fr_audit.initialized) return;
+    for(ch=args->channel_first;ch<args->channel_stop;++ch)
+        fr_audit_image_transfer(args->audit_history+(ch-args->channel_first)*args->audit_stride,ch,1);
+}
+
+static int fr_audit_before(double later, double earlier, double minimum)
+{
+    return later - earlier < minimum - 1e-7;
+}
+
+static int fr_audit_after(double later, double earlier, double maximum)
+{
+    return later - earlier > maximum + 1e-7;
+}
+
+static void fr_audit_test(int rule, int bad, const char *kind, double time, int64_t stack, int64_t channel,
+                          int64_t pc, int64_t sid, int64_t bg, int64_t bank, int64_t row)
+{
+    fr_audit.checks[rule] += 1; fr_audit.delta_checks[rule] += 1;
+    if (!bad) return;
+    fr_audit.violations[rule] += 1; fr_audit.delta_violations[rule] += 1;
+    if (fr_audit.first_kind[rule][0] == '\0') {
+        fr_audit.delta_first_seen[rule] = 1;
+        strncpy(fr_audit.first_kind[rule], kind, sizeof(fr_audit.first_kind[rule]) - 1);
+        fr_audit.first_kind[rule][sizeof(fr_audit.first_kind[rule]) - 1] = '\0';
+        fr_audit.first_time[rule] = time; fr_audit.first_stack[rule] = stack; fr_audit.first_channel[rule] = channel;
+        fr_audit.first_pc[rule] = pc; fr_audit.first_sid[rule] = sid; fr_audit.first_bg[rule] = bg;
+        fr_audit.first_bank[rule] = bank; fr_audit.first_row[rule] = row;
+    }
+}
+
+static void fr_audit_recent_update(double *top1, double *top2, int64_t *key1, int64_t *key2, int64_t key, double time)
+{
+    if (*key1 == key) { *top1 = time; return; }
+    if (*key2 == key) {
+        *top2 = time;
+        if (*top2 > *top1) { double stamp = *top1; int64_t old = *key1; *top1 = *top2; *key1 = *key2; *top2 = stamp; *key2 = old; }
+        return;
+    }
+    if (*top1 <= -DBL_MAX / 2 || time > *top1) { *top2 = *top1; *key2 = *key1; *top1 = time; *key1 = key; }
+    else if (*top2 <= -DBL_MAX / 2 || time > *top2) { *top2 = time; *key2 = key; }
+}
+
+static double fr_audit_recent_other(double top1, double top2, int64_t key1, int64_t key2, int64_t key)
+{
+    if (key1 != key && top1 > -DBL_MAX / 2) return top1;
+    if (key2 != key && top2 > -DBL_MAX / 2) return top2;
+    return -DBL_MAX;
+}
+
+static void fr_audit_faw(const fr_state *s, int64_t lane, const char *kind, double time, int64_t stack, int64_t ch,
+                         int64_t pc, int64_t sid, int64_t bg, int64_t bank, int64_t row)
+{
+    int64_t count = fr_audit.faw_count[lane], index;
+    double *window = fr_audit.faw + lane * 5;
+    while (count > 0 && window[0] <= time - s->t[30] + 1e-7) {
+        for (index = 1; index < count; ++index) window[index - 1] = window[index];
+        count -= 1;
+    }
+    fr_audit_test(AUDIT_TFAW, count >= 4, kind, time, stack, ch, pc, sid, bg, bank, row);
+    if (count < 5) window[count++] = time;
+    else { window[0] = window[1]; window[1] = window[2]; window[2] = window[3]; window[3] = time; }
+    fr_audit.faw_count[lane] = (uint8_t)count;
+}
+
+static void fr_audit_event(const fr_state *s, const char *kind, int64_t lane, int64_t sid, int64_t group,
+                           int64_t bank, int64_t row, int64_t column, double start, double data_start, double data_end)
+{
+    int64_t ch, pc, bank_index, group_index, sid_index, column_index, index;
+    int64_t stack, local_ch;
+    double anchor, previous, other;
+    fr_audit_state *a = &fr_audit;
+    if (!fr_audit_ensure(s)) return;
+    ch = lane >> 1; pc = lane & 1; stack = s->g[11] > 0 ? lane / s->g[11] : 0; local_ch = s->g[11] > 0 ? (lane % s->g[11]) / 2 : ch;
+    bank_index = lane * a->banks + bank; group_index = lane * a->bgs + group; sid_index = lane * a->sids + sid;
+    column_index = (lane * a->sids + sid) * a->bgs + group;
+    if (kind[0] == 'A') a->by_type[0] += 1;
+    else if (kind[0] == 'P' && kind[1] == 'R' && kind[2] == 'E') a->by_type[1] += 1;
+    else if (strcmp(kind, "PRE_ALL") == 0) a->by_type[2] += 1;
+    else if (strcmp(kind, "REFab") == 0) a->by_type[3] += 1;
+    else if (strcmp(kind, "REFpb") == 0) a->by_type[4] += 1;
+    else if (kind[0] == 'R') a->by_type[5] += 1;
+    else if (kind[0] == 'W') a->by_type[6] += 1;
+    a->commands += 1; a->delta_commands += 1;
+
+    /* The two CA buses are shared by the two PCs of one channel. */
+    if (strcmp(kind, "ACT") == 0 || strcmp(kind, "PRE") == 0 || strcmp(kind, "PRE_ALL") == 0 || strcmp(kind, "REFpb") == 0 || strcmp(kind, "REFab") == 0) {
+        fr_audit_test(AUDIT_BUS_ROW, start < a->row_busy[ch] - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        a->row_busy[ch] = start + (strcmp(kind, "ACT") == 0 ? 1.5 : .5) * s->t[0];
+    } else if (strcmp(kind, "RD") == 0 || strcmp(kind, "WR") == 0) {
+        fr_audit_test(AUDIT_BUS_COL, start < a->col_busy[ch] - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        a->col_busy[ch] = start + s->t[0];
+    }
+
+    if (strcmp(kind, "REFab") == 0) {
+        fr_audit_test(AUDIT_REFAB_CLOSED, a->open_count[lane] != 0, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->last_pre[lane] > -DBL_MAX / 2)
+            fr_audit_test(AUDIT_REFAB_TRP, fr_audit_before(start, a->last_pre[lane], s->t[6]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (start < a->refab_blocked[lane] - 1e-7)
+            fr_audit_test(AUDIT_REFAB_NOP, 1, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->last_refab[lane] > -DBL_MAX / 2) fr_audit_test(AUDIT_REFAB_INTERVAL, fr_audit_after(start, a->last_refab[lane], 9 * s->t[20]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        a->last_refab[lane] = start; a->refab_blocked[lane] = start + s->t[21];
+        return;
+    }
+    if (start < a->refab_blocked[lane] - 1e-7) fr_audit_test(AUDIT_REFAB_NOP, 1, kind, start, stack, local_ch, pc, sid, group, bank, row);
+    if (strcmp(kind, "PRE_ALL") == 0) {
+        a->open_count[lane] = 0;
+        if (a->last_pre[lane] > -DBL_MAX/2)
+            fr_audit_test(AUDIT_TPPD, fr_audit_before(start,a->last_pre[lane],s->t[19]),kind,start,stack,local_ch,pc,sid,group,bank,row);
+        for (index = 0; index < a->banks; ++index) {
+            int64_t item = lane * a->banks + index;
+            if(a->open_row[item] >= 0) {
+                if(a->act_anchor[item] > -DBL_MAX/2) {
+                    fr_audit_test(AUDIT_TRAS,fr_audit_before(start,a->act_anchor[item],s->t[7]),kind,start,stack,local_ch,pc,sid,group,index,row);
+                    fr_audit_test(AUDIT_TRASMAX,fr_audit_after(start,a->act_anchor[item],s->t[29]),kind,start,stack,local_ch,pc,sid,group,index,row);
+                }
+                if(a->last_rd[item] > -DBL_MAX/2) fr_audit_test(AUDIT_RTP,fr_audit_before(start,a->last_rd[item],s->t[9]),kind,start,stack,local_ch,pc,sid,group,index,row);
+                if(a->last_wr_end[item] > -DBL_MAX/2) fr_audit_test(AUDIT_WR,fr_audit_before(start,a->last_wr_end[item],s->t[10]),kind,start,stack,local_ch,pc,sid,group,index,row);
+            }
+            a->open_row[item] = -1; a->pre_time[item]=start;
+            a->last_rd[item]=a->last_wr_end[item]=-DBL_MAX;
+        }
+        a->last_pre[lane]=start;
+        return;
+    }
+    if (bank < 0 || bank >= a->banks) return;
+
+    if (strcmp(kind, "ACT") == 0) {
+        anchor = start + s->t[0];
+        fr_audit_test(AUDIT_BANK_OPEN, a->open_row[bank_index] >= 0, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        fr_audit_test(AUDIT_REFRESH_BLOCK, anchor < a->blocked[bank_index] - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->pre_time[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_TRP, fr_audit_before(start, a->pre_time[bank_index], s->t[6]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->act_anchor[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_TRC, fr_audit_before(anchor, a->act_anchor[bank_index], s->t[8]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        previous = a->act_group[group_index];
+        if (previous > -DBL_MAX / 2) fr_audit_test(AUDIT_TRRD, fr_audit_before(anchor, previous, s->t[14]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        other = fr_audit_recent_other(a->act_top1[lane], a->act_top2[lane], a->act_top_group1[lane], a->act_top_group2[lane], group);
+        if (other > -DBL_MAX / 2) fr_audit_test(AUDIT_TRRD, fr_audit_before(anchor, other, s->t[15]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        other = fr_audit_recent_other(a->ref_top1[lane], a->ref_top2[lane], a->ref_bank1[lane], a->ref_bank2[lane], bank);
+        if (other > -DBL_MAX / 2) fr_audit_test(AUDIT_REF_ACT, fr_audit_before(anchor, other, s->t[32]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        fr_audit_faw(s, lane, kind, anchor, stack, local_ch, pc, sid, group, bank, row);
+        fr_audit_recent_update(&a->act_top1[lane], &a->act_top2[lane], &a->act_top_group1[lane], &a->act_top_group2[lane], group, anchor);
+        a->act_group[group_index] = anchor;
+        fr_audit_recent_update(&a->act_group_top1[group_index], &a->act_group_top2[group_index], &a->act_group_bank1[group_index], &a->act_group_bank2[group_index], bank, anchor);
+        a->open_row[bank_index] = row; a->act_anchor[bank_index] = anchor; a->pre_time[bank_index] = a->last_rd[bank_index] = a->last_wr_end[bank_index] = -DBL_MAX; a->blocked[bank_index] = -DBL_MAX; a->open_count[lane] += 1;
+    } else if (strcmp(kind, "RD") == 0 || strcmp(kind, "WR") == 0) {
+        fr_audit_test(AUDIT_ROW_MATCH, a->open_row[bank_index] < 0 || a->open_row[bank_index] != row, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        fr_audit_test(AUDIT_REFRESH_BLOCK, start < a->blocked[bank_index] - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->act_anchor[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_TRCD, fr_audit_before(start, a->act_anchor[bank_index], strcmp(kind, "RD") == 0 ? s->t[4] : s->t[5]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (strcmp(kind, "RD") == 0) a->last_rd[bank_index] = start;
+        else a->last_wr_end[bank_index] = data_end > -DBL_MAX / 2 ? data_end : start + s->t[23] + s->t[26];
+        if (strcmp(kind, "RD") == 0 || strcmp(kind, "WR") == 0) {
+            int read = strcmp(kind, "RD") == 0;
+            int64_t typed_sid_index = 2 * (lane * a->sids + sid) + (read ? 0 : 1);
+            column_index = typed_sid_index * a->bgs + group;
+            previous = a->last_col[column_index];
+            if (previous > -DBL_MAX / 2) fr_audit_test(AUDIT_TCCDL, fr_audit_before(start, previous, s->t[11]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+            previous = fr_audit_recent_other(a->last_col_sid_top1[typed_sid_index],
+                                             a->last_col_sid_top2[typed_sid_index],
+                                             a->last_col_sid_group1[typed_sid_index],
+                                             a->last_col_sid_group2[typed_sid_index], group);
+            if (previous > -DBL_MAX / 2)
+                fr_audit_test(AUDIT_TCCDS, fr_audit_before(start, previous, s->t[12]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+            if (read) {
+                previous = fr_audit_recent_other(a->last_col_lane_top1[lane], a->last_col_lane_top2[lane],
+                                                 a->last_col_lane_sid1[lane], a->last_col_lane_sid2[lane], sid);
+                if (previous > -DBL_MAX / 2)
+                    fr_audit_test(AUDIT_TCCDR, fr_audit_before(start, previous, s->t[13]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+            }
+            a->last_col[column_index] = start;
+            fr_audit_recent_update(&a->last_col_sid_top1[typed_sid_index], &a->last_col_sid_top2[typed_sid_index],
+                                   &a->last_col_sid_group1[typed_sid_index], &a->last_col_sid_group2[typed_sid_index], group, start);
+            if (read)
+                fr_audit_recent_update(&a->last_col_lane_top1[lane], &a->last_col_lane_top2[lane],
+                                       &a->last_col_lane_sid1[lane], &a->last_col_lane_sid2[lane], sid, start);
+        }
+        if (strcmp(kind, "RD") == 0) {
+            previous = a->last_rd_lane[lane]; if (previous > -DBL_MAX / 2) { /* kept for the next WR */ }
+            other = a->data_available[lane];
+            if (data_start > -DBL_MAX / 2) fr_audit_test(AUDIT_DQ, data_start < other - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
+            a->data_available[lane] = data_end > -DBL_MAX / 2 ? data_end : start + s->t[22] + s->t[26];
+            a->last_rd_lane[lane] = start;
+            for (index = 0; index < a->bgs; ++index) if (a->write_bg[lane * a->bgs + index] > -DBL_MAX / 2) {
+                double gap = start - a->write_bg[lane * a->bgs + index];
+                fr_audit_test(index == group ? AUDIT_WTR : AUDIT_WTR, gap < (index == group ? s->t[16] : s->t[17]) - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
+            }
+        } else {
+            if (a->last_rd_lane[lane] > -DBL_MAX / 2) fr_audit_test(AUDIT_RTW, fr_audit_before(start, a->last_rd_lane[lane], s->t[18]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+            other = a->data_available[lane]; if (data_start > -DBL_MAX / 2) fr_audit_test(AUDIT_DQ, data_start < other - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
+            a->data_available[lane] = data_end > -DBL_MAX / 2 ? data_end : start + s->t[23] + s->t[26];
+            a->write_bg[lane * a->bgs + group] = a->data_available[lane];
+        }
+    } else if (strcmp(kind, "PRE") == 0) {
+        fr_audit_test(AUDIT_PRE_CLOSED, a->open_row[bank_index] < 0, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->act_anchor[bank_index] > -DBL_MAX / 2) {
+            fr_audit_test(AUDIT_TRAS, fr_audit_before(start, a->act_anchor[bank_index], s->t[7]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+            fr_audit_test(AUDIT_TRASMAX, fr_audit_after(start, a->act_anchor[bank_index], s->t[29]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        }
+        if (a->last_rd[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_RTP, fr_audit_before(start, a->last_rd[bank_index], s->t[9]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->last_wr_end[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_WR, fr_audit_before(start, a->last_wr_end[bank_index], s->t[10]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->last_pre[lane] > -DBL_MAX / 2) fr_audit_test(AUDIT_TPPD, fr_audit_before(start, a->last_pre[lane], s->t[19]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        a->open_row[bank_index] = -1; a->pre_time[bank_index] = start; a->last_rd[bank_index] = a->last_wr_end[bank_index] = -DBL_MAX; if (a->open_count[lane] > 0) a->open_count[lane] -= 1; a->last_pre[lane] = start;
+    } else if (strcmp(kind, "REFpb") == 0) {
+        fr_audit_test(AUDIT_REF_CLOSED, a->open_row[bank_index] >= 0, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->pre_time[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_REF_TRP, fr_audit_before(start, a->pre_time[bank_index], s->t[6]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        previous = a->act_anchor[bank_index]; if (previous > -DBL_MAX / 2) fr_audit_test(AUDIT_ACT_REF, fr_audit_before(start, previous, s->t[8]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        previous = fr_audit_recent_other(a->act_group_top1[group_index], a->act_group_top2[group_index], a->act_group_bank1[group_index], a->act_group_bank2[group_index], bank); if (previous > -DBL_MAX / 2) fr_audit_test(AUDIT_ACT_REF, fr_audit_before(start, previous, s->t[14]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        other = fr_audit_recent_other(a->act_top1[lane], a->act_top2[lane], a->act_top_group1[lane], a->act_top_group2[lane], group); if (other > -DBL_MAX / 2) fr_audit_test(AUDIT_ACT_REF, fr_audit_before(start, other, s->t[15]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        previous = a->last_ref[bank_index];
+        if (previous > -DBL_MAX / 2) {
+            fr_audit_test(AUDIT_REF_SPACING, fr_audit_before(start, previous, s->t[31]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+            fr_audit_test(AUDIT_REFRESH_INTERVAL, fr_audit_after(start, previous, 9 * s->t[20]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        }
+        other = fr_audit_recent_other(a->ref_top1[lane], a->ref_top2[lane], a->ref_bank1[lane], a->ref_bank2[lane], bank); if (other > -DBL_MAX / 2) fr_audit_test(AUDIT_REF_SPACING, fr_audit_before(start, other, s->t[32]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        a->blocked[bank_index] = start + s->t[31]; a->last_ref[bank_index] = start;
+        fr_audit_recent_update(&a->ref_top1[lane], &a->ref_top2[lane], &a->ref_bank1[lane], &a->ref_bank2[lane], bank, start);
+        if (a->pc_group_gate[lane] > -DBL_MAX / 2)
+            fr_audit_test(AUDIT_REFRESH_GROUP_GAP, start < a->pc_group_gate[lane] - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (sid >= 0 && sid < a->sids) {
+            uint64_t bit = UINT64_C(1) << (bank % 64), mask = a->refresh_mask[sid_index];
+            fr_audit_test(AUDIT_REFRESH_ORDER, (mask & bit) != 0, kind, start, stack, local_ch, pc, sid, group, bank, row);
+            if (a->refresh_count[sid_index] == 0 && a->round_end[sid_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_REFRESH_GROUP_GAP, fr_audit_before(start, a->round_end[sid_index], s->t[31]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+            a->refresh_mask[sid_index] = mask | bit; a->refresh_count[sid_index] += 1;
+            if (a->refresh_count[sid_index] >= a->banks / a->sids) {
+                a->refresh_count[sid_index] = 0; a->refresh_mask[sid_index] = 0; a->round_end[sid_index] = start;
+                a->pc_group_gate[lane] = start + s->t[31];
+            }
+        }
+        { uint8_t count = a->bank_ref_count[bank_index]; double *ring = a->bank_ref_ring + bank_index * 9;
+          while (count > 0 && start - ring[0] >= s->t[20] - 1e-7) {
+              memmove(ring, ring + 1, (size_t)(count - 1) * sizeof(double));
+              count -= 1;
+          }
+          fr_audit_test(AUDIT_REFRESH_RATE, count >= 9, kind, start, stack, local_ch, pc, sid, group, bank, row);
+          if (count < 9) ring[count++] = start;
+          else { memmove(ring, ring + 1, 8 * sizeof(double)); ring[8] = start; }
+          a->bank_ref_count[bank_index] = count;
+        }
+        if (a->refresh_t0[lane] <= -DBL_MAX / 2)
+            a->refresh_t0[lane] = start;
+        a->refresh_total[lane] += 1;
+        { double due = floor((start - a->refresh_t0[lane]) / s->t[33]) - 8. * 48.;
+          fr_audit_test(AUDIT_REFRESH_RATE, due > (double)a->refresh_total[lane], kind, start, stack, local_ch, pc, sid, group, bank, row);
+        }
+        fr_audit_faw(s, lane, kind, start, stack, local_ch, pc, sid, group, bank, row);
+    }
+}
+
+FR_INLINE void fr_trace(const fr_state *s, const char *kind, int64_t lane, int64_t sid,
+                        int64_t group, int64_t bank, int64_t row, int64_t column, double start,
+                        double data_start, double data_end)
+{
+    int64_t lanes_per_stack, stack, local_channel;
+    int kind_index;
+    if (fr_trace_file == NULL && fr_trace_summary_file == NULL)
+        return;
+    if (fr_trace_summary_file != NULL)
+        fr_audit_event(s, kind, lane, sid, group, bank, row, column, start, data_start, data_end);
+    kind_index = fr_trace_kind_index(kind);
+    fr_trace_total++;
+    if (kind_index >= 0)
+        fr_trace_counts[kind_index]++;
+    if (fr_trace_file == NULL || fr_trace_emitted >= fr_trace_limit
+            || start < fr_trace_min_time || start > fr_trace_max_time)
+        return;
+    lanes_per_stack = s->g[11] > 0 ? s->g[11] : s->g[0];
+    stack = lane / lanes_per_stack;
+    local_channel = (lane % lanes_per_stack) / 2;
+    fprintf(fr_trace_file, "%s\t%.17g\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\t%lld\n",
+            kind, start, (long long)stack, (long long)local_channel,
+            (long long)(lane & 1), (long long)sid, (long long)group,
+            (long long)bank, (long long)row, (long long)column);
+    fr_trace_emitted++;
+}
+
 static void fr_command(const fr_state *s, int64_t channel, int64_t kind, double earliest, double cycles, int rising,
                        double *counts, double *start_out)
 {
@@ -293,6 +1024,11 @@ static void fr_precharge(const fr_state *s, int64_t lane, int64_t bank, double e
 {
     double start = fr_row_command(s, lane >> 1, fr_precharge_start(s, lane, bank, earliest), s->precharge_step,
                                   s->pre_duration, s->pre_duration_tick, counts);
+    {
+        int64_t within = bank % s->banks;
+        fr_trace(s, "PRE", lane, within / (s->g[15] * s->g[4]), within / s->g[4], within,
+                 s->rows[bank], -1, start, -DBL_MAX, -DBL_MAX);
+    }
     double next = fr_after_tick(start, s->t[6], s->ticks[6], s->half, s->inverse);
     counts[1] += 1;
     s->pc[lane * FR_PC] = start;
@@ -457,6 +1193,11 @@ FR_NOINLINE void fr_close_expiring(const fr_state *s, int64_t ch, double before,
         if (channel_int[ch * 2] == bank)
             earliest = fr_max(earliest, fr_after(channel[ch * 2], 2 * t[0], half));
         fr_command(s, ch, 0, earliest, t[2], 0, counts, &start);
+        {
+            int64_t within = bank % s->banks;
+            fr_trace(s, "PRE", lane, within / (s->g[15] * s->g[4]), within / s->g[4], within,
+                     rows[bank], -1, start, -DBL_MAX, -DBL_MAX);
+        }
         counts[1] += 1;
         pc[lane * FR_PC] = start;
         rows[bank] = -1;
@@ -497,6 +1238,7 @@ FR_NOINLINE void fr_refresh_pc(const fr_state *s, int64_t lane, double due, doub
                     fr_fail(FR_ERR_TRAS_REFRESH);
         }
         fr_command(s, ch, 0, earliest, t[2], 0, counts, &start);
+        fr_trace(s, "PRE_ALL", lane, -1, -1, -1, -1, -1, start, -DBL_MAX, -DBL_MAX);
         counts[1] += 1;
         pc[lane * FR_PC] = start;
         earliest = fr_after(start, t[6], half);
@@ -517,6 +1259,7 @@ FR_NOINLINE void fr_refresh_pc(const fr_state *s, int64_t lane, double due, doub
     if (g[8])
         earliest = fr_max(earliest, s->resources[(s->channels + ch) * 4]);
     fr_command(s, ch, 0, earliest, t[2], 1, counts, &start);
+    fr_trace(s, "REFab", lane, -1, -1, -1, -1, -1, start, -DBL_MAX, -DBL_MAX);
     if (g[8]) {
         double ignored;
         fr_command(s, ch, 1, start, 1., 1, counts, &ignored);
@@ -655,6 +1398,7 @@ FR_NOINLINE int fr_idle_refresh_commands(const fr_state *s, int64_t lane, double
             double earliest = g[8] ? fr_max(due, resources[column_id * 4]) : due;
             double start, blocked;
             fr_command(s, ch, 0, earliest, t[2], 1, counts, &start);
+            fr_trace(s, "REFab", 2 * ch + pseudo, -1, -1, -1, -1, -1, start, -DBL_MAX, -DBL_MAX);
             if (g[8]) {
                 double ignored;
                 fr_command(s, ch, 1, start, 1., 1, counts, &ignored);
@@ -1111,7 +1855,7 @@ static void fr_next_request(const fr_args *a, int64_t start, int64_t direction, 
 
 /* One entry of a scheduling queue; ``within`` is its bank within the lane. */
 typedef struct fr_item {
-    int64_t within, row, request;
+    int64_t within, row, column, request;
     double entry;
 } fr_item;
 
@@ -1337,6 +2081,7 @@ FR_NOINLINE void fr_refresh_bank(const fr_state *s, int64_t lane, int64_t within
     double *lane_pc = s->pc + lane * FR_PC, *bank_bf = s->bf + bank * 7;
     double due = lane_pc[5], start, done;
     start = fr_row_command(s, ch, fr_max(earliest, lane_pc[6]), t[0], s->pre_duration, s->pre_duration_tick, counts);
+    fr_trace(s, "REFpb", lane, within / (s->g[15] * s->g[4]), within / s->g[4], within, -1, -1, start, -DBL_MAX, -DBL_MAX);
     counts[4] += 1;
     if (start > due + 8 * t[20])
         fr_fail(FR_ERR_REFRESH_POSTPONED);
@@ -1466,6 +2211,9 @@ static double fr_refresh_skip_group_gate(const fr_state *s, int64_t lane, int64_
  */
 FR_NOINLINE int fr_skip_refresh_gap(const fr_state *s, int64_t ch, double latest, double *counts)
 {
+    if (getenv("HETEROLLM_HBM_AUDIT_DISABLE_EQUIV") != NULL
+            || getenv("HETEROLLM_HBM_AUDIT_DISABLE_SKIP") != NULL)
+        return 0;
     const double *t = s->t;
     double step = t[33], total;
     int64_t resume = fr_ifloor(latest / step), banks = s->banks, commands = 0;
@@ -2107,7 +2855,9 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
     total_bursts = 0;
     for (request = 0; request < requests; ++request)
         total_bursts += stops[request] - firsts[request];
-    mirror = a->span >= 2 && t[0] * 2 != (double)fr_ifloor(t[0] * 2)
+    mirror = getenv("HETEROLLM_HBM_AUDIT_DISABLE_EQUIV") == NULL
+        && getenv("HETEROLLM_HBM_AUDIT_DISABLE_MIRROR") == NULL
+        && a->span >= 2 && t[0] * 2 != (double)fr_ifloor(t[0] * 2)
         && total_bursts >= FR_MIRROR_MIN_BURSTS * a->span;
     capacity_sources = mirror ? fr_imin(FR_MIRROR_SOURCES, a->channel_stop - a->channel_first) : 0;
     depth = fr_imax(q[0], q[1]);
@@ -2243,6 +2993,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
     state.act_floors = tables.act_floors;
     state.miss_seen = tables.miss_seen;
     state.act_floor_ready = tables.act_floor_ready;
+    fr_audit_prepare(s);
 
     source_count = 0;
     first_arrival = HUGE_VAL;
@@ -2420,7 +3171,7 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                     queue = &queues[pseudo][direction];
                     capacity = q[direction];
                     while (queue->count < capacity && queue->iter_request >= 0) {
-                        int64_t cursor = queue->iter_cursor;
+                        int64_t cursor = queue->iter_cursor, column;
                         request = queue->iter_request;
                         if (binary) {
                             /* The burst location for non-negative cursors. */
@@ -2432,12 +3183,14 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                         } else {
                             fr_burst_location(g, cursor, &bank_within, &row);
                         }
+                        column = fr_mod(fr_floordiv(fr_floordiv(cursor, g[15]), g[0]), g[3]);
                         bank = lane * banks + bank_within;
                         slot = queue->head + queue->count;
                         if (slot >= capacity)
                             slot -= capacity;
                         queue->items[slot].within = bank_within;
                         queue->items[slot].row = row;
+                        queue->items[slot].column = column;
                         queue->items[slot].request = request;
                         queue->items[slot].entry = fr_max(arrivals[request], queue->slot_free);
                         if (addresses[bank] < 0) {
@@ -2780,6 +3533,8 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                     }
                 }
                 command = fr_row_command(s, ch, start, t[0], s->act_duration, s->act_duration_tick, tally);
+                fr_trace(s, "ACT", lane, bank_sid[bank_within], bank_group[bank_within], bank_within,
+                         row, -1, command, -DBL_MAX, -DBL_MAX);
                 anchor = fr_after_tick(command, t[0], ticks[0], half, inverse);
                 history[(lane * entries + group) * 4] = anchor;
                 if (t[30] > 0) {
@@ -2853,6 +3608,8 @@ FR_NOINLINE void fr_channels(const fr_args *a, char *volatile *arena_out)
                     lane_stats[5] += 1;
                 data_start = fr_max(fr_after_tick(command, t[latency], ticks[latency], half, inverse), data_resource[0]);
                 data_end = fr_after_tick(data_start, t[26], ticks[26], half, inverse);
+                fr_trace(s, read ? "RD" : "WR", lane, bank_sid[bank_within], bank_group[bank_within],
+                         bank_within, row, item->column, command, data_start, data_end);
                 data_resource[0] = data_end;
                 data_resource[1] += t[26];
                 data_resource[2] = data_start;
@@ -2972,11 +3729,23 @@ int fr_run_channels(const fr_args *args)
     jmp_buf escape;
     char *volatile arena = NULL;
     int code;
+    fr_trace_open();
     fr_escape = &escape;
     code = setjmp(escape);
     if (code == 0)
         fr_channels(args, &arena);
+    if(code == 0) fr_audit_save(args);
     free(arena);
     fr_escape = NULL;
+    fr_trace_close();
     return code;
+}
+
+/* Transfer buffered observations to the GIL owner. No external audit file is
+ * written until the physical transaction commits. */
+FILE *fr_audit_take_file(int summary)
+{
+    FILE *result=summary ? fr_trace_summary_file : fr_trace_file;
+    if(summary) fr_trace_summary_file=NULL; else fr_trace_file=NULL;
+    return result;
 }

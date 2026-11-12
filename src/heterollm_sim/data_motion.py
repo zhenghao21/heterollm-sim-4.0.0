@@ -960,7 +960,7 @@ class PhysicalRuntimeContext:
                 if key in {"config", "timeline"}:
                     continue
                 if hbm_transaction is not None and key in {
-                    "_banks", "_hbm_control_state", "_hbm_transactions", "_hbm_numeric_state"
+                    "_banks", "_hbm_control_state", "_hbm_transactions", "_hbm_numeric_state", "_hbm_audit"
                 }:
                     continue
                 if nand_transaction is not None and key in {
@@ -990,6 +990,8 @@ class PhysicalRuntimeContext:
                     core_state[key] = {host: list(commands) for host, commands in value.items()}
                 elif key == "_hbm_control_state":
                     core_state[key] = _copy_hbm_control_state(value)
+                elif key == "_hbm_audit":
+                    core_state[key] = copy.deepcopy(value)
                 elif key in {"_bank_group_state", "_channel_inflight"}:
                     # Group command/activation histories contain mutable
                     # per-group clocks and activation windows. They are live
@@ -1245,6 +1247,8 @@ class PhysicalRuntimeContext:
         self._ocp_diag_sidecar_commit(snapshot)
 
     def restore(self, snapshot: dict[str, Any]) -> None:
+        previous_audits={audit.identity:audit for active in self.runtimes.values()
+                         if (audit:=getattr(active.core,"_hbm_audit",None)) is not None}
         self._ocp_diag_sidecar_discard(snapshot)
         self.runtimes.clear()
         self.runtimes.update(snapshot["runtimes"])
@@ -1258,7 +1262,7 @@ class PhysicalRuntimeContext:
             if token is not None:
                 active.core.rollback_transaction(token)
                 journal_state = {key: active.core.__dict__[key] for key in (
-                    "_banks", "_hbm_control_state", "_hbm_transactions", "_hbm_numeric_state")}
+                    "_banks", "_hbm_control_state", "_hbm_transactions", "_hbm_numeric_state", "_hbm_audit") if key in active.core.__dict__}
             nand_token = state.get("nand_transaction")
             if nand_token is not None:
                 active.core.rollback_transaction(nand_token)
@@ -1280,6 +1284,13 @@ class PhysicalRuntimeContext:
             })
             active.core.__dict__.update(journal_state)
             active.core.timeline = self.timeline
+        restored_audits={audit.identity:audit for active in self.runtimes.values()
+                         if (audit:=getattr(active.core,"_hbm_audit",None)) is not None}
+        for identity,audit in previous_audits.items():
+            if identity not in restored_audits:
+                audit.remove_output()
+        for audit in restored_audits.values():
+            audit.publish()
         for owner, allocations in snapshot["allocator_state"].items():
             allocator = self.allocators[owner]
             if type(allocations) is dict:

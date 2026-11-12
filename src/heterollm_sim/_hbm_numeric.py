@@ -49,7 +49,7 @@ FR_STAT_FIELDS = ("row_hits", "row_misses", "row_conflicts", "activate_commands"
 
 def run_fr_fcfs(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc, history, pc_seen,
                 channel, channel_int, resources, moved, directions, touched, windows, window_counts,
-                stats):
+                stats, audit=None):
     """Run one batch, one worker per channel range; returns per-request outcomes.
 
     Workers own disjoint channels and their own output rows. The outcome rows
@@ -75,9 +75,12 @@ def run_fr_fcfs(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc
         out_float = np.zeros((requests, 2), dtype=np.float64)
         out_float[:, 0] = arrivals
         channel_counts = np.zeros((max(1, right - left), 7), dtype=np.float64)
-        _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, *arrays,
-                              out_int, out_float, left, right, span, channel_counts)
-        return out_int, out_float, channel_counts
+        image = audit.images(left,right) if audit is not None else None
+        observation = _run_fr_fcfs_channels(firsts, stops, arrivals, reads, q, g, t, *arrays,
+                              out_int, out_float, left, right, span, channel_counts, image)
+        # A worker owns only its channel image. Commit observations on the
+        # calling thread, in channel order, after every worker succeeds.
+        return out_int, out_float, channel_counts, (left,image,*observation)
 
     def reduced(channel_counts):
         counts = np.zeros(7, dtype=np.float64)
@@ -91,7 +94,9 @@ def run_fr_fcfs(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc
     clock = float(t[0])
     if (physical_bytes < 128 * 1024 or workers < 2
             or (clock * 2 != math.floor(clock * 2) and bursts < FR_MIRROR_MIN_BURSTS * span)):
-        out_int, out_float, channel_counts = execute(channel_first, channel_stop)
+        out_int, out_float, channel_counts, observation = execute(channel_first, channel_stop)
+        if audit is not None:
+            audit.consume(*observation)
         return out_int, out_float, reduced(channel_counts)
     condition = Condition()
     cancelled = False
@@ -127,6 +132,9 @@ def run_fr_fcfs(firsts, stops, arrivals, reads, q, g, t, rows, bf, addresses, pc
                 except BaseException:
                     continue
         raise
+    if audit is not None:
+        for result in results:
+            audit.consume(*result[3])
     out_int = sum(result[0] for result in results)
     out_float = np.stack([result[1] for result in results]).max(axis=0)
     return out_int, out_float, reduced(np.concatenate([result[2] for result in results]))
