@@ -5,9 +5,9 @@ every legal layout and brackets its batch. The search maximises per-GPU
 throughput under the 100 ms TPOT SLO; every layout of a case uses the same
 GPUs, so per-GPU throughput is cluster throughput and does not favour fewer
 DP replicas. A layout's batch search stops at the SLO bracket without a point
-or attempt cap; its TPOT upper bound is interpolated to the SLO, and one
-native acceptance run at the best layout's interpolated batch settles the
-point. Bypass values only place batch points and bound layouts; every
+or attempt cap; its TPOT upper bound is interpolated to the SLO, and a
+native acceptance run at the interpolated batch of the best layout, and of
+every layout predicted within ACCEPTANCE_MARGIN of it, settles the point. Bypass values only place batch points and bound layouts; every
 reported number is a native candidate row.
 
 Layouts are searched by branch and bound in the order of their bypass rate
@@ -77,6 +77,12 @@ BYPASS_TPOT_FLOOR = .95
 # is below 1 (PP>1 intercepts measured 1.8-3.8x the bypass line but slopes
 # 1.05-1.35x; Maverick HBF PP1 slopes fell to 0.40x at large batches).
 SLOPE_FLOOR = .8
+# Every interpolated outcome whose predicted rate is within this share of the
+# best outcome's gets an acceptance run. The linear TPOT line through the
+# bracket never underestimated TPOT in 50 acceptance runs (scans 20261103 to
+# 20261111: measured/predicted rate 0.998x to 1.127x, Maverick HBF MID 1.09x
+# and 1.127x), so a layout predicted just below the best can still win.
+ACCEPTANCE_MARGIN = .15
 OBJECTIVE = "per_gpu_throughput_under_slo"
 SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_layouts": TOP_LAYOUTS,
             "max_points_per_layout": None, "max_runs_per_layout": None,
@@ -84,7 +90,9 @@ SETTINGS = {"search_mode": "throughput_under_slo", "objective": OBJECTIVE, "top_
             "rate_margin": RATE_MARGIN, "bypass_tpot_floor": BYPASS_TPOT_FLOOR, "slope_floor": SLOPE_FLOOR,
             "native_layouts": "legal DP/TP/PP/EP and pipeline microbatch layouts",
             "interpolation": "linear TPOT upper bound between the adjacent measured points bracketing the SLO",
-            "acceptance": ("one fast native run at the best layout's interpolated batch; one above the SLO joins the bracket "
+            "acceptance_margin": ACCEPTANCE_MARGIN,
+            "acceptance": ("one fast native run at the interpolated batch of the best layout and of every layout predicted "
+                           "within acceptance_margin of it; one above the SLO joins the bracket "
                            "and the batch is interpolated again, settling at the bracket's passing end within a step of a "
                            "measured batch; one that proves too big bisects under it; falls back to the best measured "
                            "passing point"),
@@ -715,7 +723,7 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
         if layouts[index].get("outcome", {}).get("kind") == "pruned":
             layouts[index]["outcome"]["incumbent_tokens_per_second_per_gpu"] = incumbent
     pending = [(plan_["layout"], plan_["next"]) for plan_ in layouts if "next" in plan_]
-    result = {"layouts": layouts, "next": pending, "acceptance": None, "max_batch": None,
+    result = {"layouts": layouts, "next": pending, "acceptance": None, "acceptances": [], "max_batch": None,
               "bounds": {"order": order,
                          # None: a bypass line that bounds nothing.
                          "bypass_rate_bounds": [None if math.isinf(bound) else bound for bound in bounds],
@@ -728,18 +736,26 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
                if plan_["outcome"]["kind"] in ("interpolated", "limited")]
     if not options:
         return result
-    rate, index = max(options)
-    chosen, outcome = layouts[index], layouts[index]["outcome"]
-    acceptance = {"layout": chosen["layout"], "batch": outcome["batch"], "kind": outcome["kind"],
-                  "reason": outcome.get("reason"), "predicted_tokens_per_second_per_gpu": rate,
-                  "settled": outcome.get("settled")}
-    if outcome["kind"] == "interpolated":
-        row = lookup(index)(outcome["batch"])
-        if row is None or classify(row) == "pending":
-            result["next"] = [(chosen["layout"], outcome["batch"])]
-        else:
-            acceptance["status"] = row["status"]
-    result["acceptance"] = acceptance
+    best = max(options)[0]
+    # Every interpolated outcome within ACCEPTANCE_MARGIN of the best one gets
+    # its acceptance run: the prediction only ever underestimates the rate.
+    acceptances = []
+    for rate, index in sorted(options, reverse=True):
+        outcome = layouts[index]["outcome"]
+        if (rate, index) != max(options) and (outcome["kind"] != "interpolated"
+                                              or rate < (1 - ACCEPTANCE_MARGIN) * best):
+            continue
+        acceptance = {"layout": layouts[index]["layout"], "batch": outcome["batch"], "kind": outcome["kind"],
+                      "reason": outcome.get("reason"), "predicted_tokens_per_second_per_gpu": rate,
+                      "settled": outcome.get("settled")}
+        if outcome["kind"] == "interpolated":
+            row = lookup(index)(outcome["batch"])
+            if row is None or classify(row) == "pending":
+                result["next"].append((layouts[index]["layout"], outcome["batch"]))
+            else:
+                acceptance["status"] = row["status"]
+        acceptances.append(acceptance)
+    result["acceptance"], result["acceptances"] = acceptances[0], acceptances
     if not result["next"]:
         # The throughput search is settled; the largest batch is searched next.
         firsts = [first(index) if index in later else None for index in range(count)]
@@ -750,14 +766,15 @@ def plan_case(entries, lookups, slo_ns, wall_cap_seconds, replica_gpus, memory_b
 
 def search_result(plan, selected_batch, selected_layout):
     """Label of the case's selected point under its search plan."""
-    acceptance = plan["acceptance"]
-    if acceptance is None:
+    acceptances = plan["acceptances"]
+    if not acceptances:
         return "best_measured_point"
-    if acceptance["kind"] == "limited":
-        return acceptance["reason"] if (acceptance["layout"] == selected_layout
-                                        and acceptance["batch"] == selected_batch) else "best_measured_point"
-    if acceptance.get("status") != "completed":
-        return "acceptance_failed_fallback"
-    if acceptance["layout"] != selected_layout or acceptance["batch"] != selected_batch:
-        return "best_measured_point"
-    return acceptance["settled"] or "slo_accepted"
+    match = next((acceptance for acceptance in acceptances
+                  if acceptance["layout"] == selected_layout and acceptance["batch"] == selected_batch), None)
+    if match is None:
+        best = acceptances[0]
+        return ("acceptance_failed_fallback" if best["kind"] == "interpolated" and best.get("status") != "completed"
+                else "best_measured_point")
+    if match["kind"] == "limited":
+        return match["reason"]
+    return match["settled"] or "slo_accepted"

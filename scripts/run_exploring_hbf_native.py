@@ -85,8 +85,9 @@ PREFILL_CONTRACT = "native_prefill_complete_prompt_pass_v2"
 # composed by the cohort's max-plus flush; v3 forecasts are not reusable.
 PIPELINE_EXECUTION_CONTRACT = "native_stage_fifo_cohort_flush_v1"
 PIPELINE_FORECAST_CONTRACT = "native_stationary_pp_stage_blocks_v4"
-# Per-GPU throughput under the SLO, layouts searched by branch and bound.
-SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v5"
+# Per-GPU throughput under the SLO, layouts searched by branch and bound; v6
+# runs an acceptance at every interpolated outcome near the best one.
+SEARCH_CONTRACT = "native_throughput_under_slo_bnb_v6"
 # v3 samples a whole-prompt PP pass by its stage blocks.
 PIPELINE_PREFILL_CONTRACT = "native_pp_prefill_stage_blocks_v3"
 # A fast pass the model's chunked attention splits into several chunks, at
@@ -2075,8 +2076,8 @@ def search_case(directory, case, screen):
         if "next" in layout_plan:
             planned.append((layout_plan["layout"], layout_plan["next"]))
     acceptance = plan["acceptance"]
-    if acceptance and acceptance["kind"] == "interpolated" and (acceptance["layout"], acceptance["batch"]) not in planned:
-        planned.append((acceptance["layout"], acceptance["batch"]))
+    planned += [(item["layout"], item["batch"]) for item in plan["acceptances"]
+                if item["kind"] == "interpolated" and (item["layout"], item["batch"]) not in planned]
     max_batch = plan["max_batch"]
     if max_batch:
         for layout_plan in max_batch["layouts"]:
@@ -2097,7 +2098,7 @@ def search_case(directory, case, screen):
         "layouts": [{key: layout_plan.get(key) for key in ("layout", "quantum", "bypass", "runs", "points", "outcome",
                                                             "next", "waiting")}
                     for layout_plan in plan["layouts"]],
-        "bounds": plan["bounds"], "acceptance": acceptance, "max_batch": max_batch,
+        "bounds": plan["bounds"], "acceptance": acceptance, "acceptances": plan["acceptances"], "max_batch": max_batch,
         "skipped_layouts": screen["skipped_layouts"],
         "coverage": screen.get("coverage", {}),
         "settings": search_plan.SETTINGS,
@@ -2139,8 +2140,12 @@ def run_search_manager(directory=DEFAULT_DIRECTORY, *, workers="auto", spawn=Non
         if previous and any(previous.get(key) != manifest[key]
                             for key in ("runner_contract", "cases", "max_parallel_configurations")):
             raise RuntimeError("existing native manifest differs; refusing silent parameter changes")
-        if previous and previous_scope == layout_scope and previous.get("deployment_search") != settings:
-            raise RuntimeError("existing PP search manifest differs; refusing silent parameter changes")
+        # Candidate rows do not depend on the search, and the plan replays from
+        # them, so a new search contract may continue a directory; a settings
+        # change under the same contract is refused.
+        if previous and previous_scope == layout_scope and previous.get("deployment_search") != settings \
+                and previous.get("search_contract") == SEARCH_CONTRACT:
+            raise RuntimeError("existing search manifest differs; refusing silent parameter changes")
         write_json(directory / "run_manifest.json", manifest)
         screens = {case["case_id"]: case_screen(directory, case, screen, layout_scope=layout_scope)
                    for case in cases}

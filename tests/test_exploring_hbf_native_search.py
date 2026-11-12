@@ -78,7 +78,7 @@ def selected(plan, layouts):
     return max(rows, key=lambda item: item[0]["metrics"]["tokens_per_second_per_gpu"])
 
 
-def test_two_points_bracket_the_slo_and_one_acceptance_settles_the_best_layout():
+def test_two_points_bracket_the_slo_and_acceptance_runs_settle_the_near_layouts():
     entries = [entry(), entry(DP2_TP4, candidate=353, line=(19.2e6, .0592e6), capacity=700)]
     layouts = [native(linear, lambda b: 1.5 * b), native(lambda b: (12 + .2 * b) * 1e6, lambda b: 2. * b, gpus=4)]
     plan, runs = drive(entries, layouts)
@@ -92,12 +92,39 @@ def test_two_points_bracket_the_slo_and_one_acceptance_settles_the_best_layout()
     assert plan["acceptance"]["layout"] == TP8 and plan["acceptance"]["batch"] == 911
     assert linear(911) * 1.002 <= SLO < linear(912) * 1.002
     assert plan["acceptance"]["status"] == "completed"
-    # One acceptance run, on the better layout only.
     assert runs.count((0, 911)) == 1
-    assert [batch for index, batch in runs if index == 1] == [run["batch"] for run in plan["layouts"][1]["runs"]]
-    assert plan["layouts"][1]["outcome"]["kind"] == "interpolated"
+    # DP2 TP4 is predicted within the acceptance margin of TP8 (0.96x), so
+    # its interpolated batch gets an acceptance run too.
+    second = plan["layouts"][1]["outcome"]
+    assert second["kind"] == "interpolated"
+    assert [batch for index, batch in runs if index == 1] == [run["batch"] for run in plan["layouts"][1]["runs"]] + [second["batch"]]
+    assert [(item["layout"], item["batch"], item["status"]) for item in plan["acceptances"]] == [
+        (TP8, 911, "completed"), (DP2_TP4, second["batch"], "completed")]
     row, index, batch = selected(plan, layouts)
     assert (index, batch) == (0, 911) and search.search_result(plan, batch, TP8) == "slo_accepted"
+
+
+def test_a_layout_predicted_just_below_the_best_is_measured_and_can_win():
+    # Native TPOT bends below the line through the bracket (Maverick HBF MID
+    # EP8: predicted 4974, measured 5421 tok/s/GPU). DP2 TP4 runs 10% faster
+    # at its interpolated batch than the line says, so its 0.96x prediction
+    # hides a better point than TP8's.
+    entries = [entry(), entry(DP2_TP4, candidate=353, line=(19.2e6, .0592e6), capacity=700)]
+    layouts = [native(linear, lambda b: 1.5 * b),
+               native(lambda b: (12 + .2 * b) * 1e6 * (.9 if b == 439 else 1.), lambda b: 2. * b, gpus=4)]
+    plan, runs = drive(entries, layouts)
+    assert plan["layouts"][1]["outcome"]["batch"] == 439
+    predicted = [item["predicted_tokens_per_second_per_gpu"] for item in plan["acceptances"]]
+    assert [item["layout"] for item in plan["acceptances"]] == [TP8, DP2_TP4] and predicted[1] < predicted[0]
+    assert predicted[1] >= (1 - search.ACCEPTANCE_MARGIN) * predicted[0]
+    row, index, batch = selected(plan, layouts)
+    assert (index, batch) == (1, 439) and row["metrics"]["tokens_per_second_per_gpu"] > predicted[0]
+    assert search.search_result(plan, batch, DP2_TP4) == "slo_accepted"
+    # A layout predicted beyond the margin gets no acceptance run.
+    far = [entry(), entry(DP2_TP4, candidate=353, line=(19.2e6, .0592e6), capacity=700)]
+    far_layouts = [native(linear, lambda b: 1.5 * b), native(lambda b: (12 + .26 * b) * 1e6, lambda b: 2. * b, gpus=4)]
+    far_plan, _runs = drive(far, far_layouts)
+    assert [item["layout"] for item in far_plan["acceptances"]] == [TP8]
 
 
 def test_a_layout_beyond_native_reach_stops_at_its_largest_point_without_extrapolation():
