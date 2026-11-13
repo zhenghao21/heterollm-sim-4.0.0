@@ -150,6 +150,26 @@ code { font-size: 12px; }
 </section>
 
 <section>
+  <h2>HBM4 时序区间与独立模型对照</h2>
+  <p class="lead">HBM4 规范留空的阵列时序（tRCD、tRP、tRAS、tRRD_S/L、tFAW、tRTP，及 tCCD_R）分别换成 HBM3E 公开的快、慢两端（取整到 0.64 ns 时钟），重跑选中点与次优布局。这是工程区间，不是上下界；刷新保持标称。</p>
+  <div class="cols">
+    <div>
+      <h3>HBM4 每 GPU 吞吐（tokens/s）</h3>
+      <div class="tablewrap"><table><tr><th>模型</th><th>负载</th><th>布局</th><th>快</th><th>标称</th><th>慢</th><th>变化</th></tr><tr><td>405B</td><td>SHORT</td><td>DP2_TP4__B335</td><td>2,499</td><td>2,499</td><td>2,493</td><td>0.0% / -0.3%</td></tr><tr><td>405B</td><td>MID</td><td>TP8__B458</td><td>1,332</td><td>1,332</td><td>1,240</td><td>0.0% / -6.9%</td></tr><tr><td>405B</td><td>LONG</td><td>TP8__B23</td><td>98</td><td>98</td><td>98</td><td>0.0% / -0.1%</td></tr><tr><td>Maverick</td><td>SHORT</td><td>TP1_EP8__B3360</td><td>13,616</td><td>13,608</td><td>13,600</td><td>+0.1% / -0.1%</td></tr><tr><td>Maverick</td><td>MID</td><td>TP2_EP4__B1140</td><td>4,636</td><td>4,637</td><td>4,633</td><td>0.0% / -0.1%</td></tr><tr><td>Maverick</td><td>LONG</td><td>TP8__B205</td><td>930</td><td>929</td><td>929</td><td>+0.1% / -0.1%</td></tr></table></div>
+      <p class="note">所有 HBM4 选中点受容量限制，batch 不随时序变；次优布局在两端都没有超过选中布局（405B MID 次优标称只有 872）。405B SHORT TP8 B1433 在快端为 2,078，仍低于 2,499。空覆盖对照运行与扫描结果 10 个字段逐一相同。</p>
+    </div>
+    <div>
+      <h3>NAND ÷ HBM4 比值区间</h3>
+      <div class="tablewrap"><table><tr><th>模型</th><th>负载</th><th>配置</th><th>快</th><th>标称</th><th>慢</th><th>口径</th></tr><tr><td>405B</td><td>SHORT</td><td>HBF</td><td>0.85</td><td>0.85</td><td>0.85</td><td>分母变、分子实测</td></tr><tr><td>405B</td><td>SHORT</td><td>HBF+</td><td>0.93</td><td>0.93</td><td>0.93</td><td>只有分母变（不用 HBM）</td></tr><tr><td>405B</td><td>MID</td><td>HBF</td><td>0.92</td><td>0.91</td><td>0.98</td><td>分母变、分子实测</td></tr><tr><td>405B</td><td>MID</td><td>HBF+</td><td>1.02</td><td>1.02</td><td>1.10</td><td>只有分母变（不用 HBM）</td></tr><tr><td>405B</td><td>LONG</td><td>HBF+</td><td>1.49</td><td>1.49</td><td>1.49</td><td>只有分母变（不用 HBM）</td></tr><tr><td>Maverick</td><td>SHORT</td><td>HBF</td><td>1.06</td><td>1.05</td><td>1.04</td><td>分母变、分子实测</td></tr><tr><td>Maverick</td><td>SHORT</td><td>HBF+</td><td>0.93</td><td>0.93</td><td>0.93</td><td>只有分母变（不用 HBM）</td></tr><tr><td>Maverick</td><td>MID</td><td>HBF</td><td>1.19</td><td>1.18</td><td>1.18</td><td>分母变、分子实测</td></tr><tr><td>Maverick</td><td>MID</td><td>HBF+</td><td>1.23</td><td>1.23</td><td>1.23</td><td>只有分母变（不用 HBM）</td></tr><tr><td>Maverick</td><td>LONG</td><td>HBF+</td><td>1.42</td><td>1.42</td><td>1.42</td><td>只有分母变（不用 HBM）</td></tr></table></div>
+      <p class="note">HBF 带 1 个 HBM 堆栈，其点在两端实测（TPOT 最高 99.83 ms，仍过 100 ms SLO）；LONG 的 HBF 与 CONV 未测。所有 NAND 与 HBM4 的先后顺序在两端都不变；只有 405B MID 区间较宽，因为 TP8 的 64 KiB KV 块对 tRRD/tFAW 敏感。</p>
+    </div>
+  </div>
+  <h3>与独立周期级模型 Ramulator 2.0 对照（单伪通道，同一组时序）</h3>
+  <p class="note">同一串读请求喂给我们的控制器和 Ramulator 2.0（CMU-SAFARI）：关刷新时顺序 99.8% / 99.8%、随机单突发 25.0% / 25.0%（正好是 4 ACT/tFAW 上限）、64/128/512 KiB 块差 ≤0.24%；Ramulator 用行命中优先调度时 ACT 与行命中数与我们逐个相等。开刷新随机访问我们低 1.18%，原因是 Ramulator 的单 bank 刷新在 tFAW 打满时只发了应发数量的 54%，我们约 99%。这说明同一假设时序下协议级吞吐一致，不说明时序数值本身正确；没有实测数据。</p>
+  <p class="note">真实负载回放：从 405B HBM4 MID TP8 B458 原样记录 channel 0 的 12,227 批请求（2,477 万突发，记录不改变结果），逐批在两边回放。纯读、纯写批逐批完全相同；读写混合批（占突发 93%）总时间我们比 Ramulator 行命中优先调度长 2.15%、比其默认 FR-FCFS 短 2.45%，最大的 KV 读批差 0.14%。单批差距随写占比上升（相关 0.93，最差 +32.8%），原因是写排空策略不同：我们排空期间不补写队列（限制读被饿死），Ramulator 照补、一口气写完。</p>
+</section>
+
+<section>
   <h2>口径与差异来源</h2>
   <div class="cols">
     <div>
@@ -168,7 +188,7 @@ code { font-size: 12px; }
       <h3>native 已知建模缺口</h3>
       <ul class="compact">
         <li>HBM 地址映射为线性混合基交织，没有厂商的 XOR 哈希；FR-FCFS 只在同一批请求内重排，行命令发给最早就绪的 bank，读队列 128（模型选择）。</li>
-        <li>HBM4 规范留空的 tRCD、tWR、tRRD、tFAW 等是假设值；TP 布局的 KV 块小（TP8 为 64 KiB），读带宽对 tFAW、tRRD_S 很敏感，这些点目前只给点值。命令流在 4 个整点上逐条对 35 条 JEDEC 规则审计，0 违例。</li>
+        <li>HBM4 规范留空的 tRCD、tWR、tRRD、tFAW 等是假设值；TP 布局的 KV 块小（TP8 为 64 KiB），读带宽对 tFAW、tRRD_S 很敏感，区间见上节。命令流在 4 个整点上逐条对 35 条 JEDEC 规则审计，0 违例。</li>
         <li>GPU 计时为 roofline（峰值 × 效率 + L1/L2 复用），没有 SM/warp 周期模型。</li>
       </ul>
     </div>

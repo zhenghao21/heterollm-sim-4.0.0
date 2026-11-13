@@ -1,0 +1,835 @@
+{
+ "control": {
+  "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B335": {
+   "fields": 10,
+   "different": []
+  }
+ },
+ "cases": [
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "HBM4",
+   "selected": "native__llama3_405b__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B23",
+   "points": {
+    "native__llama3_405b__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B23": {
+     "fast": {
+      "status": "completed",
+      "tps": 98.44147484811418,
+      "tpot_ms": 29.20485403052385
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 98.32775489712036,
+      "tpot_ms": 29.23894114931545
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 98.4499776896601,
+      "tpot_ms": 29.202338433151827
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 98.44147484811418,
+     "fixed_tpot_ms": 29.20485403052385,
+     "fixed_ok": true,
+     "reselect_tps": 98.44147484811418,
+     "reselect_cid": "native__llama3_405b__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B23",
+     "layouts_compared": 1
+    },
+    "nominal": {
+     "fixed_tps": 98.4499776896601,
+     "fixed_tpot_ms": 29.202338433151827,
+     "fixed_ok": true,
+     "reselect_tps": 98.4499776896601,
+     "reselect_cid": "native__llama3_405b__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B23",
+     "layouts_compared": 1
+    },
+    "slow": {
+     "fixed_tps": 98.32775489712036,
+     "fixed_tpot_ms": 29.23894114931545,
+     "fixed_ok": true,
+     "reselect_tps": 98.32775489712036,
+     "reselect_cid": "native__llama3_405b__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B23",
+     "layouts_compared": 1
+    }
+   }
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "HBF",
+   "selected": "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B475",
+   "points": {
+    "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B475": {
+     "fast": {
+      "status": "completed",
+      "tps": 1221.1141794174089,
+      "tpot_ms": 97.24716030485982
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 1210.735017243764,
+      "tpot_ms": 98.07939921732525
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 1217.6120964748548,
+      "tpot_ms": 97.52673850632425
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 1221.1141794174089,
+     "fixed_tpot_ms": 97.24716030485982,
+     "fixed_ok": true,
+     "reselect_tps": 1221.1141794174089,
+     "reselect_cid": "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B475",
+     "layouts_compared": 1
+    },
+    "nominal": {
+     "fixed_tps": 1217.6120964748548,
+     "fixed_tpot_ms": 97.52673850632425,
+     "fixed_ok": true,
+     "reselect_tps": 1217.6120964748548,
+     "reselect_cid": "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B475",
+     "layouts_compared": 1
+    },
+    "slow": {
+     "fixed_tps": 1210.735017243764,
+     "fixed_tpot_ms": 98.07939921732525,
+     "fixed_ok": true,
+     "reselect_tps": 1210.735017243764,
+     "reselect_cid": "native__llama3_405b__HBF__MID__G8__DP2_TP4_PP1_EP1__B475",
+     "layouts_compared": 1
+    }
+   }
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "HBM4",
+   "selected": "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B458",
+   "points": {
+    "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B458": {
+     "fast": {
+      "status": "completed",
+      "tps": 1332.30353089292,
+      "tpot_ms": 42.970680990575964
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 1239.889385089211,
+      "tpot_ms": 46.16711277577681
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 1332.2975779714307,
+      "tpot_ms": 42.9708779756388
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 1332.30353089292,
+     "fixed_tpot_ms": 42.970680990575964,
+     "fixed_ok": true,
+     "reselect_tps": 1332.30353089292,
+     "reselect_cid": "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B458",
+     "layouts_compared": 1
+    },
+    "nominal": {
+     "fixed_tps": 1332.2975779714307,
+     "fixed_tpot_ms": 42.9708779756388,
+     "fixed_ok": true,
+     "reselect_tps": 1332.2975779714307,
+     "reselect_cid": "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B458",
+     "layouts_compared": 1
+    },
+    "slow": {
+     "fixed_tps": 1239.889385089211,
+     "fixed_tpot_ms": 46.16711277577681,
+     "fixed_ok": true,
+     "reselect_tps": 1239.889385089211,
+     "reselect_cid": "native__llama3_405b__HBM4__MID__G8__DP1_TP8_PP1_EP1__B458",
+     "layouts_compared": 1
+    }
+   }
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "HBF",
+   "selected": "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B368",
+   "points": {
+    "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B368": {
+     "fast": {
+      "status": "completed",
+      "tps": 2127.158610395333,
+      "tpot_ms": 86.50023263989976
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 2107.6563550335727,
+      "tpot_ms": 87.30050449673777
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 2121.904604053519,
+      "tpot_ms": 86.7140398636696
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 2127.158610395333,
+     "fixed_tpot_ms": 86.50023263989976,
+     "fixed_ok": true,
+     "reselect_tps": 2127.158610395333,
+     "reselect_cid": "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B368",
+     "layouts_compared": 1
+    },
+    "nominal": {
+     "fixed_tps": 2121.904604053519,
+     "fixed_tpot_ms": 86.7140398636696,
+     "fixed_ok": true,
+     "reselect_tps": 2121.904604053519,
+     "reselect_cid": "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B368",
+     "layouts_compared": 1
+    },
+    "slow": {
+     "fixed_tps": 2107.6563550335727,
+     "fixed_tpot_ms": 87.30050449673777,
+     "fixed_ok": true,
+     "reselect_tps": 2107.6563550335727,
+     "reselect_cid": "native__llama3_405b__HBF__SHORT__G8__DP4_TP2_PP1_EP1__B368",
+     "layouts_compared": 1
+    }
+   }
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "HBM4",
+   "selected": "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B335",
+   "points": {
+    "native__llama3_405b__HBM4__SHORT__G8__DP1_TP8_PP1_EP1__B1433": {
+     "fast": {
+      "status": "completed",
+      "tps": 2077.786924181772,
+      "tpot_ms": 86.20943541096759
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 1869.837805947445,
+      "tpot_ms": 95.79632923413841
+     }
+    },
+    "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B335": {
+     "control": {
+      "status": "completed",
+      "tps": 2499.4053199988407,
+      "tpot_ms": 33.50796460722142
+     },
+     "fast": {
+      "status": "completed",
+      "tps": 2499.4004506839146,
+      "tpot_ms": 33.508033435994236
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 2492.5471524671498,
+      "tpot_ms": 33.59944736560952
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 2499.4053199988407,
+      "tpot_ms": 33.50796460722142
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 2499.4004506839146,
+     "fixed_tpot_ms": 33.508033435994236,
+     "fixed_ok": true,
+     "reselect_tps": 2499.4004506839146,
+     "reselect_cid": "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B335",
+     "layouts_compared": 2
+    },
+    "nominal": {
+     "fixed_tps": 2499.4053199988407,
+     "fixed_tpot_ms": 33.50796460722142,
+     "fixed_ok": true,
+     "reselect_tps": 2499.4053199988407,
+     "reselect_cid": "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B335",
+     "layouts_compared": 2
+    },
+    "slow": {
+     "fixed_tps": 2492.5471524671498,
+     "fixed_tpot_ms": 33.59944736560952,
+     "fixed_ok": true,
+     "reselect_tps": 2492.5471524671498,
+     "reselect_cid": "native__llama3_405b__HBM4__SHORT__G8__DP2_TP4_PP1_EP1__B335",
+     "layouts_compared": 1
+    }
+   }
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "HBM4",
+   "selected": "native__llama4_maverick__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B205",
+   "points": {
+    "native__llama4_maverick__HBM4__LONG__G8__DP1_TP2_PP1_EP4__B176": {
+     "fast": {
+      "status": "completed",
+      "tps": 867.0743036178695,
+      "tpot_ms": 25.37264132187932
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 867.1441763641603,
+      "tpot_ms": 25.370604514024198
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 867.1778536029494,
+      "tpot_ms": 25.36964662515808
+     }
+    },
+    "native__llama4_maverick__HBM4__LONG__G8__DP1_TP4_PP1_EP2__B228": {
+     "fast": {
+      "status": "completed",
+      "tps": 888.736679249373,
+      "tpot_ms": 32.06786720916703
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 887.3784203917737,
+      "tpot_ms": 32.11704189933968
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 888.7187461419921,
+      "tpot_ms": 32.0685407661486
+     }
+    },
+    "native__llama4_maverick__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B205": {
+     "fast": {
+      "status": "completed",
+      "tps": 929.6513363278841,
+      "tpot_ms": 27.56407562390486
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 928.625956721356,
+      "tpot_ms": 27.59442370134806
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 929.1722341298965,
+      "tpot_ms": 27.5782428854088
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 929.6513363278841,
+     "fixed_tpot_ms": 27.56407562390486,
+     "fixed_ok": true,
+     "reselect_tps": 929.6513363278841,
+     "reselect_cid": "native__llama4_maverick__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B205",
+     "layouts_compared": 3
+    },
+    "nominal": {
+     "fixed_tps": 929.1722341298965,
+     "fixed_tpot_ms": 27.5782428854088,
+     "fixed_ok": true,
+     "reselect_tps": 929.1722341298965,
+     "reselect_cid": "native__llama4_maverick__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B205",
+     "layouts_compared": 3
+    },
+    "slow": {
+     "fixed_tps": 928.625956721356,
+     "fixed_tpot_ms": 27.59442370134806,
+     "fixed_ok": true,
+     "reselect_tps": 928.625956721356,
+     "reselect_cid": "native__llama4_maverick__HBM4__LONG__G8__DP1_TP8_PP1_EP1__B205",
+     "layouts_compared": 3
+    }
+   }
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "HBF",
+   "selected": "native__llama4_maverick__HBF__MID__G8__DP1_TP1_PP1_EP8__B3936",
+   "points": {
+    "native__llama4_maverick__HBF__MID__G8__DP1_TP1_PP1_EP8__B3936": {
+     "fast": {
+      "status": "completed",
+      "tps": 5498.3268014064415,
+      "tpot_ms": 89.48169630018303
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 5465.8452028324455,
+      "tpot_ms": 90.01348024649927
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 5485.829421476352,
+      "tpot_ms": 89.6855638863981
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 5498.3268014064415,
+     "fixed_tpot_ms": 89.48169630018303,
+     "fixed_ok": true,
+     "reselect_tps": 5498.3268014064415,
+     "reselect_cid": "native__llama4_maverick__HBF__MID__G8__DP1_TP1_PP1_EP8__B3936",
+     "layouts_compared": 1
+    },
+    "nominal": {
+     "fixed_tps": 5485.829421476352,
+     "fixed_tpot_ms": 89.6855638863981,
+     "fixed_ok": true,
+     "reselect_tps": 5485.829421476352,
+     "reselect_cid": "native__llama4_maverick__HBF__MID__G8__DP1_TP1_PP1_EP8__B3936",
+     "layouts_compared": 1
+    },
+    "slow": {
+     "fixed_tps": 5465.8452028324455,
+     "fixed_tpot_ms": 90.01348024649927,
+     "fixed_ok": true,
+     "reselect_tps": 5465.8452028324455,
+     "reselect_cid": "native__llama4_maverick__HBF__MID__G8__DP1_TP1_PP1_EP8__B3936",
+     "layouts_compared": 1
+    }
+   }
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "HBM4",
+   "selected": "native__llama4_maverick__HBM4__MID__G8__DP1_TP2_PP1_EP4__B1140",
+   "points": {
+    "native__llama4_maverick__HBM4__MID__G8__DP1_TP1_PP1_EP8__B1040": {
+     "fast": {
+      "status": "completed",
+      "tps": 4381.042562253169,
+      "tpot_ms": 29.67328661891964
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 4379.297032679614,
+      "tpot_ms": 29.685098936912127
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 4380.94783762895,
+      "tpot_ms": 29.673924245488063
+     }
+    },
+    "native__llama4_maverick__HBM4__MID__G8__DP1_TP2_PP1_EP4__B1140": {
+     "fast": {
+      "status": "completed",
+      "tps": 4635.988549762016,
+      "tpot_ms": 30.73776876203568
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 4632.661267145415,
+      "tpot_ms": 30.75977624121445
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 4636.60601215488,
+      "tpot_ms": 30.73365021197889
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 4635.988549762016,
+     "fixed_tpot_ms": 30.73776876203568,
+     "fixed_ok": true,
+     "reselect_tps": 4635.988549762016,
+     "reselect_cid": "native__llama4_maverick__HBM4__MID__G8__DP1_TP2_PP1_EP4__B1140",
+     "layouts_compared": 2
+    },
+    "nominal": {
+     "fixed_tps": 4636.60601215488,
+     "fixed_tpot_ms": 30.73365021197889,
+     "fixed_ok": true,
+     "reselect_tps": 4636.60601215488,
+     "reselect_cid": "native__llama4_maverick__HBM4__MID__G8__DP1_TP2_PP1_EP4__B1140",
+     "layouts_compared": 2
+    },
+    "slow": {
+     "fixed_tps": 4632.661267145415,
+     "fixed_tpot_ms": 30.75977624121445,
+     "fixed_ok": true,
+     "reselect_tps": 4632.661267145415,
+     "reselect_cid": "native__llama4_maverick__HBM4__MID__G8__DP1_TP2_PP1_EP4__B1140",
+     "layouts_compared": 2
+    }
+   }
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "HBF",
+   "selected": "native__llama4_maverick__HBF__SHORT__G8__DP1_TP1_PP1_EP8__B11296",
+   "points": {
+    "native__llama4_maverick__HBF__SHORT__G8__DP1_TP1_PP1_EP8__B11296": {
+     "fast": {
+      "status": "completed",
+      "tps": 14382.613794117682,
+      "tpot_ms": 98.17406914411431
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 14143.711209570341,
+      "tpot_ms": 99.83233470658779
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 14289.957142910132,
+      "tpot_ms": 98.8106393693885
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 14382.613794117682,
+     "fixed_tpot_ms": 98.17406914411431,
+     "fixed_ok": true,
+     "reselect_tps": 14382.613794117682,
+     "reselect_cid": "native__llama4_maverick__HBF__SHORT__G8__DP1_TP1_PP1_EP8__B11296",
+     "layouts_compared": 1
+    },
+    "nominal": {
+     "fixed_tps": 14289.957142910132,
+     "fixed_tpot_ms": 98.8106393693885,
+     "fixed_ok": true,
+     "reselect_tps": 14289.957142910132,
+     "reselect_cid": "native__llama4_maverick__HBF__SHORT__G8__DP1_TP1_PP1_EP8__B11296",
+     "layouts_compared": 1
+    },
+    "slow": {
+     "fixed_tps": 14143.711209570341,
+     "fixed_tpot_ms": 99.83233470658779,
+     "fixed_ok": true,
+     "reselect_tps": 14143.711209570341,
+     "reselect_cid": "native__llama4_maverick__HBF__SHORT__G8__DP1_TP1_PP1_EP8__B11296",
+     "layouts_compared": 1
+    }
+   }
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "HBM4",
+   "selected": "native__llama4_maverick__HBM4__SHORT__G8__DP1_TP1_PP1_EP8__B3360",
+   "points": {
+    "native__llama4_maverick__HBM4__SHORT__G8__DP1_TP1_PP1_EP8__B3360": {
+     "fast": {
+      "status": "completed",
+      "tps": 13615.625595797275,
+      "tpot_ms": 30.846890245200758
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 13599.583869155511,
+      "tpot_ms": 30.883245805420096
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 13608.400748180728,
+      "tpot_ms": 30.863283827054723
+     }
+    },
+    "native__llama4_maverick__HBM4__SHORT__G8__DP1_TP2_PP1_EP4__B3660": {
+     "fast": {
+      "status": "completed",
+      "tps": 13097.25121513421,
+      "tpot_ms": 34.93097994116225
+     },
+     "slow": {
+      "status": "completed",
+      "tps": 13082.169958363245,
+      "tpot_ms": 34.971221497677895
+     },
+     "nominal": {
+      "status": "completed",
+      "tps": 13090.996857313252,
+      "tpot_ms": 34.947608432834016
+     }
+    }
+   },
+   "band": {
+    "fast": {
+     "fixed_tps": 13615.625595797275,
+     "fixed_tpot_ms": 30.846890245200758,
+     "fixed_ok": true,
+     "reselect_tps": 13615.625595797275,
+     "reselect_cid": "native__llama4_maverick__HBM4__SHORT__G8__DP1_TP1_PP1_EP8__B3360",
+     "layouts_compared": 2
+    },
+    "nominal": {
+     "fixed_tps": 13608.400748180728,
+     "fixed_tpot_ms": 30.863283827054723,
+     "fixed_ok": true,
+     "reselect_tps": 13608.400748180728,
+     "reselect_cid": "native__llama4_maverick__HBM4__SHORT__G8__DP1_TP1_PP1_EP8__B3360",
+     "layouts_compared": 2
+    },
+    "slow": {
+     "fixed_tps": 13599.583869155511,
+     "fixed_tpot_ms": 30.883245805420096,
+     "fixed_ok": true,
+     "reselect_tps": 13599.583869155511,
+     "reselect_cid": "native__llama4_maverick__HBM4__SHORT__G8__DP1_TP1_PP1_EP8__B3360",
+     "layouts_compared": 2
+    }
+   }
+  }
+ ],
+ "ratios": [
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "HBF",
+   "fast": null,
+   "basis": "1 HBM stack, not measured",
+   "nominal": 1.1764678320451667,
+   "slow": null
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "HBF+",
+   "fast": 1.4932004401658239,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 1.493071476736507,
+   "slow": 1.4949273857373697
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "CONV",
+   "fast": null,
+   "basis": "1 HBM stack, not measured",
+   "nominal": 0.17813325617263615,
+   "slow": null
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "LONG",
+   "hardware": "CONV+",
+   "fast": 0.2799068197916956,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 0.2798826450443553,
+   "slow": 0.2802305431377931
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "HBF",
+   "fast_numerator_tpot_ms": 97.24716030485982,
+   "fast": 0.9165435286349567,
+   "basis": "HBF point measured at this variant",
+   "nominal_numerator_tpot_ms": 97.52673850632425,
+   "nominal": 0.9139190197499292,
+   "slow_numerator_tpot_ms": 98.07939921732525,
+   "slow": 0.976486315476159
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "HBF+",
+   "fast": 1.0195539200383996,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 1.0195584755705422,
+   "slow": 1.0955455413509674
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "CONV",
+   "fast": null,
+   "basis": "1 HBM stack, not measured",
+   "nominal": 0.17831292609277283,
+   "slow": null
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "MID",
+   "hardware": "CONV+",
+   "fast": 0.2524039932767159,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 0.25240512105866225,
+   "slow": 0.2712167194090834
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "HBF",
+   "fast_numerator_tpot_ms": 86.50023263989976,
+   "fast": 0.8510675469444184,
+   "basis": "HBF point measured at this variant",
+   "nominal_numerator_tpot_ms": 86.7140398636696,
+   "nominal": 0.8489637863355846,
+   "slow_numerator_tpot_ms": 87.30050449673777,
+   "slow": 0.8455833435076211
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "HBF+",
+   "fast": 0.9309571542020901,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 0.9309553405212396,
+   "slow": 0.9335168357705863
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "CONV",
+   "fast": null,
+   "basis": "1 HBM stack, not measured",
+   "nominal": 0.21622257876455614,
+   "slow": null
+  },
+  {
+   "model": "llama3_405b",
+   "workload": "SHORT",
+   "hardware": "CONV+",
+   "fast": 0.2692078062438124,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 0.26920728177602055,
+   "slow": 0.269947997407957
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "HBF",
+   "fast": null,
+   "basis": "1 HBM stack, not measured",
+   "nominal": 1.261954656914888,
+   "slow": null
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "HBF+",
+   "fast": 1.4223279425667152,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 1.4230613269905201,
+   "slow": 1.4238984630282068
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "CONV",
+   "fast": null,
+   "basis": "1 HBM stack, not measured",
+   "nominal": 0.19541814336687133,
+   "slow": null
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "LONG",
+   "hardware": "CONV+",
+   "fast": 0.2550200071758691,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 0.2551515012535878,
+   "slow": 0.2553015977481788
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "HBF",
+   "fast_numerator_tpot_ms": 89.48169630018303,
+   "fast": 1.1860095732308684,
+   "basis": "HBF point measured at this variant",
+   "nominal_numerator_tpot_ms": 89.6855638863981,
+   "nominal": 1.183156258499262,
+   "slow_numerator_tpot_ms": 90.01348024649927,
+   "slow": 1.1798499582941508
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "HBF+",
+   "fast": 1.2259426175203345,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 1.2257793572691629,
+   "slow": 1.2268231173723643
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "CONV",
+   "fast": null,
+   "basis": "1 HBM stack, not measured",
+   "nominal": 0.19002129239731455,
+   "slow": null
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "MID",
+   "hardware": "CONV+",
+   "fast": 0.2487888599033623,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 0.24875572839200444,
+   "slow": 0.24896754571720137
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "HBF",
+   "fast_numerator_tpot_ms": 98.17406914411431,
+   "fast": 1.05633146952551,
+   "basis": "HBF point measured at this variant",
+   "nominal_numerator_tpot_ms": 98.8106393693885,
+   "nominal": 1.0500835041046628,
+   "slow_numerator_tpot_ms": 99.83233470658779,
+   "slow": 1.0400105875039998
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "HBF+",
+   "fast": 0.928752613604568,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 0.9292456984446554,
+   "slow": 0.9298481467979813
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "CONV",
+   "fast": null,
+   "basis": "1 HBM stack, not measured",
+   "nominal": 0.1766112162728448,
+   "slow": null
+  },
+  {
+   "model": "llama4_maverick",
+   "workload": "SHORT",
+   "hardware": "CONV+",
+   "fast": 0.20165825969223022,
+   "basis": "no HBM: numerator fixed",
+   "nominal": 0.20176532225041433,
+   "slow": 0.20189613069682572
+  }
+ ]
+}
