@@ -68,12 +68,14 @@ CONTRACT = "native_continuous_refill_layout_detailed_v17"
 # v28 ran the host channels' requests one channel after another.
 # v30：HBM 行命令发给命令最早能发的 bank，读队列每 PC 128。
 # v31：HBM 的 REFpb 在 SID 的 16 个 bank 内按排队情况选 bank（无排队的先刷）。
-FAST_CONTRACT = "native_stationary_layout_fast_v31"
-# Prefill runs on HBM4, so its runner follows v25 (as v24) and v27 (as v25); v26,
+# v32：HBM 的 tRP（及刷新后的 tRFC 门）截止到下一个 ACT 的第二个上升沿，ACT 可提前 1 CK 开始。
+FAST_CONTRACT = "native_stationary_layout_fast_v32"
+# Prefill runs on HBM4, so its runner follows v25 (as v24), v27 (as v25) and v32 (as v28); v26,
 # v28 and v29 change neither its physics nor its forecast.
 # v26：HBM 行命令发给命令最早能发的 bank，读队列每 PC 128。
 # v27：HBM 的 REFpb 在 SID 的 16 个 bank 内按排队情况选 bank。
-PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v27"
+# v28：HBM 的 tRP 截止到下一个 ACT 的第二个上升沿。
+PREFILL_FAST_RUNNER_CONTRACT = "native_stationary_layout_fast_v28"
 # Prefill evolves independently of the saved Decode evidence. PP fast passes
 # sample a whole prompt by its stage blocks and a chunked one by the
 # conditional chunk forecast; detailed passes retain the complete native

@@ -197,7 +197,7 @@ def test_reference_profile_enforces_independent_array_read_and_write_command_exp
     conflict = writer.submit(request(c, row=1))
     assert stage(first, "WRITE_COMMAND").start_ns == 15.
     assert stage(conflict, "PRECHARGE").start_ns == 36.25  # write DQ end 21.25 + WR 15.
-    assert stage(conflict, "ACTIVATE").start_ns == 51.25  # PRE + RP 15.
+    assert stage(conflict, "ACTIVATE").start_ns == 50.625  # PRE + RP 15. at its second rising edge
 
 
 def test_reference_profile_activation_windows_and_late_read_recovery_are_active():
@@ -222,7 +222,7 @@ def test_reference_refresh_executes_the_assumed_rfc_and_interval():
     recovery = [item for item in result.stages if item.name == "REFRESH_RECOVERY"]
     assert [(item.start_ns, item.end_ns) for item in recovery] == [(3900., 4400.), (3900.625, 4400.625)]
     assert result.counters["refresh_commands"] == 2
-    assert stage(result, "ACTIVATE").start_ns == 4400.
+    assert stage(result, "ACTIVATE").start_ns == 4399.375  # tRFC ends at its second rising edge
     assert c.metadata["parameter_provenance"]["refresh_cycle_ns"]["vendor_value_status"] == "unknown"
 
 
@@ -320,7 +320,7 @@ def test_ramulator_inputs_reach_existing_command_gates_without_replacing_control
     conflict = writer.submit(request(c, row=1))
     assert stage(first, "WRITE_COMMAND").start_ns == 10.
     assert stage(conflict, "PRECHARGE").start_ns == 38.125
-    assert stage(conflict, "ACTIVATE").start_ns == 54.375
+    assert stage(conflict, "ACTIVATE").start_ns == 53.75  # tRP ends at its second rising edge
     refresh = DramCore(c).submit(request(c, time=3900.))
     assert stage(refresh, "REFRESH_RECOVERY").end_ns == 4450.
-    assert stage(refresh, "ACTIVATE").start_ns == 4450.
+    assert stage(refresh, "ACTIVATE").start_ns == 4449.375  # tRFC ends at its second rising edge

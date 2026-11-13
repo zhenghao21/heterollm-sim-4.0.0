@@ -808,7 +808,7 @@ static void fr_audit_event(const fr_state *s, const char *kind, int64_t lane, in
         anchor = start + s->t[0];
         fr_audit_test(AUDIT_BANK_OPEN, a->open_row[bank_index] >= 0, kind, start, stack, local_ch, pc, sid, group, bank, row);
         fr_audit_test(AUDIT_REFRESH_BLOCK, anchor < a->blocked[bank_index] - 1e-7, kind, start, stack, local_ch, pc, sid, group, bank, row);
-        if (a->pre_time[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_TRP, fr_audit_before(start, a->pre_time[bank_index], s->t[6]), kind, start, stack, local_ch, pc, sid, group, bank, row);
+        if (a->pre_time[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_TRP, fr_audit_before(anchor, a->pre_time[bank_index], s->t[6]), kind, start, stack, local_ch, pc, sid, group, bank, row);
         if (a->act_anchor[bank_index] > -DBL_MAX / 2) fr_audit_test(AUDIT_TRC, fr_audit_before(anchor, a->act_anchor[bank_index], s->t[8]), kind, start, stack, local_ch, pc, sid, group, bank, row);
         previous = a->act_group[group_index];
         if (previous > -DBL_MAX / 2) fr_audit_test(AUDIT_TRRD, fr_audit_before(anchor, previous, s->t[14]), kind, start, stack, local_ch, pc, sid, group, bank, row);
@@ -1718,18 +1718,22 @@ FR_INLINE double fr_activate_group_gate(const fr_state *s, int64_t lane, int64_t
 }
 
 /* The ACT edge from a ready time that already holds the bank's own terms, under tRRD
- * gate ``gate``. ``base`` gets the anchor before the gate, ``fixed`` the anchor the
- * tFAW loop settles on. The edge never falls when ``ready`` or ``gate`` rises: every
- * step is a max, a round up to the clock, or the earliest tFAW slot no earlier than its
- * argument; the loop runs that inflationary map to its least fixed point. */
-FR_INLINE double fr_activate_from(const fr_state *s, int64_t lane, double gate, double ready, double *base,
-                                  double *fixed)
+ * gate ``gate``. ``ready`` bounds the ACT's first rising edge (request, row port, tRC);
+ * ``anchored`` bounds its second rising edge, where the array timings refer: tRP after a
+ * PRE and the tRFC gates after a refresh. ``base`` gets the anchor before the gate,
+ * ``fixed`` the anchor the tFAW loop settles on. The edge never falls when ``ready``,
+ * ``anchored`` or ``gate`` rises: every step is a max, a round up to the clock, or the
+ * earliest tFAW slot no earlier than its argument; the loop runs that inflationary map to
+ * its least fixed point. */
+FR_INLINE double fr_activate_from(const fr_state *s, int64_t lane, double gate, double ready, double anchored,
+                                  double *base, double *fixed)
 {
     const double *t = s->t;
     const int64_t *ticks = s->ticks;
     const double *lane_pc = s->pc + lane * FR_PC;
     double half = s->half, inverse = s->inverse;
-    double anchor = fr_max(fr_after_tick(fr_align(ready, t[0]), t[0], ticks[0], half, inverse), lane_pc[4]);
+    double anchor = fr_max(fr_max(fr_after_tick(fr_align(ready, t[0]), t[0], ticks[0], half, inverse), lane_pc[4]),
+                           anchored);
     *base = anchor;
     anchor = fr_max(anchor, gate);
     for (;;) {
@@ -1754,12 +1758,15 @@ FR_INLINE double fr_activate_start(const fr_state *s, int64_t lane, int64_t bank
     const double *bf = s->bf, *lane_pc = s->pc + lane * FR_PC;
     double half = s->half, inverse = s->inverse;
     double row_bus = s->resources[(lane >> 1) * 4];
-    double ready = fr_max(fr_max(fr_max(earliest, bf[bank * 7 + 1]), lane_pc[1]), row_bus);
+    double ready = fr_max(earliest, row_bus);
     double base, fixed;
     if (bf[bank * 7] >= 0)
         ready = fr_max(ready, fr_after_tick(fr_after_tick(bf[bank * 7], t[8], ticks[8], half, inverse),
                                             -t[0], s->clock_back, half, inverse));
-    return fr_activate_from(s, lane, fr_activate_group_gate(s, lane, group), ready, &base, &fixed);
+    /* tRP (bf[1] after a PRE) and the refresh gates (bf[1] after a REFpb, pc[1] after a
+     * REFab) end at the ACT's second rising edge. */
+    return fr_activate_from(s, lane, fr_activate_group_gate(s, lane, group), ready,
+                            fr_max(bf[bank * 7 + 1], lane_pc[1]), &base, &fixed);
 }
 
 /* The lowest ACT edge any closed bank of ``group`` can have in this row scan: the edge
@@ -1773,16 +1780,16 @@ FR_INLINE double fr_activate_floor(const fr_state *s, int64_t lane, int64_t grou
     if (s->act_floor_ready[group])
         return floors[group];
     if (!s->act_floor_ready[groups]) {
-        double ready = fr_max(fr_max(act_floor, s->pc[lane * FR_PC + 1]), s->resources[(lane >> 1) * 4]);
-        floors[groups] = fr_activate_from(s, lane, -HUGE_VAL, ready, &base, &floors[groups + 1]);
+        double ready = fr_max(act_floor, s->resources[(lane >> 1) * 4]);
+        floors[groups] = fr_activate_from(s, lane, -HUGE_VAL, ready, s->pc[lane * FR_PC + 1], &base, &floors[groups + 1]);
         s->act_floor_ready[groups] = 1;
     }
     gate = fr_activate_group_gate(s, lane, group);
     if (gate <= floors[groups + 1]) {
         floors[group] = floors[groups];
     } else {
-        double ready = fr_max(fr_max(act_floor, s->pc[lane * FR_PC + 1]), s->resources[(lane >> 1) * 4]);
-        floors[group] = fr_activate_from(s, lane, gate, ready, &base, &fixed);
+        double ready = fr_max(act_floor, s->resources[(lane >> 1) * 4]);
+        floors[group] = fr_activate_from(s, lane, gate, ready, s->pc[lane * FR_PC + 1], &base, &fixed);
     }
     s->act_floor_ready[group] = 1;
     return floors[group];
@@ -1803,7 +1810,7 @@ FR_INLINE double fr_queued_row_start(const fr_state *s, int64_t lane, int64_t ba
             return HUGE_VAL;
         return fr_precharge_start(s, lane, bank, entry);
     }
-    row_floor = fr_max(fr_max(fr_max(fr_max(entry, act_floor), bf[1]), pc[1]), row_bus);
+    row_floor = fr_max(fr_max(fr_max(entry, act_floor), fr_max(bf[1], pc[1]) - t[0]), row_bus);
     /* Only the row-port frontier can discard old tFAW entries. */
     if (*faw_expiry <= fr_max(0., row_bus))
         *faw_expiry = fr_faw_prune(s, lane, fr_max(0., row_bus));

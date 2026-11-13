@@ -73,7 +73,7 @@ def test_same_bank_reactivation_enforces_independent_rc_and_ras_rp_constraints(r
     precharge = stage(changed_row, "PRECHARGE").start_ns
     next_act = stage(changed_row, "ACTIVATE").start_ns
     assert precharge >= first_anchor + ras
-    assert next_act >= precharge + rp
+    assert next_act + c.command_clock_ns >= precharge + rp  # tRP ends at the ACT's second rising edge
     assert next_act + c.command_clock_ns >= first_anchor + rc
     assert next_act + c.command_clock_ns - first_anchor >= max(rc, ras + rp)
 
@@ -124,7 +124,7 @@ def test_read_and_write_recovery_gate_precharge_without_charging_write_completio
     conflict = core.submit(request(c, row=1))
     assert stage(first, "READ_COMMAND").start_ns == 5.
     assert stage(conflict, "PRECHARGE").start_ns == 8.  # max(tRAS anchor+7, RD+3)
-    assert stage(conflict, "ACTIVATE").start_ns == 11.  # PRE+tRP; rising edge
+    assert stage(conflict, "ACTIVATE").start_ns == 10.  # PRE+tRP at its second rising edge
     writer = DramCore(c)
     written = writer.submit(request(c, "write"))
     assert written.completion_ns == 10.  # DQ end; old write_recovery_ns=100 is unused
@@ -207,7 +207,7 @@ def test_periodic_refresh_targets_each_pc_all_sids_once_and_reopens_after_rfc():
     refresh = [item for item in result.stages if item.name == "REFRESH_ALL"]
     assert len(refresh) == 2
     assert all(item.start_ns % c.command_clock_ns == 0 for item in refresh)
-    assert stage(result, "ACTIVATE").start_ns >= refresh[0].start_ns + 20.
+    assert stage(result, "ACTIVATE").start_ns + c.command_clock_ns >= refresh[0].start_ns + 20.
     assert result.counters["row_misses"] == 1
     assert result.counters["activate_commands"] == 1
 
@@ -336,9 +336,9 @@ def test_write_recovery_crossing_maximum_active_precharges_before_issuing_write(
     core.submit(request(c))
     result = core.submit(request(c, "write", time=15.))
     assert stage(result, "PRECHARGE").start_ns == 21.
-    assert stage(result, "ACTIVATE").start_ns == 24.
-    assert stage(result, "WRITE_COMMAND").start_ns == 28.
-    assert stage(result, "BURST_TRANSFER").end_ns + c.write_to_precharge_ns <= 25. + c.maximum_active_ns
+    assert stage(result, "ACTIVATE").start_ns == 23.  # PRE + tRP at its second rising edge
+    assert stage(result, "WRITE_COMMAND").start_ns == 27.
+    assert stage(result, "BURST_TRANSFER").end_ns + c.write_to_precharge_ns <= 24. + c.maximum_active_ns  # ACT anchor 24
 
 
 def test_maximum_active_closes_banks_across_both_pcs_on_the_shared_row_bus():

@@ -148,14 +148,16 @@ class _Controller:
     def activate_start(self, mapping, bank, earliest):
         config, key = self.config, self._pc_key(mapping)
         pc = self.pc(key)
-        ready = max(earliest, bank["activate_ready"], pc["blocked_until"],
-                    self.timeline.available_ns(self.bus_id(key, "row")))
+        ready = max(earliest, self.timeline.available_ns(self.bus_id(key, "row")))
         if bank["last_activate"] is not None:
             ready = max(ready, self.after(self.after(bank["last_activate"], config.activate_cycle_ns), -self.clock))
         # ACT array timings are anchored at the second rising CK edge.
         # Align the external/request constraint before shifting its anchor;
         # adding and subtracting a CK must never erase a late arrival's ULP.
-        anchor = max(self.after(self.align(ready, self.clock), self.clock), pc["refresh_gate"])
+        # tRP after a PRE and the tRFC gates after a refresh also end at that
+        # edge (``activate_ready`` and ``blocked_until``), as does tRREFD.
+        anchor = max(self.after(self.align(ready, self.clock), self.clock), pc["refresh_gate"],
+                     bank["activate_ready"], pc["blocked_until"])
         # Unlike an arbitrary bank-ready time, the shared row-port frontier
         # proves that no later HBM ACT can be inserted before it. Pruning at
         # this frontier bounds the live tFAW calendar even inside a huge request.

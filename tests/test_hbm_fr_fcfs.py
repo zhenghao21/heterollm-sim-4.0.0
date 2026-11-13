@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import math
 import random
 
 import numpy as np
@@ -205,7 +206,8 @@ def check_legal(log, config=CONFIG):
                 last_bank_refresh = start
                 checked["REFpb"] += 1
                 continue
-            assert start >= last_refresh_end - slack, event
+            # tRFC ends at the next ACT's second rising edge (HBM4 spec 6.3.2.2, Fig. 19).
+            assert start + (ck if name == "ACTIVATE" else 0.) >= last_refresh_end - slack, event
             state = banks.setdefault(bank_key(mapping), {"open": None})
             group = mapping.bank_group
             sid = (group * config.banks_per_group + mapping.bank) // 16
@@ -220,7 +222,8 @@ def check_legal(log, config=CONFIG):
                     assert anchor >= state["anchor"] + config.activate_cycle_ns - slack
                     checked["tRC"] += 1
                 if state.get("precharged") is not None:
-                    assert start >= state["precharged"] + config.precharge_to_activate_ns - slack
+                    # tRP ends at the ACT's second rising edge, like tRC and tRRD (HBM4 spec 6.3.2.2, Fig. 19).
+                    assert anchor >= state["precharged"] + config.precharge_to_activate_ns - slack
                     checked["tRP"] += 1
                 for other_group, other_anchor in activates[-8:]:
                     gap = config.activate_same_group_ns if other_group == group else config.activate_different_group_ns
@@ -710,7 +713,8 @@ def test_shared_row_frontier_invalidates_a_cached_refresh_fallback():
     first = next(event for event in controller.log
                  if event["name"] == "ACTIVATE" and event["key"][2] == 0)
     assert first["mapping"].bank == 1
-    assert first["start"] == 90.24
+    # activate_ready (tRP) ends at the ACT's second rising edge, the first edge at or after 90 ns.
+    assert first["start"] + config.command_clock_ns == pytest.approx(90.24, abs=1e-9)
     numeric = numeric_core(config)
     seeded = _FrFcfsController(numeric, items)
     for item, ready in zip(items[:2], (120., 90.)):
@@ -1338,3 +1342,22 @@ def test_idle_refresh_tail_keeps_an_open_sid_boundary_identical_to_issuing_every
             assert first.completion_ns.hex()==second.completion_ns.hex()
             assert ({key:value for key,value in first.counters.items() if key not in capture}
                     =={key:value for key,value in second.counters.items() if key not in capture})
+
+
+
+def test_trp_ends_at_the_second_rising_edge_of_the_next_activate():
+    """HBM4 spec 6.3.2.2, Fig. 19: tRP runs from the PRE to the next ACT's second rising edge, so that ACT
+    starts one CK before the first rising edge at or after PRE + tRP."""
+    config = hbm4(refresh_policy="disabled")
+    ck = config.command_clock_ns
+    first = [request("a", READ, address(0, bank=3, row=0, config=config), arrival=0.)]
+    second = [request("b", READ, address(0, bank=3, row=1, config=config), arrival=200.)]
+    _, log = run_recorded(first, second, config=config)
+    rows = [event for event in log if event["name"] in ("PRECHARGE", "ACTIVATE")]
+    assert [event["name"] for event in rows] == ["ACTIVATE", "PRECHARGE", "ACTIVATE"]
+    pre, act = rows[1]["start"], rows[2]["start"]
+    edge = math.ceil((pre + config.precharge_to_activate_ns) / ck - 1e-9) * ck
+    assert act == pytest.approx(edge - ck, abs=1e-9)
+    compiled, scalar = numeric_core(config), reference_core(config)
+    for batch in (first, second):
+        assert_all_fr_results_equal(compiled, scalar, tuple(batch))
