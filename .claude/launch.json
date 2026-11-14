@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "deck-annotate",
+      "runtimeExecutable": "E:/anaconda/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "tmp/deck_annotate/site"
+      ],
+      "port": 8765
+    }
+  ]
+}
